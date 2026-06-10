@@ -1,0 +1,75 @@
+publiccodeYmlVersion: "0.5"
+name: MOZa NotificatieManagementComponent
+url: https://github.com/MinBZK/moza-notificatiemanagementcomponent
+landingURL: https://mijnoverheidzakelijk.nl
+platforms:
+  - web
+categories:
+  - digital-citizenship
+organisation:
+  uri: https://www.rijksoverheid.nl/ministeries/ministerie-van-binnenlandse-zaken-en-koninkrijksrelaties
+  name: Ministerie van Binnenlandse Zaken en Koninkrijksrelaties
+fundedBy:
+  - name: Ministerie van Binnenlandse Zaken en Koninkrijksrelaties
+    uri: https://www.rijksoverheid.nl/ministeries/ministerie-van-binnenlandse-zaken-en-koninkrijksrelaties
+developmentStatus: development
+softwareType: standalone/web
+intendedAudience:
+  countries:
+    - NL
+  scope:
+    - government
+description:
+  nl:
+    localisedName: MOZa NotificatieManagementComponent
+    shortDescription: >-
+      Centrale component voor het versturen van overheidsnotificaties en het
+      orkestreren van contactherstel binnen MijnOverheid Zakelijk (MOZa).
+    longDescription: >
+      De NotificatieManagementComponent (NMC) is de centrale hub voor het
+      versturen van notificaties namens een Dienstverlener. De NMC stelt het
+      bericht samen via de Templating Service, verstuurt het via NotifyNL,
+      verwerkt de bezorgstatus en orkestreert - bij een mislukte digitale
+      bezorging - contactherstel via een fysieke brief (Printstraat/Postadres).
+
+
+      Deze repository bevat de broncode van de NMC. Het MOZa-project bestaat
+      uit meerdere repositories binnen de MinBZK organisatie, te herkennen aan
+      de moza- prefix of het topic mijnoverheidzakelijk.
+    features:
+      - Versturen van notificaties via NotifyNL (e-mail en fysieke post)
+      - Verwerken van asynchrone bezorgstatussen
+      - Orkestreren van contactherstel bij een mislukte bezorging
+  en:
+    shortDescription: >-
+      Central component for sending government notifications and
+      orchestrating contact recovery within "MijnOverheid Zakelijk" (MOZa).
+    longDescription: >
+      The NotificatieManagementComponent (NMC) is the central hub for sending
+      notifications on behalf of a Dienstverlener. The NMC composes the
+      message via the Templating Service, sends it through NotifyNL,
+      processes the delivery status and - if digital delivery fails -
+      orchestrates contact recovery ("contactherstel") via a physical letter
+      (Printstraat/Postadres).
+
+
+      This repository contains the source code of the NMC. The MOZa project
+      consists of multiple repositories within the MinBZK organisation,
+      identifiable by the moza- prefix or the mijnoverheidzakelijk topic.
+    features:
+      - Sending notifications via NotifyNL (email and physical mail)
+      - Processing asynchronous delivery statuses
+      - Orchestrating contact recovery on failed delivery
+legal:
+  license: EUPL-1.2
+  mainCopyrightOwner: Ministerie van Binnenlandse Zaken en Koninkrijksrelaties
+maintenance:
+  type: internal
+  contacts:
+    - name: MijnOverheid Zakelijk Team
+      email: moza@minbzk.nl
+      affiliation: Ministerie van Binnenlandse Zaken en Koninkrijksrelaties
+localisation:
+  localisationReady: false
+  availableLanguages:
+    - nl
