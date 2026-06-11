@@ -1,138 +1,117 @@
 package nl.rijksoverheid.moz.service;
 
+import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.transaction.Transactional;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
-import nl.rijksoverheid.moz.common.NotificatieStatus;
-import nl.rijksoverheid.moz.common.ProfielType;
-import nl.rijksoverheid.moz.common.VerzendKanaal;
-import nl.rijksoverheid.moz.common.VerzendingType;
-import nl.rijksoverheid.moz.dto.request.ContactherstelAanvraagRequest;
-import nl.rijksoverheid.moz.dto.request.DeliveryReceiptRequest;
-import nl.rijksoverheid.moz.dto.request.NotificatieAanvraagRequest;
-import nl.rijksoverheid.moz.entity.Notificatie;
-import nl.rijksoverheid.moz.entity.StatusGebeurtenis;
-import nl.rijksoverheid.moz.entity.Verzending;
-import nl.rijksoverheid.moz.mapper.NotificatieMapper;
-import nl.rijksoverheid.moz.repository.NotificatieRepository;
-import nl.rijksoverheid.moz.repository.VerzendingRepository;
+import nl.rijksoverheid.moz.client.notify.NotifyClient;
+import nl.rijksoverheid.moz.client.notify.NotifyEmailRequest;
+import nl.rijksoverheid.moz.client.notify.NotifyEmailResponse;
+import nl.rijksoverheid.moz.client.notify.NotifyJwtFactory;
+import nl.rijksoverheid.moz.client.profielservice.ContactgegevenResponse;
+import nl.rijksoverheid.moz.client.profielservice.PartijRequest;
+import nl.rijksoverheid.moz.client.profielservice.PartijResponse;
+import nl.rijksoverheid.moz.client.profielservice.ProfielServiceClient;
+import nl.rijksoverheid.moz.api.model.NotificatieAanvraagRequest;
+import nl.rijksoverheid.moz.api.model.NotificatieResponse;
+import nl.rijksoverheid.moz.common.ContactType;
+import nl.rijksoverheid.moz.helper.Problems;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @ApplicationScoped
 public class NotificatieService {
 
-    private final NotificatieRepository notificatieRepository;
-    private final VerzendingRepository verzendingRepository;
-    private final NotificatieMapper notificatieMapper;
+    private final ProfielServiceClient profielServiceClient;
+    private final NotifyClient notifyClient;
+    private final NotifyJwtFactory notifyJwtFactory;
+    private final String notifyApiKey;
+    private final String notifyTemplateId;
 
-    public NotificatieService(NotificatieRepository notificatieRepository,
-                               VerzendingRepository verzendingRepository,
-                               NotificatieMapper notificatieMapper) {
-        this.notificatieRepository = notificatieRepository;
-        this.verzendingRepository = verzendingRepository;
-        this.notificatieMapper = notificatieMapper;
+    public NotificatieService(@RestClient ProfielServiceClient profielServiceClient,
+                               @RestClient NotifyClient notifyClient,
+                               NotifyJwtFactory notifyJwtFactory,
+                               @ConfigProperty(name = "notify.api-key") Optional<String> notifyApiKey,
+                               @ConfigProperty(name = "notify.template-id") Optional<String> notifyTemplateId) {
+        this.profielServiceClient = profielServiceClient;
+        this.notifyClient = notifyClient;
+        this.notifyJwtFactory = notifyJwtFactory;
+        this.notifyApiKey = notifyApiKey.orElse("");
+        this.notifyTemplateId = notifyTemplateId.orElse("");
     }
 
-    @Transactional
-    public Notificatie aanmaken(NotificatieAanvraagRequest request) {
-        valideerAanvraag(request);
+    public NotificatieResponse versturen(NotificatieAanvraagRequest request) {
+        PartijResponse partij = zoekPartij(request);
+        String emailAdres = zoekEmailAdres(partij, request.getIdentificatieNummer());
 
-        Notificatie notificatie = new Notificatie();
-        notificatie.setProfielType(request.profielType);
-        notificatie.setIdentificatieType(request.identificatieType);
-        notificatie.setIdentificatieNummer(request.identificatieNummer);
-        notificatie.setDienstverlener(request.dienstverlener);
-        notificatie.setDienst(request.dienst);
-        notificatie.setBerichtType(request.berichtType);
-        notificatie.setBerichtgegevens(notificatieMapper.serialiseer(request.berichtgegevens));
-        notificatie.setReferentie(request.referentie);
+        NotifyEmailRequest notifyRequest = new NotifyEmailRequest(
+                emailAdres,
+                notifyTemplateId,
+                request.getBerichtgegevens() != null ? request.getBerichtgegevens() : Map.of());
 
-        Verzending verzending = new Verzending();
-        verzending.setType(VerzendingType.PRIMAIR);
-        verzending.setStatus(NotificatieStatus.CREATED);
-        if (request.profielType == ProfielType.DECENTRAAL) {
-            verzending.setKanaal(request.verzendKanaal);
-            verzending.setOntvangerEmail(request.ontvangerEmail);
-            verzending.setOntvangerAdres(notificatieMapper.naarAdres(request.ontvangerAdres));
-        }
-        // Bij CENTRAAL: kanaal en ontvangergegevens worden later bepaald via Profielservice (niet in deze skeleton)
-
-        notificatie.addVerzending(verzending);
-        notificatieRepository.persist(notificatie);
-
-        return notificatie;
-    }
-
-    public Notificatie ophalen(UUID id) {
-        return notificatieRepository.findByIdOptional(id)
-                .orElseThrow(() -> new WebApplicationException("Notificatie " + id + " niet gevonden", Response.Status.NOT_FOUND));
-    }
-
-    @Transactional
-    public Verzending contactherstelInitieren(UUID notificatieId, ContactherstelAanvraagRequest request) {
-        valideerContactherstel(request);
-
-        Notificatie notificatie = notificatieRepository.findByIdOptional(notificatieId)
-                .orElseThrow(() -> new WebApplicationException("Notificatie " + notificatieId + " niet gevonden", Response.Status.NOT_FOUND));
-
-        Verzending verzending = new Verzending();
-        verzending.setType(VerzendingType.CONTACTHERSTEL);
-        verzending.setStatus(NotificatieStatus.CREATED);
-        verzending.setKanaal(request.kanaal);
-        verzending.setOntvangerEmail(request.ontvangerEmail);
-        verzending.setOntvangerAdres(notificatieMapper.naarAdres(request.ontvangerAdres));
-
-        notificatie.addVerzending(verzending);
-
-        return verzending;
-    }
-
-    @Transactional
-    public Verzending verwerkDeliveryReceipt(DeliveryReceiptRequest request) {
-        Verzending verzending = verzendingRepository.findByNotifyReferentie(request.id)
-                .orElseThrow(() -> new WebApplicationException(
-                        "Geen verzending gevonden voor Notify-referentie " + request.id, Response.Status.NOT_FOUND));
-
-        NotificatieStatus status = notificatieMapper.naarNotificatieStatus(request.status);
-        verzending.setStatus(status);
-        if (request.sentAt != null) {
-            verzending.setVerzondenAt(request.sentAt);
-        }
-        if (request.completedAt != null) {
-            verzending.setAfgerondAt(request.completedAt);
+        String authorization;
+        try {
+            authorization = notifyJwtFactory.authorizationHeader(notifyApiKey);
+        } catch (IllegalArgumentException e) {
+            Log.error("Ongeldige NotifyNL API-key geconfigureerd", e);
+            throw Problems.serverError("Configuratiefout",
+                    "Er kan momenteel geen notificatie worden verstuurd vanwege een configuratieprobleem");
         }
 
-        StatusGebeurtenis gebeurtenis = new StatusGebeurtenis();
-        gebeurtenis.setStatus(status);
-        gebeurtenis.setOmschrijving(request.status);
-        verzending.addStatusGebeurtenis(gebeurtenis);
+        Response notifyResponse = notifyClient.verstuurEmail(authorization, notifyRequest);
+        try {
+            if (notifyResponse.getStatus() != Response.Status.OK.getStatusCode()) {
+                throw Problems.badGateway("NotifyNL fout",
+                        "NotifyNL gaf status " + notifyResponse.getStatus() + " terug");
+            }
 
-        return verzending;
-    }
+            UUID notifyReferentie = notifyResponse.readEntity(NotifyEmailResponse.class).id;
 
-    private void valideerAanvraag(NotificatieAanvraagRequest request) {
-        if (request.profielType != ProfielType.DECENTRAAL) {
-            return;
-        }
-        if (request.verzendKanaal == null) {
-            throw new WebApplicationException("verzendKanaal is verplicht bij profielType=DECENTRAAL", Response.Status.BAD_REQUEST);
-        }
-        if (request.verzendKanaal == VerzendKanaal.EMAIL && request.ontvangerEmail == null) {
-            throw new WebApplicationException("ontvangerEmail is verplicht bij verzendKanaal=EMAIL", Response.Status.BAD_REQUEST);
-        }
-        if (request.verzendKanaal == VerzendKanaal.FYSIEK && request.ontvangerAdres == null) {
-            throw new WebApplicationException("ontvangerAdres is verplicht bij verzendKanaal=FYSIEK", Response.Status.BAD_REQUEST);
+            return new NotificatieResponse().notifyReferentie(notifyReferentie);
+        } finally {
+            notifyResponse.close();
         }
     }
 
-    private void valideerContactherstel(ContactherstelAanvraagRequest request) {
-        if (request.kanaal == VerzendKanaal.EMAIL && request.ontvangerEmail == null) {
-            throw new WebApplicationException("ontvangerEmail is verplicht bij kanaal=EMAIL", Response.Status.BAD_REQUEST);
+    private PartijResponse zoekPartij(NotificatieAanvraagRequest request) {
+        PartijRequest partijRequest = new PartijRequest();
+        partijRequest.identificatieType = request.getIdentificatieType();
+        partijRequest.identificatieNummer = request.getIdentificatieNummer();
+        partijRequest.dienstverlener = request.getDienstverlener();
+        partijRequest.dienstNaam = request.getDienst();
+
+        try {
+            return profielServiceClient.zoekPartij(partijRequest);
+        } catch (WebApplicationException e) {
+            if (e.getResponse().getStatus() == Response.Status.NOT_FOUND.getStatusCode()) {
+                throw Problems.notFound("Partij niet gevonden",
+                        "Geen partij gevonden voor " + request.getIdentificatieType() + " " + request.getIdentificatieNummer());
+            }
+
+            Log.error("Profielservice gaf status " + e.getResponse().getStatus() + " terug", e);
+            throw Problems.serverError("Profielservice fout",
+                    "Er is een fout opgetreden bij het ophalen van de contactgegevens");
         }
-        if (request.kanaal == VerzendKanaal.FYSIEK && request.ontvangerAdres == null) {
-            throw new WebApplicationException("ontvangerAdres is verplicht bij kanaal=FYSIEK", Response.Status.BAD_REQUEST);
-        }
+    }
+
+    private String zoekEmailAdres(PartijResponse partij, String identificatieNummer) {
+        List<ContactgegevenResponse> emailAdressen = partij.contactgegevens == null
+                ? List.of()
+                : partij.contactgegevens.stream()
+                        .filter(contactgegeven -> contactgegeven.type == ContactType.Email)
+                        .toList();
+
+        return emailAdressen.stream()
+                .filter(contactgegeven -> contactgegeven.isDefault)
+                .findFirst()
+                .or(() -> emailAdressen.stream().findFirst())
+                .map(contactgegeven -> contactgegeven.waarde)
+                .orElseThrow(() -> Problems.notFound("Geen e-mailadres gevonden",
+                        "Geen e-mailadres gevonden voor " + identificatieNummer));
     }
 }
