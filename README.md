@@ -1,5 +1,36 @@
 # NotificatieManagementComponent (NMC)
 
+## Wat doet dit skeleton wel/niet
+
+Deze implementatie ondersteunt op dit moment één synchrone happy-flow:
+
+1. Een Dienstverlener (rechtstreeks, of via een OMC) roept
+   `POST /api/nmc/v1/notificaties` aan met een identificatie (BSN/KVK/RSIN),
+   dienstverlener/dienst en het te versturen bericht.
+2. De NMC haalt synchroon de contactgegevens op bij de **Profielservice** op
+   basis van die identificatie.
+3. De NMC verstuurt synchroon een e-mail via **NotifyNL**
+   (`POST /v2/notifications/email`) en verwacht hierop direct een `200`.
+4. De NMC retourneert de Notify-referentie aan de aanroeper.
+
+Dit is het **centraal profiel**-scenario (zie "De twee assen" hieronder),
+waarbij de NMC zelf de contactgegevens opzoekt. Er wordt bewust **niets**
+gepersisteerd: er is geen database, en contactgegevens die bij de
+Profielservice worden opgehaald (met name adresgegevens) worden niet
+opgeslagen door de NMC.
+
+Nog **niet** geïmplementeerd, maar wel onderdeel van de visie verderop in dit
+document:
+
+- Contactherstel (fysieke post via Printstraat/Postadres,
+  KvK/BRP/NHR-fallback)
+- Herverzending
+- Verwerken van asynchrone bezorgstatus (delivery receipts) van NotifyNL
+- Het decentraal profiel / doorgeefluik-scenario voor OMC's
+- Een koppeling met de Templating Service: het Notify-`template_id` komt
+  voorlopig uit een vaste configuratiewaarde (`notify.template-id`)
+- Een observability-koppelvlak
+
 ## Wat is de NMC?
 
 De NMC is de centrale component voor het versturen van officiële
@@ -64,6 +95,10 @@ Een OMC voor de NMC betekent dus niet automatisch een decentraal profiel: een
 OMC kan ook gewoon een kale identificatie doorgeven en het centraal profiel
 laten gebruiken.
 
+Dit skeleton implementeert alleen het **centraal profiel**-scenario van As 2,
+onafhankelijk van As 1 (een eventuele OMC geeft hierbij alleen een kale
+identificatie door).
+
 ## Belangrijkste flow
 
 1. **Notificatie aanmaken**: de aanroeper dient een aanvraag in. Bij een
@@ -78,7 +113,16 @@ laten gebruiken.
    profiel initieert de NMC dit zelf, bij een decentraal profiel gebeurt dit op
    verzoek van de aanroeper.
 
+Van deze flow implementeert dit skeleton alleen stap 1 (alleen het
+centraal-profiel-pad) en stap 2 (zonder Templating Service). Stap 3 en 4 zijn
+nog niet gebouwd.
+
 ## Domeinmodel
+
+Onderstaand domeinmodel is de beoogde eindsituatie. De huidige code kent **geen
+persistente entiteiten** — er is geen database. Een aanvraag wordt verwerkt via
+request/response-DTO's (`NotificatieAanvraagRequest` /
+`NotificatieResponse`) zonder dat er iets wordt opgeslagen.
 
 - **`Notificatie`**: de aanvraag/het "geval" als geheel: voor wie (BSN/KVK/RSIN),
   namens welke dienstverlener/dienst, welk berichttype en welke berichtgegevens.
@@ -96,62 +140,76 @@ voorkomen dat dit uit de pas gaat lopen.
 
 ## API
 
-Alle endpoints zitten onder `/api/nmc/v1`:
+Het huidige endpoint zit onder `/api/nmc/v1`:
 
-- **`POST /notificaties`**: maakt een nieuwe notificatie aan en start de
-  eerste verzending. Retourneert `201` met de aangemaakte notificatie.
-- **`GET /notificaties/{id}`**: haalt een notificatie op, inclusief de status
-  van alle verzendingen. Retourneert `404` als de notificatie niet bestaat.
-- **`POST /notificaties/{id}/contactherstel`**: start een nieuwe
-  verzendpoging (contactherstel) voor een bestaande notificatie. Retourneert
-  `201` met de nieuwe verzending.
+- **`POST /notificaties`**: voert de volledige synchrone happy-flow uit (zie
+  "Wat doet dit skeleton wel/niet"): haalt contactgegevens op bij de
+  Profielservice, verstuurt de e-mail via NotifyNL, en retourneert de
+  Notify-referentie. Retourneert `200` op succes, `404` als er geen partij of
+  e-mailadres gevonden wordt, en `502` als NotifyNL geen `200` teruggeeft.
+
+Gepland/toekomstig (nog niet aanwezig):
+
+- **`GET /notificaties/{id}`**: status van een eerder verstuurde notificatie
+  opvragen, inclusief de status van alle verzendingen.
+- **`POST /notificaties/{id}/contactherstel`**: een nieuwe verzendpoging
+  (contactherstel) starten voor een bestaande notificatie.
 - **`POST /notify-callback`**: webhook waarop NotifyNL de bezorgstatus
-  (delivery receipt) van een verzending terugmeldt. Werkt de status van de
-  bijbehorende verzending bij.
+  (delivery receipt) van een verzending terugmeldt.
 
 De volledige OpenAPI-specificatie is beschikbaar via `/q/swagger-ui` wanneer de
 applicatie draait (`./mvnw quarkus:dev`).
 
+## OpenAPI-specificatie & codegen
+
+Het contract van `/api/nmc/v1/notificaties` is **spec-first**:
+`src/main/resources/META-INF/openapi.yaml` is de bron van waarheid.
+
+- Quarkus serveert dit bestand ongewijzigd via `/q/openapi` en
+  `/q/swagger-ui` (`mp.openapi.scan.disable=true` staat aan, dus er wordt niet
+  ook nog automatisch op annotaties gescand).
+- Bij elke build genereert de `openapi-generator-maven-plugin` hieruit de
+  JAX-RS-interface (`nl.rijksoverheid.moz.api.NotificatiesApi`) en de
+  request/response-modellen (`nl.rijksoverheid.moz.api.model.*`) in
+  `target/generated-sources/openapi` (niet ingecheckt).
+  `NotificatieController` implementeert deze gegenereerde interface.
+
+Om het contract aan te passen: wijzig `META-INF/openapi.yaml` en draai een
+build (`./mvnw compile`, `test` of `quarkus:dev`) — de gegenereerde
+interface/modellen en de swagger-ui worden automatisch bijgewerkt.
+
 ## Lokaal draaien
 
-Voor `dev`- en `prod`-mode is een PostgreSQL-database nodig (zie
-`src/main/resources/application.properties`). Start deze lokaal via Docker
-Compose:
+Er is geen database nodig. De applicatie roept de Profielservice en NotifyNL
+aan via REST clients, geconfigureerd in
+`src/main/resources/application.properties`:
 
-```shell
-docker-compose up -d
-```
+- `quarkus.rest-client.profiel-service.url` — in `%dev`/`%test` standaard
+  `http://localhost:8081`; er moet dus een (lokale of gestubde)
+  Profielservice op die poort draaien.
+- `quarkus.rest-client.notify.url`, `notify.api-key` en `notify.template-id` —
+  wijzen naar NotifyNL. `notify.api-key` en `notify.template-id` staan leeg in
+  de repository en moeten lokaal (bijvoorbeeld in
+  `application-dev.properties`, niet ingecheckt) ingevuld worden om de
+  e-mailflow daadwerkelijk te laten werken.
 
-Start daarna de applicatie in dev mode:
+Start de applicatie in dev mode:
 
 ```shell
 ./mvnw quarkus:dev
 ```
 
-Voor `mvn test`/`./mvnw test` is geen database nodig: de tests draaien tegen
-een in-memory H2-database.
-
-Database weer afsluiten:
-
-```shell
-docker-compose down
-```
-
-Of, om ook de data in de `postgres_data`-volume te wissen:
-
-```shell
-docker-compose down -v
-```
+Voor `mvn test`/`./mvnw test` worden de Profielservice- en NotifyNL-clients
+gemockt; hiervoor is geen draaiende Profielservice of NotifyNL nodig.
 
 ## Status & vervolgstappen
 
-Dit is een eerste skeleton met het domeinmodel en de inbound API-contracten
-van de NMC. Nog **niet** aanwezig:
+Dit skeleton implementeert de synchrone centraal-profiel happy-flow zoals
+beschreven onder "Wat doet dit skeleton wel/niet". Nog **niet** aanwezig:
 
-- **Uitgaande integraties** met Profielservice, NotifyNL, Templating Service en
-  OMC-statusmeldingen
-- **Orkestratielogica** die de fasen aan elkaar knoopt (template ophalen,
-  versturen via Notify, beslissen wanneer contactherstel nodig is)
-- **Herverzending vs. contactherstel**-beslislogica
-- Een uitgewerkt **observability-koppelvlak** (het datamodel ondersteunt dit
-  al via `StatusGebeurtenis`, maar er is nog geen endpoint voor)
+- **Contactherstel** en **herverzending**
+- Verwerking van **asynchrone bezorgstatus** (delivery receipts) van NotifyNL
+- Het **decentraal profiel**-scenario en de bijbehorende OMC-statusmeldingen
+- Een koppeling met de **Templating Service** (template-keuze op basis van
+  `berichtType`)
+- Een uitgewerkt **observability-koppelvlak**

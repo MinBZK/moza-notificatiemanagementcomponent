@@ -1,0 +1,120 @@
+openapi: 3.0.3
+info:
+  title: NotificatieManagementComponent API
+  description: |
+    API voor het versturen van notificaties namens een Dienstverlener.
+  version: 0.1.0
+
+paths:
+  /api/nmc/v1/notificaties:
+    post:
+      operationId: notificatieVersturen
+      summary: Notificatie versturen
+      description: |
+        Haalt de contactgegevens op bij de Profielservice en verstuurt de
+        notificatie synchroon via NotifyNL.
+      tags:
+        - Notificaties
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificatieAanvraagRequest'
+      responses:
+        '200':
+          description: Notificatie succesvol verstuurd
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificatieResponse'
+        '400':
+          description: Ongeldige aanvraag
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Geen partij of e-mailadres gevonden voor de opgegeven identificatie
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '502':
+          description: NotifyNL heeft de notificatie niet (succesvol) geaccepteerd
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+components:
+  schemas:
+    IdentificatieType:
+      type: string
+      description: Type identificatie van de ontvanger
+      enum:
+        - BSN
+        - KVK
+        - RSIN
+
+    NotificatieAanvraagRequest:
+      type: object
+      description: Aanvraag om een notificatie te versturen
+      required:
+        - identificatieType
+        - identificatieNummer
+        - dienstverlener
+        - dienst
+      properties:
+        identificatieType:
+          $ref: '#/components/schemas/IdentificatieType'
+        identificatieNummer:
+          type: string
+          minLength: 1
+          description: BSN-, KVK- of RSIN-nummer van de ontvanger
+        dienstverlener:
+          type: string
+          minLength: 1
+          description: Naam van de dienstverlener namens wie de notificatie wordt verstuurd
+        dienst:
+          type: string
+          minLength: 1
+          description: Naam van de dienst waarvoor de notificatie wordt verstuurd
+        berichtType:
+          type: string
+          description: >-
+            Berichttype, bedoeld voor het opvragen van de juiste template bij
+            de Templating Service (nog niet in gebruik)
+        berichtgegevens:
+          type: object
+          description: Templatevariabelen voor het bericht
+          additionalProperties:
+            type: string
+
+    NotificatieResponse:
+      type: object
+      required:
+        - notifyReferentie
+      properties:
+        notifyReferentie:
+          type: string
+          format: uuid
+          description: Referentie van de verzending bij NotifyNL
+
+    Problem:
+      type: object
+      description: Problem Details (RFC 9457)
+      properties:
+        type:
+          type: string
+          format: uri
+          default: "about:blank"
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri
