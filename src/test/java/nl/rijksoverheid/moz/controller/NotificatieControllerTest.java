@@ -46,8 +46,8 @@ class NotificatieControllerTest {
     void notificatieVersturen_happyFlow_retourneert200() {
         Mockito.when(profielServiceClient.zoekPartij(any())).thenReturn(partijMetEmail("burger@example.nl", true));
 
-        UUID notifyReferentie = UUID.randomUUID();
-        Response notifyResponse = notifyResponse(200, notifyReferentie);
+        UUID notifyNlId = UUID.randomUUID();
+        Response notifyResponse = notifyResponse(200, notifyNlId);
         Mockito.when(notifyClient.verstuurEmail(any(), any())).thenReturn(notifyResponse);
 
         String aanvraag = """
@@ -66,7 +66,7 @@ class NotificatieControllerTest {
                 .when().post("/api/nmc/v1/notificaties")
                 .then()
                 .statusCode(200)
-                .body("notifyReferentie", equalTo(notifyReferentie.toString()));
+                .body("notificatieId", org.hamcrest.Matchers.notNullValue());
     }
 
     @Test
@@ -107,6 +107,34 @@ class NotificatieControllerTest {
                 .when().post("/api/nmc/v1/notificaties")
                 .then()
                 .statusCode(400);
+    }
+
+    @Test
+    void notificatieVersturen_notifyGeenNotificatieId_retourneert502() {
+        Mockito.when(profielServiceClient.zoekPartij(any())).thenReturn(partijMetEmail("burger@example.nl", true));
+
+        Response notifyResponse = Mockito.mock(Response.class);
+        Mockito.when(notifyResponse.getStatus()).thenReturn(200);
+        Mockito.when(notifyResponse.readEntity(NotifyEmailResponse.class)).thenReturn(new NotifyEmailResponse());
+
+        Mockito.when(notifyClient.verstuurEmail(any(), any())).thenReturn(notifyResponse);
+
+        String aanvraag = """
+                {
+                  "identificatieType": "KVK",
+                  "identificatieNummer": "12345678",
+                  "dienstverlener": "Gemeente Voorbeeld",
+                  "dienst": "Parkeervergunning"
+                }
+                """;
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(aanvraag)
+                .when().post("/api/nmc/v1/notificaties")
+                .then()
+                .statusCode(502)
+                .contentType("application/problem+json");
     }
 
     @Test

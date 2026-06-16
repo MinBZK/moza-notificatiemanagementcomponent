@@ -2,22 +2,30 @@
 
 ## Wat doet dit skeleton wel/niet
 
-Deze implementatie ondersteunt op dit moment één synchrone happy-flow:
+Deze implementatie ondersteunt de centraal-profiel happy-flow, inclusief de
+asynchrone bezorgstatus:
 
 1. Een Dienstverlener (rechtstreeks, of via een OMC) roept
    `POST /api/nmc/v1/notificaties` aan met een identificatie (BSN/KVK/RSIN),
-   dienstverlener/dienst en het te versturen bericht.
+   dienstverlener/dienst, het te versturen bericht en optioneel een `callbackUrl`.
 2. De NMC haalt synchroon de contactgegevens op bij de **Profielservice** op
    basis van die identificatie.
 3. De NMC verstuurt synchroon een e-mail via **NotifyNL**
    (`POST /v2/notifications/email`) en verwacht hierop direct een `200`.
-4. De NMC retourneert de Notify-referentie aan de aanroeper.
+4. De NMC slaat de notificatie op (PostgreSQL) met status `sending` en de
+   eventuele `callbackUrl`, en retourneert een `notificatieId` aan de aanroeper.
+5. NotifyNL roept asynchroon `POST /api/nmc/v1/notify-callback` aan met de
+   bezorgstatus (delivery receipt).
+6. De NMC zoekt de notificatie op, werkt de status bij en stuurt — als er een
+   `callbackUrl` is meegegeven — een statusupdate (**CloudEvents NL GOV**) naar
+   die URL. Na een geslaagde callback wordt het record verwijderd (minimale
+   dataminimalisatie).
+
+De `callbackUrl` is optioneel: Dienstverleners zonder eigen webhook-endpoint kunnen
+de status opvragen via `GET /notificaties/{id}` (nog niet geïmplementeerd).
 
 Dit is het **centraal profiel**-scenario (zie "De twee assen" hieronder),
-waarbij de NMC zelf de contactgegevens opzoekt. Er wordt bewust **niets**
-gepersisteerd: er is geen database, en contactgegevens die bij de
-Profielservice worden opgehaald (met name adresgegevens) worden niet
-opgeslagen door de NMC.
+waarbij de NMC zelf de contactgegevens opzoekt.
 
 Nog **niet** geïmplementeerd, maar wel onderdeel van de visie verderop in dit
 document:
@@ -25,11 +33,13 @@ document:
 - Contactherstel (fysieke post via Printstraat/Postadres,
   KvK/BRP/NHR-fallback)
 - Herverzending
-- Verwerken van asynchrone bezorgstatus (delivery receipts) van NotifyNL
 - Het decentraal profiel / doorgeefluik-scenario voor OMC's
 - Een koppeling met de Templating Service: het Notify-`template_id` komt
   voorlopig uit een vaste configuratiewaarde (`notify.template-id`)
 - Een observability-koppelvlak
+- `GET /notificaties/{id}`: statuspoll voor Dienstverleners zonder callbackUrl
+- Bearer-JWT-authenticatie voor de uitgaande consument-callback (momenteel geen
+  auth op de callback naar de Dienstverlener)
 
 ## Wat is de NMC?
 
@@ -69,7 +79,9 @@ los van elkaar, een keuze op de ene as zegt niets over de andere.
 ### As 1. Zit er een OMC voor de NMC?
 
 - **Ja**: de OMC is de aanroeper van de NMC en ontvangt statusupdates terug,
-  die het weer doorgeeft aan de Procesapplicatie.
+  die het weer doorgeeft aan de Procesapplicatie. De OMC kan bij de aanvraag
+  een optionele `callbackUrl` meegeven waarop de NMC asynchroon statusupdates
+  terugstuurt (CloudEvents NL GOV).
 - **Nee**: een dienst/voorziening zonder eigen OMC roept de NMC rechtstreeks
   aan.
 
@@ -105,84 +117,118 @@ identificatie door).
    centraal profiel volstaat een identificatie; bij een decentraal profiel
    worden ook het verzendkanaal en de ontvangergegevens meegegeven.
 2. **Versturen**: de NMC haalt (in een latere stap) de juiste template op en
-   stuurt het bericht via NotifyNL.
+   stuurt het bericht via NotifyNL. De notificatie wordt opgeslagen met status
+   `sending`.
 3. **Bezorgstatus verwerken**: NotifyNL meldt asynchroon terug of de
-   bezorging is gelukt of mislukt. De NMC legt deze statusupdates vast.
+   bezorging is gelukt of mislukt. De NMC werkt de status bij en stuurt een
+   statusupdate naar de `callbackUrl` van de aanroeper (indien opgegeven).
 4. **Contactherstel (indien nodig)**: bij een mislukte bezorging kan een
    nieuwe verzendpoging via een ander kanaal worden gestart: bij een centraal
    profiel initieert de NMC dit zelf, bij een decentraal profiel gebeurt dit op
    verzoek van de aanroeper.
 
-Van deze flow implementeert dit skeleton alleen stap 1 (alleen het
-centraal-profiel-pad) en stap 2 (zonder Templating Service). Stap 3 en 4 zijn
-nog niet gebouwd.
+Dit skeleton implementeert stap 1, 2 en 3 (alleen het centraal-profiel-pad,
+zonder Templating Service). Stap 4 is nog niet gebouwd.
+
+## Interne componenten (C4-componentmodel)
+
+De NMC bestaat intern uit de volgende componenten (gebaseerd op het C4-componentdiagram).
+Geïmplementeerde componenten zijn vetgedrukt; de rest is toekomstig ontwerp.
+
+| Component | Type | Omschrijving |
+|---|---|---|
+| **Centrale-regie-API** | REST (controller) | Inbound endpoint voor het centraal profiel: intake op identificerend nummer; NMC resolvet zelf de contactgegevens via de Profielservice. |
+| **Afleverstatus-callback** | REST (controller) | Webhook waarop NotifyNL delivery receipts meldt. |
+| **Notificatie-orchestrator** | Service | Coördineert contactgegevens ophalen, opslag in de database, versturen en statusverwerking. |
+| **Profielservice-adapter** | Client | Haalt contactvoorkeur op bij de Profielservice en kan een e-mailadres invalideren. |
+| **Verzendadapter** | Client (bearer-JWT) | Verstuurt berichten via NotifyNL (`template_id` + `personalisation`). |
+| **Consument-callback-adapter** | Webhook-client (CloudEvents NL GOV) | Stuurt de afleverstatus asynchroon terug naar de aanroeper via de opgegeven `callbackUrl`. |
+| **notificatiedatabase** | PostgreSQL | Slaat referentie, status en (bij centraal profiel) het versleuteld identificerend nummer op; records worden verwijderd zodra de callback is verstuurd. |
+| Decentrale-regie-API | REST (controller) | Inbound endpoint voor het decentraal profiel: intake met reeds opgehaalde contactgegevens. |
+| Adres-adapter | Client | Haalt een postadres op bij KvK Handelsregister of BRP als fallback bij contactherstel. |
+| Contactherstel-coordinator | Component | Coördineert de contactherselstroom bij onbereikbaarheid; initieert een nieuwe verzendpoging via een ander kanaal en meldt dit aan de Contactherstel-dienst. |
+
+De externe systemen die de NMC aanroept of van ontvangt:
+
+- **Dienstverlener / OMC** — initiëert notificaties (centraal of decentraal)
+- **NotifyNL** — verzendt template-berichten en meldt afleverstatus terug
+- **Profiel Service** — levert contactgegevens en -voorkeuren
+- **Contactherstel** — voert de uiteindelijke contactherselactie uit (fysieke post via Printstraat)
+- **KvK Handelsregister / BRP** — adresgegevens als fallback bij contactherstel
 
 ## Domeinmodel
 
-Onderstaand domeinmodel is de beoogde eindsituatie. De huidige code kent **geen
-persistente entiteiten** — er is geen database. Een aanvraag wordt verwerkt via
-request/response-DTO's (`NotificatieAanvraagRequest` /
-`NotificatieResponse`) zonder dat er iets wordt opgeslagen.
+De `Notificatie`-entiteit is minimaal geïmplementeerd: hij bevat een
+NMC-interne `notificatieId` (UUID), de `notifyNlNotificatieId` (de referentie
+die NotifyNL intern gebruikt voor correlatie met delivery receipts), de
+optionele `callbackUrl` en de huidige `status`. Records worden verwijderd zodra
+de callback succesvol is verstuurd (dataminimalisatie).
 
-- **`Notificatie`**: de aanvraag/het "geval" als geheel: voor wie (BSN/KVK/RSIN),
-  namens welke dienstverlener/dienst, welk berichttype en welke berichtgegevens.
-  Een notificatie heeft één of meer verzendingen.
-- **`Verzending`**: één concrete verzendpoging: de oorspronkelijke (primaire)
-  verzending, of een contactherstelpoging. Houdt het verzendkanaal, de
-  ontvangergegevens, de huidige status en de Notify-referentie bij.
+Onderstaande entiteiten zijn de **beoogde eindsituatie** voor latere stories en
+nog niet geïmplementeerd:
+
+- **`Verzending`**: één concrete verzendpoging (primaire verzending of
+  contactherstelpoging). Houdt het verzendkanaal, de ontvangergegevens, de
+  huidige status en de Notify-referentie bij.
 - **`StatusGebeurtenis`**: een append-only logboek van statusupdates per
-  verzending (bijvoorbeeld de delivery receipts van NotifyNL). Vormt de basis
-  voor een toekomstig observability-koppelvlak.
-
-De huidige status van een notificatie wordt afgeleid van de meest recente
-verzending. Er is bewust geen apart statusveld op `Notificatie` zelf, om te
-voorkomen dat dit uit de pas gaat lopen.
+  verzending (bijv. delivery receipts van NotifyNL). Basis voor een toekomstig
+  observability-koppelvlak.
 
 ## API
 
-Het huidige endpoint zit onder `/api/nmc/v1`:
+De huidige endpoints zitten onder `/api/nmc/v1`:
 
-- **`POST /notificaties`**: voert de volledige synchrone happy-flow uit (zie
-  "Wat doet dit skeleton wel/niet"): haalt contactgegevens op bij de
-  Profielservice, verstuurt de e-mail via NotifyNL, en retourneert de
-  Notify-referentie. Retourneert `200` op succes, `404` als er geen partij of
-  e-mailadres gevonden wordt, en `502` als NotifyNL geen `200` teruggeeft.
+- **`POST /notificaties`**: haalt contactgegevens op bij de Profielservice,
+  verstuurt de e-mail via NotifyNL, slaat de notificatie op en retourneert een
+  `notificatieId`. Optioneel kan een `callbackUrl` worden meegegeven voor
+  asynchrone statusupdates. Retourneert `200` op succes, `404` als er geen
+  partij of e-mailadres gevonden wordt, en `502` als NotifyNL geen `200`
+  teruggeeft.
+- **`POST /notify-callback`**: webhook waarop NotifyNL de bezorgstatus
+  (delivery receipt) van een verzending terugmeldt. De NMC werkt de status bij
+  en stuurt — indien een `callbackUrl` aanwezig is — een **CloudEvents NL GOV**
+  statusupdate naar die URL. Retourneert `204` op succes en `404` als de
+  NotifyNL-referentie onbekend is.
 
 Gepland/toekomstig (nog niet aanwezig):
 
 - **`GET /notificaties/{id}`**: status van een eerder verstuurde notificatie
-  opvragen, inclusief de status van alle verzendingen.
+  opvragen (alternatief voor de callbackUrl).
 - **`POST /notificaties/{id}/contactherstel`**: een nieuwe verzendpoging
   (contactherstel) starten voor een bestaande notificatie.
-- **`POST /notify-callback`**: webhook waarop NotifyNL de bezorgstatus
-  (delivery receipt) van een verzending terugmeldt.
 
 De volledige OpenAPI-specificatie is beschikbaar via `/q/swagger-ui` wanneer de
 applicatie draait (`./mvnw quarkus:dev`).
 
 ## OpenAPI-specificatie & codegen
 
-Het contract van `/api/nmc/v1/notificaties` is **spec-first**:
+Het contract van `/api/nmc/v1` is **spec-first**:
 `src/main/resources/META-INF/openapi.yaml` is de bron van waarheid.
 
 - Quarkus serveert dit bestand ongewijzigd via `/q/openapi` en
   `/q/swagger-ui` (`mp.openapi.scan.disable=true` staat aan, dus er wordt niet
   ook nog automatisch op annotaties gescand).
 - Bij elke build genereert de `openapi-generator-maven-plugin` hieruit de
-  JAX-RS-interface (`nl.rijksoverheid.moz.api.NotificatiesApi`) en de
-  request/response-modellen (`nl.rijksoverheid.moz.api.model.*`) in
-  `target/generated-sources/openapi` (niet ingecheckt).
-  `NotificatieController` implementeert deze gegenereerde interface.
+  JAX-RS-interfaces (`nl.rijksoverheid.moz.api.NotificatiesApi`,
+  `nl.rijksoverheid.moz.api.NotifyCallbackApi`) en de request/response-modellen
+  (`nl.rijksoverheid.moz.api.model.*`) in `target/generated-sources/openapi`
+  (niet ingecheckt). `NotificatieController` en `NotifyCallbackController`
+  implementeren de gegenereerde interfaces.
 
 Om het contract aan te passen: wijzig `META-INF/openapi.yaml` en draai een
 build (`./mvnw compile`, `test` of `quarkus:dev`) — de gegenereerde
-interface/modellen en de swagger-ui worden automatisch bijgewerkt.
+interfaces/modellen en de swagger-ui worden automatisch bijgewerkt.
 
 ## Lokaal draaien
 
-Er is geen database nodig. De applicatie roept de Profielservice en NotifyNL
-aan via REST clients, geconfigureerd in
-`src/main/resources/application.properties`:
+De applicatie gebruikt een **PostgreSQL**-database. In dev mode (`%dev`) wordt
+een lokale PostgreSQL-instantie verwacht (`jdbc:postgresql://localhost:5432/nmc`,
+credentials `nmc`/`nmc`). In test mode (`%test`) wordt H2 in-memory gebruikt.
+Voor productie moeten `DB_USERNAME` en `DB_PASSWORD` als omgevingsvariabelen worden
+meegegeven.
+
+De applicatie roept de Profielservice en NotifyNL aan via REST clients,
+geconfigureerd in `src/main/resources/application.properties`:
 
 - `quarkus.rest-client.profiel-service.url` — in `%dev`/`%test` standaard
   `http://localhost:8081`; er moet dus een (lokale of gestubde)
@@ -199,17 +245,20 @@ Start de applicatie in dev mode:
 ./mvnw quarkus:dev
 ```
 
-Voor `mvn test`/`./mvnw test` worden de Profielservice- en NotifyNL-clients
-gemockt; hiervoor is geen draaiende Profielservice of NotifyNL nodig.
+Voor `./mvnw test` worden de Profielservice- en NotifyNL-clients en de
+consument-callback-adapter gemockt; hiervoor is geen draaiende externe service
+nodig.
 
 ## Status & vervolgstappen
 
-Dit skeleton implementeert de synchrone centraal-profiel happy-flow zoals
-beschreven onder "Wat doet dit skeleton wel/niet". Nog **niet** aanwezig:
+Dit skeleton implementeert de centraal-profiel happy-flow inclusief de
+asynchrone bezorgstatus en consument-callback, zoals beschreven onder "Wat doet
+dit skeleton wel/niet". Nog **niet** aanwezig:
 
 - **Contactherstel** en **herverzending**
-- Verwerking van **asynchrone bezorgstatus** (delivery receipts) van NotifyNL
-- Het **decentraal profiel**-scenario en de bijbehorende OMC-statusmeldingen
+- Het **decentraal profiel**-scenario
 - Een koppeling met de **Templating Service** (template-keuze op basis van
   `berichtType`)
+- **`GET /notificaties/{id}`** voor statuspoll zonder callbackUrl
+- **Bearer-JWT-authenticatie** voor de uitgaande consument-callback
 - Een uitgewerkt **observability-koppelvlak**
