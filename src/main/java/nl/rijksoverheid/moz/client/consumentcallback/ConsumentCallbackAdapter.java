@@ -3,6 +3,7 @@ package nl.rijksoverheid.moz.client.consumentcallback;
 import io.quarkus.logging.Log;
 import io.quarkus.rest.client.reactive.QuarkusRestClientBuilder;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.domain.Notificatie;
 import nl.rijksoverheid.moz.repository.NotificatieRepository;
 
@@ -19,6 +20,7 @@ public class ConsumentCallbackAdapter {
     private final Function<String, ConsumentCallbackClient> clientFactory;
     private final long initieleWachtMs;
 
+    @Inject
     public ConsumentCallbackAdapter(NotificatieRepository notificatieRepository) {
         this(notificatieRepository,
                 url -> QuarkusRestClientBuilder.newBuilder()
