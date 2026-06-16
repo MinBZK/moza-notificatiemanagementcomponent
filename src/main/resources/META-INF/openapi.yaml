@@ -4,6 +4,16 @@ info:
   description: |
     API voor het versturen van notificaties namens een Dienstverlener.
   version: 0.1.0
+  contact:
+    name: MijnOverheid Zakelijk Team
+    email: moza@minbzk.nl
+    url: https://github.com/MinBZK/moza-notificatiemanagementcomponent
+
+servers:
+  - url: https://nmc.example.nl
+    description: Productie (placeholder — invullen bij deployment)
+  - url: http://localhost:8080
+    description: Lokale ontwikkeling
 
 paths:
   /api/nmc/v1/notificaties:
@@ -26,6 +36,11 @@ paths:
       responses:
         '200':
           description: Notificatie succesvol verstuurd
+          headers:
+            API-Version:
+              schema:
+                type: string
+              description: Versie van de API
           content:
             application/json:
               schema:
@@ -70,6 +85,11 @@ paths:
       responses:
         '204':
           description: Afleverstatus verwerkt
+          headers:
+            API-Version:
+              schema:
+                type: string
+              description: Versie van de API
         '400':
           description: Ongeldige aanvraag
           content:
