@@ -5,10 +5,13 @@ import nl.rijksoverheid.moz.domain.Notificatie;
 import nl.rijksoverheid.moz.repository.NotificatieRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -22,7 +25,8 @@ class ConsumentCallbackAdapterTest {
     void setUp() {
         callbackClient = Mockito.mock(ConsumentCallbackClient.class);
         notificatieRepository = Mockito.mock(NotificatieRepository.class);
-        adapter = new ConsumentCallbackAdapter(notificatieRepository, url -> callbackClient, 0L);
+        adapter = new ConsumentCallbackAdapter(notificatieRepository, url -> callbackClient);
+        adapter.setInitieleWachtMs(0L);
     }
 
     @Test
@@ -68,6 +72,26 @@ class ConsumentCallbackAdapterTest {
 
         verify(callbackClient, times(3)).stuurStatusUpdate(any());
         verify(notificatieRepository, never()).delete(any());
+    }
+
+    @Test
+    void stuurStatusUpdate_event_bevat_correcteData() {
+        Notificatie notificatie = notificatie("https://omc.example.nl/callback");
+
+        adapter.stuurStatusUpdate(notificatie);
+
+        ArgumentCaptor<NotificatieStatusEvent> captor = ArgumentCaptor.forClass(NotificatieStatusEvent.class);
+        verify(callbackClient).stuurStatusUpdate(captor.capture());
+        NotificatieStatusEvent event = captor.getValue();
+        assertNotNull(event.id());
+        assertEquals("1.0", event.specversion());
+        assertEquals("nl.rijksoverheid.moz.nmc.notificatie.status", event.type());
+        assertEquals("application/json", event.datacontenttype());
+        assertNotNull(event.source());
+        assertNotNull(event.subject());
+        assertNotNull(event.time());
+        assertEquals(notificatie.id, event.data().notificatieId());
+        assertEquals("delivered", event.data().status());
     }
 
     private Notificatie notificatie(String callbackUrl) {

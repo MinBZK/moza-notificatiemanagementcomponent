@@ -62,7 +62,7 @@ public class NotificatieService {
     @Transactional
     public NotificatieResponse versturen(NotificatieAanvraagRequest request) {
         PartijResponse partij = zoekPartij(request);
-        String emailAdres = zoekEmailAdres(partij, request.getIdentificatieNummer());
+        String emailAdres = zoekEmailAdres(partij, request.getDienstverlener(), request.getDienst());
 
         NotifyEmailRequest notifyRequest = new NotifyEmailRequest(
                 emailAdres,
@@ -140,7 +140,7 @@ public class NotificatieService {
         } catch (WebApplicationException e) {
             if (e.getResponse().getStatus() == Response.Status.NOT_FOUND.getStatusCode()) {
                 throw Problems.notFound("Partij niet gevonden",
-                        "Geen partij gevonden voor " + request.getIdentificatieType() + " " + request.getIdentificatieNummer());
+                        "Geen partij gevonden voor het opgegeven identificerend nummer");
             }
 
             Log.error("Profielservice gaf status " + e.getResponse().getStatus() + " terug", e);
@@ -149,19 +149,29 @@ public class NotificatieService {
         }
     }
 
-    private String zoekEmailAdres(PartijResponse partij, String identificatieNummer) {
-        List<ContactgegevenResponse> emailAdressen = partij.contactgegevens == null
+    private String zoekEmailAdres(PartijResponse partij, String dienstverlener, String dienst) {
+        List<ContactgegevenResponse> emails = partij.contactgegevens == null
                 ? List.of()
                 : partij.contactgegevens.stream()
-                        .filter(contactgegeven -> contactgegeven.type == ContactType.Email)
+                        .filter(c -> c.type == ContactType.Email)
                         .toList();
 
-        return emailAdressen.stream()
-                .filter(contactgegeven -> contactgegeven.isDefault)
-                .findFirst()
-                .or(() -> emailAdressen.stream().findFirst())
-                .map(contactgegeven -> contactgegeven.waarde)
+        return emails.stream().filter(c -> heeftExacteScope(c, dienstverlener, dienst)).findFirst()
+                .or(() -> emails.stream().filter(c -> heeftDienstverlenerScope(c, dienstverlener)).findFirst())
+                .or(() -> emails.stream().filter(c -> c.isDefault).findFirst())
+                .or(() -> emails.stream().filter(c -> c.scopes == null || c.scopes.isEmpty()).findFirst())
+                .map(c -> c.waarde)
                 .orElseThrow(() -> Problems.notFound("Geen e-mailadres gevonden",
-                        "Geen e-mailadres gevonden voor " + identificatieNummer));
+                        "Geen e-mailadres gevonden voor het opgegeven identificerend nummer"));
+    }
+
+    private boolean heeftExacteScope(ContactgegevenResponse email, String dienstverlener, String dienst) {
+        return email.scopes != null && email.scopes.stream()
+                .anyMatch(s -> dienstverlener.equals(s.dienstverlenerNaam) && dienst.equals(s.dienstNaam));
+    }
+
+    private boolean heeftDienstverlenerScope(ContactgegevenResponse email, String dienstverlener) {
+        return email.scopes != null && email.scopes.stream()
+                .anyMatch(s -> dienstverlener.equals(s.dienstverlenerNaam) && (s.dienstNaam == null || s.dienstNaam.isBlank()));
     }
 }
