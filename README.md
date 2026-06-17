@@ -11,7 +11,7 @@ asynchrone bezorgstatus:
 2. De NMC haalt synchroon de contactgegevens op bij de **Profielservice** op
    basis van die identificatie.
 3. De NMC verstuurt synchroon een e-mail via **NotifyNL**
-   (`POST /v2/notifications/email`) en verwacht hierop direct een `200`.
+   (`POST /v2/notifications/email`) en verwacht hierop direct een `201`.
 4. De NMC slaat de notificatie op (PostgreSQL) met status `sending` en de
    eventuele `callbackUrl`, en retourneert een `notificatieId` aan de aanroeper.
 5. NotifyNL roept asynchroon `POST /api/nmc/v1/notify-callback` aan met de
@@ -182,7 +182,7 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   verstuurt de e-mail via NotifyNL, slaat de notificatie op en retourneert een
   `notificatieId`. Optioneel kan een `callbackUrl` worden meegegeven voor
   asynchrone statusupdates. Retourneert `200` op succes, `404` als er geen
-  partij of e-mailadres gevonden wordt, en `502` als NotifyNL geen `200`
+  partij of e-mailadres gevonden wordt, en `502` als NotifyNL geen `201`
   teruggeeft.
 - **`POST /notify-callback`**: webhook waarop NotifyNL de bezorgstatus
   (delivery receipt) van een verzending terugmeldt. De NMC werkt de status bij
@@ -230,9 +230,10 @@ meegegeven.
 De applicatie roept de Profielservice en NotifyNL aan via REST clients,
 geconfigureerd in `src/main/resources/application.properties`:
 
-- `quarkus.rest-client.profiel-service.url` — in `%dev`/`%test` standaard
-  `http://localhost:8081`; er moet dus een (lokale of gestubde)
-  Profielservice op die poort draaien.
+- `quarkus.rest-client.profiel-service.url` — in `%dev` standaard
+  `http://localhost:8080`; er moet dus een (lokale of gestubde) Profielservice
+  op die poort draaien. In `%test` staat dit op `http://localhost:8081`, maar
+  daar wordt de client toch gemockt.
 - `quarkus.rest-client.notify.url`, `notify.api-key` en `notify.template-id` —
   wijzen naar NotifyNL. `notify.api-key` en `notify.template-id` staan leeg in
   de repository en moeten lokaal (bijvoorbeeld in

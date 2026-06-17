@@ -53,7 +53,7 @@ class NotifyCallbackControllerTest {
     @Test
     void verwerkAfleverstatus_gelukt_retourneert204() {
         UUID notifyNlId = UUID.randomUUID();
-        Response notifyNlResponse = notifyResponse(200, notifyNlId);
+        Response notifyNlResponse = notifyResponse(201, notifyNlId);
         Mockito.when(notifyClient.verstuurEmail(any(), any())).thenReturn(notifyNlResponse);
 
         // Zorg dat er een notificatie bestaat voor dit notifyNlId
@@ -86,7 +86,7 @@ class NotifyCallbackControllerTest {
     void verwerkAfleverstatus_onbekendStatus_slaatTechnischeFoutOp() {
         // Onbekende statussen van NotifyNL moeten als TECHNICAL_FAILURE worden opgeslagen
         UUID notifyNlId = UUID.randomUUID();
-        Response notifyNlResponse = notifyResponse(200, notifyNlId);
+        Response notifyNlResponse = notifyResponse(201, notifyNlId);
         Mockito.when(notifyClient.verstuurEmail(any(), any())).thenReturn(notifyNlResponse);
 
         given()
@@ -110,7 +110,7 @@ class NotifyCallbackControllerTest {
     @Test
     void verwerkAfleverstatus_metCallbackUrl_roeptConsumentCallbackAdapterAan() {
         UUID notifyNlId = UUID.randomUUID();
-        Response notifyNlResponse = notifyResponse(200, notifyNlId);
+        Response notifyNlResponse = notifyResponse(201, notifyNlId);
         Mockito.when(notifyClient.verstuurEmail(any(), any())).thenReturn(notifyNlResponse);
 
         given()

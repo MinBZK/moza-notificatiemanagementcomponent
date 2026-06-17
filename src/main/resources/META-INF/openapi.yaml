@@ -12,7 +12,7 @@ info:
 servers:
   - url: https://nmc.example.nl
     description: Productie (placeholder — invullen bij deployment)
-  - url: http://localhost:8080
+  - url: http://localhost:8081
     description: Lokale ontwikkeling
 
 paths:

@@ -49,7 +49,7 @@ class NotificatieControllerTest {
         Mockito.when(profielServiceClient.zoekPartij(any())).thenReturn(partijMetEmail("burger@example.nl", true));
 
         UUID notifyNlId = UUID.randomUUID();
-        Response notifyResponse = notifyResponse(200, notifyNlId);
+        Response notifyResponse = notifyResponse(201, notifyNlId);
         Mockito.when(notifyClient.verstuurEmail(any(), any())).thenReturn(notifyResponse);
 
         String aanvraag = """
@@ -116,7 +116,7 @@ class NotificatieControllerTest {
         Mockito.when(profielServiceClient.zoekPartij(any())).thenReturn(partijMetEmail("burger@example.nl", true));
 
         Response notifyResponse = Mockito.mock(Response.class);
-        Mockito.when(notifyResponse.getStatus()).thenReturn(200);
+        Mockito.when(notifyResponse.getStatus()).thenReturn(201);
         Mockito.when(notifyResponse.readEntity(NotifyEmailResponse.class)).thenReturn(new NotifyEmailResponse());
 
         Mockito.when(notifyClient.verstuurEmail(any(), any())).thenReturn(notifyResponse);
@@ -140,11 +140,11 @@ class NotificatieControllerTest {
     }
 
     @Test
-    void notificatieVersturen_notifyGeenStatus200_retourneert502() {
+    void notificatieVersturen_notifyGeenStatus201_retourneert502() {
         Mockito.when(profielServiceClient.zoekPartij(any())).thenReturn(partijMetEmail("burger@example.nl", true));
 
         Response notifyResponse = Mockito.mock(Response.class);
-        Mockito.when(notifyResponse.getStatus()).thenReturn(201);
+        Mockito.when(notifyResponse.getStatus()).thenReturn(400);
         Mockito.when(notifyClient.verstuurEmail(any(), any())).thenReturn(notifyResponse);
 
         String aanvraag = """
@@ -213,7 +213,7 @@ class NotificatieControllerTest {
         // Only a scoped email exists (no default/unscoped), so a 200 proves the scope lookup works
         Mockito.when(profielServiceClient.zoekPartij(any()))
                 .thenReturn(partijMetEnkelGescopedeEmail("scoped@example.nl", "Gemeente Voorbeeld", "Parkeervergunning"));
-        Response notifyResp = notifyResponse(200, UUID.randomUUID());
+        Response notifyResp = notifyResponse(201, UUID.randomUUID());
         Mockito.when(notifyClient.verstuurEmail(any(), any())).thenReturn(notifyResp);
 
         given()
@@ -229,7 +229,7 @@ class NotificatieControllerTest {
         // Scoped to dienstverlener only (no dienst), no default — should still be picked
         Mockito.when(profielServiceClient.zoekPartij(any()))
                 .thenReturn(partijMetEnkelGescopedeEmail("dv-scoped@example.nl", "Gemeente Voorbeeld", null));
-        Response notifyResp = notifyResponse(200, UUID.randomUUID());
+        Response notifyResp = notifyResponse(201, UUID.randomUUID());
         Mockito.when(notifyClient.verstuurEmail(any(), any())).thenReturn(notifyResp);
 
         given()
@@ -249,7 +249,7 @@ class NotificatieControllerTest {
                 gescopedeEmail("wrong-scoped@example.nl", "Andere Dienstverlener", "Parkeervergunning"),
                 ongescopedeEmail("default@example.nl", true));
         Mockito.when(profielServiceClient.zoekPartij(any())).thenReturn(partij);
-        Response notifyResp = notifyResponse(200, UUID.randomUUID());
+        Response notifyResp = notifyResponse(201, UUID.randomUUID());
         Mockito.when(notifyClient.verstuurEmail(any(), any())).thenReturn(notifyResp);
 
         given()
