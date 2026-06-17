@@ -1,41 +1,16 @@
 package nl.rijksoverheid.moz.client.consumentcallback;
 
 import io.quarkus.logging.Log;
-import io.quarkus.rest.client.reactive.QuarkusRestClientBuilder;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.domain.Notificatie;
 import nl.rijksoverheid.moz.repository.NotificatieRepository;
 
-import java.net.URI;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
-import java.util.function.Function;
 
 @ApplicationScoped
 public class ConsumentCallbackAdapter {
-
-    private final NotificatieRepository notificatieRepository;
-    private final Function<String, ConsumentCallbackClient> clientFactory;
-    private final long initieleWachtMs;
-
-    @Inject
-    public ConsumentCallbackAdapter(NotificatieRepository notificatieRepository) {
-        this(notificatieRepository,
-                url -> QuarkusRestClientBuilder.newBuilder()
-                        .baseUri(URI.create(url))
-                        .build(ConsumentCallbackClient.class),
-                1000L);
-    }
-
-    ConsumentCallbackAdapter(NotificatieRepository notificatieRepository,
-                              Function<String, ConsumentCallbackClient> clientFactory,
-                              long initieleWachtMs) {
-        this.notificatieRepository = notificatieRepository;
-        this.clientFactory = clientFactory;
-        this.initieleWachtMs = initieleWachtMs;
-    }
 
     // TODO: this HTTP call happens inside the active @Transactional context from
     // NotificatieService.verwerkAfleverstatus(), keeping a DB connection open for the full
@@ -45,6 +20,20 @@ public class ConsumentCallbackAdapter {
     // the persistence context is rolled back and the Notificatie entity becomes detached;
     // the subsequent notificatieRepository.delete() call will then throw a DetachedObjectException.
     private static final int MAX_POGINGEN = 3;
+
+    private final NotificatieRepository notificatieRepository;
+    private final ConsumentCallbackClientFactory clientFactory;
+    private long initieleWachtMs = 1000L;
+
+    public ConsumentCallbackAdapter(NotificatieRepository notificatieRepository,
+                                    ConsumentCallbackClientFactory clientFactory) {
+        this.notificatieRepository = notificatieRepository;
+        this.clientFactory = clientFactory;
+    }
+
+    void setInitieleWachtMs(long initieleWachtMs) {
+        this.initieleWachtMs = initieleWachtMs;
+    }
 
     public void stuurStatusUpdate(Notificatie notificatie) {
         if (notificatie.callbackUrl == null) {
@@ -61,14 +50,14 @@ public class ConsumentCallbackAdapter {
                 "application/json",
                 new NotificatieStatusData(notificatie.id, notificatie.status.toApiValue()));
 
-        ConsumentCallbackClient client = clientFactory.apply(notificatie.callbackUrl);
+        ConsumentCallbackClient client = clientFactory.maakClient(notificatie.callbackUrl);
 
-        if (verstuurMetHerpoging(client, event, notificatie.callbackUrl)) {
+        if (verstuurSuccesvol(client, event, notificatie.callbackUrl)) {
             notificatieRepository.delete(notificatie);
         }
     }
 
-    private boolean verstuurMetHerpoging(ConsumentCallbackClient client, NotificatieStatusEvent event, String callbackUrl) {
+    private boolean verstuurSuccesvol(ConsumentCallbackClient client, NotificatieStatusEvent event, String callbackUrl) {
         long wachtMs = initieleWachtMs;
         for (int poging = 1; poging <= MAX_POGINGEN; poging++) {
             try {
