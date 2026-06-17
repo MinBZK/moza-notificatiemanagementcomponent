@@ -1,0 +1,5 @@
+CREATE USER nmc WITH PASSWORD 'nmc';
+CREATE DATABASE nmc OWNER nmc;
+
+CREATE USER "user" WITH PASSWORD 'password';
+CREATE DATABASE profiel OWNER "user";

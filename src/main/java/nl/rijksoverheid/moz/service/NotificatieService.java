@@ -87,7 +87,7 @@ public class NotificatieService {
 
         Response notifyResponse = notifyClient.verstuurEmail(authorization, notifyRequest);
         try {
-            if (notifyResponse.getStatus() != Response.Status.OK.getStatusCode()) {
+            if (notifyResponse.getStatus() != Response.Status.CREATED.getStatusCode()) {
                 throw Problems.badGateway("NotifyNL fout",
                         "NotifyNL gaf status " + notifyResponse.getStatus() + " terug");
             }
