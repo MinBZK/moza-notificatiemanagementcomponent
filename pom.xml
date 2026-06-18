@@ -65,10 +65,24 @@
             <artifactId>quarkus-http-problem</artifactId>
             <version>3.33.1</version>
         </dependency>
+        <dependency>
+            <groupId>io.quarkiverse.openapi.generator</groupId>
+            <artifactId>quarkus-openapi-generator</artifactId>
+            <version>2.16.0-lts</version>
+        </dependency>
+        <dependency>
+            <groupId>nl.mijnoverheidzakelijk.ldv</groupId>
+            <artifactId>logboekdataverwerking-wrapper</artifactId>
+            <version>1.2.1-SNAPSHOT</version>
+        </dependency>
 
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-hibernate-orm-panache</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-flyway</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -134,8 +148,8 @@
                             <inputSpec>${project.basedir}/src/main/resources/META-INF/openapi.yaml</inputSpec>
                             <generatorName>jaxrs-spec</generatorName>
                             <output>${project.build.directory}/generated-sources/openapi</output>
-                            <apiPackage>nl.rijksoverheid.moz.api</apiPackage>
-                            <modelPackage>nl.rijksoverheid.moz.api.model</modelPackage>
+                            <apiPackage>nl.rijksoverheid.moz.nmc.api</apiPackage>
+                            <modelPackage>nl.rijksoverheid.moz.nmc.api.model</modelPackage>
                             <configOptions>
                                 <sourceFolder>src/gen/java</sourceFolder>
                                 <interfaceOnly>true</interfaceOnly>
@@ -147,7 +161,7 @@
                                 <openApiNullable>false</openApiNullable>
                             </configOptions>
                             <importMappings>
-                                <importMapping>IdentificatieType=nl.rijksoverheid.moz.common.IdentificatieType</importMapping>
+                                <importMapping>IdentificatieType=nl.rijksoverheid.moz.nmc.common.IdentificatieType</importMapping>
                             </importMappings>
                             <generateSupportingFiles>false</generateSupportingFiles>
                             <generateApiTests>false</generateApiTests>
@@ -169,6 +183,19 @@
             </plugin>
         </plugins>
     </build>
+
+    <repositories>
+        <repository>
+            <name>Central Portal Snapshots</name>
+            <id>central-portal-snapshots</id>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+            </snapshots>
+        </repository>
+    </repositories>
 
     <profiles>
         <profile>
