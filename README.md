@@ -221,16 +221,31 @@ interfaces/modellen en de swagger-ui worden automatisch bijgewerkt.
 
 ## Lokaal draaien
 
-De applicatie gebruikt een **PostgreSQL**-database. In dev mode (`%dev`) wordt
-een lokale PostgreSQL-instantie verwacht (`jdbc:postgresql://localhost:5432/nmc`,
-credentials `nmc`/`nmc`). In test mode (`%test`) wordt H2 in-memory gebruikt.
-Voor productie moeten `DB_USERNAME` en `DB_PASSWORD` als omgevingsvariabelen worden
-meegegeven.
+De applicatie gebruikt een **PostgreSQL**-database, met het schema beheerd via
+**Flyway**-migraties (`src/main/resources/db/migration`). Start een lokale
+instantie met:
 
-De applicatie roept de Profielservice en NotifyNL aan via REST clients,
-geconfigureerd in `src/main/resources/application.properties`:
+```shell
+docker-compose up -d
+```
 
-- `quarkus.rest-client.profiel-service.url` — in `%dev` standaard
+Dit start één Postgres-container met de `nmc`-database/-user (via de
+standaard `POSTGRES_DB`/`POSTGRES_USER`/`POSTGRES_PASSWORD`-omgevingsvariabelen).
+In test mode (`%test`) wordt H2 in-memory gebruikt. Voor productie moeten
+`DB_USERNAME` en `DB_PASSWORD` als omgevingsvariabelen worden meegegeven, en
+draait de migratie niet automatisch bij opstarten
+(`%prod.quarkus.flyway.migrate-at-start=false`) maar als los init-proces/job.
+
+> Let op: dit `docker-compose.yml` bootstrapt alleen de database van dit
+> component. Draai je lokaal ook Profielservice met zijn eigen
+> `docker-compose.yml`, dan claimen beide standaard hostport 5432 — niet
+> gelijktijdig op dezelfde poort starten.
+
+De applicatie roept de Profielservice en NotifyNL aan via gegenereerde REST
+clients (zie "OpenAPI-specificatie & codegen" hierboven), geconfigureerd in
+`src/main/resources/application.properties`:
+
+- `quarkus.rest-client.profielservice.url` — in `%dev` standaard
   `http://localhost:8080`; er moet dus een (lokale of gestubde) Profielservice
   op die poort draaien. In `%test` staat dit op `http://localhost:8081`, maar
   daar wordt de client toch gemockt.

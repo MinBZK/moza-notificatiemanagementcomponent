@@ -22,9 +22,8 @@ paths:
       summary: Notificatie versturen
       description: |
         Haalt de contactgegevens op bij de Profielservice, verstuurt de notificatie
-        via NotifyNL en slaat de notificatie op. Als een callbackUrl is meegegeven,
-        stuurt de NMC asynchroon een statusupdate (CloudEvents) zodra NotifyNL de
-        bezorgstatus meldt.
+        en slaat de notificatie op. Als een callbackUrl is meegegeven, stuurt de
+        NMC asynchroon een statusupdate (CloudEvents) zodra de bezorgstatus bekend is.
       tags:
         - Notificaties
       requestBody:
@@ -46,19 +45,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/NotificatieResponse'
         '400':
-          description: Ongeldige aanvraag
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-        '404':
-          description: Geen partij of e-mailadres gevonden voor de opgegeven identificatie
+          description: >-
+            Ongeldige aanvraag, of er kon geen notificatie worden gedaan voor de
+            opgegeven partij (geen partij of geen e-mailadres gevonden voor de
+            opgegeven identificatie)
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '502':
-          description: NotifyNL heeft de notificatie niet (succesvol) geaccepteerd
+          description: De notificatie kon niet (succesvol) verzonden worden
           content:
             application/problem+json:
               schema:
@@ -67,10 +63,10 @@ paths:
   /api/nmc/v1/notify-callback:
     post:
       operationId: verwerkAfleverstatus
-      summary: NotifyNL delivery receipt verwerken
+      summary: Bezorgstatus (delivery receipt) verwerken
       description: |
-        Webhook waarop NotifyNL de bezorgstatus (delivery receipt) van een eerder
-        verstuurde e-mail meldt. Na verwerking wordt de status opgeslagen en, als
+        Webhook waarop de bezorgstatus (delivery receipt) van een eerder
+        verstuurde e-mail gemeld wordt. Na verwerking wordt de status opgeslagen en, als
         er een callbackUrl is meegegeven bij de oorspronkelijke aanvraag, een
         statusupdate (CloudEvents NL GOV) naar die URL gestuurd. Na een geslaagde
         callback wordt het notificatierecord verwijderd.
@@ -97,7 +93,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
         '404':
-          description: Geen notificatie gevonden voor de opgegeven NotifyNL-referentie
+          description: Geen notificatie gevonden voor de opgegeven referentie
           content:
             application/problem+json:
               schema:
@@ -151,7 +147,7 @@ components:
           format: uri
           description: >-
             Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
-            terugstuurt zodra NotifyNL de bezorgstatus meldt. Weglaten als de
+            terugstuurt zodra de bezorgstatus bekend is. Weglaten als de
             Dienstverlener de status zelf opvraagt via GET /notificaties/{id}.
 
     NotificatieResponse:
@@ -166,7 +162,7 @@ components:
 
     AfleverstatusRequest:
       type: object
-      description: Delivery receipt van NotifyNL
+      description: Bezorgstatus-melding van een eerder verstuurd bericht
       required:
         - id
         - status
@@ -177,7 +173,7 @@ components:
         id:
           type: string
           format: uuid
-          description: NotifyNL-referentie van de verzending
+          description: Referentie van de verzending bij de verzenddienst
         reference:
           type: string
           nullable: true
@@ -194,7 +190,7 @@ components:
         created_at:
           type: string
           format: date-time
-          description: Tijdstip waarop NotifyNL de notificatie heeft aangemaakt
+          description: Tijdstip waarop de notificatie is aangemaakt
         completed_at:
           type: string
           format: date-time
@@ -204,7 +200,7 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Tijdstip waarop NotifyNL de e-mail heeft verstuurd
+          description: Tijdstip waarop de e-mail is verstuurd
 
     Problem:
       type: object
