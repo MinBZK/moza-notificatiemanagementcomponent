@@ -11,7 +11,7 @@ import java.util.UUID;
 @ApplicationScoped
 public class ConsumentCallbackAdapter {
 
-    // TODO: this HTTP call happens inside the active @Transactional context from
+    // TODO #732 (zie https://github.com/MinBZK/MijnOverheidZakelijk/issues/732): this HTTP call happens inside the active @Transactional context from
     // NotificatieService.verwerkAfleverstatus(), keeping a DB connection open for the full
     // duration of the callback including retries. Under load this can exhaust the connection
     // pool — move the HTTP call outside the transaction (or use an async/event-driven approach)
