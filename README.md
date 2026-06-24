@@ -298,8 +298,8 @@ dit skeleton wel/niet". Nog **niet** aanwezig:
 
 - **Contactherstel** en **herverzending**
 - Het **decentraal profiel**-scenario
-- Een koppeling met de **Templating Service** (template-keuze op basis van
-  `berichtType`)
+- Een koppeling met de **Templating Service** (nu wordt altijd hetzelfde,
+  gemockte bericht verstuurd, ongeacht het type notificatie)
 - **`GET /notificaties/{id}`** voor statuspoll zonder callbackUrl
 - **Bearer-JWT-authenticatie** voor de uitgaande consument-callback
 - Een uitgewerkt **observability-koppelvlak**

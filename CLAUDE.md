@@ -117,24 +117,32 @@ through only a bare identifier and let NMC lead.
   — relation unconfirmed, see the `NotificatieStatus` caveat above
 
 ## Technical conventions for this project
-- Stack: Java 21 + Quarkus 3.31.3 (RESTEasy Reactive, Hibernate ORM/Panache),
+- Stack: Java 21 + Quarkus 3.35.1 (RESTEasy Reactive, Hibernate ORM/Panache),
   groupId `nl.rijksoverheid.moz`
 - **Use constructor-based dependency injection, not field injection** — a
   deliberate deviation from other projects in this org that use field injection
-- Repositories use `PanacheRepository<T>` (not the active-record
+- Repositories use `PanacheRepositoryBase<T, Id>` (not the active-record
   `PanacheEntity`/`PanacheEntityBase` static-finder style used in sibling repos),
-  specifically so they're constructor-injectable
-- Error handling: plain `WebApplicationException(message, status)` thrown from
-  service methods (400/404/500) — no `GlobalExceptionMapper`/`ErrorResponse`
-  abstraction (kept minimal for this skeleton)
+  specifically so they're constructor-injectable. Use `PanacheRepositoryBase`
+  rather than the simpler `PanacheRepository` whenever the entity's `@Id` isn't
+  a `Long` (e.g. `Notificatie`'s id is a `UUID`) — `PanacheRepository<T>` fixes
+  the id type to `Long`, which silently breaks id-based methods like
+  `deleteById` for any other id type.
+- Error handling: client/service code throws plain exceptions; only
+  Controllers build responses, via RFC 9457 `HttpProblem` (Quarkiverse
+  `io.quarkiverse.httpproblem`, wrapped by the `Problems` helper) — no
+  `GlobalExceptionMapper`/`ErrorResponse` abstraction (kept minimal for this
+  skeleton)
 
 ## Status
-- Domain model, repositories, service layer and inbound API contract
-  (`/api/nmc/v1`: create notification, get status, initiate contactherstel,
-  Notify delivery-receipt webhook) are implemented, with `@QuarkusTest` +
-  RestAssured controller tests
+- Inbound API contract (`/api/nmc/v1`: create notification, Notify
+  delivery-receipt webhook) and the domain model/repositories/service layer
+  behind it are implemented, with `@QuarkusTest` + RestAssured controller
+  tests. `get status` and `initiate contactherstel` are planned but not yet
+  implemented — no such endpoints exist yet
+- Outbound integrations to Profielservice and NotifyNL are implemented as
+  real `@RestClient`-backed adapters (mocked only in tests)
 - See `README.md` (Dutch) for a functional overview
-- Not yet implemented (see "Integration assumptions" above): outbound
-  integrations (Profielservice, NotifyNL, Templating Service, OMC), the
-  orchestration logic that ties the flow phases together, and herverzending vs.
-  contactherstel trigger logic
+- Not yet implemented (see "Integration assumptions" above): the Templating
+  Service integration, OMC integration, the orchestration logic that ties the
+  flow phases together, and herverzending vs. contactherstel trigger logic
