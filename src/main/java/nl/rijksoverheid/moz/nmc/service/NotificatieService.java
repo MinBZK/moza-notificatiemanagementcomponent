@@ -3,7 +3,7 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
-import nl.rijksoverheid.moz.nmc.api.model.AfleverstatusRequest;
+import nl.rijksoverheid.moz.nmc.notifycallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieAanvraagRequest;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieResponse;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;

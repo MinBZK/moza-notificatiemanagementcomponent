@@ -8,13 +8,13 @@ import nl.rijksoverheid.moz.nmc.api.model.NotificatieResponse;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 
-public class NotificatieController implements NotificatiesApi {
+public class CentraleNotificatieController implements NotificatiesApi {
 
     private final NotificatieService notificatieService;
     private final LogboekContext logboekContext;
     private final HashHelper hashHelper;
 
-    public NotificatieController(NotificatieService notificatieService, LogboekContext logboekContext, HashHelper hashHelper) {
+    public CentraleNotificatieController(NotificatieService notificatieService, LogboekContext logboekContext, HashHelper hashHelper) {
         this.notificatieService = notificatieService;
         this.logboekContext = logboekContext;
         this.hashHelper = hashHelper;

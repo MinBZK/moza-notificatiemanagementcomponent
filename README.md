@@ -181,14 +181,17 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
 - **`POST /notificaties`**: haalt contactgegevens op bij de Profielservice,
   verstuurt de e-mail via NotifyNL, slaat de notificatie op en retourneert een
   `notificatieId`. Optioneel kan een `callbackUrl` worden meegegeven voor
-  asynchrone statusupdates. Retourneert `200` op succes, `404` als er geen
-  partij of e-mailadres gevonden wordt, en `502` als NotifyNL geen `201`
-  teruggeeft.
+  asynchrone statusupdates. Retourneert `200` op succes, `400` als er geen
+  partij of e-mailadres gevonden wordt, `500` bij een Profielservice-fout, en
+  `502` als NotifyNL geen `201` teruggeeft.
 - **`POST /notify-callback`**: webhook waarop NotifyNL de bezorgstatus
   (delivery receipt) van een verzending terugmeldt. De NMC werkt de status bij
   en stuurt — indien een `callbackUrl` aanwezig is — een **CloudEvents NL GOV**
   statusupdate naar die URL. Retourneert `204` op succes en `404` als de
-  NotifyNL-referentie onbekend is.
+  NotifyNL-referentie onbekend is. Dit endpoint heeft een eigen, losse
+  OpenAPI-specificatie (zie hieronder), zodat het makkelijk te verwijderen is
+  zodra de NMC publiek bereikbaar is en NotifyNL een echte callback-URL kan
+  benaderen.
 
 Gepland/toekomstig (nog niet aanwezig):
 
@@ -197,27 +200,44 @@ Gepland/toekomstig (nog niet aanwezig):
 - **`POST /notificaties/{id}/contactherstel`**: een nieuwe verzendpoging
   (contactherstel) starten voor een bestaande notificatie.
 
-De volledige OpenAPI-specificatie is beschikbaar via `/q/swagger-ui` wanneer de
-applicatie draait (`./mvnw quarkus:dev`).
+De `/notificaties`-specificatie is beschikbaar via `/q/swagger-ui` wanneer de
+applicatie draait (`./mvnw quarkus:dev`); zie de toelichting bij
+"OpenAPI-specificatie & codegen" hieronder voor waarom `/notify-callback`
+daar niet in staat.
 
 ## OpenAPI-specificatie & codegen
 
-Het contract van `/api/nmc/v1` is **spec-first**:
-`src/main/resources/META-INF/openapi.yaml` is de bron van waarheid.
+Het contract van `/api/nmc/v1` is **spec-first** en bestaat uit twee losse
+specificaties:
 
-- Quarkus serveert dit bestand ongewijzigd via `/q/openapi` en
-  `/q/swagger-ui` (`mp.openapi.scan.disable=true` staat aan, dus er wordt niet
-  ook nog automatisch op annotaties gescand).
-- Bij elke build genereert de `openapi-generator-maven-plugin` hieruit de
-  JAX-RS-interfaces (`nl.rijksoverheid.moz.api.NotificatiesApi`,
-  `nl.rijksoverheid.moz.api.NotifyCallbackApi`) en de request/response-modellen
-  (`nl.rijksoverheid.moz.api.model.*`) in `target/generated-sources/openapi`
-  (niet ingecheckt). `NotificatieController` en `NotifyCallbackController`
+- `src/main/resources/META-INF/openapi.yaml` — `POST /notificaties` (de
+  centrale-regie-flow).
+- `src/main/resources/META-INF/notify-callback-openapi.yaml` — `POST
+  /notify-callback`, in een eigen bestand zodat het zelfstandig te verwijderen
+  is zodra dit endpoint niet meer nodig is (zie de API-sectie hierboven).
+
+- Quarkus serveert alleen `openapi.yaml` ongewijzigd via `/q/openapi` en
+  `/q/swagger-ui` (SmallRye OpenAPI pikt automatisch een bestand met die naam
+  op uit `META-INF`; `mp.openapi.scan.disable=true` staat aan, dus er wordt
+  niet ook nog automatisch op annotaties gescand).
+  `notify-callback-openapi.yaml` heet bewust anders en wordt dus **niet**
+  via swagger-ui getoond — die is alleen input voor de codegen hieronder, niet
+  voor runtime-documentatie.
+- Bij elke build genereert de `openapi-generator-maven-plugin` (twee losse
+  `<execution>`s, één per spec) hieruit de JAX-RS-interfaces
+  (`nl.rijksoverheid.moz.nmc.api.NotificatiesApi`,
+  `nl.rijksoverheid.moz.nmc.notifycallback.api.NotifyCallbackApi`) en de
+  request/response-modellen (`nl.rijksoverheid.moz.nmc.api.model.*`,
+  `nl.rijksoverheid.moz.nmc.notifycallback.api.model.*`) in
+  `target/generated-sources/openapi` (niet ingecheckt).
+  `CentraleNotificatieController` (package `controller`) en
+  `NotifyCallbackController` (package `notifycallback.controller`)
   implementeren de gegenereerde interfaces.
 
-Om het contract aan te passen: wijzig `META-INF/openapi.yaml` en draai een
-build (`./mvnw compile`, `test` of `quarkus:dev`) — de gegenereerde
-interfaces/modellen en de swagger-ui worden automatisch bijgewerkt.
+Om een contract aan te passen: wijzig `META-INF/openapi.yaml` of
+`META-INF/notify-callback-openapi.yaml` en draai een build (`./mvnw compile`,
+`test` of `quarkus:dev`) — de gegenereerde interfaces/modellen worden
+automatisch bijgewerkt (en, voor `openapi.yaml`, ook de swagger-ui).
 
 ## Lokaal draaien
 
