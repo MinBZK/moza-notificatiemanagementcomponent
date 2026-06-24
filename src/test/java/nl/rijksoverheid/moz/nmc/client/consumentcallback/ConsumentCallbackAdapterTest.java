@@ -1,6 +1,6 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
-import nl.rijksoverheid.moz.nmc.common.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.common.NotificatieStatusEnum;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,8 +24,7 @@ class ConsumentCallbackAdapterTest {
     @BeforeEach
     void setUp() {
         callbackClient = Mockito.mock(ConsumentCallbackClient.class);
-        adapter = new ConsumentCallbackAdapter(url -> callbackClient);
-        adapter.setInitieleWachtMs(0L);
+        adapter = new ConsumentCallbackAdapter(url -> callbackClient, 0L);
     }
 
     @Test
@@ -89,15 +88,15 @@ class ConsumentCallbackAdapterTest {
         assertNotNull(event.source());
         assertNotNull(event.subject());
         assertNotNull(event.time());
-        assertEquals(notificatie.id, event.data().notificatieId());
-        assertEquals(NotificatieStatus.DELIVERED, event.data().status());
+        assertEquals(notificatie.id, event.status().notificatieId());
+        assertEquals(NotificatieStatusEnum.DELIVERED, event.status().status());
     }
 
     private Notificatie notificatie(String callbackUrl) {
         Notificatie notificatie = new Notificatie();
         notificatie.id = UUID.randomUUID();
         notificatie.callbackUrl = callbackUrl;
-        notificatie.status = NotificatieStatus.DELIVERED;
+        notificatie.status = NotificatieStatusEnum.DELIVERED;
         return notificatie;
     }
 }
