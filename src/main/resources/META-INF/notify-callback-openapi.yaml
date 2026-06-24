@@ -1,0 +1,121 @@
+openapi: 3.0.3
+info:
+  title: NotificatieManagementComponent - NotifyNL delivery-receipt callback
+  description: |
+    Webhook waarop NotifyNL de bezorgstatus van een eerder verstuurd bericht
+    terugmeldt. Losse specificatie (apart van openapi.yaml) zodat dit endpoint
+    zelfstandig te verwijderen is zodra de NMC publiek bereikbaar is en NotifyNL
+    een echte callback-URL kan benaderen.
+  version: 0.1.0
+  contact:
+    name: MijnOverheid Zakelijk Team
+    email: moza@minbzk.nl
+    url: https://github.com/MinBZK/moza-notificatiemanagementcomponent
+
+servers:
+  - url: https://nmc.example.nl
+    description: Productie (placeholder — invullen bij deployment)
+  - url: http://localhost:8081
+    description: Lokale ontwikkeling
+
+paths:
+  /api/nmc/v1/notify-callback:
+    post:
+      operationId: verwerkAfleverstatus
+      summary: Bezorgstatus (delivery receipt) verwerken
+      description: |
+        Webhook waarop de bezorgstatus (delivery receipt) van een eerder
+        verstuurde e-mail gemeld wordt. Na verwerking wordt de status opgeslagen en, als
+        er een callbackUrl is meegegeven bij de oorspronkelijke aanvraag, een
+        statusupdate (CloudEvents NL GOV) naar die URL gestuurd. Na een geslaagde
+        callback wordt het notificatierecord verwijderd.
+      tags:
+        - NotifyCallback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AfleverstatusRequest'
+      responses:
+        '204':
+          description: Afleverstatus verwerkt
+          headers:
+            API-Version:
+              schema:
+                type: string
+              description: Versie van de API
+        '400':
+          description: Ongeldige aanvraag
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Geen notificatie gevonden voor de opgegeven referentie
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+components:
+  schemas:
+    AfleverstatusRequest:
+      type: object
+      description: Bezorgstatus-melding van een eerder verstuurd bericht
+      required:
+        - id
+        - status
+        - notification_type
+        - to
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Referentie van de verzending bij de verzenddienst
+        reference:
+          type: string
+          nullable: true
+          description: Optionele referentie meegegeven bij het versturen
+        to:
+          type: string
+          description: E-mailadres van de ontvanger
+        status:
+          type: string
+          description: Bezorgstatus (bijv. delivered, permanent-failure)
+        notification_type:
+          type: string
+          description: Type notificatie (email)
+        created_at:
+          type: string
+          format: date-time
+          description: Tijdstip waarop de notificatie is aangemaakt
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Tijdstip waarop de bezorging is voltooid
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Tijdstip waarop de e-mail is verstuurd
+
+    Problem:
+      type: object
+      description: Problem Details (RFC 9457)
+      properties:
+        type:
+          type: string
+          format: uri
+          default: "about:blank"
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri

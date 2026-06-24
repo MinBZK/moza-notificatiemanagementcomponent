@@ -53,47 +53,14 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '500':
+          description: Er is een fout opgetreden bij het ophalen van de contactgegevens
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '502':
           description: De notificatie kon niet (succesvol) verzonden worden
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-
-  /api/nmc/v1/notify-callback:
-    post:
-      operationId: verwerkAfleverstatus
-      summary: Bezorgstatus (delivery receipt) verwerken
-      description: |
-        Webhook waarop de bezorgstatus (delivery receipt) van een eerder
-        verstuurde e-mail gemeld wordt. Na verwerking wordt de status opgeslagen en, als
-        er een callbackUrl is meegegeven bij de oorspronkelijke aanvraag, een
-        statusupdate (CloudEvents NL GOV) naar die URL gestuurd. Na een geslaagde
-        callback wordt het notificatierecord verwijderd.
-      tags:
-        - NotifyCallback
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AfleverstatusRequest'
-      responses:
-        '204':
-          description: Afleverstatus verwerkt
-          headers:
-            API-Version:
-              schema:
-                type: string
-              description: Versie van de API
-        '400':
-          description: Ongeldige aanvraag
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-        '404':
-          description: Geen notificatie gevonden voor de opgegeven referentie
           content:
             application/problem+json:
               schema:
@@ -132,11 +99,6 @@ components:
           type: string
           minLength: 1
           description: Naam van de dienst waarvoor de notificatie wordt verstuurd
-        berichtType:
-          type: string
-          description: >-
-            Berichttype, bedoeld voor het opvragen van de juiste template bij
-            de Templating Service (nog niet in gebruik)
         berichtgegevens:
           type: object
           description: Templatevariabelen voor het bericht
@@ -159,48 +121,6 @@ components:
           type: string
           format: uuid
           description: NMC-interne referentie voor deze notificatie
-
-    AfleverstatusRequest:
-      type: object
-      description: Bezorgstatus-melding van een eerder verstuurd bericht
-      required:
-        - id
-        - status
-        - notification_type
-        - to
-        - created_at
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Referentie van de verzending bij de verzenddienst
-        reference:
-          type: string
-          nullable: true
-          description: Optionele referentie meegegeven bij het versturen
-        to:
-          type: string
-          description: E-mailadres van de ontvanger
-        status:
-          type: string
-          description: Bezorgstatus (bijv. delivered, permanent-failure)
-        notification_type:
-          type: string
-          description: Type notificatie (email)
-        created_at:
-          type: string
-          format: date-time
-          description: Tijdstip waarop de notificatie is aangemaakt
-        completed_at:
-          type: string
-          format: date-time
-          nullable: true
-          description: Tijdstip waarop de bezorging is voltooid
-        sent_at:
-          type: string
-          format: date-time
-          nullable: true
-          description: Tijdstip waarop de e-mail is verstuurd
 
     Problem:
       type: object

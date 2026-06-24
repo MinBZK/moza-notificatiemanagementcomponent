@@ -25,7 +25,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.mockito.ArgumentMatchers.any;
 
 @QuarkusTest
-class NotificatieControllerTest {
+class CentraleNotificatieControllerTest {
 
     @InjectMock
     @RestClient

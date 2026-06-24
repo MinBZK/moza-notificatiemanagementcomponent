@@ -1,7 +1,7 @@
-package nl.rijksoverheid.moz.nmc.controller;
+package nl.rijksoverheid.moz.nmc.notifycallback.controller;
 
-import nl.rijksoverheid.moz.nmc.api.NotifyCallbackApi;
-import nl.rijksoverheid.moz.nmc.api.model.AfleverstatusRequest;
+import nl.rijksoverheid.moz.nmc.notifycallback.api.NotifyCallbackApi;
+import nl.rijksoverheid.moz.nmc.notifycallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 
 // TODO (security): this endpoint has no authentication. GOV.UK Notify supports a callback

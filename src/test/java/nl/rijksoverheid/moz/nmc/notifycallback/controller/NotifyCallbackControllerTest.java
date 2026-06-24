@@ -1,4 +1,4 @@
-package nl.rijksoverheid.moz.nmc.controller;
+package nl.rijksoverheid.moz.nmc.notifycallback.controller;
 
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
