@@ -31,8 +31,8 @@ public class ConsumentCallbackAdapter {
     // Zonder callbackUrl blijft de notificatie voor altijd staan (nooit verwijderd) — voor nu
     // acceptabel, maar vraagt later om een lastUpdated-veld en cleanup-job.
     public boolean stuurStatusUpdate(Notificatie notificatie) {
-        if (notificatie.callbackUrl == null) {
-            Log.infof("Geen callback-URL geconfigureerd voor notificatie %s — statusupdate niet verstuurd", notificatie.id);
+        if (notificatie.getCallbackUrl() == null) {
+            Log.infof("Geen callback-URL geconfigureerd voor notificatie %s — statusupdate niet verstuurd", notificatie.getId());
             return false;
         }
 
@@ -40,15 +40,15 @@ public class ConsumentCallbackAdapter {
                 "1.0",
                 UUID.randomUUID(),
                 "nl.rijksoverheid.moz.nmc.notificatie.status",
-                "/api/nmc/v1/notificaties/" + notificatie.id,
-                "notificatie/" + notificatie.id,
+                "/api/nmc/v1/notificaties/" + notificatie.getId(),
+                "notificatie/" + notificatie.getId(),
                 OffsetDateTime.now(ZoneOffset.UTC),
                 "application/json",
-                new NotificatieStatus(notificatie.id, notificatie.status));
+                new NotificatieStatus(notificatie.getId(), notificatie.getStatus()));
 
-        ConsumentCallbackClient client = clientFactory.maakClient(notificatie.callbackUrl);
+        ConsumentCallbackClient client = clientFactory.maakClient(notificatie.getCallbackUrl());
 
-        return verstuurSuccesvol(client, event, notificatie.callbackUrl);
+        return verstuurSuccesvol(client, event, notificatie.getCallbackUrl());
     }
 
     private boolean verstuurSuccesvol(ConsumentCallbackClient client, NotificatieStatusEvent event, String callbackUrl) {
