@@ -10,9 +10,11 @@ import nl.rijksoverheid.moz.nmc.client.notify.NotifyVerzendException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.GeenEmailadresGevondenException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.PartijNietGevondenException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceException;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
+import nl.rijksoverheid.moz.nmc.service.NotificatieVersturenOpdracht;
 
 public class CentraleNotificatieController implements NotificatiesApi {
 
@@ -33,8 +35,21 @@ public class CentraleNotificatieController implements NotificatiesApi {
         logboekContext.setDataSubjectId(hashHelper.hashIdentifier(notificatieAanvraagRequest.getIdentificatieNummer()));
         logboekContext.setDataSubjectType(String.valueOf(notificatieAanvraagRequest.getIdentificatieType()));
 
+        // TODO (security): callbackUrl is unvalidated caller input that we later POST to — SSRF risk.
+        String callbackUrl = notificatieAanvraagRequest.getCallbackUrl() != null
+                ? notificatieAanvraagRequest.getCallbackUrl().toString()
+                : null;
+        NotificatieVersturenOpdracht opdracht = new NotificatieVersturenOpdracht(
+                notificatieAanvraagRequest.getIdentificatieType(),
+                notificatieAanvraagRequest.getIdentificatieNummer(),
+                notificatieAanvraagRequest.getDienstverlener(),
+                notificatieAanvraagRequest.getDienst(),
+                notificatieAanvraagRequest.getBerichtgegevens(),
+                callbackUrl);
+
         try {
-            return notificatieService.versturen(notificatieAanvraagRequest);
+            Notificatie notificatie = notificatieService.versturen(opdracht);
+            return new NotificatieResponse().notificatieId(notificatie.getId());
         } catch (PartijNietGevondenException e) {
             throw Problems.badRequest("Partij niet gevonden", e.getMessage());
         } catch (GeenEmailadresGevondenException e) {

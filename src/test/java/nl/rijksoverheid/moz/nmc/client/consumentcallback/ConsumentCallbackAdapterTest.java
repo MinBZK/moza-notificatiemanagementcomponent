@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
+import java.lang.reflect.Field;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -88,15 +89,27 @@ class ConsumentCallbackAdapterTest {
         assertNotNull(event.source());
         assertNotNull(event.subject());
         assertNotNull(event.time());
-        assertEquals(notificatie.id, event.status().notificatieId());
+        assertEquals(notificatie.getId(), event.status().notificatieId());
         assertEquals(NotificatieStatusEnum.DELIVERED, event.status().status());
     }
 
     private Notificatie notificatie(String callbackUrl) {
-        Notificatie notificatie = new Notificatie();
-        notificatie.id = UUID.randomUUID();
-        notificatie.callbackUrl = callbackUrl;
-        notificatie.status = NotificatieStatusEnum.DELIVERED;
+        Notificatie notificatie = new Notificatie(callbackUrl);
+        stelIdIn(notificatie, UUID.randomUUID());
+        notificatie.setStatus(NotificatieStatusEnum.DELIVERED);
         return notificatie;
+    }
+
+    // id is @GeneratedValue/getter-only (door JPA gezet bij persist) — in deze pure unit test
+    // (geen echte database) wordt het via reflectie gezet zodat we kunnen verifiëren dat het
+    // wordt doorgegeven aan de callback-event.
+    private static void stelIdIn(Notificatie notificatie, UUID id) {
+        try {
+            Field idField = Notificatie.class.getDeclaredField("id");
+            idField.setAccessible(true);
+            idField.set(notificatie, id);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

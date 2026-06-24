@@ -110,7 +110,7 @@ class NotifyCallbackControllerTest {
 
         ArgumentCaptor<Notificatie> captor = ArgumentCaptor.forClass(Notificatie.class);
         Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(captor.capture());
-        assertEquals(NotificatieStatusEnum.TECHNICAL_FAILURE, captor.getValue().status);
+        assertEquals(NotificatieStatusEnum.TECHNICAL_FAILURE, captor.getValue().getStatus());
     }
 
     @Test
