@@ -2,17 +2,17 @@ package nl.rijksoverheid.moz.nmc.client.profielservice;
 
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.validation.Valid;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijRequest;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
-import nl.rijksoverheid.moz.nmc.common.IdentificatieType;
-import nl.rijksoverheid.moz.nmc.helper.Problems;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.util.List;
+import java.util.function.Predicate;
 
 @ApplicationScoped
 public class ProfielServiceAdapter {
@@ -23,45 +23,50 @@ public class ProfielServiceAdapter {
         this.profielApi = profielApi;
     }
 
-    public String zoekEmailAdres(IdentificatieType identificatieType, String identificatieNummer,
-                                  String dienstverlener, String dienst) {
-        PartijResponse partij = zoekPartij(identificatieType, identificatieNummer, dienstverlener, dienst);
+    public String zoekEmailAdres(@Valid PartijIdentificatie identificatie) {
+        PartijResponse partij = zoekPartij(identificatie);
 
         List<ContactgegevenResponse> emails = partij.getContactgegevens() == null
                 ? List.of()
                 : partij.getContactgegevens().stream()
-                        .filter(c -> c.getType() == ContactgegevenResponse.TypeEnum.EMAIL)
+                        .filter(this::isEmail)
                         .toList();
 
-        return emails.stream().filter(c -> heeftExacteScope(c, dienstverlener, dienst)).findFirst()
-                .or(() -> emails.stream().filter(c -> heeftDienstverlenerScope(c, dienstverlener)).findFirst())
-                .or(() -> emails.stream().filter(c -> Boolean.TRUE.equals(c.getIsDefault())).findFirst())
-                .or(() -> emails.stream().filter(c -> c.getScopes() == null || c.getScopes().isEmpty()).findFirst())
+        List<Predicate<ContactgegevenResponse>> prioriteiten = List.of(
+                c -> heeftExacteScope(c, identificatie.dienstverlener(), identificatie.dienst()),
+                c -> heeftDienstverlenerScope(c, identificatie.dienstverlener()),
+                c -> Boolean.TRUE.equals(c.getIsDefault()),
+                c -> c.getScopes() == null || c.getScopes().isEmpty());
+
+        return prioriteiten.stream()
+                .flatMap(p -> emails.stream().filter(p).findFirst().stream())
+                .findFirst()
                 .map(ContactgegevenResponse::getWaarde)
-                .orElseThrow(() -> Problems.badRequest("Geen e-mailadres gevonden",
+                .orElseThrow(() -> new GeenEmailadresGevondenException(
                         "Voor de opgegeven partij kon geen notificatie worden verstuurd"));
     }
 
-    private PartijResponse zoekPartij(IdentificatieType identificatieType, String identificatieNummer,
-                                       String dienstverlener, String dienst) {
+    private PartijResponse zoekPartij(PartijIdentificatie identificatie) {
         PartijRequest partijRequest = new PartijRequest()
-                .identificatieType(PartijRequest.IdentificatieTypeEnum.valueOf(identificatieType.name()))
-                .identificatieNummer(identificatieNummer)
-                .dienstverlener(dienstverlener)
-                .dienstNaam(dienst);
+                .identificatieType(PartijRequest.IdentificatieTypeEnum.valueOf(identificatie.identificatieType().name()))
+                .identificatieNummer(identificatie.identificatieNummer())
+                .dienstverlener(identificatie.dienstverlener())
+                .dienstNaam(identificatie.dienst());
 
         try {
             return profielApi.apiProfielserviceV1PartijPost(partijRequest);
         } catch (WebApplicationException e) {
             if (e.getResponse().getStatus() == Response.Status.NOT_FOUND.getStatusCode()) {
-                throw Problems.badRequest("Partij niet gevonden",
-                        "Voor de opgegeven partij kon geen notificatie worden verstuurd");
+                throw new PartijNietGevondenException("Voor de opgegeven partij kon geen notificatie worden verstuurd");
             }
 
             Log.error("Profielservice gaf status " + e.getResponse().getStatus() + " terug", e);
-            throw Problems.serverError("Profielservice fout",
-                    "Er is een fout opgetreden bij het ophalen van de contactgegevens");
+            throw new ProfielServiceException("Er is een fout opgetreden bij het ophalen van de contactgegevens", e);
         }
+    }
+
+    private boolean isEmail(ContactgegevenResponse contactgegeven) {
+        return contactgegeven.getType() == ContactgegevenResponse.TypeEnum.EMAIL;
     }
 
     private boolean heeftExacteScope(ContactgegevenResponse email, String dienstverlener, String dienst) {
