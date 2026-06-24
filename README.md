@@ -274,6 +274,11 @@ clients (zie "OpenAPI-specificatie & codegen" hierboven), geconfigureerd in
   de repository en moeten lokaal (bijvoorbeeld in
   `application-dev.properties`, niet ingecheckt) ingevuld worden om de
   e-mailflow daadwerkelijk te laten werken.
+- `hash.pepper` — geheime pepper voor de keyed HMAC-SHA-256 in `HashHelper`
+  (gebruikt om BSN/KVK/RSIN te pseudonimiseren voor de logboek-context). Staat
+  ook leeg in de repository; zonder waarde (en zonder `%dev`/`%test`-override)
+  start de applicatie niet op. Lokaal in te vullen via
+  `application-dev.properties`.
 
 Start de applicatie in dev mode:
 

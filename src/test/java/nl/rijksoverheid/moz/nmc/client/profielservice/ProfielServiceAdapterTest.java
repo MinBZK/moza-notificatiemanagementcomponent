@@ -1,6 +1,5 @@
 package nl.rijksoverheid.moz.nmc.client.profielservice;
 
-import io.quarkiverse.httpproblem.HttpProblem;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
@@ -35,7 +34,7 @@ class ProfielServiceAdapterTest {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(
                 partijMet(gescopedeEmail("scoped@example.nl", "Gemeente Voorbeeld", "Parkeervergunning")));
 
-        String email = adapter.zoekEmailAdres(IdentificatieType.KVK, "12345678", "Gemeente Voorbeeld", "Parkeervergunning");
+        String email = adapter.zoekEmailAdres(standaardIdentificatie());
 
         assertEquals("scoped@example.nl", email);
     }
@@ -45,7 +44,7 @@ class ProfielServiceAdapterTest {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(
                 partijMet(gescopedeEmail("dv-scoped@example.nl", "Gemeente Voorbeeld", null)));
 
-        String email = adapter.zoekEmailAdres(IdentificatieType.KVK, "12345678", "Gemeente Voorbeeld", "Parkeervergunning");
+        String email = adapter.zoekEmailAdres(standaardIdentificatie());
 
         assertEquals("dv-scoped@example.nl", email);
     }
@@ -57,7 +56,7 @@ class ProfielServiceAdapterTest {
                 ongescopedeEmail("default@example.nl", true)));
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partij);
 
-        String email = adapter.zoekEmailAdres(IdentificatieType.KVK, "12345678", "Gemeente Voorbeeld", "Parkeervergunning");
+        String email = adapter.zoekEmailAdres(standaardIdentificatie());
 
         assertEquals("default@example.nl", email);
     }
@@ -68,42 +67,37 @@ class ProfielServiceAdapterTest {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(
                 partijMet(ongescopedeEmail("fallback@example.nl", false)));
 
-        String email = adapter.zoekEmailAdres(IdentificatieType.KVK, "12345678", "Gemeente Voorbeeld", "Parkeervergunning");
+        String email = adapter.zoekEmailAdres(standaardIdentificatie());
 
         assertEquals("fallback@example.nl", email);
     }
 
     @Test
-    void zoekEmailAdres_geenEmail_gooitBadRequest() {
+    void zoekEmailAdres_geenEmail_gooitGeenEmailadresGevondenException() {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(
                 new PartijResponse().contactgegevens(List.of()));
 
-        HttpProblem problem = assertThrows(HttpProblem.class,
-                () -> adapter.zoekEmailAdres(IdentificatieType.KVK, "12345678", "Gemeente Voorbeeld", "Parkeervergunning"));
-
-        assertEquals(400, problem.getStatusCode());
+        assertThrows(GeenEmailadresGevondenException.class, () -> adapter.zoekEmailAdres(standaardIdentificatie()));
     }
 
     @Test
-    void zoekEmailAdres_partijNietGevonden_gooitBadRequest() {
+    void zoekEmailAdres_partijNietGevonden_gooitPartijNietGevondenException() {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
                 .thenThrow(new WebApplicationException(Response.status(Response.Status.NOT_FOUND).build()));
 
-        HttpProblem problem = assertThrows(HttpProblem.class,
-                () -> adapter.zoekEmailAdres(IdentificatieType.KVK, "12345678", "Gemeente Voorbeeld", "Parkeervergunning"));
-
-        assertEquals(400, problem.getStatusCode());
+        assertThrows(PartijNietGevondenException.class, () -> adapter.zoekEmailAdres(standaardIdentificatie()));
     }
 
     @Test
-    void zoekEmailAdres_profielserviceFout_gooitServerError() {
+    void zoekEmailAdres_profielserviceFout_gooitProfielServiceException() {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
                 .thenThrow(new WebApplicationException(Response.status(Response.Status.INTERNAL_SERVER_ERROR).build()));
 
-        HttpProblem problem = assertThrows(HttpProblem.class,
-                () -> adapter.zoekEmailAdres(IdentificatieType.KVK, "12345678", "Gemeente Voorbeeld", "Parkeervergunning"));
+        assertThrows(ProfielServiceException.class, () -> adapter.zoekEmailAdres(standaardIdentificatie()));
+    }
 
-        assertEquals(500, problem.getStatusCode());
+    private PartijIdentificatie standaardIdentificatie() {
+        return new PartijIdentificatie(IdentificatieType.KVK, "12345678", "Gemeente Voorbeeld", "Parkeervergunning");
     }
 
     private PartijResponse partijMet(ContactgegevenResponse... contactgegevens) {

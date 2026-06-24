@@ -8,6 +8,7 @@ import nl.rijksoverheid.moz.nmc.api.model.NotificatieAanvraagRequest;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieResponse;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
 import nl.rijksoverheid.moz.nmc.client.notify.VerzendAdapter;
+import nl.rijksoverheid.moz.nmc.client.profielservice.PartijIdentificatie;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
 import nl.rijksoverheid.moz.nmc.common.NotificatieStatusEnum;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
@@ -38,9 +39,9 @@ public class NotificatieService {
 
     @Transactional
     public NotificatieResponse versturen(NotificatieAanvraagRequest request) {
-        String emailAdres = profielServiceAdapter.zoekEmailAdres(
+        String emailAdres = profielServiceAdapter.zoekEmailAdres(new PartijIdentificatie(
                 request.getIdentificatieType(), request.getIdentificatieNummer(),
-                request.getDienstverlener(), request.getDienst());
+                request.getDienstverlener(), request.getDienst()));
 
         // Persist before calling NotifyNL so that a DB failure never results in a sent email with no record.
         Notificatie notificatie = new Notificatie();

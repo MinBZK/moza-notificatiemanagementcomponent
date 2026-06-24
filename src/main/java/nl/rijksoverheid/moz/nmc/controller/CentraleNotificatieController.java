@@ -5,7 +5,13 @@ import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
 import nl.rijksoverheid.moz.nmc.api.NotificatiesApi;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieAanvraagRequest;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieResponse;
+import nl.rijksoverheid.moz.nmc.client.notify.NotifyConfiguratieException;
+import nl.rijksoverheid.moz.nmc.client.notify.NotifyVerzendException;
+import nl.rijksoverheid.moz.nmc.client.profielservice.GeenEmailadresGevondenException;
+import nl.rijksoverheid.moz.nmc.client.profielservice.PartijNietGevondenException;
+import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceException;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
+import nl.rijksoverheid.moz.nmc.helper.Problems;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 
 public class CentraleNotificatieController implements NotificatiesApi {
@@ -27,6 +33,18 @@ public class CentraleNotificatieController implements NotificatiesApi {
         logboekContext.setDataSubjectId(hashHelper.hashIdentifier(notificatieAanvraagRequest.getIdentificatieNummer()));
         logboekContext.setDataSubjectType(String.valueOf(notificatieAanvraagRequest.getIdentificatieType()));
 
-        return notificatieService.versturen(notificatieAanvraagRequest);
+        try {
+            return notificatieService.versturen(notificatieAanvraagRequest);
+        } catch (PartijNietGevondenException e) {
+            throw Problems.badRequest("Partij niet gevonden", e.getMessage());
+        } catch (GeenEmailadresGevondenException e) {
+            throw Problems.badRequest("Geen e-mailadres gevonden", e.getMessage());
+        } catch (ProfielServiceException e) {
+            throw Problems.serverError("Profielservice fout", e.getMessage());
+        } catch (NotifyConfiguratieException e) {
+            throw Problems.serverError("Verzendfout", "Er kan momenteel geen notificatie worden verstuurd");
+        } catch (NotifyVerzendException e) {
+            throw Problems.badGateway("Verzendfout", e.getMessage());
+        }
     }
 }

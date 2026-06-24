@@ -2,12 +2,12 @@ package nl.rijksoverheid.moz.nmc.client.notify;
 
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.WebApplicationException;
 import nl.rijksoverheid.moz.nmc.client.notify.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notify.generated.model.SendEmailRequest;
 import nl.rijksoverheid.moz.nmc.client.notify.generated.model.SendEmailRequestPersonalisation;
 import nl.rijksoverheid.moz.nmc.client.notify.generated.model.SendEmailResponse;
-import nl.rijksoverheid.moz.nmc.helper.Problems;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
@@ -34,46 +34,58 @@ public class VerzendAdapter {
         this.sendAMessageApi = sendAMessageApi;
         this.notifyJwtFactory = notifyJwtFactory;
         this.notifyAuthorizationHolder = notifyAuthorizationHolder;
-        this.notifyApiKey = notifyApiKey.orElse("");
-        this.notifyTemplateId = notifyTemplateId.orElse("");
+        this.notifyApiKey = notifyApiKey.filter(s -> !s.isBlank())
+                .orElseThrow(() -> new IllegalStateException("notify.api-key is niet geconfigureerd"));
+        this.notifyTemplateId = notifyTemplateId.filter(s -> !s.isBlank())
+                .orElseThrow(() -> new IllegalStateException("notify.template-id is niet geconfigureerd"));
     }
 
-    public UUID verstuurEmail(String emailAdres, Map<String, String> berichtgegevens) {
+    public UUID verstuurEmail(@NotNull String emailAdres, Map<String, String> berichtgegevens) {
+        autoriseer();
+        SendEmailRequest notifyRequest = bouwVerzoek(emailAdres, berichtgegevens);
+        SendEmailResponse notifyResponse = verstuur(notifyRequest);
+        return extraheerNotificatieId(notifyResponse);
+    }
+
+    private void autoriseer() {
         try {
             String authorization = notifyJwtFactory.authorizationHeader(notifyApiKey);
             notifyAuthorizationHolder.setBearerToken(authorization.substring(BEARER_PREFIX.length()));
         } catch (IllegalArgumentException e) {
             Log.error("Ongeldige NotifyNL API-key geconfigureerd", e);
-            throw Problems.serverError("Configuratiefout",
-                    "Er kan momenteel geen notificatie worden verstuurd vanwege een configuratieprobleem");
+            throw new NotifyConfiguratieException("Ongeldige NotifyNL API-key geconfigureerd", e);
         }
+    }
 
+    private SendEmailRequest bouwVerzoek(String emailAdres, Map<String, String> berichtgegevens) {
         SendEmailRequestPersonalisation personalisation = new SendEmailRequestPersonalisation();
         if (berichtgegevens != null) {
             personalisation.putAll(berichtgegevens);
         }
 
-        SendEmailRequest notifyRequest = new SendEmailRequest()
+        return new SendEmailRequest()
                 .emailAddress(emailAdres)
                 .templateId(notifyTemplateId)
                 .personalisation(personalisation);
+    }
 
-        SendEmailResponse notifyResponse;
+    private SendEmailResponse verstuur(SendEmailRequest notifyRequest) {
         try {
-            notifyResponse = sendAMessageApi.sendEmail(notifyRequest);
+            return sendAMessageApi.sendEmail(notifyRequest);
         } catch (WebApplicationException e) {
-            throw Problems.badGateway("NotifyNL fout",
-                    "NotifyNL gaf status " + e.getResponse().getStatus() + " terug");
+            throw new NotifyVerzendException("NotifyNL gaf status " + e.getResponse().getStatus() + " terug");
         }
+    }
 
+    private UUID extraheerNotificatieId(SendEmailResponse notifyResponse) {
         if (notifyResponse == null || notifyResponse.getId() == null) {
-            throw Problems.badGateway("NotifyNL fout", "NotifyNL gaf geen notificatie-ID terug in de respons");
+            throw new NotifyVerzendException("NotifyNL gaf geen notificatie-ID terug in de respons");
         }
 
         try {
             return UUID.fromString(notifyResponse.getId());
         } catch (IllegalArgumentException e) {
-            throw Problems.badGateway("NotifyNL fout", "NotifyNL gaf een ongeldig notificatie-ID terug in de respons");
+            throw new NotifyVerzendException("NotifyNL gaf een ongeldig notificatie-ID terug in de respons");
         }
     }
 }
