@@ -3,6 +3,7 @@ package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -19,13 +20,11 @@ public class ConsumentCallbackAdapter {
     private static final int MAX_POGINGEN = 3;
 
     private final ConsumentCallbackClientFactory clientFactory;
-    private long initieleWachtMs = 1000L;
+    private final long initieleWachtMs;
 
-    public ConsumentCallbackAdapter(ConsumentCallbackClientFactory clientFactory) {
+    public ConsumentCallbackAdapter(ConsumentCallbackClientFactory clientFactory,
+                                     @ConfigProperty(name = "consument-callback.initiele-wacht-ms", defaultValue = "1000") long initieleWachtMs) {
         this.clientFactory = clientFactory;
-    }
-
-    void setInitieleWachtMs(long initieleWachtMs) {
         this.initieleWachtMs = initieleWachtMs;
     }
 
@@ -33,6 +32,7 @@ public class ConsumentCallbackAdapter {
     // acceptabel, maar vraagt later om een lastUpdated-veld en cleanup-job.
     public boolean stuurStatusUpdate(Notificatie notificatie) {
         if (notificatie.callbackUrl == null) {
+            Log.infof("Geen callback-URL geconfigureerd voor notificatie %s — statusupdate niet verstuurd", notificatie.id);
             return false;
         }
 
@@ -44,7 +44,7 @@ public class ConsumentCallbackAdapter {
                 "notificatie/" + notificatie.id,
                 OffsetDateTime.now(ZoneOffset.UTC),
                 "application/json",
-                new NotificatieStatusData(notificatie.id, notificatie.status));
+                new NotificatieStatus(notificatie.id, notificatie.status));
 
         ConsumentCallbackClient client = clientFactory.maakClient(notificatie.callbackUrl);
 

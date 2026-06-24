@@ -9,7 +9,7 @@ import nl.rijksoverheid.moz.nmc.api.model.NotificatieResponse;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
 import nl.rijksoverheid.moz.nmc.client.notify.VerzendAdapter;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
-import nl.rijksoverheid.moz.nmc.common.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.common.NotificatieStatusEnum;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
@@ -46,12 +46,12 @@ public class NotificatieService {
         Notificatie notificatie = new Notificatie();
         // TODO (security): callbackUrl is unvalidated caller input that we later POST to — SSRF risk.
         notificatie.callbackUrl = request.getCallbackUrl() != null ? request.getCallbackUrl().toString() : null;
-        notificatie.status = NotificatieStatus.CREATED;
+        notificatie.status = NotificatieStatusEnum.CREATED;
         notificatie.aangemaakt = OffsetDateTime.now(ZoneOffset.UTC);
         notificatieRepository.persist(notificatie);
 
         notificatie.notifyNlNotificatieId = verzendAdapter.verstuurEmail(emailAdres, request.getBerichtgegevens());
-        notificatie.status = NotificatieStatus.SENDING;
+        notificatie.status = NotificatieStatusEnum.SENDING;
 
         return new NotificatieResponse().notificatieId(notificatie.id);
     }
@@ -74,12 +74,12 @@ public class NotificatieService {
         }
     }
 
-    private NotificatieStatus parseStatus(String notifyStatus) {
+    private NotificatieStatusEnum parseStatus(String notifyStatus) {
         try {
-            return NotificatieStatus.valueOf(notifyStatus.replace("-", "_").toUpperCase());
+            return NotificatieStatusEnum.valueOf(notifyStatus.replace("-", "_").toUpperCase());
         } catch (IllegalArgumentException e) {
             Log.warnf("Onbekende NotifyNL-status ontvangen: %s — opgeslagen als technische fout", notifyStatus);
-            return NotificatieStatus.TECHNICAL_FAILURE;
+            return NotificatieStatusEnum.TECHNICAL_FAILURE;
         }
     }
 }

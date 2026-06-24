@@ -2,7 +2,7 @@ package nl.rijksoverheid.moz.nmc.common;
 
 import com.fasterxml.jackson.annotation.JsonValue;
 
-public enum NotificatieStatus {
+public enum NotificatieStatusEnum {
     SENDING,
     DELIVERED,
     PERMANENT_FAILURE,

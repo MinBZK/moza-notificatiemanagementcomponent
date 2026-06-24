@@ -1,8 +1,10 @@
 package nl.rijksoverheid.moz.nmc.notifycallback.controller;
 
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
+import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
 import nl.rijksoverheid.moz.nmc.client.notify.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notify.generated.model.SendEmailResponse;
@@ -10,8 +12,9 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
 import nl.rijksoverheid.moz.nmc.client.notify.NotifyJwtFactory;
-import nl.rijksoverheid.moz.nmc.common.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.common.NotificatieStatusEnum;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,8 +45,15 @@ class NotifyCallbackControllerTest {
     @InjectMock
     ConsumentCallbackAdapter consumentCallbackAdapter;
 
+    @Inject
+    NotificatieRepository notificatieRepository;
+
     @BeforeEach
     void setUp() {
+        // Voorkomt dat notificaties van een vorige test de lookup-by-notifyNlNotificatieId
+        // in een volgende test beïnvloeden.
+        QuarkusTransaction.requiringNew().run(notificatieRepository::deleteAll);
+
         Mockito.when(notifyJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail("test@example.nl", true));
     }
@@ -100,7 +110,7 @@ class NotifyCallbackControllerTest {
 
         ArgumentCaptor<Notificatie> captor = ArgumentCaptor.forClass(Notificatie.class);
         Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(captor.capture());
-        assertEquals(NotificatieStatus.TECHNICAL_FAILURE, captor.getValue().status);
+        assertEquals(NotificatieStatusEnum.TECHNICAL_FAILURE, captor.getValue().status);
     }
 
     @Test
