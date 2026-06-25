@@ -26,6 +26,7 @@ import java.util.UUID;
 
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 
 @QuarkusTest
@@ -132,6 +133,50 @@ class NotifyCallbackControllerTest {
                 .statusCode(204);
 
         Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(any());
+    }
+
+    @Test
+    void verwerkAfleverstatus_callbackSuccesvol_verwijdertNotificatieUitDatabase() {
+        UUID notifyNlId = UUID.randomUUID();
+        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
+        Mockito.when(consumentCallbackAdapter.stuurStatusUpdate(any())).thenReturn(true);
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(aanvraag("https://omc.example.com/callback"))
+                .when().post("/api/nmc/v1/notificaties")
+                .then().statusCode(200);
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(deliveryReceipt(notifyNlId, "delivered"))
+                .when().post("/api/nmc/v1/notify-callback")
+                .then()
+                .statusCode(204);
+
+        assertTrue(notificatieRepository.findByNotifyNlNotificatieId(notifyNlId).isEmpty());
+    }
+
+    @Test
+    void verwerkAfleverstatus_callbackMislukt_bewaartNotificatieInDatabase() {
+        UUID notifyNlId = UUID.randomUUID();
+        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
+        Mockito.when(consumentCallbackAdapter.stuurStatusUpdate(any())).thenReturn(false);
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(aanvraag("https://omc.example.com/callback"))
+                .when().post("/api/nmc/v1/notificaties")
+                .then().statusCode(200);
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(deliveryReceipt(notifyNlId, "delivered"))
+                .when().post("/api/nmc/v1/notify-callback")
+                .then()
+                .statusCode(204);
+
+        assertTrue(notificatieRepository.findByNotifyNlNotificatieId(notifyNlId).isPresent());
     }
 
     private String aanvraag(String callbackUrl) {
