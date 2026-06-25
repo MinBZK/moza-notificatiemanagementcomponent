@@ -119,7 +119,7 @@ through only a bare identifier and let NMC lead.
   — relation unconfirmed, see the `NotificatieStatus` caveat above
 
 ## Technical conventions for this project
-- Stack: Java 21 + Quarkus 3.35.1 (RESTEasy Reactive, Hibernate ORM/Panache),
+- Stack: Java 25 + Quarkus 3.35.1 (RESTEasy Reactive, Hibernate ORM/Panache),
   groupId `nl.rijksoverheid.moz`
 - **Use constructor-based dependency injection, not field injection** — a
   deliberate deviation from other projects in this org that use field injection
