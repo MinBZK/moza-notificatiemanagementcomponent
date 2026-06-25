@@ -23,9 +23,9 @@ echte ZAD project-id.
 ### 3. Applicatieconfiguratie in ZAD (managed DB + secrets)
 
 De `zad-actions/deploy` action zet **geen** env-vars of DB-config; de app krijgt
-die uit de ZAD-deploymentconfig. Regel dit via een **base-deployment** waar
-`clone-from: base` in `deploy.yml` naar verwijst (pas de naam aan of haal
-`clone-from` weg als je het anders regelt).
+die uit de ZAD-deploymentconfig. Dit is geregeld via de **`feature`-deployment**
+(component `nmcapi`), waar `clone-from: feature` in `deploy.yml` naar verwijst.
+PR-deploys erven die env.
 
 Benodigde env-vars op die deployment:
 
@@ -47,4 +47,4 @@ Benodigde env-vars op die deployment:
   (deploy + wacht op `/q/health/ready` + plaatst deploy-URL als PR-comment).
 - PR closed → `cleanup-preview`.
 
-URL-patroon: `https://nmc-pr-<n>-<project-id>.rig.prd1.gn2.quattro.rijksapps.nl`
+URL-patroon: `https://nmcapi-pr-<n>-nd-j7s.rig.prd1.gn2.quattro.rijksapps.nl`

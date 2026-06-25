@@ -29,22 +29,14 @@ anders start de app zonder DB en gaat de deploy rood (`/q/health/ready` faalt).
 - [x] Repo-secret `ZAD_API_KEY` gezet
 - [x] Lokale build geverifieerd (fast-jar gebouwd, health-extensie gebundeld)
 
-## Openstaand (ZAD-kant — mens met Operations-Manager-toegang)
+## ZAD-kant (gereed)
 
-Eenmalig in Operations Manager, project `nd-j7s`:
+- [x] Base-deployment **`feature`** met component **`nmcapi`** geconfigureerd in
+  Operations Manager (env-vars: DB-url/creds, notify-keys, `hash.pepper`,
+  flyway-flag). `deploy.yml` heeft `component: nmcapi` + `clone-from: feature`.
 
-1. [ ] Zorg dat er een **Postgres** beschikbaar is (managed addon óf los component).
-2. [ ] Maak een **base-deployment** (bv naam `base`) met deze env-vars:
-   - `DB_USERNAME`, `DB_PASSWORD`
-   - `QUARKUS_DATASOURCE_JDBC_URL` (JDBC-url naar die Postgres)
-   - `QUARKUS_FLYWAY_MIGRATE_AT_START=true` (container draait prod-profiel waar dit
-     `false` staat; zonder migraties faalt boot op `schema-management=validate`)
-   - `NOTIFY_API_KEY`, `NOTIFY_TEMPLATE_ID`
-   - `HASH_PEPPER` (mag niet leeg in prod)
-3. [ ] Bevestig de base-naam; staat die niet op `base`, pas `clone-from:` in
-   `deploy.yml` aan.
-
-> Wie project `nd-j7s` heeft aangemaakt / het ZAD-platformteam weet hoe stap 1-2 gaan.
+> Controleer dat de env op `feature/nmcapi` `QUARKUS_FLYWAY_MIGRATE_AT_START=true`
+> bevat — anders faalt de eerste boot op een lege DB (`schema-management=validate`).
 
 ## Optioneel later
 
