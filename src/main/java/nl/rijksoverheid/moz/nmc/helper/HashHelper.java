@@ -24,10 +24,6 @@ public class HashHelper {
         this.pepperKey = new SecretKeySpec(pepperValue.getBytes(StandardCharsets.UTF_8), HMAC_ALGORITHM);
     }
 
-    // Keyed HMAC met een geheime pepper, zodat een pseudonym niet via brute force (terug) naar
-    // het oorspronkelijke BSN/KVK/RSIN te herleiden is door iemand met enkel toegang tot de logs.
-    // Deterministisch (zelfde input + pepper -> zelfde pseudonym) — een per-call salt zou dat
-    // onmogelijk maken, terwijl auditpseudonyms net consistent moeten zijn over loginvoer heen.
     public String hashIdentifier(String identifier) {
         if (identifier == null) {
             return null;
