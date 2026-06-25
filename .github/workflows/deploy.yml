@@ -1,0 +1,97 @@
+# Deploy elke Pull Request naar een ephemeral ZAD-omgeving, zodat de PR daar
+# getest kan worden. Bij sluiten van de PR wordt de omgeving opgeruimd.
+#
+# Vereiste repo-secrets:
+#   ZAD_API_KEY         — ZAD Operations Manager API key
+#   GITHUB_ADMIN_TOKEN  — PAT met repo-admin (voor opruimen GitHub environment)
+#
+# De applicatieconfiguratie (DB-url/credentials, notify.api-key, hash.pepper,
+# QUARKUS_FLYWAY_MIGRATE_AT_START=true, ...) komt NIET uit deze workflow maar uit
+# de ZAD-deploymentconfig. Via `clone-from` erven PR-deploys die config van een
+# base-deployment. Zie .github/workflows/README-zad-deploy.md.
+
+name: ZAD PR Deploy
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  ZAD_PROJECT_ID: PLACEHOLDER-PROJECT-ID # TODO: ZAD project-id invullen (bv regel-k4c)
+
+jobs:
+  build:
+    # Niet bouwen wanneer de PR enkel gesloten wordt.
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # image pushen naar GHCR
+    steps:
+      - uses: actions/checkout@v6
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.number }}
+
+  deploy-preview:
+    if: github.event.action != 'closed'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # deploy-URL als PR-comment posten
+      deployments: write # GitHub environment/deployment aanmaken
+    environment:
+      name: pr-${{ github.event.pull_request.number }}
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Deploy to ZAD
+        id: deploy
+        uses: RijksICTGilde/zad-actions/deploy@v4
+        with:
+          api-key: ${{ secrets.ZAD_API_KEY }}
+          project-id: ${{ env.ZAD_PROJECT_ID }}
+          deployment-name: pr-${{ github.event.pull_request.number }}
+          component: nmc
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.number }}
+          # Erf DB + secrets + env van een vooraf geconfigureerde base-deployment.
+          # TODO: naam van de base-deployment invullen; weghalen als niet gebruikt.
+          clone-from: base
+          comment-on-pr: 'true'
+          # Wacht tot de app daadwerkelijk up is; readiness bevat de datasource-check.
+          wait-for-ready: 'true'
+          health-endpoint: /q/health/ready
+
+  cleanup-preview:
+    # Alleen bij sluiten van de PR: omgeving + image + GitHub environment opruimen.
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+      packages: write
+      pull-requests: write
+    steps:
+      - name: Cleanup ZAD environment
+        uses: RijksICTGilde/zad-actions/cleanup@v4
+        with:
+          api-key: ${{ secrets.ZAD_API_KEY }}
+          project-id: ${{ env.ZAD_PROJECT_ID }}
+          deployment-name: pr-${{ github.event.pull_request.number }}
+          delete-github-env: 'true'
+          delete-github-deployments: 'true'
+          delete-container: 'true'
+          container-org: ${{ github.repository_owner }}
+          container-name: ${{ github.event.repository.name }}
+          container-tag: pr-${{ github.event.number }}
+          github-admin-token: ${{ secrets.GITHUB_ADMIN_TOKEN }}
