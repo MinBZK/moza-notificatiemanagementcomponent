@@ -30,6 +30,8 @@ jobs:
     permissions:
       contents: read
       packages: write # image pushen naar GHCR
+    outputs:
+      digest: ${{ steps.build.outputs.digest }} # immutable digest voor verse pull
     steps:
       - uses: actions/checkout@v6
       - name: Log in to GHCR
@@ -39,6 +41,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -68,7 +71,9 @@ jobs:
           project-id: ${{ env.ZAD_PROJECT_ID }}
           deployment-name: pr-${{ github.event.pull_request.number }}
           component: nmcapi
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.number }}
+          # Deploy op digest (niet de mutable pr-N tag) zodat ZAD altijd de net
+          # gebouwde image pullt i.p.v. een gecachete oude versie van dezelfde tag.
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.digest }}
           # Erf DB + secrets + env van de 'feature'-deployment (component nmcapi
           # heeft daar DB-url/creds, notify-keys, hash.pepper, flyway-flag gezet).
           clone-from: feature
