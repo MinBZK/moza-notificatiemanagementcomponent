@@ -18,7 +18,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # GHCR vereist lowercase; github.repository is MinBZK/... (hoofdletters) → hardcode lowercase.
+  IMAGE_NAME: minbzk/moza-notificatiemanagementcomponent
   ZAD_PROJECT_ID: nd-j7s
 
 jobs:
@@ -93,7 +94,7 @@ jobs:
           delete-github-env: 'false'
           delete-github-deployments: 'false'
           delete-container: 'true'
-          container-org: ${{ github.repository_owner }}
+          container-org: minbzk # lowercase; moet matchen met push-tag
           container-name: ${{ github.event.repository.name }}
           container-tag: pr-${{ github.event.number }}
           github-admin-token: ${{ secrets.GITHUB_ADMIN_TOKEN }}
