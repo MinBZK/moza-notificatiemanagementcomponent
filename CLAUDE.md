@@ -76,16 +76,18 @@ through only a bare identifier and let NMC lead.
 5. **Execute & follow up contactherstel** — digital (same template/send/response
    flow) or physical (Notify → Printstraat → Postadres), report status back up
 
-## Integration assumptions (TODO: verify against real contracts)
-- **NotifyNL send is synchronous, delivery status is async.** Based on
-  `../moza-verificatie-service`'s `NotifyNLService`: the initial send is a
-  synchronous HTTP POST (JWT built from the API key) that only confirms
-  "accepted for sending" (200/201) — not actual delivery. We're assuming the real
-  delivery outcome (success vs 4.x.x/5.x.x in the sequence diagram) arrives via a
-  **separate async webhook/callback** from Notify to NMC, matching the dashed
-  "Statusmeldingen" lines in the architecture diagrams. **Confirm this against
-  NotifyNL's actual API docs** as an early implementation step — until then,
-  design the data model assuming async callbacks.
+## Integration assumptions
+- **NotifyNL send is synchronous, delivery status is async.** The initial
+  send is a synchronous HTTP POST (JWT built from the API key) that only
+  confirms "accepted for sending" (200/201) — not actual delivery. The real
+  delivery outcome arrives via a separate async webhook. NotifyNL callbacks
+  are configured once, per service/API key, in NotifyNL's dashboard ("API
+  integration" → "Callbacks"): a URL plus a bearer token that NotifyNL sends
+  back in the Authorization header — not a field on the send-email request
+  itself (see `src/main/resources/openapi/notifynl_api.yaml:74-85`).
+  `/api/nmc/v1/notify-callback` (`NotifyCallbackController`) is that
+  registered URL, and the bearer token is what its no-auth TODO should
+  validate against.
 - **Herverzending vs contactherstel trigger logic is out of scope for this
   skeleton.** Herverzending retries the same channel. Deciding *when* to escalate
   to contactherstel is a later story — leave it as an extension point, don't build it now.
