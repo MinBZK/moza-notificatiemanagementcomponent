@@ -28,6 +28,7 @@ public class ConsumentCallbackAdapter {
         this.initieleWachtMs = initieleWachtMs;
     }
 
+    // TODO #757 (NMC: Notificaties zonder callback url verwijderen uit database)
     // Zonder callbackUrl blijft de notificatie voor altijd staan (nooit verwijderd) — voor nu
     // acceptabel, maar vraagt later om een lastUpdated-veld en cleanup-job.
     public boolean stuurStatusUpdate(Notificatie notificatie) {
