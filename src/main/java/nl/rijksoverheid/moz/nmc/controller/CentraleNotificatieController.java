@@ -29,13 +29,15 @@ public class CentraleNotificatieController implements NotificatiesApi {
     }
 
     @Override
-    // TODO: processingActivityId is een placeholder, vervang door de echte URL uit het privacy-register.
+    // TODO #754 (LDV Logboek annotaties hebben placeholder URL)
+    // processingActivityId is een placeholder, vervang door de echte URL uit het privacy-register.
     @Logboek(name = "notificatieVersturen", processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
     public NotificatieResponse notificatieVersturen(NotificatieAanvraagRequest notificatieAanvraagRequest) {
         logboekContext.setDataSubjectId(hashHelper.hashIdentifier(notificatieAanvraagRequest.getIdentificatieNummer()));
         logboekContext.setDataSubjectType(String.valueOf(notificatieAanvraagRequest.getIdentificatieType()));
 
-        // TODO (security): callbackUrl is unvalidated caller input that we later POST to — SSRF risk.
+        // TODO #752 (zie NMC: CallbackUrl wordt niet gevalideerd (SSRF risico))
+        // (security): callbackUrl is unvalidated caller input that we later POST to — SSRF risk.
         String callbackUrl = notificatieAanvraagRequest.getCallbackUrl() != null
                 ? notificatieAanvraagRequest.getCallbackUrl().toString()
                 : null;
