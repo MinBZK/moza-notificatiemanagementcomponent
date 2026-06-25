@@ -89,8 +89,8 @@ class ConsumentCallbackAdapterTest {
         assertNotNull(event.source());
         assertNotNull(event.subject());
         assertNotNull(event.time());
-        assertEquals(notificatie.getId(), event.status().notificatieId());
-        assertEquals(NotificatieStatusEnum.DELIVERED, event.status().status());
+        assertEquals(notificatie.getId(), event.data().notificatieId());
+        assertEquals(NotificatieStatusEnum.DELIVERED, event.data().status());
     }
 
     private Notificatie notificatie(String callbackUrl) {
