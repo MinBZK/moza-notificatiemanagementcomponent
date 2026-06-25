@@ -43,6 +43,9 @@ jobs:
         with:
           context: .
           push: true
+          # Swagger UI mee in preview-images (zie ARG SWAGGER_UI in Dockerfile).
+          build-args: |
+            SWAGGER_UI=true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.number }}
 
   deploy-preview:

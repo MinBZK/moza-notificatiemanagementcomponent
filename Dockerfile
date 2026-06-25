@@ -13,8 +13,11 @@ COPY pom.xml ./
 RUN ./mvnw -B -q dependency:go-offline
 
 # Daarna de broncode en bouwen (codegen van OpenAPI-clients gebeurt in package).
+# SWAGGER_UI=true bundelt Swagger UI in de prod-jar (alleen voor test/preview-images;
+# standaard false zodat een echte prod-build het niet meekrijgt).
+ARG SWAGGER_UI=false
 COPY src src
-RUN ./mvnw -B -DskipTests package
+RUN ./mvnw -B -DskipTests package -Dquarkus.swagger-ui.always-include=${SWAGGER_UI}
 
 # --- Runtime stage ---
 FROM eclipse-temurin:25-jre AS runtime
