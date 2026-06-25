@@ -51,8 +51,25 @@ anders start de app zonder DB en gaat de deploy rood (`/q/health/ready` faalt).
   om de key platform-zijdig in te trekken/vervangen; daarna het repo-secret
   `ZAD_API_KEY` bijwerken.
 
-## Nog te doen voor activatie
+## Live (PR #6, in review)
 
-- [ ] Branch pushen + PR openen (deploy gaat groen zodra base-deployment bestaat).
-  PR met `pull_request`-trigger draait de workflow van de PR-head, dus de PR die
-  deze workflow toevoegt deployt zichzelf.
+- [x] Branch gepusht + PR [#6](https://github.com/MinBZK/moza-notificatiemanagementcomponent/pull/6)
+  geopend (target `feature/nmc-skeleton`) — wacht op review, nog niet mergen.
+- [x] Deploy end-to-end groen: build → image → ZAD-deploy → health.
+- URLs: `https://nmcapi-pr-6-nd-j7s.rig.prd1.gn2.quattro.rijksapps.nl`
+  → `/q/swagger-ui`, `/q/openapi`, `/q/health/ready`.
+
+### Twee leerpunten onderweg (al opgelost in de workflow)
+- **JDBC-URL** moet volledig zijn: `jdbc:postgresql://host:5432/<db>` (env op
+  `feature/nmcapi`), niet enkel host of `jdbc://...`.
+- **Image-digest i.p.v. mutable `pr-N` tag**: ZAD/k8s pullt een gelijke tag niet
+  opnieuw, waardoor image-wijzigingen niet live kwamen. Deploy gaat nu op digest.
+- **Swagger UI** alleen in preview-image via build-arg `SWAGGER_UI=true`
+  (`quarkus.swagger-ui.always-include`); prod-build blijft schoon.
+
+## Restpunten
+
+- [ ] **Security:** `ZAD_API_KEY` is in platte tekst gedeeld → met platformteam
+  intrekken/vervangen, daarna repo-secret bijwerken. (GUI-rotatie kan niet.)
+- [ ] `GITHUB_ADMIN_TOKEN` toevoegen → dan `delete-github-env`/`-deployments` in
+  `deploy.yml` weer op `'true'`.
