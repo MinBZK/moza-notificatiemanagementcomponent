@@ -44,13 +44,6 @@ anders start de app zonder DB en gaat de deploy rood (`/q/health/ready` faalt).
   `deploy.yml` `delete-github-env` + `delete-github-deployments` weer op `'true'`
   zetten (nu `'false'` om hard falen van cleanup te voorkomen).
 
-## Security — actie vereist
-
-- ⚠️ De `ZAD_API_KEY` is in platte tekst in een chat gedeeld → als blootgesteld
-  beschouwen. Rotatie kan **niet** via de ZAD-GUI. **Met platformteam overleggen**
-  om de key platform-zijdig in te trekken/vervangen; daarna het repo-secret
-  `ZAD_API_KEY` bijwerken.
-
 ## Live (PR #6, in review)
 
 - [x] Branch gepusht + PR [#6](https://github.com/MinBZK/moza-notificatiemanagementcomponent/pull/6)
@@ -69,7 +62,5 @@ anders start de app zonder DB en gaat de deploy rood (`/q/health/ready` faalt).
 
 ## Restpunten
 
-- [ ] **Security:** `ZAD_API_KEY` is in platte tekst gedeeld → met platformteam
-  intrekken/vervangen, daarna repo-secret bijwerken. (GUI-rotatie kan niet.)
 - [ ] `GITHUB_ADMIN_TOKEN` toevoegen → dan `delete-github-env`/`-deployments` in
   `deploy.yml` weer op `'true'`.
