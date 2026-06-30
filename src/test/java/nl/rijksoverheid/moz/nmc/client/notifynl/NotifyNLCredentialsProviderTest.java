@@ -1,4 +1,4 @@
-package nl.rijksoverheid.moz.nmc.client.notify;
+package nl.rijksoverheid.moz.nmc.client.notifynl;
 
 import io.quarkiverse.openapi.generator.providers.CredentialsContext;
 import io.quarkiverse.openapi.generator.providers.CredentialsProvider;
@@ -11,38 +11,38 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @QuarkusTest
-class NotifyCredentialsProviderTest {
+class NotifyNLCredentialsProviderTest {
 
     @Inject
     CredentialsProvider credentialsProvider;
 
     @Test
     void credentialsProvider_overridtExtensieDefault() {
-        // Zonder de @Alternative @Priority-override in NotifyCredentialsProvider zou de extensie's
+        // Zonder de @Alternative @Priority-override in NotifyNLCredentialsProvider zou de extensie's
         // eigen config-gebaseerde ConfigCredentialsProvider gebruikt worden, en gaat NotifyNL stilletjes
         // zonder bearer token.
-        assertInstanceOf(NotifyCredentialsProvider.class, credentialsProvider);
+        assertInstanceOf(NotifyNLCredentialsProvider.class, credentialsProvider);
     }
 
     @Test
     void getBearerToken_retourneertTokenUitHolder() {
-        NotifyAuthorizationHolder holder = new NotifyAuthorizationHolder();
+        NotifyNLAuthorizationHolder holder = new NotifyNLAuthorizationHolder();
         holder.setBearerToken("test-token");
-        NotifyCredentialsProvider provider = new NotifyCredentialsProvider(holder);
+        NotifyNLCredentialsProvider provider = new NotifyNLCredentialsProvider(holder);
 
         assertEquals("test-token", provider.getBearerToken(dummyContext()).orElse(null));
     }
 
     @Test
     void getBearerToken_zonderToken_retourneertLeeg() {
-        NotifyCredentialsProvider provider = new NotifyCredentialsProvider(new NotifyAuthorizationHolder());
+        NotifyNLCredentialsProvider provider = new NotifyNLCredentialsProvider(new NotifyNLAuthorizationHolder());
 
         assertTrue(provider.getBearerToken(dummyContext()).isEmpty());
     }
 
     @Test
     void overigeCredentialMethoden_retourenAltijdLeeg() {
-        NotifyCredentialsProvider provider = new NotifyCredentialsProvider(new NotifyAuthorizationHolder());
+        NotifyNLCredentialsProvider provider = new NotifyNLCredentialsProvider(new NotifyNLAuthorizationHolder());
         CredentialsContext context = dummyContext();
 
         assertTrue(provider.getApiKey(context).isEmpty());

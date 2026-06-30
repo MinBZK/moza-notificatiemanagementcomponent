@@ -1,4 +1,4 @@
-package nl.rijksoverheid.moz.nmc.client.notify;
+package nl.rijksoverheid.moz.nmc.client.notifynl;
 
 import io.quarkiverse.openapi.generator.providers.CredentialsContext;
 import io.quarkiverse.openapi.generator.providers.CredentialsProvider;
@@ -13,11 +13,11 @@ import java.util.Optional;
 @Alternative
 @Priority(200)
 @ApplicationScoped
-public class NotifyCredentialsProvider implements CredentialsProvider {
+public class NotifyNLCredentialsProvider implements CredentialsProvider {
 
-    private final NotifyAuthorizationHolder authorizationHolder;
+    private final NotifyNLAuthorizationHolder authorizationHolder;
 
-    public NotifyCredentialsProvider(NotifyAuthorizationHolder authorizationHolder) {
+    public NotifyNLCredentialsProvider(NotifyNLAuthorizationHolder authorizationHolder) {
         this.authorizationHolder = authorizationHolder;
     }
 

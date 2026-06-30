@@ -1,13 +1,13 @@
-package nl.rijksoverheid.moz.nmc.client.notify;
+package nl.rijksoverheid.moz.nmc.client.notifynl;
 
 import jakarta.enterprise.context.RequestScoped;
 
 import java.util.Optional;
 
-// Carries the per-request JWT to NotifyCredentialsProvider, which the generated NotifyNL client
+// Carries the per-request JWT to NotifyNLCredentialsProvider, which the generated NotifyNL client
 // consults for the Authorization header.
 @RequestScoped
-public class NotifyAuthorizationHolder {
+public class NotifyNLAuthorizationHolder {
 
     private String bearerToken;
 

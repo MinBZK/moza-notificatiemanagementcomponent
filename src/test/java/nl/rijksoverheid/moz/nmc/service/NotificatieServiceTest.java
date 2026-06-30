@@ -1,7 +1,7 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
-import nl.rijksoverheid.moz.nmc.client.notify.VerzendAdapter;
+import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
 import nl.rijksoverheid.moz.nmc.client.profielservice.GeenEmailadresGevondenException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
 import nl.rijksoverheid.moz.nmc.common.IdentificatieType;
@@ -30,7 +30,7 @@ import static org.mockito.Mockito.when;
 class NotificatieServiceTest {
 
     private ProfielServiceAdapter profielServiceAdapter;
-    private VerzendAdapter verzendAdapter;
+    private NotifyNLVerzendAdapter verzendAdapter;
     private NotificatieRepository notificatieRepository;
     private ConsumentCallbackAdapter consumentCallbackAdapter;
     private NotificatieService service;
@@ -38,7 +38,7 @@ class NotificatieServiceTest {
     @BeforeEach
     void setUp() {
         profielServiceAdapter = mock(ProfielServiceAdapter.class);
-        verzendAdapter = mock(VerzendAdapter.class);
+        verzendAdapter = mock(NotifyNLVerzendAdapter.class);
         notificatieRepository = mock(NotificatieRepository.class);
         consumentCallbackAdapter = mock(ConsumentCallbackAdapter.class);
         service = new NotificatieService(profielServiceAdapter, verzendAdapter, notificatieRepository, consumentCallbackAdapter);

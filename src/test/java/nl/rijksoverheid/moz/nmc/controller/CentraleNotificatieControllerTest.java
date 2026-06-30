@@ -5,9 +5,9 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
-import nl.rijksoverheid.moz.nmc.client.notify.NotifyJwtFactory;
-import nl.rijksoverheid.moz.nmc.client.notify.generated.api.SendAMessageApi;
-import nl.rijksoverheid.moz.nmc.client.notify.generated.model.SendEmailResponse;
+import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
+import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
+import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ApiProfielserviceV1VoorkeurPost201ResponseScopesInner;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
@@ -36,11 +36,11 @@ class CentraleNotificatieControllerTest {
     SendAMessageApi sendAMessageApi;
 
     @InjectMock
-    NotifyJwtFactory notifyJwtFactory;
+    NotifyNLJwtFactory notifyNLJwtFactory;
 
     @BeforeEach
     void setUp() {
-        Mockito.when(notifyJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
+        Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
     }
 
     @Test
@@ -189,7 +189,7 @@ class CentraleNotificatieControllerTest {
     @Test
     void notificatieVersturen_ongeldigeApiKeyConfiguratie_retourneert500() {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail("burger@example.nl", true));
-        Mockito.when(notifyJwtFactory.authorizationHeader(any()))
+        Mockito.when(notifyNLJwtFactory.authorizationHeader(any()))
                 .thenThrow(new IllegalArgumentException("Ongeldige key"));
 
         given()
