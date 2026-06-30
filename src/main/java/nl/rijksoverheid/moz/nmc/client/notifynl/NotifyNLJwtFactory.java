@@ -1,4 +1,4 @@
-package nl.rijksoverheid.moz.nmc.client.notify;
+package nl.rijksoverheid.moz.nmc.client.notifynl;
 
 import io.smallrye.jwt.build.Jwt;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -6,7 +6,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.time.Instant;
 
 @ApplicationScoped
-public class NotifyJwtFactory {
+public class NotifyNLJwtFactory {
 
     private static final int API_KEY_MIN_LENGTH = 74;
     private static final int SERVICE_ID_START_OFFSET = 73;

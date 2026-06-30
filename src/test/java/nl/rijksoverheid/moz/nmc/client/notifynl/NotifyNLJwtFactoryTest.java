@@ -1,12 +1,12 @@
-package nl.rijksoverheid.moz.nmc.client.notify;
+package nl.rijksoverheid.moz.nmc.client.notifynl;
 
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class NotifyJwtFactoryTest {
+class NotifyNLJwtFactoryTest {
 
-    private final NotifyJwtFactory factory = new NotifyJwtFactory();
+    private final NotifyNLJwtFactory factory = new NotifyNLJwtFactory();
 
     // "some-service" (12) + "-" (1) + serviceId (36) + "-" (1) + secret (36) = 86 chars
     private static final String GELDIGE_API_KEY =

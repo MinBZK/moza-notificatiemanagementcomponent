@@ -1,4 +1,4 @@
-package nl.rijksoverheid.moz.nmc.notifycallback.controller;
+package nl.rijksoverheid.moz.nmc.notifynlcallback.controller;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
@@ -6,12 +6,12 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
-import nl.rijksoverheid.moz.nmc.client.notify.generated.api.SendAMessageApi;
-import nl.rijksoverheid.moz.nmc.client.notify.generated.model.SendEmailResponse;
+import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
+import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
-import nl.rijksoverheid.moz.nmc.client.notify.NotifyJwtFactory;
+import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.common.NotificatieStatusEnum;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 
 @QuarkusTest
-class NotifyCallbackControllerTest {
+class NotifyNLCallbackControllerTest {
 
     @InjectMock
     @RestClient
@@ -41,7 +41,7 @@ class NotifyCallbackControllerTest {
     SendAMessageApi sendAMessageApi;
 
     @InjectMock
-    NotifyJwtFactory notifyJwtFactory;
+    NotifyNLJwtFactory notifyNLJwtFactory;
 
     @InjectMock
     ConsumentCallbackAdapter consumentCallbackAdapter;
@@ -55,7 +55,7 @@ class NotifyCallbackControllerTest {
         // in een volgende test beïnvloeden.
         QuarkusTransaction.requiringNew().run(notificatieRepository::deleteAll);
 
-        Mockito.when(notifyJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
+        Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail("test@example.nl", true));
     }
 

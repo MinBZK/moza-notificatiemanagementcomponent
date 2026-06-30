@@ -30,7 +30,7 @@ paths:
         statusupdate (CloudEvents NL GOV) naar die URL gestuurd. Na een geslaagde
         callback wordt het notificatierecord verwijderd.
       tags:
-        - NotifyCallback
+        - NotifyNLCallback
       requestBody:
         required: true
         content:

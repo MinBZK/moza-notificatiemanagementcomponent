@@ -4,7 +4,7 @@ import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
-import nl.rijksoverheid.moz.nmc.client.notify.VerzendAdapter;
+import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
 import nl.rijksoverheid.moz.nmc.client.profielservice.PartijIdentificatie;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
 import nl.rijksoverheid.moz.nmc.common.NotificatieStatusEnum;
@@ -17,12 +17,12 @@ import java.util.UUID;
 public class NotificatieService {
 
     private final ProfielServiceAdapter profielServiceAdapter;
-    private final VerzendAdapter verzendAdapter;
+    private final NotifyNLVerzendAdapter verzendAdapter;
     private final NotificatieRepository notificatieRepository;
     private final ConsumentCallbackAdapter consumentCallbackAdapter;
 
     public NotificatieService(ProfielServiceAdapter profielServiceAdapter,
-                               VerzendAdapter verzendAdapter,
+                               NotifyNLVerzendAdapter verzendAdapter,
                                NotificatieRepository notificatieRepository,
                                ConsumentCallbackAdapter consumentCallbackAdapter) {
         this.profielServiceAdapter = profielServiceAdapter;

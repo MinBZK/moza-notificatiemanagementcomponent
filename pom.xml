@@ -178,8 +178,8 @@
                             <inputSpec>${project.basedir}/src/main/resources/META-INF/notify-callback-openapi.yaml</inputSpec>
                             <generatorName>jaxrs-spec</generatorName>
                             <output>${project.build.directory}/generated-sources/openapi</output>
-                            <apiPackage>nl.rijksoverheid.moz.nmc.notifycallback.api</apiPackage>
-                            <modelPackage>nl.rijksoverheid.moz.nmc.notifycallback.api.model</modelPackage>
+                            <apiPackage>nl.rijksoverheid.moz.nmc.notifynlcallback.api</apiPackage>
+                            <modelPackage>nl.rijksoverheid.moz.nmc.notifynlcallback.api.model</modelPackage>
                             <configOptions>
                                 <sourceFolder>src/gen/java</sourceFolder>
                                 <interfaceOnly>true</interfaceOnly>
