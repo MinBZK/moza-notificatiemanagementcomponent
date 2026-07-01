@@ -45,13 +45,16 @@ jobs:
         # Het GHCR-token gaat via QUARKUS_CONTAINER_IMAGE_PASSWORD i.p.v. een -D-flag, zodat
         # het secret niet in de proceslijst (ps) of build-output belandt. jib pusht direct
         # naar GHCR (geen Docker-daemon). Swagger UI mee in preview-images via de Quarkus-flag.
+        # jib.serialize=true pusht blobs serieel i.p.v. parallel: GHCR geeft bij parallelle
+        # uploads soms een flaky "BLOB_UPLOAD_UNKNOWN" (blob-sessie-race). Kost wat build-tijd,
+        # maar maakt de push betrouwbaar.
         env:
           GROUP: minbzk # lowercase GHCR-owner (moet matchen met IMAGE_NAME)
           TAG: pr-${{ github.event.number }}
           GHCR_USER: ${{ github.actor }}
           QUARKUS_CONTAINER_IMAGE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ./mvnw -B package -DskipTests \
+          ./mvnw -B package -DskipTests -Djib.serialize=true \
             -Dquarkus.container-image.build=true \
             -Dquarkus.container-image.push=true \
             -Dquarkus.container-image.registry="$REGISTRY" \
