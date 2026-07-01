@@ -53,6 +53,7 @@ Benodigde env-vars op die deployment:
 | `QUARKUS_DATASOURCE_JDBC_URL` | JDBC-url naar de managed Postgres |
 | `QUARKUS_FLYWAY_MIGRATE_AT_START` = `true` | Container draait prod-profiel waar dit `false` is; zonder migraties faalt boot op `schema-management=validate` |
 | `NOTIFY_API_KEY`, `NOTIFY_TEMPLATE_ID` | NotifyNL-integratie |
+| `QUARKUS_REST_CLIENT_NOTIFY_URL` | NotifyNL-endpoint; overschrijft de placeholder-default (`https://notifynl.example.invalid`) uit `application.properties` |
 | `HASH_PEPPER` | Keyed HMAC pepper (mag niet leeg in prod) |
 
 > Quarkus mapt env-vars naar properties via name-mangling (uppercase, niet-alfanumeriek
