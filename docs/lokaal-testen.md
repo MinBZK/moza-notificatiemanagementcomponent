@@ -57,7 +57,7 @@ Dan de app draaien:
 ```bash
 podman run -d --rm --name nmc -p 8080:8080 \
   -e QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://host.containers.internal:5432/nmc \
-  -e DB_USERNAME=nmc -e DB_PASSWORD=nmc \
+  -e QUARKUS_DATASOURCE_USERNAME=nmc -e QUARKUS_DATASOURCE_PASSWORD=nmc \
   -e QUARKUS_FLYWAY_MIGRATE_AT_START=true \
   local/moza-notificatiemanagementcomponent:test
 ```

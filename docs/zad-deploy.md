@@ -44,15 +44,17 @@ Benodigde env-vars op die deployment:
 
 | Env var | Reden |
 | --- | --- |
-| `DB_USERNAME`, `DB_PASSWORD` | Datasource-credentials (managed Postgres) |
+| `QUARKUS_DATASOURCE_USERNAME`, `QUARKUS_DATASOURCE_PASSWORD` | Datasource-credentials (managed Postgres) |
 | `QUARKUS_DATASOURCE_JDBC_URL` | JDBC-url naar de managed Postgres |
 | `QUARKUS_FLYWAY_MIGRATE_AT_START` = `true` | Container draait prod-profiel waar dit `false` is; zonder migraties faalt boot op `schema-management=validate` |
 | `NOTIFY_API_KEY`, `NOTIFY_TEMPLATE_ID` | NotifyNL-integratie |
 | `HASH_PEPPER` | Keyed HMAC pepper (mag niet leeg in prod) |
 
-> Quarkus mapt env-vars naar properties: `QUARKUS_FLYWAY_MIGRATE_AT_START`
-> overschrijft `%prod.quarkus.flyway.migrate-at-start`. `DB_USERNAME`/`DB_PASSWORD`
-> worden al door `application.properties` ingelezen (`${DB_USERNAME:}`).
+> Quarkus mapt env-vars naar properties via name-mangling (uppercase, niet-alfanumeriek
+> → `_`): `QUARKUS_DATASOURCE_USERNAME`/`_PASSWORD`/`_JDBC_URL` vullen de datasource-config,
+> `QUARKUS_FLYWAY_MIGRATE_AT_START` overschrijft `%prod.quarkus.flyway.migrate-at-start`.
+> `application.properties` bevat hiervoor geen placeholders meer — alle prod-config loopt
+> uniform via deze `QUARKUS_*`-env-vars.
 
 > Deze env-vars worden nu handmatig gezet. Automatiseren via de ZAD Operations
 > Manager API staat open als [#10](https://github.com/MinBZK/moza-notificatiemanagementcomponent/issues/10).
