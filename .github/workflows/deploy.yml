@@ -34,22 +34,33 @@ jobs:
       digest: ${{ steps.build.outputs.digest }} # immutable digest voor verse pull
     steps:
       - uses: actions/checkout@v6
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - uses: actions/setup-java@v5
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push image
+          distribution: temurin
+          java-version: '25'
+          cache: maven # Maven-dependency-tree cachen tussen runs
+      - name: Build + push image (jib)
         id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          # Swagger UI mee in preview-images (zie ARG SWAGGER_UI in Dockerfile).
-          build-args: |
-            SWAGGER_UI=true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.number }}
+        # Variabele waarden via env i.p.v. inline interpolatie (defense-in-depth injectie).
+        # Het GHCR-token gaat via QUARKUS_CONTAINER_IMAGE_PASSWORD i.p.v. een -D-flag, zodat
+        # het secret niet in de proceslijst (ps) of build-output belandt. jib pusht direct
+        # naar GHCR (geen Docker-daemon). Swagger UI mee in preview-images via de Quarkus-flag.
+        env:
+          GROUP: minbzk # lowercase GHCR-owner (moet matchen met IMAGE_NAME)
+          TAG: pr-${{ github.event.number }}
+          GHCR_USER: ${{ github.actor }}
+          QUARKUS_CONTAINER_IMAGE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./mvnw -B package -DskipTests \
+            -Dquarkus.container-image.build=true \
+            -Dquarkus.container-image.push=true \
+            -Dquarkus.container-image.registry="$REGISTRY" \
+            -Dquarkus.container-image.group="$GROUP" \
+            -Dquarkus.container-image.tag="$TAG" \
+            -Dquarkus.container-image.username="$GHCR_USER" \
+            -Dquarkus.swagger-ui.always-include=true
+          # Immutable digest voor de deploy-step (verse pull i.p.v. gecachete tag).
+          echo "digest=$(cat target/jib-image.digest)" >> "$GITHUB_OUTPUT"
 
   deploy-preview:
     if: github.event.action != 'closed'

@@ -19,8 +19,10 @@ anders start de app zonder DB en gaat de deploy rood (`/q/health/ready` faalt).
 ## Klaar (code-kant)
 
 - [x] Branch aangemaakt vanaf `feature/nmc-skeleton`
-- [x] `Dockerfile` — multi-stage Quarkus fast-jar build (Java 25)
-- [x] `.dockerignore`
+- [x] Container-image via **jib** (`quarkus-container-image-jib`) — geen
+      Dockerfile/container-daemon; base `eclipse-temurin:25-jre` (Java 25), non-root
+      (`quarkus.jib.user=1001`). Image-naam in `application.properties`, rest via
+      CI-flags (`-Dquarkus.container-image.*`)
 - [x] `pom.xml` — `quarkus-smallrye-health` toegevoegd (`/q/health/ready`;
       readiness bevat datasource-check → vangt DB-boot-faal af)
 - [x] `.github/workflows/deploy.yml` — build → deploy → cleanup op `pull_request`,
@@ -57,8 +59,8 @@ anders start de app zonder DB en gaat de deploy rood (`/q/health/ready` faalt).
   `feature/nmcapi`), niet enkel host of `jdbc://...`.
 - **Image-digest i.p.v. mutable `pr-N` tag**: ZAD/k8s pullt een gelijke tag niet
   opnieuw, waardoor image-wijzigingen niet live kwamen. Deploy gaat nu op digest.
-- **Swagger UI** alleen in preview-image via build-arg `SWAGGER_UI=true`
-  (`quarkus.swagger-ui.always-include`); prod-build blijft schoon.
+- **Swagger UI** alleen in preview-image via de Maven-flag
+  `-Dquarkus.swagger-ui.always-include=true`; prod-build blijft schoon.
 
 ## Restpunten
 
