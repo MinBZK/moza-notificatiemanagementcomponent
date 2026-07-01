@@ -246,7 +246,7 @@ De applicatie gebruikt een **PostgreSQL**-database, met het schema beheerd via
 instantie met:
 
 ```shell
-docker-compose up -d
+podman compose up -d
 ```
 
 Dit start één Postgres-container met de `nmc`-database/-user (via de
@@ -289,6 +289,11 @@ Start de applicatie in dev mode:
 Voor `./mvnw test` worden de Profielservice- en NotifyNL-clients en de
 consument-callback-adapter gemockt; hiervoor is geen draaiende externe service
 nodig.
+
+Bovenstaande draait de app in **dev-mode** (`%dev`-profiel: Postgres uit
+`podman compose`, Flyway migreert automatisch). Wil je in plaats daarvan de
+**container-image** lokaal bouwen en draaien (prod-profiel, zoals op ZAD), zie
+[`docs/lokaal-testen.md`](docs/lokaal-testen.md).
 
 ## Status & vervolgstappen
 

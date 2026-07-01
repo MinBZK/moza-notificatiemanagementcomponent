@@ -92,6 +92,22 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-jdbc-postgresql</artifactId>
         </dependency>
+        <!-- Readiness/liveness-probes (/q/health). Readiness bevat automatisch een
+             datasource-check, zodat een ZAD-deploy met onbereikbare DB als
+             not-ready zichtbaar wordt i.p.v. stilletjes "up". -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-health</artifactId>
+        </dependency>
+
+        <!-- Container-image: jib bouwt een OCI-image zonder Dockerfile en zonder
+             Docker-daemon (rechtstreeks naar de registry), reproduceerbaar en als
+             non-root base-layer. Registry/group/tag/push/credentials komen uit de
+             CI-flags (-Dquarkus.container-image.*), niet uit deze POM. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-container-image-jib</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>io.quarkus</groupId>
