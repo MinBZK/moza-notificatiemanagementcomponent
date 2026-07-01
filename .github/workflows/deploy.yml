@@ -16,6 +16,13 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, closed]
 
+# Eén deploy-run tegelijk per PR; een nieuwe push wacht op de lopende i.p.v. die af
+# te breken (cancel-in-progress: false) — een halverwege afgebroken ZAD-deploy kan de
+# deployment in een inconsistente staat achterlaten.
+concurrency:
+  group: zad-deploy-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   # GHCR vereist lowercase; github.repository is MinBZK/... (hoofdletters) → hardcode lowercase.
