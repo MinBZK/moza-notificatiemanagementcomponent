@@ -4,6 +4,20 @@
 ephemeral ZAD-omgeving (`pr-<nummer>`). Bij sluiten van de PR ruimt
 `cleanup-preview` de omgeving, het image en het GitHub-environment op.
 
+Issue: [#749](https://github.com/MinBZK/MijnOverheidZakelijk/issues/749).
+ZAD-project: `nd-j7s`.
+
+## Hoe ZAD hier werkt
+
+De `RijksICTGilde/zad-actions/deploy` action zet alleen **welk container-image** +
+optioneel **`clone-from`** (config erven van een bestaande deployment). De action
+zet **geen** app-config (DB-url, wachtwoorden, `hash.pepper`, notify-keys). Die
+config leeft in de deployment zelf, ingesteld in de ZAD **Operations Manager**.
+Een PR-deploy erft die via `clone-from feature`.
+
+→ Gevolg: er moet **eenmalig** een base-deployment met de juiste env bestaan,
+anders start de app zonder DB en gaat de deploy rood (`/q/health/ready` faalt).
+
 ## Eenmalige setup
 
 ### 1. Repo-secrets
@@ -17,8 +31,7 @@ ephemeral ZAD-omgeving (`pr-<nummer>`). Bij sluiten van de PR ruimt
 
 ### 2. `project-id` invullen
 
-In `deploy.yml` staat `ZAD_PROJECT_ID: PLACEHOLDER-PROJECT-ID`. Vervang door de
-echte ZAD project-id.
+In `deploy.yml` staat `ZAD_PROJECT_ID`. Vul de echte ZAD project-id in (`nd-j7s`).
 
 ### 3. Applicatieconfiguratie in ZAD (managed DB + secrets)
 
@@ -41,6 +54,9 @@ Benodigde env-vars op die deployment:
 > overschrijft `%prod.quarkus.flyway.migrate-at-start`. `DB_USERNAME`/`DB_PASSWORD`
 > worden al door `application.properties` ingelezen (`${DB_USERNAME:}`).
 
+> Deze env-vars worden nu handmatig gezet. Automatiseren via de ZAD Operations
+> Manager API staat open als [#10](https://github.com/MinBZK/moza-notificatiemanagementcomponent/issues/10).
+
 ## Hoe het draait
 
 - PR open/synchronize/reopen → `build` (image `pr-<n>` naar GHCR) → `deploy-preview`
@@ -48,3 +64,19 @@ Benodigde env-vars op die deployment:
 - PR closed → `cleanup-preview`.
 
 URL-patroon: `https://nmcapi-pr-<n>-nd-j7s.rig.prd1.gn2.quattro.rijksapps.nl`
+→ `/q/swagger-ui`, `/q/openapi`, `/q/health/ready`.
+
+## Gotchas (al opgelost in de workflow)
+
+- **JDBC-URL** moet volledig zijn: `jdbc:postgresql://host:5432/<db>` (env op
+  `feature/nmcapi`), niet enkel host of `jdbc://...`.
+- **Image-digest i.p.v. mutable `pr-N` tag**: ZAD/k8s pullt een gelijke tag niet
+  opnieuw, waardoor image-wijzigingen niet live kwamen. Deploy gaat nu op digest.
+- **Swagger UI** alleen in preview-image via de Maven-flag
+  `-Dquarkus.swagger-ui.always-include=true`; prod-build blijft schoon.
+
+## Restpunten
+
+- [ ] `GITHUB_ADMIN_TOKEN` (repo-admin PAT) als repo-secret toevoegen, daarna in
+  `deploy.yml` `delete-github-env` + `delete-github-deployments` weer op `'true'`
+  zetten (nu `'false'` om hard falen van cleanup te voorkomen).
