@@ -8,7 +8,11 @@
 # De applicatieconfiguratie (DB-url/credentials, notify.api-key, hash.pepper,
 # QUARKUS_FLYWAY_MIGRATE_AT_START=true, ...) komt NIET uit deze workflow maar uit
 # de ZAD-deploymentconfig. Via `clone-from` erven PR-deploys die config van een
-# base-deployment. Zie .github/workflows/README-zad-deploy.md.
+# base-deployment. Zie docs/zad-deploy.md.
+#
+# TODO(#10): Deze env-vars worden nu handmatig op de 'feature'-deployment gezet.
+# ZAD heeft een Operations Manager API — dit zou via een script geautomatiseerd
+# kunnen worden (idempotent env-vars zetten i.p.v. handmatige eenmalige setup).
 
 name: ZAD PR Deploy
 

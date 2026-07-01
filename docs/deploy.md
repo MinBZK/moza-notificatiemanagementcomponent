@@ -27,7 +27,7 @@ anders start de app zonder DB en gaat de deploy rood (`/q/health/ready` faalt).
       readiness bevat datasource-check → vangt DB-boot-faal af)
 - [x] `.github/workflows/deploy.yml` — build → deploy → cleanup op `pull_request`,
       `project-id: nd-j7s` ingevuld
-- [x] `.github/workflows/README-zad-deploy.md` — setup-gids
+- [x] `docs/zad-deploy.md` — setup-gids
 - [x] Repo-secret `ZAD_API_KEY` gezet
 - [x] Lokale build geverifieerd (fast-jar gebouwd, health-extensie gebundeld)
 
