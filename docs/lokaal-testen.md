@@ -44,8 +44,15 @@ Digest-file check: `cat target/jib-image.digest`.
 > export DOCKER_HOST="unix://$(podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}')"
 > ```
 
-Draaien met de Postgres uit `podman compose up -d` (zelfde compose als in de
-README; de `nmc/nmc`-creds hieronder komen daarvandaan):
+Start eerst de **Postgres** (zonder draaiende DB faalt de boot op de
+datasource/Flyway-check). Zelfde compose als in de README; de `nmc/nmc`-creds
+hieronder komen daarvandaan:
+
+```bash
+podman compose up -d   # Postgres op host-poort 5432
+```
+
+Dan de app draaien:
 
 ```bash
 podman run -d --rm --name nmc -p 8080:8080 \
