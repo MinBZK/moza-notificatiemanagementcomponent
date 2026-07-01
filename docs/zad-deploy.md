@@ -4,6 +4,11 @@
 ephemeral ZAD-omgeving (`pr-<nummer>`). Bij sluiten van de PR ruimt
 `cleanup-preview` de omgeving, het image en het GitHub-environment op.
 
+> **Scope:** ZAD is uitsluitend de **PR-preview**-omgeving. Echte releases draaien
+> op een ander cluster. De env-vars uit dit document (datasource, notify, pepper)
+> zijn nodig op elke deployomgeving; op ZAD staan ze op de `feature`-deployment,
+> op het release-cluster op de eigen deploymentconfig.
+
 Issue: [#749](https://github.com/MinBZK/MijnOverheidZakelijk/issues/749).
 ZAD-project: `nd-j7s`.
 
