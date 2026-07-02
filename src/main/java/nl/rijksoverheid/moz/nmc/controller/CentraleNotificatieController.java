@@ -15,6 +15,7 @@ import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 import nl.rijksoverheid.moz.nmc.service.NotificatieVersturenOpdracht;
+import org.jspecify.annotations.NonNull;
 
 public class CentraleNotificatieController implements NotificatiesApi {
 
@@ -39,20 +40,11 @@ public class CentraleNotificatieController implements NotificatiesApi {
 
         // TODO #752 (zie NMC: CallbackUrl wordt niet gevalideerd (SSRF risico))
         // (security): callbackUrl is unvalidated caller input that we later POST to — SSRF risk.
-        String callbackUrl = notificatieAanvraagRequest.getCallbackUrl() != null
-                ? notificatieAanvraagRequest.getCallbackUrl().toString()
-                : null;
-        NotificatieVersturenOpdracht opdracht = new NotificatieVersturenOpdracht(
-                notificatieAanvraagRequest.getIdentificatieType(),
-                notificatieAanvraagRequest.getIdentificatieNummer(),
-                notificatieAanvraagRequest.getDienstverlener(),
-                notificatieAanvraagRequest.getDienst(),
-                notificatieAanvraagRequest.getBerichtgegevens(),
-                callbackUrl);
+        NotificatieVersturenOpdracht opdracht = getNotificatieVersturenOpdracht(notificatieAanvraagRequest);
 
         try {
             Notificatie notificatie = notificatieService.versturen(opdracht);
-            return new NotificatieResponse().notificatieId(notificatie.getId());
+            return new NotificatieResponse(notificatie.getId());
         } catch (PartijNietGevondenException e) {
             throw Problems.badRequest("Partij niet gevonden", e.getMessage());
         } catch (GeenEmailadresGevondenException e) {
@@ -64,5 +56,18 @@ public class CentraleNotificatieController implements NotificatiesApi {
         } catch (NotifyNLVerzendException e) {
             throw Problems.badGateway("Verzendfout", e.getMessage());
         }
+    }
+
+    private static @NonNull NotificatieVersturenOpdracht getNotificatieVersturenOpdracht(NotificatieAanvraagRequest notificatieAanvraagRequest) {
+        String callbackUrl = notificatieAanvraagRequest.getCallbackUrl() != null
+                ? notificatieAanvraagRequest.getCallbackUrl().toString()
+                : null;
+        return new NotificatieVersturenOpdracht(
+                notificatieAanvraagRequest.getIdentificatieType(),
+                notificatieAanvraagRequest.getIdentificatieNummer(),
+                notificatieAanvraagRequest.getDienstverlener(),
+                notificatieAanvraagRequest.getDienst(),
+                notificatieAanvraagRequest.getBerichtgegevens(),
+                callbackUrl);
     }
 }
