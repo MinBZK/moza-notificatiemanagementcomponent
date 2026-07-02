@@ -1,7 +1,9 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
+import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLConfiguratieException;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
+import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.GeenEmailadresGevondenException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
 import nl.rijksoverheid.moz.nmc.common.IdentificatieType;
@@ -45,7 +47,7 @@ class NotificatieServiceTest {
     }
 
     @Test
-    void versturen_happyFlow_retourneertNotificatieMetStatusSendingEnNotifyId() {
+    void versturen_happyFlow_retourneertNotificatieMetStatusSendingEnNotifyId() throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         when(profielServiceAdapter.zoekEmailAdres(any())).thenReturn("burger@example.nl");
         UUID notifyNlId = UUID.randomUUID();
         when(verzendAdapter.verstuurEmail("burger@example.nl", Map.of("naam", "Voorbeeld BV"))).thenReturn(notifyNlId);
@@ -58,7 +60,7 @@ class NotificatieServiceTest {
     }
 
     @Test
-    void versturen_persisteertEnFlushtVoordatNotifyWordtAangeroepen() {
+    void versturen_persisteertEnFlushtVoordatNotifyWordtAangeroepen() throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         when(profielServiceAdapter.zoekEmailAdres(any())).thenReturn("burger@example.nl");
         when(verzendAdapter.verstuurEmail(any(), any())).thenReturn(UUID.randomUUID());
 

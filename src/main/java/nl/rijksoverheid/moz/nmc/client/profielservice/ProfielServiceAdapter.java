@@ -43,7 +43,7 @@ public class ProfielServiceAdapter {
                 .findFirst()
                 .map(ContactgegevenResponse::getWaarde)
                 .orElseThrow(() -> new GeenEmailadresGevondenException(
-                        "Voor de opgegeven partij kon geen notificatie worden verstuurd"));
+                        "Voor de opgegeven identificatie konden geen e-mailadressen worden gevonden in de profielgegevens van de partij"));
     }
 
     private PartijResponse zoekPartij(PartijIdentificatie identificatie) {
@@ -57,7 +57,7 @@ public class ProfielServiceAdapter {
             return profielApi.apiProfielserviceV1PartijPost(partijRequest);
         } catch (WebApplicationException e) {
             if (e.getResponse().getStatus() == Response.Status.NOT_FOUND.getStatusCode()) {
-                throw new PartijNietGevondenException("Voor de opgegeven partij kon geen notificatie worden verstuurd");
+                throw new PartijNietGevondenException("Geen partij gevonden met de opgegeven identificatie");
             }
 
             Log.error("Profielservice gaf status " + e.getResponse().getStatus() + " terug", e);

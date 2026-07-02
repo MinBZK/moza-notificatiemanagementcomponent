@@ -40,14 +40,14 @@ public class NotifyNLVerzendAdapter {
                 .orElseThrow(() -> new IllegalStateException("notify.template-id is niet geconfigureerd"));
     }
 
-    public UUID verstuurEmail(@NotNull String emailAdres, Map<String, String> berichtgegevens) {
+    public UUID verstuurEmail(@NotNull String emailAdres, Map<String, String> berichtgegevens) throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         autoriseer();
         SendEmailRequest notifyRequest = bouwVerzoek(emailAdres, berichtgegevens);
         SendEmailResponse notifyResponse = verstuur(notifyRequest);
         return extraheerNotificatieId(notifyResponse);
     }
 
-    private void autoriseer() {
+    private void autoriseer() throws NotifyNLConfiguratieException {
         try {
             String authorization = notifyNLJwtFactory.authorizationHeader(notifyApiKey);
             notifyNLAuthorizationHolder.setBearerToken(authorization.substring(BEARER_PREFIX.length()));
@@ -69,7 +69,7 @@ public class NotifyNLVerzendAdapter {
                 .personalisation(personalisation);
     }
 
-    private SendEmailResponse verstuur(SendEmailRequest notifyRequest) {
+    private SendEmailResponse verstuur(SendEmailRequest notifyRequest) throws NotifyNLVerzendException {
         try {
             return sendAMessageApi.sendEmail(notifyRequest);
         } catch (WebApplicationException e) {
@@ -77,7 +77,7 @@ public class NotifyNLVerzendAdapter {
         }
     }
 
-    private UUID extraheerNotificatieId(SendEmailResponse notifyResponse) {
+    private UUID extraheerNotificatieId(SendEmailResponse notifyResponse) throws NotifyNLVerzendException {
         if (notifyResponse == null || notifyResponse.getId() == null) {
             throw new NotifyNLVerzendException("NotifyNL gaf geen notificatie-ID terug in de respons");
         }

@@ -4,7 +4,9 @@ import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
+import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLConfiguratieException;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
+import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.PartijIdentificatie;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
@@ -50,7 +52,12 @@ public class NotificatieService {
         notificatieRepository.persist(notificatie);
         notificatieRepository.flush();
 
-        notificatie.setNotifyNlNotificatieId(verzendAdapter.verstuurEmail(emailAdres, opdracht.berichtgegevens()));
+        try {
+            notificatie.setNotifyNlNotificatieId(verzendAdapter.verstuurEmail(emailAdres, opdracht.berichtgegevens()));
+        } catch (NotifyNLConfiguratieException | NotifyNLVerzendException e) {
+            Log.error("Fout bij versturen van notificatie", e);
+            throw new NotificatieException("Notificatie kon niet worden verstuurd.");
+        }
         notificatie.setStatus(NotificatieStatus.SENDING);
 
         return notificatie;

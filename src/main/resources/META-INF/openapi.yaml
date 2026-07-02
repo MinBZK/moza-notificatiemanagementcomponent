@@ -53,12 +53,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
         '500':
-          description: Er is een fout opgetreden bij het ophalen van de contactgegevens
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-        '502':
           description: De notificatie kon niet (succesvol) verzonden worden
           content:
             application/problem+json:

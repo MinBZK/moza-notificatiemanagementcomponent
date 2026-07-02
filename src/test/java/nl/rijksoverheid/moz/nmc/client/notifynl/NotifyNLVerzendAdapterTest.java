@@ -35,7 +35,7 @@ class NotifyNLVerzendAdapterTest {
     }
 
     @Test
-    void verstuurEmail_succesvol_retourneertId() {
+    void verstuurEmail_succesvol_retourneertId() throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(notifyNlId.toString()));
 
@@ -45,7 +45,7 @@ class NotifyNLVerzendAdapterTest {
     }
 
     @Test
-    void verstuurEmail_nullBerichtgegevens_werktZonderPersonalisatie() {
+    void verstuurEmail_nullBerichtgegevens_werktZonderPersonalisatie() throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(notifyNlId.toString()));
 
@@ -55,7 +55,7 @@ class NotifyNLVerzendAdapterTest {
     }
 
     @Test
-    void verstuurEmail_zetBearerTokenZonderPrefixOpHolder() {
+    void verstuurEmail_zetBearerTokenZonderPrefixOpHolder() throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
 
         adapter.verstuurEmail("burger@example.nl", Map.of());

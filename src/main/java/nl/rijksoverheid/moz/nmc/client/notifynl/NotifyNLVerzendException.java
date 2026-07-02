@@ -1,7 +1,7 @@
 package nl.rijksoverheid.moz.nmc.client.notifynl;
 
 // NotifyNL zelf gaf een fout terug, of een onbruikbare respons (geen of een ongeldig notificatie-ID).
-public class NotifyNLVerzendException extends RuntimeException {
+public class NotifyNLVerzendException extends Exception {
 
     public NotifyNLVerzendException(String message) {
         super(message);

@@ -5,14 +5,13 @@ import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
 import nl.rijksoverheid.moz.nmc.api.NotificatiesApi;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieAanvraagRequest;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieResponse;
-import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLConfiguratieException;
-import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.GeenEmailadresGevondenException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.PartijNietGevondenException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceException;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
+import nl.rijksoverheid.moz.nmc.service.NotificatieException;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 import nl.rijksoverheid.moz.nmc.service.NotificatieVersturenOpdracht;
 import org.jspecify.annotations.NonNull;
@@ -45,16 +44,12 @@ public class CentraleNotificatieController implements NotificatiesApi {
         try {
             Notificatie notificatie = notificatieService.versturen(opdracht);
             return new NotificatieResponse(notificatie.getId());
-        } catch (PartijNietGevondenException e) {
-            throw Problems.badRequest("Partij niet gevonden", e.getMessage());
-        } catch (GeenEmailadresGevondenException e) {
-            throw Problems.badRequest("Geen e-mailadres gevonden", e.getMessage());
+        } catch (PartijNietGevondenException | GeenEmailadresGevondenException e) {
+            throw Problems.badRequest("Notificatie niet verstuurd.", e.getMessage());
         } catch (ProfielServiceException e) {
             throw Problems.serverError("Profielservice fout", e.getMessage());
-        } catch (NotifyNLConfiguratieException e) {
+        } catch (Exception e) {
             throw Problems.serverError("Verzendfout", "Er kan momenteel geen notificatie worden verstuurd");
-        } catch (NotifyNLVerzendException e) {
-            throw Problems.badGateway("Verzendfout", e.getMessage());
         }
     }
 

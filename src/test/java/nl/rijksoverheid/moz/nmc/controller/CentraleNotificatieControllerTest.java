@@ -110,7 +110,7 @@ class CentraleNotificatieControllerTest {
     }
 
     @Test
-    void notificatieVersturen_notifyGeenNotificatieId_retourneert502() {
+    void notificatieVersturen_notifyGeenNotificatieId_retourneert500() {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail("burger@example.nl", true));
 
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse());
@@ -129,12 +129,12 @@ class CentraleNotificatieControllerTest {
                 .body(aanvraag)
                 .when().post("/api/nmc/v1/notificaties")
                 .then()
-                .statusCode(502)
+                .statusCode(500)
                 .contentType("application/problem+json");
     }
 
     @Test
-    void notificatieVersturen_notifyGeenStatus201_retourneert502() {
+    void notificatieVersturen_notifyGeenStatus201_retourneert500() {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail("burger@example.nl", true));
 
         Mockito.when(sendAMessageApi.sendEmail(any()))
@@ -154,7 +154,7 @@ class CentraleNotificatieControllerTest {
                 .body(aanvraag)
                 .when().post("/api/nmc/v1/notificaties")
                 .then()
-                .statusCode(502)
+                .statusCode(500)
                 .contentType("application/problem+json");
     }
 
