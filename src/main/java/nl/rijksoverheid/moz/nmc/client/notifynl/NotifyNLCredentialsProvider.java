@@ -8,8 +8,10 @@ import jakarta.enterprise.inject.Alternative;
 
 import java.util.Optional;
 
-// Overrides the extension's default ConfigCredentialsProvider (static config), since our bearer
-// token is a fresh JWT built per call rather than a fixed property value.
+/**
+ * Overrides the extension's default ConfigCredentialsProvider (static config), since our bearer
+ * token is a fresh JWT built per call rather than a fixed property value.
+ */
 @Alternative
 @Priority(200)
 @ApplicationScoped
