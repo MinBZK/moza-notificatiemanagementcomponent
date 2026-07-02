@@ -12,7 +12,7 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
-import nl.rijksoverheid.moz.nmc.common.NotificatieStatusEnum;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
@@ -111,7 +111,7 @@ class NotifyNLCallbackControllerTest {
 
         ArgumentCaptor<Notificatie> captor = ArgumentCaptor.forClass(Notificatie.class);
         Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(captor.capture());
-        assertEquals(NotificatieStatusEnum.TECHNICAL_FAILURE, captor.getValue().getStatus());
+        assertEquals(NotificatieStatus.TECHNICAL_FAILURE, captor.getValue().getStatus());
     }
 
     @Test

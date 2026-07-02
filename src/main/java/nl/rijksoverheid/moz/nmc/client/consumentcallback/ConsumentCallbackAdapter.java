@@ -45,7 +45,7 @@ public class ConsumentCallbackAdapter {
                 "notificatie/" + notificatie.getId(),
                 OffsetDateTime.now(ZoneOffset.UTC),
                 "application/json",
-                new NotificatieStatus(notificatie.getId(), notificatie.getStatus()));
+                new NotificatieData(notificatie.getId(), notificatie.getStatus()));
 
         ConsumentCallbackClient client = clientFactory.maakClient(notificatie.getCallbackUrl());
 

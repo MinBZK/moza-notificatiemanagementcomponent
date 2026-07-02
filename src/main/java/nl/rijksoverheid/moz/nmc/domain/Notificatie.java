@@ -6,7 +6,6 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
-import nl.rijksoverheid.moz.nmc.common.NotificatieStatusEnum;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -27,7 +26,7 @@ public class Notificatie {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
-    private NotificatieStatusEnum status;
+    private NotificatieStatus status;
 
     @Column(nullable = false)
     private OffsetDateTime aangemaakt;
@@ -38,7 +37,7 @@ public class Notificatie {
 
     public Notificatie(String callbackUrl) {
         this.callbackUrl = callbackUrl;
-        this.status = NotificatieStatusEnum.CREATED;
+        this.status = NotificatieStatus.CREATED;
         this.aangemaakt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 
@@ -58,11 +57,11 @@ public class Notificatie {
         return callbackUrl;
     }
 
-    public NotificatieStatusEnum getStatus() {
+    public NotificatieStatus getStatus() {
         return status;
     }
 
-    public void setStatus(NotificatieStatusEnum status) {
+    public void setStatus(NotificatieStatus status) {
         this.status = status;
     }
 

@@ -7,7 +7,7 @@ import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapte
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
 import nl.rijksoverheid.moz.nmc.client.profielservice.PartijIdentificatie;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
-import nl.rijksoverheid.moz.nmc.common.NotificatieStatusEnum;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 
@@ -47,7 +47,7 @@ public class NotificatieService {
         notificatieRepository.flush();
 
         notificatie.setNotifyNlNotificatieId(verzendAdapter.verstuurEmail(emailAdres, opdracht.berichtgegevens()));
-        notificatie.setStatus(NotificatieStatusEnum.SENDING);
+        notificatie.setStatus(NotificatieStatus.SENDING);
 
         return notificatie;
     }
@@ -68,12 +68,12 @@ public class NotificatieService {
         }
     }
 
-    private NotificatieStatusEnum parseStatus(String notifyStatus) {
+    private NotificatieStatus parseStatus(String notifyStatus) {
         try {
-            return NotificatieStatusEnum.valueOf(notifyStatus.replace("-", "_").toUpperCase());
+            return NotificatieStatus.valueOf(notifyStatus.replace("-", "_").toUpperCase());
         } catch (IllegalArgumentException e) {
             Log.errorf("Onbekende NotifyNL-status ontvangen: %s — opgeslagen als technische fout", notifyStatus);
-            return NotificatieStatusEnum.TECHNICAL_FAILURE;
+            return NotificatieStatus.TECHNICAL_FAILURE;
         }
     }
 }

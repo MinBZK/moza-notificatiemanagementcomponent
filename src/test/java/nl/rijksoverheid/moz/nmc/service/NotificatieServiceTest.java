@@ -5,7 +5,7 @@ import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
 import nl.rijksoverheid.moz.nmc.client.profielservice.GeenEmailadresGevondenException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
 import nl.rijksoverheid.moz.nmc.common.IdentificatieType;
-import nl.rijksoverheid.moz.nmc.common.NotificatieStatusEnum;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,7 +52,7 @@ class NotificatieServiceTest {
 
         Notificatie resultaat = service.versturen(opdracht("https://omc.example.nl/callback"));
 
-        assertEquals(NotificatieStatusEnum.SENDING, resultaat.getStatus());
+        assertEquals(NotificatieStatus.SENDING, resultaat.getStatus());
         assertEquals(notifyNlId, resultaat.getNotifyNlNotificatieId());
         assertEquals("https://omc.example.nl/callback", resultaat.getCallbackUrl());
     }
@@ -97,7 +97,7 @@ class NotificatieServiceTest {
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "permanent-failure");
 
-        assertEquals(NotificatieStatusEnum.PERMANENT_FAILURE, notificatie.getStatus());
+        assertEquals(NotificatieStatus.PERMANENT_FAILURE, notificatie.getStatus());
     }
 
     @Test
@@ -107,7 +107,7 @@ class NotificatieServiceTest {
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "een-rare-status");
 
-        assertEquals(NotificatieStatusEnum.TECHNICAL_FAILURE, notificatie.getStatus());
+        assertEquals(NotificatieStatus.TECHNICAL_FAILURE, notificatie.getStatus());
     }
 
     @Test

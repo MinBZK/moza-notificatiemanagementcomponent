@@ -11,5 +11,5 @@ public record NotificatieStatusEvent(
         String subject,
         OffsetDateTime time,
         String datacontenttype,
-        NotificatieStatus data) {
+        NotificatieData data) {
 }

@@ -1,6 +1,6 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
-import nl.rijksoverheid.moz.nmc.common.NotificatieStatusEnum;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -90,13 +90,13 @@ class ConsumentCallbackAdapterTest {
         assertNotNull(event.subject());
         assertNotNull(event.time());
         assertEquals(notificatie.getId(), event.data().notificatieId());
-        assertEquals(NotificatieStatusEnum.DELIVERED, event.data().status());
+        assertEquals(NotificatieStatus.DELIVERED, event.data().status());
     }
 
     private Notificatie notificatie(String callbackUrl) {
         Notificatie notificatie = new Notificatie(callbackUrl);
         stelIdIn(notificatie, UUID.randomUUID());
-        notificatie.setStatus(NotificatieStatusEnum.DELIVERED);
+        notificatie.setStatus(NotificatieStatus.DELIVERED);
         return notificatie;
     }
 
