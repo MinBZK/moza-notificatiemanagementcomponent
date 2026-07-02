@@ -9,11 +9,10 @@ info:
     email: moza@minbzk.nl
     url: https://github.com/MinBZK/moza-notificatiemanagementcomponent
 
-servers:
-  - url: https://nmc.example.nl
-    description: Productie (placeholder — invullen bij deployment)
-  - url: http://localhost:8081
-    description: Lokale ontwikkeling
+# Bewust geen `servers:` blok: zonder dit blok gebruikt Swagger UI de origin
+# waarvandaan de spec geladen is. Daardoor wijst "Try it out" altijd naar de
+# juiste host — lokaal `localhost`, elke PR-deploy zijn eigen `pr-N`-host, prod
+# de prod-host — zonder per-omgeving een URL te hoeven invullen.
 
 paths:
   /api/nmc/v1/notificaties:
