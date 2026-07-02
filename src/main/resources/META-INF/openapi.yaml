@@ -15,7 +15,7 @@ info:
 # de prod-host — zonder per-omgeving een URL te hoeven invullen.
 
 paths:
-  /api/nmc/v1/notificaties:
+  /api/nmc/v1/centraal/notificaties:
     post:
       operationId: notificatieVersturen
       summary: Notificatie versturen

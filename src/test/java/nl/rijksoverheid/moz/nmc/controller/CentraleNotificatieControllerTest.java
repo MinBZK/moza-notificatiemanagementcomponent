@@ -63,7 +63,7 @@ class CentraleNotificatieControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(aanvraag)
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then()
                 .statusCode(200)
                 .body("notificatieId", org.hamcrest.Matchers.notNullValue());
@@ -85,7 +85,7 @@ class CentraleNotificatieControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(aanvraag)
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then()
                 .statusCode(400)
                 .contentType("application/problem+json");
@@ -104,7 +104,7 @@ class CentraleNotificatieControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(aanvraag)
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then()
                 .statusCode(400);
     }
@@ -127,7 +127,7 @@ class CentraleNotificatieControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(aanvraag)
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then()
                 .statusCode(500)
                 .contentType("application/problem+json");
@@ -152,7 +152,7 @@ class CentraleNotificatieControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(aanvraag)
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then()
                 .statusCode(500)
                 .contentType("application/problem+json");
@@ -166,7 +166,7 @@ class CentraleNotificatieControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then()
                 .statusCode(400)
                 .contentType("application/problem+json");
@@ -180,7 +180,7 @@ class CentraleNotificatieControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then()
                 .statusCode(500)
                 .contentType("application/problem+json");
@@ -195,7 +195,7 @@ class CentraleNotificatieControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then()
                 .statusCode(500)
                 .contentType("application/problem+json");
@@ -211,7 +211,7 @@ class CentraleNotificatieControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then()
                 .statusCode(200);
     }
@@ -226,7 +226,7 @@ class CentraleNotificatieControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then()
                 .statusCode(200);
     }
@@ -245,7 +245,7 @@ class CentraleNotificatieControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then()
                 .statusCode(200);
     }
@@ -259,7 +259,7 @@ class CentraleNotificatieControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then()
                 .statusCode(400)
                 .contentType("application/problem+json");

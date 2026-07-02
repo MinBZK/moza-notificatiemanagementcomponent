@@ -68,7 +68,7 @@ class NotifyNLCallbackControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(aanvraag(null))
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then().statusCode(200);
 
         given()
@@ -99,7 +99,7 @@ class NotifyNLCallbackControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(aanvraag(null))
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then().statusCode(200);
 
         given()
@@ -122,7 +122,7 @@ class NotifyNLCallbackControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(aanvraag("https://omc.example.com/callback"))
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then().statusCode(200);
 
         given()
@@ -144,7 +144,7 @@ class NotifyNLCallbackControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(aanvraag("https://omc.example.com/callback"))
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then().statusCode(200);
 
         given()
@@ -166,7 +166,7 @@ class NotifyNLCallbackControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(aanvraag("https://omc.example.com/callback"))
-                .when().post("/api/nmc/v1/notificaties")
+                .when().post("/api/nmc/v1/centraal/notificaties")
                 .then().statusCode(200);
 
         given()

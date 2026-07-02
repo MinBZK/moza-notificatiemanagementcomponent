@@ -1,12 +1,12 @@
 # NotificatieManagementComponent (NMC)
 
-## Wat doet dit skeleton wel/niet
+## Geïmplementeerde functionaliteit
 
 Deze implementatie ondersteunt de centraal-profiel happy-flow, inclusief de
 asynchrone bezorgstatus:
 
 1. Een Dienstverlener (rechtstreeks, of via een OMC) roept
-   `POST /api/nmc/v1/notificaties` aan met een identificatie (BSN/KVK/RSIN),
+   `POST /api/nmc/v1/centraal/notificaties` aan met een identificatie (BSN/KVK/RSIN),
    dienstverlener/dienst, het te versturen bericht en optioneel een `callbackUrl`.
 2. De NMC haalt synchroon de contactgegevens op bij de **Profielservice** op
    basis van die identificatie.
@@ -22,7 +22,7 @@ asynchrone bezorgstatus:
    dataminimalisatie).
 
 De `callbackUrl` is optioneel: Dienstverleners zonder eigen webhook-endpoint kunnen
-de status opvragen via `GET /notificaties/{id}` (nog niet geïmplementeerd).
+de status opvragen via `GET /centraal/notificaties/{id}` (nog niet geïmplementeerd).
 
 Dit is het **centraal profiel**-scenario (zie "De twee assen" hieronder),
 waarbij de NMC zelf de contactgegevens opzoekt.
@@ -37,7 +37,7 @@ document:
 - Een koppeling met de Templating Service: het Notify-`template_id` komt
   voorlopig uit een vaste configuratiewaarde (`notify.template-id`)
 - Een observability-koppelvlak
-- `GET /notificaties/{id}`: statuspoll voor Dienstverleners zonder callbackUrl
+- `GET /centraal/notificaties/{id}`: statuspoll voor Dienstverleners zonder callbackUrl
 - Bearer-JWT-authenticatie voor de uitgaande consument-callback (momenteel geen
   auth op de callback naar de Dienstverlener)
 
@@ -107,7 +107,7 @@ Een OMC voor de NMC betekent dus niet automatisch een decentraal profiel: een
 OMC kan ook gewoon een kale identificatie doorgeven en het centraal profiel
 laten gebruiken.
 
-Dit skeleton implementeert alleen het **centraal profiel**-scenario van As 2,
+De NMC implementeert momenteel alleen het **centraal profiel**-scenario van As 2,
 onafhankelijk van As 1 (een eventuele OMC geeft hierbij alleen een kale
 identificatie door).
 
@@ -127,7 +127,7 @@ identificatie door).
    profiel initieert de NMC dit zelf, bij een decentraal profiel gebeurt dit op
    verzoek van de aanroeper.
 
-Dit skeleton implementeert stap 1, 2 en 3 (alleen het centraal-profiel-pad,
+Stap 1, 2 en 3 zijn geïmplementeerd (alleen het centraal-profiel-pad,
 zonder Templating Service). Stap 4 is nog niet gebouwd.
 
 ## Interne componenten (C4-componentmodel)
@@ -178,7 +178,7 @@ nog niet geïmplementeerd:
 
 De huidige endpoints zitten onder `/api/nmc/v1`:
 
-- **`POST /notificaties`**: haalt contactgegevens op bij de Profielservice,
+- **`POST /centraal/notificaties`**: haalt contactgegevens op bij de Profielservice,
   verstuurt de e-mail via NotifyNL, slaat de notificatie op en retourneert een
   `notificatieId`. Optioneel kan een `callbackUrl` worden meegegeven voor
   asynchrone statusupdates. Retourneert `200` op succes, `400` als er geen
@@ -195,12 +195,12 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
 
 Gepland/toekomstig (nog niet aanwezig):
 
-- **`GET /notificaties/{id}`**: status van een eerder verstuurde notificatie
+- **`GET /centraal/notificaties/{id}`**: status van een eerder verstuurde notificatie
   opvragen (alternatief voor de callbackUrl).
-- **`POST /notificaties/{id}/contactherstel`**: een nieuwe verzendpoging
+- **`POST /centraal/notificaties/{id}/contactherstel`**: een nieuwe verzendpoging
   (contactherstel) starten voor een bestaande notificatie.
 
-De `/notificaties`-specificatie is beschikbaar via `/q/swagger-ui` wanneer de
+De `/centraal/notificaties`-specificatie is beschikbaar via `/q/swagger-ui` wanneer de
 applicatie draait (`./mvnw quarkus:dev`); zie de toelichting bij
 "OpenAPI-specificatie & codegen" hieronder voor waarom `/notify-callback`
 daar niet in staat.
@@ -210,9 +210,9 @@ daar niet in staat.
 Het contract van `/api/nmc/v1` is **spec-first** en bestaat uit twee losse
 specificaties:
 
-- `src/main/resources/META-INF/openapi.yaml` — `POST /notificaties` (de
+- `src/main/resources/META-INF/openapi.yaml` — `POST /centraal/notificaties` (de
   centrale-regie-flow).
-- `src/main/resources/META-INF/notify-callback-openapi.yaml` — `POST
+- `src/main/resources/META-INF/notifynl-callback-openapi.yaml` — `POST
   /notify-callback`, in een eigen bestand zodat het zelfstandig te verwijderen
   is zodra dit endpoint niet meer nodig is (zie de API-sectie hierboven).
 
@@ -220,22 +220,22 @@ specificaties:
   `/q/swagger-ui` (SmallRye OpenAPI pikt automatisch een bestand met die naam
   op uit `META-INF`; `mp.openapi.scan.disable=true` staat aan, dus er wordt
   niet ook nog automatisch op annotaties gescand).
-  `notify-callback-openapi.yaml` heet bewust anders en wordt dus **niet**
+  `notifynl-callback-openapi.yaml` heet bewust anders en wordt dus **niet**
   via swagger-ui getoond — die is alleen input voor de codegen hieronder, niet
   voor runtime-documentatie.
 - Bij elke build genereert de `openapi-generator-maven-plugin` (twee losse
   `<execution>`s, één per spec) hieruit de JAX-RS-interfaces
   (`nl.rijksoverheid.moz.nmc.api.NotificatiesApi`,
-  `nl.rijksoverheid.moz.nmc.notifycallback.api.NotifyCallbackApi`) en de
+  `nl.rijksoverheid.moz.nmc.notifynlcallback.api.NotifyNlCallbackApi`) en de
   request/response-modellen (`nl.rijksoverheid.moz.nmc.api.model.*`,
-  `nl.rijksoverheid.moz.nmc.notifycallback.api.model.*`) in
+  `nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.*`) in
   `target/generated-sources/openapi` (niet ingecheckt).
   `CentraleNotificatieController` (package `controller`) en
-  `NotifyCallbackController` (package `notifycallback.controller`)
+  `NotifyNLCallbackController` (package `notifynlcallback.controller`)
   implementeren de gegenereerde interfaces.
 
 Om een contract aan te passen: wijzig `META-INF/openapi.yaml` of
-`META-INF/notify-callback-openapi.yaml` en draai een build (`./mvnw compile`,
+`META-INF/notifynl-callback-openapi.yaml` en draai een build (`./mvnw compile`,
 `test` of `quarkus:dev`) — de gegenereerde interfaces/modellen worden
 automatisch bijgewerkt (en, voor `openapi.yaml`, ook de swagger-ui).
 
@@ -298,14 +298,14 @@ Bovenstaande draait de app in **dev-mode** (`%dev`-profiel: Postgres uit
 
 ## Status & vervolgstappen
 
-Dit skeleton implementeert de centraal-profiel happy-flow inclusief de
-asynchrone bezorgstatus en consument-callback, zoals beschreven onder "Wat doet
-dit skeleton wel/niet". Nog **niet** aanwezig:
+De NMC implementeert de centraal-profiel happy-flow inclusief de
+asynchrone bezorgstatus en consument-callback, zoals beschreven onder
+"Geïmplementeerde functionaliteit". Nog **niet** aanwezig:
 
 - **Contactherstel** en **herverzending**
 - Het **decentraal profiel**-scenario
 - Een koppeling met de **Templating Service** (nu wordt altijd hetzelfde,
   gemockte bericht verstuurd, ongeacht het type notificatie)
-- **`GET /notificaties/{id}`** voor statuspoll zonder callbackUrl
+- **`GET /centraal/notificaties/{id}`** voor statuspoll zonder callbackUrl
 - **Bearer-JWT-authenticatie** voor de uitgaande consument-callback
 - Een uitgewerkt **observability-koppelvlak**
