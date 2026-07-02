@@ -1,6 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
-import nl.rijksoverheid.moz.nmc.common.IdentificatieType;
+import nl.rijksoverheid.moz.nmc.controller.IdentificatieType;
 
 import java.util.Map;
 

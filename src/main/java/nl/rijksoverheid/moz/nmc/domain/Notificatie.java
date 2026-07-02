@@ -18,8 +18,8 @@ public class Notificatie {
     @GeneratedValue
     private UUID id;
 
-    @Column(name = "notifynl_notificatie_id", unique = true)
-    private UUID notifyNlNotificatieId;
+    @Column(name = "external_reference", unique = true)
+    private UUID externalReference;
 
     @Column(name = "callback_url", length = 2048)
     private String callbackUrl;
@@ -45,20 +45,20 @@ public class Notificatie {
         return id;
     }
 
-    public UUID getNotifyNlNotificatieId() {
-        return notifyNlNotificatieId;
-    }
-
-    public void setNotifyNlNotificatieId(UUID notifyNlNotificatieId) {
-        this.notifyNlNotificatieId = notifyNlNotificatieId;
-    }
-
     public String getCallbackUrl() {
         return callbackUrl;
     }
 
     public NotificatieStatus getStatus() {
         return status;
+    }
+
+    public UUID getExternalReference() {
+        return externalReference;
+    }
+
+    public void setExternalReference(UUID externalReference) {
+        this.externalReference = externalReference;
     }
 
     public void setStatus(NotificatieStatus status) {

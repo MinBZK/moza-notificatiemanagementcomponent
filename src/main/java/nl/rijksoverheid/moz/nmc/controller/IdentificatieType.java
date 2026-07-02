@@ -1,4 +1,4 @@
-package nl.rijksoverheid.moz.nmc.common;
+package nl.rijksoverheid.moz.nmc.controller;
 
 public enum IdentificatieType {
     BSN,

@@ -3,11 +3,10 @@
 
 CREATE TABLE notificatie (
     id uuid PRIMARY KEY,
-    notifynlnotificatieid uuid UNIQUE,
-    callbackurl varchar(255),
-    status varchar(255) NOT NULL CHECK (status IN (
-        'SENDING', 'DELIVERED', 'PERMANENT_FAILURE', 'TEMPORARY_FAILURE', 'TECHNICAL_FAILURE',
-        'PENDING', 'SENT', 'ACCEPTED', 'RECEIVED', 'CANCELLED', 'CREATED'
+    external_reference uuid UNIQUE,
+    callback_url varchar(2048),
+    status varchar(17) NOT NULL CHECK (status IN (
+        'SENDING', 'DELIVERED', 'PERMANENT_FAILURE', 'TEMPORARY_FAILURE', 'TECHNICAL_FAILURE', 'CREATED'
     )),
     aangemaakt timestamp(6) with time zone NOT NULL
 );

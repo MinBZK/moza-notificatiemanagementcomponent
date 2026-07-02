@@ -53,7 +53,7 @@ public class NotificatieService {
         notificatieRepository.flush();
 
         try {
-            notificatie.setNotifyNlNotificatieId(verzendAdapter.verstuurEmail(emailAdres, opdracht.berichtgegevens()));
+            notificatie.setExternalReference(verzendAdapter.verstuurEmail(emailAdres, opdracht.berichtgegevens()));
         } catch (NotifyNLConfiguratieException | NotifyNLVerzendException e) {
             Log.error("Fout bij versturen van notificatie", e);
             throw new NotificatieException("Notificatie kon niet worden verstuurd.");
@@ -66,7 +66,7 @@ public class NotificatieService {
     @Transactional
     public void verwerkAfleverstatus(UUID notifyNlNotificatieId, String status) {
         Notificatie notificatie = notificatieRepository
-                .findByNotifyNlNotificatieId(notifyNlNotificatieId)
+                .findByExternalReference(notifyNlNotificatieId)
                 .orElseThrow(() -> new NotificatieNietGevondenException(
                         "Geen notificatie gevonden voor NotifyNL-referentie " + notifyNlNotificatieId));
 

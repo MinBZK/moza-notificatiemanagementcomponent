@@ -159,6 +159,16 @@
                 <version>${compiler-plugin.version}</version>
                 <configuration>
                     <parameters>true</parameters>
+                    <!-- Genereert de JPA static metamodel (Notificatie_) zodat repository-queries
+                         veldnamen als compile-time constant gebruiken i.p.v. losse strings. Sinds
+                         JDK 23 draaien classpath-processors niet meer automatisch; expliciet pad nodig.
+                         Versie komt uit de Quarkus-BOM (dependencyManagement). -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.hibernate.orm</groupId>
+                            <artifactId>hibernate-processor</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
             <plugin>
@@ -188,7 +198,7 @@
                                 <openApiNullable>false</openApiNullable>
                             </configOptions>
                             <importMappings>
-                                <importMapping>IdentificatieType=nl.rijksoverheid.moz.nmc.common.IdentificatieType</importMapping>
+                                <importMapping>IdentificatieType=nl.rijksoverheid.moz.nmc.controller.IdentificatieType</importMapping>
                             </importMappings>
                             <generateSupportingFiles>false</generateSupportingFiles>
                             <generateApiTests>false</generateApiTests>

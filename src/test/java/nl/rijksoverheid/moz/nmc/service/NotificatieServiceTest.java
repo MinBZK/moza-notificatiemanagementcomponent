@@ -6,7 +6,7 @@ import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.GeenEmailadresGevondenException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
-import nl.rijksoverheid.moz.nmc.common.IdentificatieType;
+import nl.rijksoverheid.moz.nmc.controller.IdentificatieType;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
@@ -55,7 +55,7 @@ class NotificatieServiceTest {
         Notificatie resultaat = service.versturen(opdracht("https://omc.example.nl/callback"));
 
         assertEquals(NotificatieStatus.SENDING, resultaat.getStatus());
-        assertEquals(notifyNlId, resultaat.getNotifyNlNotificatieId());
+        assertEquals(notifyNlId, resultaat.getExternalReference());
         assertEquals("https://omc.example.nl/callback", resultaat.getCallbackUrl());
     }
 
@@ -84,7 +84,7 @@ class NotificatieServiceTest {
 
     @Test
     void verwerkAfleverstatus_onbekendNotifyNlId_gooitNotificatieNietGevondenException() {
-        when(notificatieRepository.findByNotifyNlNotificatieId(any())).thenReturn(Optional.empty());
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.empty());
 
         assertThrows(NotificatieNietGevondenException.class,
                 () -> service.verwerkAfleverstatus(UUID.randomUUID(), "delivered"));
@@ -95,7 +95,7 @@ class NotificatieServiceTest {
     @Test
     void verwerkAfleverstatus_bekendeStatus_zetStatusOpNotificatie() {
         Notificatie notificatie = notificatie(null);
-        when(notificatieRepository.findByNotifyNlNotificatieId(any())).thenReturn(Optional.of(notificatie));
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "permanent-failure");
 
@@ -105,7 +105,7 @@ class NotificatieServiceTest {
     @Test
     void verwerkAfleverstatus_onbekendeStatus_valtTerugOpTechnicalFailure() {
         Notificatie notificatie = notificatie(null);
-        when(notificatieRepository.findByNotifyNlNotificatieId(any())).thenReturn(Optional.of(notificatie));
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "een-rare-status");
 
@@ -115,7 +115,7 @@ class NotificatieServiceTest {
     @Test
     void verwerkAfleverstatus_callbackSuccesvol_verwijdertNotificatie() {
         Notificatie notificatie = notificatie("https://omc.example.nl/callback");
-        when(notificatieRepository.findByNotifyNlNotificatieId(any())).thenReturn(Optional.of(notificatie));
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
         when(consumentCallbackAdapter.stuurStatusUpdate(notificatie)).thenReturn(true);
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
@@ -126,7 +126,7 @@ class NotificatieServiceTest {
     @Test
     void verwerkAfleverstatus_callbackMislukt_bewaartNotificatie() {
         Notificatie notificatie = notificatie("https://omc.example.nl/callback");
-        when(notificatieRepository.findByNotifyNlNotificatieId(any())).thenReturn(Optional.of(notificatie));
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
         when(consumentCallbackAdapter.stuurStatusUpdate(notificatie)).thenReturn(false);
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");

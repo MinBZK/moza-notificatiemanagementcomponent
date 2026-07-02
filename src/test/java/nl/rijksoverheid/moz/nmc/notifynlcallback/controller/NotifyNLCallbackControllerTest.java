@@ -154,7 +154,7 @@ class NotifyNLCallbackControllerTest {
                 .then()
                 .statusCode(204);
 
-        assertTrue(notificatieRepository.findByNotifyNlNotificatieId(notifyNlId).isEmpty());
+        assertTrue(notificatieRepository.findByExternalReference(notifyNlId).isEmpty());
     }
 
     @Test
@@ -176,7 +176,7 @@ class NotifyNLCallbackControllerTest {
                 .then()
                 .statusCode(204);
 
-        assertTrue(notificatieRepository.findByNotifyNlNotificatieId(notifyNlId).isPresent());
+        assertTrue(notificatieRepository.findByExternalReference(notifyNlId).isPresent());
     }
 
     private String aanvraag(String callbackUrl) {
