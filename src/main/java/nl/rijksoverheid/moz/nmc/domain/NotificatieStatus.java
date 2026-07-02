@@ -8,11 +8,6 @@ public enum NotificatieStatus {
     PERMANENT_FAILURE,
     TEMPORARY_FAILURE,
     TECHNICAL_FAILURE,
-    PENDING,
-    SENT,
-    ACCEPTED,
-    RECEIVED,
-    CANCELLED,
     CREATED;
 
     /** Returns the kebab-case representation for use in API responses (e.g. permanent-failure). */
