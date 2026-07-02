@@ -66,7 +66,7 @@ public class NotificatieService {
         notificatie.setStatus(parseStatus(status));
 
         // Een JTA-timeout tijdens de retries in stuurStatusUpdate() zou notificatie detached maken,
-        // waardoor delete() hieronder een DetachedObjectException geeft. Zie ConsumentCallbackAdapter.
+        // waardoor deleteById() hieronder een DetachedObjectException geeft. Zie ConsumentCallbackAdapter.
         if (consumentCallbackAdapter.stuurStatusUpdate(notificatie)) {
             notificatieRepository.deleteById(notificatie.getId());
         }
