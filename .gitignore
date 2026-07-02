@@ -1,9 +1,6 @@
 ### Maven ###
 target/
 
-### Claude ###
-CLAUDE.md
-
 ### IntelliJ IDEA ###
 .idea
 *.iml
@@ -36,3 +33,6 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Local config ###
+src/main/resources/application-dev.properties

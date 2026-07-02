@@ -1,0 +1,7 @@
+*
+
+# Quarkus production Docker builds (see src/main/docker/)
+!target/*-runner
+!target/*-runner.jar
+!target/lib/*
+!target/quarkus-app/*

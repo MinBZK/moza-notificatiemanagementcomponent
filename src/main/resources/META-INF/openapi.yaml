@@ -1,0 +1,134 @@
+openapi: 3.0.3
+info:
+  title: NotificatieManagementComponent API
+  description: |
+    API voor het versturen van notificaties namens een Dienstverlener.
+  version: 0.1.0
+  contact:
+    name: MijnOverheid Zakelijk Team
+    email: moza@minbzk.nl
+    url: https://github.com/MinBZK/moza-notificatiemanagementcomponent
+
+# Bewust geen `servers:` blok: zonder dit blok gebruikt Swagger UI de origin
+# waarvandaan de spec geladen is. Daardoor wijst "Try it out" altijd naar de
+# juiste host — lokaal `localhost`, elke PR-deploy zijn eigen `pr-N`-host, prod
+# de prod-host — zonder per-omgeving een URL te hoeven invullen.
+
+paths:
+  /api/nmc/v1/centraal/notificaties:
+    post:
+      operationId: notificatieVersturen
+      summary: Notificatie versturen
+      description: |
+        Haalt de contactgegevens op bij de Profielservice, verstuurt de notificatie
+        en slaat de notificatie op. Als een callbackUrl is meegegeven, stuurt de
+        NMC asynchroon een statusupdate (CloudEvents) zodra de bezorgstatus bekend is.
+      tags:
+        - Notificaties
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificatieAanvraagRequest'
+      responses:
+        '200':
+          description: Notificatie succesvol verstuurd
+          headers:
+            API-Version:
+              schema:
+                type: string
+              description: Versie van de API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificatieResponse'
+        '400':
+          description: >-
+            Ongeldige aanvraag, of er kon geen notificatie worden gedaan voor de
+            opgegeven partij (geen partij of geen e-mailadres gevonden voor de
+            opgegeven identificatie)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: De notificatie kon niet (succesvol) verzonden worden
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+components:
+  schemas:
+    IdentificatieType:
+      type: string
+      description: Type identificatie van de ontvanger
+      enum:
+        - BSN
+        - KVK
+        - RSIN
+
+    NotificatieAanvraagRequest:
+      type: object
+      description: Aanvraag om een notificatie te versturen
+      required:
+        - identificatieType
+        - identificatieNummer
+        - dienstverlener
+        - dienst
+      properties:
+        identificatieType:
+          $ref: '#/components/schemas/IdentificatieType'
+        identificatieNummer:
+          type: string
+          minLength: 1
+          description: BSN-, KVK- of RSIN-nummer van de ontvanger
+        dienstverlener:
+          type: string
+          minLength: 1
+          description: Naam van de dienstverlener namens wie de notificatie wordt verstuurd
+        dienst:
+          type: string
+          minLength: 1
+          description: Naam van de dienst waarvoor de notificatie wordt verstuurd
+        berichtgegevens:
+          type: object
+          description: Templatevariabelen voor het bericht
+          additionalProperties:
+            type: string
+        callbackUrl:
+          type: string
+          format: uri
+          description: >-
+            Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
+            terugstuurt zodra de bezorgstatus bekend is. Weglaten als de
+            Dienstverlener de status zelf opvraagt via GET /notificaties/{id}.
+
+    NotificatieResponse:
+      type: object
+      required:
+        - notificatieId
+      properties:
+        notificatieId:
+          type: string
+          format: uuid
+          description: NMC-interne referentie voor deze notificatie
+
+    Problem:
+      type: object
+      description: Problem Details (RFC 9457)
+      properties:
+        type:
+          type: string
+          format: uri
+          default: "about:blank"
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri
