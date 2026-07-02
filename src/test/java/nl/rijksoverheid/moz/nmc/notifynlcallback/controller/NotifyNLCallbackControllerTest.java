@@ -74,7 +74,7 @@ class NotifyNLCallbackControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(deliveryReceipt(notifyNlId, "delivered"))
-                .when().post("/api/nmc/v1/notify-callback")
+                .when().post("/api/nmc/v1/notifynl-callback")
                 .then()
                 .statusCode(204);
     }
@@ -84,7 +84,7 @@ class NotifyNLCallbackControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(deliveryReceipt(UUID.randomUUID(), "delivered"))
-                .when().post("/api/nmc/v1/notify-callback")
+                .when().post("/api/nmc/v1/notifynl-callback")
                 .then()
                 .statusCode(404)
                 .contentType("application/problem+json");
@@ -105,7 +105,7 @@ class NotifyNLCallbackControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(deliveryReceipt(notifyNlId, "some-unknown-status"))
-                .when().post("/api/nmc/v1/notify-callback")
+                .when().post("/api/nmc/v1/notifynl-callback")
                 .then()
                 .statusCode(204);
 
@@ -128,7 +128,7 @@ class NotifyNLCallbackControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(deliveryReceipt(notifyNlId, "delivered"))
-                .when().post("/api/nmc/v1/notify-callback")
+                .when().post("/api/nmc/v1/notifynl-callback")
                 .then()
                 .statusCode(204);
 
@@ -150,7 +150,7 @@ class NotifyNLCallbackControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(deliveryReceipt(notifyNlId, "delivered"))
-                .when().post("/api/nmc/v1/notify-callback")
+                .when().post("/api/nmc/v1/notifynl-callback")
                 .then()
                 .statusCode(204);
 
@@ -172,7 +172,7 @@ class NotifyNLCallbackControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body(deliveryReceipt(notifyNlId, "delivered"))
-                .when().post("/api/nmc/v1/notify-callback")
+                .when().post("/api/nmc/v1/notifynl-callback")
                 .then()
                 .statusCode(204);
 

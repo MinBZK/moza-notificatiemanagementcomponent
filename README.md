@@ -14,7 +14,7 @@ asynchrone bezorgstatus:
    (`POST /v2/notifications/email`) en verwacht hierop direct een `201`.
 4. De NMC slaat de notificatie op (PostgreSQL) met status `sending` en de
    eventuele `callbackUrl`, en retourneert een `notificatieId` aan de aanroeper.
-5. NotifyNL roept asynchroon `POST /api/nmc/v1/notify-callback` aan met de
+5. NotifyNL roept asynchroon `POST /api/nmc/v1/notifynl-callback` aan met de
    bezorgstatus (delivery receipt).
 6. De NMC zoekt de notificatie op, werkt de status bij en stuurt — als er een
    `callbackUrl` is meegegeven — een statusupdate (**CloudEvents NL GOV**) naar
@@ -184,7 +184,7 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   asynchrone statusupdates. Retourneert `200` op succes, `400` als er geen
   partij of e-mailadres gevonden wordt, `500` bij een Profielservice-fout, en
   `502` als NotifyNL geen `201` teruggeeft.
-- **`POST /notify-callback`**: webhook waarop NotifyNL de bezorgstatus
+- **`POST /notifynl-callback`**: webhook waarop NotifyNL de bezorgstatus
   (delivery receipt) van een verzending terugmeldt. De NMC werkt de status bij
   en stuurt — indien een `callbackUrl` aanwezig is — een **CloudEvents NL GOV**
   statusupdate naar die URL. Retourneert `204` op succes en `404` als de
@@ -202,7 +202,7 @@ Gepland/toekomstig (nog niet aanwezig):
 
 De `/centraal/notificaties`-specificatie is beschikbaar via `/q/swagger-ui` wanneer de
 applicatie draait (`./mvnw quarkus:dev`); zie de toelichting bij
-"OpenAPI-specificatie & codegen" hieronder voor waarom `/notify-callback`
+"OpenAPI-specificatie & codegen" hieronder voor waarom `/notifynl-callback`
 daar niet in staat.
 
 ## OpenAPI-specificatie & codegen
@@ -213,7 +213,7 @@ specificaties:
 - `src/main/resources/META-INF/openapi.yaml` — `POST /centraal/notificaties` (de
   centrale-regie-flow).
 - `src/main/resources/META-INF/notifynl-callback-openapi.yaml` — `POST
-  /notify-callback`, in een eigen bestand zodat het zelfstandig te verwijderen
+  /notifynl-callback`, in een eigen bestand zodat het zelfstandig te verwijderen
   is zodra dit endpoint niet meer nodig is (zie de API-sectie hierboven).
 
 - Quarkus serveert alleen `openapi.yaml` ongewijzigd via `/q/openapi` en

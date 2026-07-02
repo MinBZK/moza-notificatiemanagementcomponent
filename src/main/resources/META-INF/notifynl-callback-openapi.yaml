@@ -19,7 +19,7 @@ servers:
     description: Lokale ontwikkeling
 
 paths:
-  /api/nmc/v1/notify-callback:
+  /api/nmc/v1/notifynl-callback:
     post:
       operationId: verwerkAfleverstatus
       summary: Bezorgstatus (delivery receipt) verwerken
