@@ -7,7 +7,6 @@ import nl.rijksoverheid.moz.nmc.api.model.NotificatieAanvraagRequest;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.GeenEmailadresGevondenException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.PartijNietGevondenException;
-import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceException;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
@@ -46,8 +45,6 @@ public class CentraleNotificatieController implements NotificatiesApi {
             return new NotificatieResponse(notificatie.getId());
         } catch (PartijNietGevondenException | GeenEmailadresGevondenException e) {
             throw Problems.badRequest("Notificatie niet verstuurd.", e.getMessage());
-        } catch (ProfielServiceException e) {
-            throw Problems.serverError("Profielservice fout", e.getMessage());
         } catch (Exception e) {
             throw Problems.serverError("Verzendfout", "Er kan momenteel geen notificatie worden verstuurd");
         }
