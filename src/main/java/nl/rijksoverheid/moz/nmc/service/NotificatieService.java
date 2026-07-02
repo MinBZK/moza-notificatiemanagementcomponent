@@ -41,7 +41,11 @@ public class NotificatieService {
                 opdracht.identificatieType(), opdracht.identificatieNummer(),
                 opdracht.dienstverlener(), opdracht.dienst()));
 
-        // Persist (en flush) before calling NotifyNL so that a DB failure never results in a sent email with no record.
+        // Persist (en flush) vóór de NotifyNL-aanroep, zodat een INSERT-fout (constraint, DB down,
+        // pool uitgeput) opduikt vóórdat de e-mail verstuurd is. Let op: flush is geen commit — dit
+        // dekt alleen faal vóór het versturen. Faalt de commit ná verstuurEmail(), dan rolt ook deze
+        // INSERT terug: e-mail verstuurd, geen record. Dat venster sluiten (record in aparte transactie)
+        // hoort bij TODO #732.
         Notificatie notificatie = new Notificatie(opdracht.callbackUrl());
         notificatieRepository.persist(notificatie);
         notificatieRepository.flush();
