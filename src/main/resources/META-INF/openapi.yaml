@@ -77,6 +77,7 @@ components:
         - identificatieNummer
         - dienstverlener
         - dienst
+        - berichtType
       properties:
         identificatieType:
           $ref: '#/components/schemas/IdentificatieType'
@@ -92,6 +93,10 @@ components:
           type: string
           minLength: 1
           description: Naam van de dienst waarvoor de notificatie wordt verstuurd
+        berichtType:
+          type: string
+          minLength: 1
+          description: Type bericht dat verstuurd wordt (bepaalt de te gebruiken template)
         berichtgegevens:
           type: object
           description: Templatevariabelen voor het bericht

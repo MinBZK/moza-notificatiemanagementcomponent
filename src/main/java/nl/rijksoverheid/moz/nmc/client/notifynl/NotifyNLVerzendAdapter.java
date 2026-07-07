@@ -24,25 +24,21 @@ public class NotifyNLVerzendAdapter {
     private final NotifyNLJwtFactory notifyNLJwtFactory;
     private final NotifyNLAuthorizationHolder notifyNLAuthorizationHolder;
     private final String notifyApiKey;
-    private final String notifyTemplateId;
 
     public NotifyNLVerzendAdapter(@RestClient SendAMessageApi sendAMessageApi,
                            NotifyNLJwtFactory notifyNLJwtFactory,
                            NotifyNLAuthorizationHolder notifyNLAuthorizationHolder,
-                           @ConfigProperty(name = "notify.api-key") Optional<String> notifyApiKey,
-                           @ConfigProperty(name = "notify.template-id") Optional<String> notifyTemplateId) {
+                           @ConfigProperty(name = "notify.api-key") Optional<String> notifyApiKey) {
         this.sendAMessageApi = sendAMessageApi;
         this.notifyNLJwtFactory = notifyNLJwtFactory;
         this.notifyNLAuthorizationHolder = notifyNLAuthorizationHolder;
         this.notifyApiKey = notifyApiKey.filter(s -> !s.isBlank())
                 .orElseThrow(() -> new IllegalStateException("notify.api-key is niet geconfigureerd"));
-        this.notifyTemplateId = notifyTemplateId.filter(s -> !s.isBlank())
-                .orElseThrow(() -> new IllegalStateException("notify.template-id is niet geconfigureerd"));
     }
 
-    public UUID verstuurEmail(@NotNull String emailAdres, Map<String, String> berichtgegevens) throws NotifyNLConfiguratieException, NotifyNLVerzendException {
+    public UUID verstuurEmail(@NotNull String emailAdres, String templateId, Map<String, String> berichtgegevens) throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         autoriseer();
-        SendEmailRequest notifyRequest = bouwVerzoek(emailAdres, berichtgegevens);
+        SendEmailRequest notifyRequest = bouwVerzoek(emailAdres, templateId, berichtgegevens);
         SendEmailResponse notifyResponse = verstuur(notifyRequest);
         return extraheerNotificatieId(notifyResponse);
     }
@@ -57,7 +53,7 @@ public class NotifyNLVerzendAdapter {
         }
     }
 
-    private SendEmailRequest bouwVerzoek(String emailAdres, Map<String, String> berichtgegevens) {
+    private SendEmailRequest bouwVerzoek(String emailAdres, String templateId, Map<String, String> berichtgegevens) {
         SendEmailRequestPersonalisation personalisation = new SendEmailRequestPersonalisation();
         if (berichtgegevens != null) {
             personalisation.putAll(berichtgegevens);
@@ -65,7 +61,7 @@ public class NotifyNLVerzendAdapter {
 
         return new SendEmailRequest()
                 .emailAddress(emailAdres)
-                .templateId(notifyTemplateId)
+                .templateId(templateId)
                 .personalisation(personalisation);
     }
 

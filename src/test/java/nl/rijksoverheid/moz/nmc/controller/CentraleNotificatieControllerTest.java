@@ -56,6 +56,7 @@ class CentraleNotificatieControllerTest {
                   "identificatieNummer": "12345678",
                   "dienstverlener": "Gemeente Voorbeeld",
                   "dienst": "Parkeervergunning",
+                  "berichtType": "Test",
                   "berichtgegevens": { "naam": "Voorbeeld BV" }
                 }
                 """;
@@ -78,7 +79,8 @@ class CentraleNotificatieControllerTest {
                   "identificatieType": "KVK",
                   "identificatieNummer": "12345678",
                   "dienstverlener": "Gemeente Voorbeeld",
-                  "dienst": "Parkeervergunning"
+                  "dienst": "Parkeervergunning",
+                  "berichtType": "Test"
                 }
                 """;
 
@@ -120,7 +122,8 @@ class CentraleNotificatieControllerTest {
                   "identificatieType": "KVK",
                   "identificatieNummer": "12345678",
                   "dienstverlener": "Gemeente Voorbeeld",
-                  "dienst": "Parkeervergunning"
+                  "dienst": "Parkeervergunning",
+                  "berichtType": "Test"
                 }
                 """;
 
@@ -145,7 +148,8 @@ class CentraleNotificatieControllerTest {
                   "identificatieType": "KVK",
                   "identificatieNummer": "12345678",
                   "dienstverlener": "Gemeente Voorbeeld",
-                  "dienst": "Parkeervergunning"
+                  "dienst": "Parkeervergunning",
+                  "berichtType": "Test"
                 }
                 """;
 
@@ -265,13 +269,33 @@ class CentraleNotificatieControllerTest {
                 .contentType("application/problem+json");
     }
 
+    @Test
+    void notificatieVersturen_onbekendBerichtType_retourneert400() {
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "identificatieType": "KVK",
+                          "identificatieNummer": "12345678",
+                          "dienstverlener": "Gemeente Voorbeeld",
+                          "dienst": "Parkeervergunning",
+                          "berichtType": "Onbekend Type XYZ"
+                        }
+                        """)
+                .when().post("/api/nmc/v1/centraal/notificaties")
+                .then()
+                .statusCode(400)
+                .contentType("application/problem+json");
+    }
+
     private String standaardAanvraag() {
         return """
                 {
                   "identificatieType": "KVK",
                   "identificatieNummer": "12345678",
                   "dienstverlener": "Gemeente Voorbeeld",
-                  "dienst": "Parkeervergunning"
+                  "dienst": "Parkeervergunning",
+                  "berichtType": "Test"
                 }
                 """;
     }

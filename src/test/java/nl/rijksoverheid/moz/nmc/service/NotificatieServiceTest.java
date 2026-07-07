@@ -22,6 +22,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -30,6 +31,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class NotificatieServiceTest {
+
+    private static final String TEST_TEMPLATE_ID = "fd2aad70-09d9-4af3-9ac9-f0c418b1b47a";
 
     private ProfielServiceAdapter profielServiceAdapter;
     private NotifyNLVerzendAdapter verzendAdapter;
@@ -50,7 +53,7 @@ class NotificatieServiceTest {
     void versturen_happyFlow_retourneertNotificatieMetStatusSendingEnNotifyId() throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         when(profielServiceAdapter.zoekEmailAdres(any())).thenReturn("burger@example.nl");
         UUID notifyNlId = UUID.randomUUID();
-        when(verzendAdapter.verstuurEmail("burger@example.nl", Map.of("naam", "Voorbeeld BV"))).thenReturn(notifyNlId);
+        when(verzendAdapter.verstuurEmail(eq("burger@example.nl"), eq(TEST_TEMPLATE_ID), eq(Map.of("naam", "Voorbeeld BV")))).thenReturn(notifyNlId);
 
         Notificatie resultaat = service.versturen(opdracht("https://omc.example.nl/callback"));
 
@@ -62,14 +65,14 @@ class NotificatieServiceTest {
     @Test
     void versturen_persisteertEnFlushtVoordatNotifyWordtAangeroepen() throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         when(profielServiceAdapter.zoekEmailAdres(any())).thenReturn("burger@example.nl");
-        when(verzendAdapter.verstuurEmail(any(), any())).thenReturn(UUID.randomUUID());
+        when(verzendAdapter.verstuurEmail(any(), any(), any())).thenReturn(UUID.randomUUID());
 
         service.versturen(opdracht(null));
 
         InOrder inOrder = inOrder(notificatieRepository, verzendAdapter);
         inOrder.verify(notificatieRepository).persist(any(Notificatie.class));
         inOrder.verify(notificatieRepository).flush();
-        inOrder.verify(verzendAdapter).verstuurEmail(any(), any());
+        inOrder.verify(verzendAdapter).verstuurEmail(any(), any(), any());
     }
 
     @Test
@@ -136,7 +139,7 @@ class NotificatieServiceTest {
 
     private NotificatieVersturenOpdracht opdracht(String callbackUrl) {
         return new NotificatieVersturenOpdracht(IdentificatieType.KVK, "12345678",
-                "Gemeente Voorbeeld", "Parkeervergunning", Map.of("naam", "Voorbeeld BV"), callbackUrl);
+                "Gemeente Voorbeeld", "Parkeervergunning", TEST_TEMPLATE_ID, Map.of("naam", "Voorbeeld BV"), callbackUrl);
     }
 
     private Notificatie notificatie(String callbackUrl) {

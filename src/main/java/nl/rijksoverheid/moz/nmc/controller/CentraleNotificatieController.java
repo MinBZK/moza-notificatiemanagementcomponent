@@ -10,9 +10,10 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.PartijNietGevondenExceptio
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
-import nl.rijksoverheid.moz.nmc.service.NotificatieException;
+import nl.rijksoverheid.moz.nmc.service.BerichtType;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 import nl.rijksoverheid.moz.nmc.service.NotificatieVersturenOpdracht;
+import nl.rijksoverheid.moz.nmc.service.OnbekendBerichtTypeException;
 import org.jspecify.annotations.NonNull;
 
 public class CentraleNotificatieController implements NotificatiesApi {
@@ -38,11 +39,12 @@ public class CentraleNotificatieController implements NotificatiesApi {
 
         // TODO #752 (zie NMC: CallbackUrl wordt niet gevalideerd (SSRF risico))
         // (security): callbackUrl is unvalidated caller input that we later POST to — SSRF risk.
-        NotificatieVersturenOpdracht opdracht = getNotificatieVersturenOpdracht(notificatieAanvraagRequest);
-
         try {
+            NotificatieVersturenOpdracht opdracht = getNotificatieVersturenOpdracht(notificatieAanvraagRequest);
             Notificatie notificatie = notificatieService.versturen(opdracht);
             return new NotificatieResponse(notificatie.getId());
+        } catch (OnbekendBerichtTypeException e) {
+            throw Problems.badRequest("Onbekend berichttype", e.getMessage());
         } catch (PartijNietGevondenException | GeenEmailadresGevondenException e) {
             throw Problems.badRequest("Notificatie niet verstuurd.", e.getMessage());
         } catch (Exception e) {
@@ -54,11 +56,13 @@ public class CentraleNotificatieController implements NotificatiesApi {
         String callbackUrl = notificatieAanvraagRequest.getCallbackUrl() != null
                 ? notificatieAanvraagRequest.getCallbackUrl().toString()
                 : null;
+        String templateId = BerichtType.vanNaam(notificatieAanvraagRequest.getBerichtType()).getTemplateId();
         return new NotificatieVersturenOpdracht(
                 notificatieAanvraagRequest.getIdentificatieType(),
                 notificatieAanvraagRequest.getIdentificatieNummer(),
                 notificatieAanvraagRequest.getDienstverlener(),
                 notificatieAanvraagRequest.getDienst(),
+                templateId,
                 notificatieAanvraagRequest.getBerichtgegevens(),
                 callbackUrl);
     }

@@ -18,6 +18,8 @@ import static org.mockito.ArgumentMatchers.any;
 
 class NotifyNLVerzendAdapterTest {
 
+    private static final String TEST_TEMPLATE_ID = "00000000-0000-0000-0000-000000000001";
+
     private SendAMessageApi sendAMessageApi;
     private NotifyNLJwtFactory notifyNLJwtFactory;
     private NotifyNLAuthorizationHolder authorizationHolder;
@@ -29,7 +31,7 @@ class NotifyNLVerzendAdapterTest {
         notifyNLJwtFactory = Mockito.mock(NotifyNLJwtFactory.class);
         authorizationHolder = new NotifyNLAuthorizationHolder();
         adapter = new NotifyNLVerzendAdapter(sendAMessageApi, notifyNLJwtFactory, authorizationHolder,
-                Optional.of("test-key"), Optional.of("test-template"));
+                Optional.of("test-key"));
 
         Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
     }
@@ -39,7 +41,7 @@ class NotifyNLVerzendAdapterTest {
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(notifyNlId.toString()));
 
-        UUID result = adapter.verstuurEmail("burger@example.nl", Map.of("naam", "Voorbeeld BV"));
+        UUID result = adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of("naam", "Voorbeeld BV"));
 
         assertEquals(notifyNlId, result);
     }
@@ -49,7 +51,7 @@ class NotifyNLVerzendAdapterTest {
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(notifyNlId.toString()));
 
-        UUID result = adapter.verstuurEmail("burger@example.nl", null);
+        UUID result = adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, null);
 
         assertEquals(notifyNlId, result);
     }
@@ -58,7 +60,7 @@ class NotifyNLVerzendAdapterTest {
     void verstuurEmail_zetBearerTokenZonderPrefixOpHolder() throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
 
-        adapter.verstuurEmail("burger@example.nl", Map.of());
+        adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of());
 
         assertEquals("test-token", authorizationHolder.getBearerToken().orElse(null));
     }
@@ -68,7 +70,7 @@ class NotifyNLVerzendAdapterTest {
         Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenThrow(new IllegalArgumentException("Ongeldige key"));
 
         assertThrows(NotifyNLConfiguratieException.class,
-                () -> adapter.verstuurEmail("burger@example.nl", Map.of()));
+                () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
     }
 
     @Test
@@ -77,7 +79,7 @@ class NotifyNLVerzendAdapterTest {
                 .thenThrow(new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build()));
 
         assertThrows(NotifyNLVerzendException.class,
-                () -> adapter.verstuurEmail("burger@example.nl", Map.of()));
+                () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
     }
 
     @Test
@@ -85,7 +87,7 @@ class NotifyNLVerzendAdapterTest {
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse());
 
         assertThrows(NotifyNLVerzendException.class,
-                () -> adapter.verstuurEmail("burger@example.nl", Map.of()));
+                () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
     }
 
     @Test
@@ -93,18 +95,12 @@ class NotifyNLVerzendAdapterTest {
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id("niet-een-uuid"));
 
         assertThrows(NotifyNLVerzendException.class,
-                () -> adapter.verstuurEmail("burger@example.nl", Map.of()));
+                () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
     }
 
     @Test
     void constructor_ontbrekendeApiKey_gooitIllegalStateException() {
         assertThrows(IllegalStateException.class, () -> new NotifyNLVerzendAdapter(sendAMessageApi, notifyNLJwtFactory,
-                authorizationHolder, Optional.empty(), Optional.of("test-template")));
-    }
-
-    @Test
-    void constructor_ontbrekendTemplateId_gooitIllegalStateException() {
-        assertThrows(IllegalStateException.class, () -> new NotifyNLVerzendAdapter(sendAMessageApi, notifyNLJwtFactory,
-                authorizationHolder, Optional.of("test-key"), Optional.empty()));
+                authorizationHolder, Optional.empty()));
     }
 }
