@@ -32,7 +32,7 @@ import static org.mockito.Mockito.when;
 
 class NotificatieServiceTest {
 
-    private static final String TEST_TEMPLATE_ID = "fd2aad70-09d9-4af3-9ac9-f0c418b1b47a";
+    private static final String TEST_TEMPLATE_ID = "test-template-id";
 
     private ProfielServiceAdapter profielServiceAdapter;
     private NotifyNLVerzendAdapter verzendAdapter;

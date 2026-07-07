@@ -56,7 +56,7 @@ class CentraleNotificatieControllerTest {
                   "identificatieNummer": "12345678",
                   "dienstverlener": "Gemeente Voorbeeld",
                   "dienst": "Parkeervergunning",
-                  "berichtType": "Test",
+                  "berichtType": "Stuurgroep Agenda",
                   "berichtgegevens": { "naam": "Voorbeeld BV" }
                 }
                 """;
@@ -80,7 +80,7 @@ class CentraleNotificatieControllerTest {
                   "identificatieNummer": "12345678",
                   "dienstverlener": "Gemeente Voorbeeld",
                   "dienst": "Parkeervergunning",
-                  "berichtType": "Test"
+                  "berichtType": "Stuurgroep Agenda"
                 }
                 """;
 
@@ -123,7 +123,7 @@ class CentraleNotificatieControllerTest {
                   "identificatieNummer": "12345678",
                   "dienstverlener": "Gemeente Voorbeeld",
                   "dienst": "Parkeervergunning",
-                  "berichtType": "Test"
+                  "berichtType": "Stuurgroep Agenda"
                 }
                 """;
 
@@ -149,7 +149,7 @@ class CentraleNotificatieControllerTest {
                   "identificatieNummer": "12345678",
                   "dienstverlener": "Gemeente Voorbeeld",
                   "dienst": "Parkeervergunning",
-                  "berichtType": "Test"
+                  "berichtType": "Stuurgroep Agenda"
                 }
                 """;
 
@@ -295,7 +295,7 @@ class CentraleNotificatieControllerTest {
                   "identificatieNummer": "12345678",
                   "dienstverlener": "Gemeente Voorbeeld",
                   "dienst": "Parkeervergunning",
-                  "berichtType": "Test"
+                  "berichtType": "Stuurgroep Agenda"
                 }
                 """;
     }
