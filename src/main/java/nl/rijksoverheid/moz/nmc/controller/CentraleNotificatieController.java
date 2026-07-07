@@ -43,9 +43,7 @@ public class CentraleNotificatieController implements NotificatiesApi {
             NotificatieVersturenOpdracht opdracht = getNotificatieVersturenOpdracht(notificatieAanvraagRequest);
             Notificatie notificatie = notificatieService.versturen(opdracht);
             return new NotificatieResponse(notificatie.getId());
-        } catch (OnbekendBerichtTypeException e) {
-            throw Problems.badRequest("Onbekend berichttype", e.getMessage());
-        } catch (PartijNietGevondenException | GeenEmailadresGevondenException e) {
+        } catch (OnbekendBerichtTypeException | PartijNietGevondenException | GeenEmailadresGevondenException e) {
             throw Problems.badRequest("Notificatie niet verstuurd.", e.getMessage());
         } catch (Exception e) {
             throw Problems.serverError("Verzendfout", "Er kan momenteel geen notificatie worden verstuurd");

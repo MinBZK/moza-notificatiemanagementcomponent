@@ -36,7 +36,7 @@ public class NotifyNLVerzendAdapter {
                 .orElseThrow(() -> new IllegalStateException("notify.api-key is niet geconfigureerd"));
     }
 
-    public UUID verstuurEmail(@NotNull String emailAdres, String templateId, Map<String, String> berichtgegevens) throws NotifyNLConfiguratieException, NotifyNLVerzendException {
+    public UUID verstuurEmail(@NotNull String emailAdres, @NotNull String templateId, Map<String, String> berichtgegevens) throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         autoriseer();
         SendEmailRequest notifyRequest = bouwVerzoek(emailAdres, templateId, berichtgegevens);
         SendEmailResponse notifyResponse = verstuur(notifyRequest);
