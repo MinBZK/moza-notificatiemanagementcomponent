@@ -53,7 +53,7 @@ public class NotificatieService {
         notificatieRepository.flush();
 
         try {
-            notificatie.setExternalReference(verzendAdapter.verstuurEmail(emailAdres, opdracht.berichtgegevens()));
+            notificatie.setExternalReference(verzendAdapter.verstuurEmail(emailAdres, opdracht.templateId(), opdracht.berichtgegevens()));
         } catch (NotifyNLConfiguratieException | NotifyNLVerzendException e) {
             Log.error("Fout bij versturen van notificatie", e);
             throw new NotificatieException("Notificatie kon niet worden verstuurd.");

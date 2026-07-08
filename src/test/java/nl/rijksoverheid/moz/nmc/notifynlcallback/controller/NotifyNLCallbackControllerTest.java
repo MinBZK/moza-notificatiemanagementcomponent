@@ -190,7 +190,8 @@ class NotifyNLCallbackControllerTest {
                   "identificatieType": "KVK",
                   "identificatieNummer": "12345678",
                   "dienstverlener": "Gemeente Voorbeeld",
-                  "dienst": "Parkeervergunning"%s
+                  "dienst": "Parkeervergunning",
+                  "berichtType": "Stuurgroep Agenda"%s
                 }
                 """.formatted(callbackPart);
     }
