@@ -7,7 +7,7 @@ asynchrone bezorgstatus:
 
 1. Een Dienstverlener (rechtstreeks, of via een OMC) roept
    `POST /api/nmc/v1/centraal/notificaties` aan met een identificatie (BSN/KVK/RSIN),
-   dienstverlener/dienst, het te versturen bericht en optioneel een `callbackUrl`.
+   dienstverlener/dienst, berichttype, optionele berichtgegevens en optioneel een `callbackUrl`.
 2. De NMC haalt synchroon de contactgegevens op bij de **Profielservice** op
    basis van die identificatie.
 3. De NMC verstuurt synchroon een e-mail via **NotifyNL**
@@ -34,8 +34,8 @@ document:
   KvK/BRP/NHR-fallback)
 - Herverzending
 - Het decentraal profiel / doorgeefluik-scenario voor OMC's
-- Een koppeling met de Templating Service: het Notify-`template_id` komt
-  voorlopig uit een vaste configuratiewaarde (`notify.template-id`)
+- Een koppeling met de **Templating Service**: het `template_id` wordt voorlopig
+  bepaald door een lokale `BerichtType`-enum in de NMC, niet via een externe Templating Service
 - Een observability-koppelvlak
 - `GET /centraal/notificaties/{id}`: statuspoll voor Dienstverleners zonder callbackUrl
 - Bearer-JWT-authenticatie voor de uitgaande consument-callback (momenteel geen
@@ -270,9 +270,8 @@ clients (zie "OpenAPI-specificatie & codegen" hierboven), geconfigureerd in
   `http://localhost:8080`; er moet dus een (lokale of gestubde) Profielservice
   op die poort draaien. In `%test` staat dit op `http://localhost:8081`, maar
   daar wordt de client toch gemockt.
-- `quarkus.rest-client.notify.url`, `notify.api-key` en `notify.template-id` —
-  wijzen naar NotifyNL. `notify.api-key` en `notify.template-id` staan leeg in
-  de repository en moeten lokaal (bijvoorbeeld in
+- `quarkus.rest-client.notify.url` en `notify.api-key` — wijzen naar NotifyNL.
+  `notify.api-key` staat leeg in de repository en moet lokaal (bijvoorbeeld in
   `application-dev.properties`, niet ingecheckt) ingevuld worden om de
   e-mailflow daadwerkelijk te laten werken.
 - `hash.pepper` — geheime pepper voor de keyed HMAC-SHA-256 in `HashHelper`
@@ -304,8 +303,8 @@ asynchrone bezorgstatus en consument-callback, zoals beschreven onder
 
 - **Contactherstel** en **herverzending**
 - Het **decentraal profiel**-scenario
-- Een koppeling met de **Templating Service** (nu wordt altijd hetzelfde,
-  gemockte bericht verstuurd, ongeacht het type notificatie)
+- Een koppeling met de **Templating Service** (het `template_id` wordt voorlopig
+  bepaald door een lokale `BerichtType`-enum, niet via een externe Templating Service)
 - **`GET /centraal/notificaties/{id}`** voor statuspoll zonder callbackUrl
 - **Bearer-JWT-authenticatie** voor de uitgaande consument-callback
 - Een uitgewerkt **observability-koppelvlak**

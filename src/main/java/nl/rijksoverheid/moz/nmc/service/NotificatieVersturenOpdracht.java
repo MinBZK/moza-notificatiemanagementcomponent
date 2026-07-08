@@ -11,6 +11,8 @@ public record NotificatieVersturenOpdracht(
         String identificatieNummer,
         String dienstverlener,
         String dienst,
+        String templateId,
         Map<String, String> berichtgegevens,
         String callbackUrl) {
 }
+ 
