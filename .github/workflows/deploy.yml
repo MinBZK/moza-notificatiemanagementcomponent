@@ -91,9 +91,6 @@ jobs:
           echo "digest=$(cat target/jib-image.digest)" >> "$GITHUB_OUTPUT"
 
   deploy-preview:
-    # event_name-guard nodig: bij push naar main is github.event.action leeg, dus
-    # 'action != closed' zou true zijn en deze preview-job zou meedraaien met een
-    # leeg PR-nummer (deployment 'pr-'). Beperken tot echte PR-events.
     if: github.event_name == 'pull_request' && github.event.action != 'closed'
     needs: build
     runs-on: ubuntu-latest
@@ -126,8 +123,6 @@ jobs:
 
   cleanup-preview:
     # Alleen bij sluiten van de PR: omgeving + image + GitHub environment opruimen.
-    # event_name-guard voor consistentie met deploy-preview; '== closed' is op push
-    # al false, maar zo staat de PR-scope expliciet in beide jobs.
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     permissions:
