@@ -1,5 +1,8 @@
-# Deploy elke Pull Request naar een ephemeral ZAD-omgeving, zodat de PR daar
-# getest kan worden. Bij sluiten van de PR wordt de omgeving opgeruimd.
+# Deploy naar ZAD (Operations Manager) via RijksICTGilde/zad-actions.
+#
+#   - Elke Pull Request → een ephemeral 'pr-<n>'-omgeving, zodat de PR daar getest
+#     kan worden. Bij sluiten van de PR wordt die omgeving opgeruimd.
+#   - Elke push/merge naar main → de persistente 'stable'-deployment.
 #
 # Vereiste repo-secrets:
 #   ZAD_API_KEY         — ZAD Operations Manager API key
@@ -7,18 +10,21 @@
 #
 # De applicatieconfiguratie (DB-url/credentials, notify.api-key, hash.pepper,
 # QUARKUS_FLYWAY_MIGRATE_AT_START=true, ...) komt NIET uit deze workflow maar uit
-# de ZAD-deploymentconfig. Via `clone-from` erven PR-deploys die config van een
-# base-deployment. Zie docs/zad-deploy.md.
+# de ZAD-deploymentconfig. Die config staat éénmalig per deployment in Operations
+# Manager: op 'stable' voor de main-deploy, op 'feature' als base waarvan PR-deploys
+# via `clone-from` erven. Zie docs/zad-deploy.md.
 #
-# TODO(#10): Deze env-vars worden nu handmatig op de 'feature'-deployment gezet.
-# ZAD heeft een Operations Manager API — dit zou via een script geautomatiseerd
+# TODO(#10): Deze env-vars worden nu handmatig op de 'feature'- en 'stable'-deployment
+# gezet. ZAD heeft een Operations Manager API — dit zou via een script geautomatiseerd
 # kunnen worden (idempotent env-vars zetten i.p.v. handmatige eenmalige setup).
 
-name: ZAD PR Deploy
+name: ZAD Deploy
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, closed]
+  push:
+    branches: [main]
 
 # Eén deploy-run tegelijk per PR; een nieuwe push wacht op de lopende i.p.v. die af
 # te breken (cancel-in-progress: false) — een halverwege afgebroken ZAD-deploy kan de
@@ -35,8 +41,8 @@ env:
 
 jobs:
   build:
-    # Niet bouwen wanneer de PR enkel gesloten wordt.
-    if: github.event.action != 'closed'
+    # Bouwen op push naar main en op elke PR-actie behalve 'closed' (dan enkel opruimen).
+    if: github.event_name == 'push' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -61,10 +67,18 @@ jobs:
         # maar maakt de push betrouwbaar.
         env:
           GROUP: minbzk # lowercase GHCR-owner (moet matchen met IMAGE_NAME)
-          TAG: pr-${{ github.event.number }}
+          EVENT: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.number }}
           GHCR_USER: ${{ github.actor }}
           QUARKUS_CONTAINER_IMAGE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Tag per event: PR → mutable pr-<n>; push naar main → main-<sha7>. Beide worden
+          # verderop op immutable digest gedeployd (verse pull i.p.v. gecachete tag).
+          if [ "$EVENT" = "push" ]; then
+            TAG="main-${GITHUB_SHA::7}"
+          else
+            TAG="pr-$PR_NUMBER"
+          fi
           ./mvnw -B package -DskipTests -Djib.serialize=true \
             -Dquarkus.container-image.build=true \
             -Dquarkus.container-image.push=true \
@@ -77,7 +91,7 @@ jobs:
           echo "digest=$(cat target/jib-image.digest)" >> "$GITHUB_OUTPUT"
 
   deploy-preview:
-    if: github.event.action != 'closed'
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -109,7 +123,7 @@ jobs:
 
   cleanup-preview:
     # Alleen bij sluiten van de PR: omgeving + image + GitHub environment opruimen.
-    if: github.event.action == 'closed'
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     permissions:
       deployments: write
@@ -131,3 +145,33 @@ jobs:
           container-name: ${{ github.event.repository.name }}
           container-tag: pr-${{ github.event.number }}
           github-admin-token: ${{ secrets.GITHUB_ADMIN_TOKEN }}
+
+  # Push/merge naar main → de persistente 'stable'-deployment (de baseline-omgeving).
+  # Config (DB-url/creds, notify.api-key, hash.pepper, flyway-flag, ...) staat éénmalig op de
+  # 'stable'-deployment in Operations Manager — deze workflow draagt geen env, dus géén
+  # clone-from (in tegenstelling tot de PR-preview, die van 'feature' erft).
+  deploy-stable:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write # GitHub environment/deployment aanmaken
+    environment:
+      name: stable
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Deploy to ZAD (stable)
+        id: deploy
+        uses: RijksICTGilde/zad-actions/deploy@v4
+        with:
+          api-key: ${{ secrets.ZAD_API_KEY }}
+          project-id: ${{ env.ZAD_PROJECT_ID }}
+          deployment-name: stable
+          component: nmcapi
+          # Deploy op digest (niet de mutable main-<sha7> tag) zodat ZAD altijd de net
+          # gebouwde image pullt i.p.v. een gecachete oude versie van dezelfde tag.
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.digest }}
+          # Wacht tot de app daadwerkelijk up is; readiness bevat de datasource-check.
+          wait-for-ready: 'true'
+          health-endpoint: /q/health/ready
