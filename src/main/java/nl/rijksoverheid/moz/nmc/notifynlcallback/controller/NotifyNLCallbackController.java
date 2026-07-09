@@ -14,9 +14,6 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
         this.notificatieService = notificatieService;
     }
 
-    // TODO #755 (NMC: Authenticatie nodig bij callback endpoint voor NotifyNL richting NMC)
-// (security): this endpoint has no authentication. GOV.UK Notify supports a callback
-// bearer token that should be validated here to prevent callers from submitting fake delivery receipts.
     @Override
     public void verwerkAfleverstatus(AfleverstatusRequest afleverstatusRequest) {
         try {
