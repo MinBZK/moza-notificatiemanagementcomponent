@@ -45,6 +45,12 @@ paths:
               schema:
                 type: string
               description: Versie van de API
+        '401':
+          description: Ontbrekend of ongeldig bearer token
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '400':
           description: Ongeldige aanvraag
           content:

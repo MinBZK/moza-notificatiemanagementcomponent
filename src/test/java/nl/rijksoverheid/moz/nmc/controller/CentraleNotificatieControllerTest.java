@@ -94,6 +94,28 @@ class CentraleNotificatieControllerTest {
     }
 
     @Test
+    void notificatieVersturen_zonderDienst_retourneert200() {
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail("burger@example.nl", true));
+        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(UUID.randomUUID()));
+
+        String aanvraag = """
+                {
+                  "identificatieType": "KVK",
+                  "identificatieNummer": "12345678",
+                  "dienstverlener": "Gemeente Voorbeeld",
+                  "berichtType": "Stuurgroep Agenda"
+                }
+                """;
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(aanvraag)
+                .when().post("/api/nmc/v1/centraal/notificaties")
+                .then()
+                .statusCode(200);
+    }
+
+    @Test
     void notificatieVersturen_ontbrekendIdentificatieNummer_retourneert400() {
         String aanvraag = """
                 {

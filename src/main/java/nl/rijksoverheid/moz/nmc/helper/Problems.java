@@ -8,6 +8,14 @@ public final class Problems {
     private Problems() {
     }
 
+    public static HttpProblem unauthorized(String title, String detail) {
+        return HttpProblem.builder()
+                .withStatus(Response.Status.UNAUTHORIZED)
+                .withTitle(title)
+                .withDetail(detail)
+                .build();
+    }
+
     public static HttpProblem badRequest(String title, String detail) {
         return HttpProblem.builder()
                 .withStatus(Response.Status.BAD_REQUEST)

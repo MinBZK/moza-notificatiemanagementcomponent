@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
+import io.quarkus.logging.Log;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.Logboek;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
 import nl.rijksoverheid.moz.nmc.api.NotificatiesApi;
@@ -46,6 +47,7 @@ public class CentraleNotificatieController implements NotificatiesApi {
         } catch (OnbekendBerichtTypeException | PartijNietGevondenException | GeenEmailadresGevondenException e) {
             throw Problems.badRequest("Notificatie niet verstuurd.", e.getMessage());
         } catch (Exception e) {
+            Log.error("Onverwachte fout bij versturen van notificatie", e);
             throw Problems.serverError("Verzendfout", "Er kan momenteel geen notificatie worden verstuurd");
         }
     }

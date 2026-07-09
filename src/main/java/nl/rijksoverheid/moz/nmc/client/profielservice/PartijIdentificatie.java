@@ -7,5 +7,5 @@ public record PartijIdentificatie(
         @NotNull IdentificatieType identificatieType,
         @NotNull String identificatieNummer,
         @NotNull String dienstverlener,
-        @NotNull String dienst) {
+        String dienst) {
 }

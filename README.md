@@ -185,13 +185,15 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   partij of e-mailadres gevonden wordt, `500` bij een Profielservice-fout, en
   `502` als NotifyNL geen `201` teruggeeft.
 - **`POST /notifynl-callback`**: webhook waarop NotifyNL de bezorgstatus
-  (delivery receipt) van een verzending terugmeldt. De NMC werkt de status bij
-  en stuurt — indien een `callbackUrl` aanwezig is — een **CloudEvents NL GOV**
-  statusupdate naar die URL. Retourneert `204` op succes en `404` als de
-  NotifyNL-referentie onbekend is. Dit endpoint heeft een eigen, losse
-  OpenAPI-specificatie (zie hieronder), zodat het makkelijk te verwijderen is
-  zodra de NMC publiek bereikbaar is en NotifyNL een echte callback-URL kan
-  benaderen.
+  (delivery receipt) van een verzending terugmeldt. Beveiligd met een bearer
+  token dat geconfigureerd wordt in NotifyNL's dashboard en via
+  `notify.callback.bearer-token` in de NMC. De NMC werkt de status bij en
+  stuurt — indien een `callbackUrl` aanwezig is — een **CloudEvents NL GOV**
+  statusupdate naar die URL. Retourneert `204` op succes, `401` bij een
+  ontbrekend of ongeldig bearer token, en `404` als de NotifyNL-referentie
+  onbekend is. Dit endpoint heeft een eigen, losse OpenAPI-specificatie (zie
+  hieronder), zodat het makkelijk te verwijderen is zodra de NMC publiek
+  bereikbaar is en NotifyNL een echte callback-URL kan benaderen.
 
 Gepland/toekomstig (nog niet aanwezig):
 
@@ -274,6 +276,12 @@ clients (zie "OpenAPI-specificatie & codegen" hierboven), geconfigureerd in
   `notify.api-key` staat leeg in de repository en moet lokaal (bijvoorbeeld in
   `application-dev.properties`, niet ingecheckt) ingevuld worden om de
   e-mailflow daadwerkelijk te laten werken.
+- `notify.callback.bearer-token` — het bearer token waarmee NotifyNL zich
+  authenticeert op het `/notifynl-callback`-endpoint. Staat leeg in de
+  repository; zonder waarde start de applicatie niet op. Lokaal in te vullen
+  via `application-dev.properties`. In productie/ZAD als secret instellen en
+  hetzelfde token configureren in NotifyNL's dashboard onder "API integration
+  → Callbacks".
 - `hash.pepper` — geheime pepper voor de keyed HMAC-SHA-256 in `HashHelper`
   (gebruikt om BSN/KVK/RSIN te pseudonimiseren voor de logboek-context). Staat
   ook leeg in de repository; zonder waarde (en zonder `%dev`/`%test`-override)

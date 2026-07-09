@@ -32,6 +32,9 @@ import static org.mockito.ArgumentMatchers.any;
 @QuarkusTest
 class NotifyNLCallbackControllerTest {
 
+    // Moet overeenkomen met %test.notify.callback.bearer-token in application.properties
+    private static final String CALLBACK_BEARER_TOKEN = "test-callback-token-niet-voor-productie";
+
     @InjectMock
     @RestClient
     ProfielApi profielApi;
@@ -73,6 +76,7 @@ class NotifyNLCallbackControllerTest {
 
         given()
                 .contentType(ContentType.JSON)
+                .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
                 .body(deliveryReceipt(notifyNlId, "delivered"))
                 .when().post("/api/nmc/v1/notifynl-callback")
                 .then()
@@ -83,10 +87,34 @@ class NotifyNLCallbackControllerTest {
     void verwerkAfleverstatus_onbekendId_retourneert404() {
         given()
                 .contentType(ContentType.JSON)
+                .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
                 .body(deliveryReceipt(UUID.randomUUID(), "delivered"))
                 .when().post("/api/nmc/v1/notifynl-callback")
                 .then()
                 .statusCode(404)
+                .contentType("application/problem+json");
+    }
+
+    @Test
+    void verwerkAfleverstatus_ongeldigBearerToken_retourneert401() {
+        given()
+                .contentType(ContentType.JSON)
+                .header("Authorization", "Bearer ongeldig-token")
+                .body(deliveryReceipt(UUID.randomUUID(), "delivered"))
+                .when().post("/api/nmc/v1/notifynl-callback")
+                .then()
+                .statusCode(401)
+                .contentType("application/problem+json");
+    }
+
+    @Test
+    void verwerkAfleverstatus_geenBearerToken_retourneert401() {
+        given()
+                .contentType(ContentType.JSON)
+                .body(deliveryReceipt(UUID.randomUUID(), "delivered"))
+                .when().post("/api/nmc/v1/notifynl-callback")
+                .then()
+                .statusCode(401)
                 .contentType("application/problem+json");
     }
 
@@ -104,6 +132,7 @@ class NotifyNLCallbackControllerTest {
 
         given()
                 .contentType(ContentType.JSON)
+                .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
                 .body(deliveryReceipt(notifyNlId, "some-unknown-status"))
                 .when().post("/api/nmc/v1/notifynl-callback")
                 .then()
@@ -127,6 +156,7 @@ class NotifyNLCallbackControllerTest {
 
         given()
                 .contentType(ContentType.JSON)
+                .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
                 .body(deliveryReceipt(notifyNlId, "delivered"))
                 .when().post("/api/nmc/v1/notifynl-callback")
                 .then()
@@ -149,6 +179,7 @@ class NotifyNLCallbackControllerTest {
 
         given()
                 .contentType(ContentType.JSON)
+                .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
                 .body(deliveryReceipt(notifyNlId, "delivered"))
                 .when().post("/api/nmc/v1/notifynl-callback")
                 .then()
@@ -171,6 +202,7 @@ class NotifyNLCallbackControllerTest {
 
         given()
                 .contentType(ContentType.JSON)
+                .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
                 .body(deliveryReceipt(notifyNlId, "delivered"))
                 .when().post("/api/nmc/v1/notifynl-callback")
                 .then()
