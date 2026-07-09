@@ -70,7 +70,7 @@ public class ProfielServiceAdapter {
     }
 
     private boolean heeftExacteScope(ContactgegevenResponse email, String dienstverlener, String dienst) {
-        return email.getScopes() != null && email.getScopes().stream()
+        return dienst != null && email.getScopes() != null && email.getScopes().stream()
                 .anyMatch(s -> dienstverlener.equals(s.getDienstverlenerNaam()) && dienst.equals(s.getDienstNaam()));
     }
 

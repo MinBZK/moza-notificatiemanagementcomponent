@@ -76,7 +76,6 @@ components:
         - identificatieType
         - identificatieNummer
         - dienstverlener
-        - dienst
         - berichtType
       properties:
         identificatieType:
@@ -92,7 +91,7 @@ components:
         dienst:
           type: string
           minLength: 1
-          description: Naam van de dienst waarvoor de notificatie wordt verstuurd
+          description: Naam van de dienst waarvoor de notificatie wordt verstuurd (optioneel)
         berichtType:
           type: string
           minLength: 1
