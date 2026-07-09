@@ -3,9 +3,11 @@ package nl.rijksoverheid.moz.nmc.notifynlcallback.controller;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.NotifyNlCallbackApi;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
+import nl.rijksoverheid.moz.nmc.notifynlcallback.filter.NotifyNLCallbackBeveiligd;
 import nl.rijksoverheid.moz.nmc.service.NotificatieNietGevondenException;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 
+@NotifyNLCallbackBeveiligd
 public class NotifyNLCallbackController implements NotifyNlCallbackApi {
 
     private final NotificatieService notificatieService;
