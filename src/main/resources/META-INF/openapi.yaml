@@ -95,7 +95,7 @@ components:
         berichtType:
           type: string
           minLength: 1
-          description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda"
+          description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template"
         berichtgegevens:
           type: object
           description: Templatevariabelen voor het bericht
