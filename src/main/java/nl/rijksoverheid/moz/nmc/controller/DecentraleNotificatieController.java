@@ -22,8 +22,8 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
     // Betrokkene is bij decentraal alleen via het e-mailadres bekend (geen BSN/KVK/RSIN).
     private static final String BETROKKENE_TYPE_EMAIL = "EMAIL";
 
-    // Aanwezigheid van emailAdres dwingt de gegenereerde @NotNull/@Size af; het formaat niet
-    // (de generator maakt geen @Email/@Pattern uit `format: email`), dus dat checken we hier.
+    // `format: email` levert geen @Email/@Pattern op bij de generator, dus het e-mailadresformaat
+    // valideren we hier.
     private static final Pattern EMAIL_PATROON = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
     private final NotificatieService notificatieService;
@@ -60,7 +60,7 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
     }
 
     private static void valideerEmailAdres(String emailAdres) {
-        if (!EMAIL_PATROON.matcher(emailAdres).matches()) {
+        if (emailAdres == null || !EMAIL_PATROON.matcher(emailAdres).matches()) {
             throw Problems.badRequest("Notificatie niet verstuurd.", "Ongeldig e-mailadres");
         }
     }
