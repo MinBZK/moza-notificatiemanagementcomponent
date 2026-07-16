@@ -27,13 +27,24 @@ de status opvragen via `GET /centraal/notificaties/{id}` (nog niet geïmplemente
 Dit is het **centraal profiel**-scenario (zie "De twee assen" hieronder),
 waarbij de NMC zelf de contactgegevens opzoekt.
 
+### Decentraal profiel (doorgeefluik)
+
+Naast het centraal profiel ondersteunt de NMC het **decentraal profiel**: de
+aanroeper (doorgaans een OMC) heeft de contactgegevens zelf al bepaald en levert
+het e-mailadres rechtstreeks aan via `POST /api/nmc/v1/decentraal/notificaties`
+(e-mailadres, berichttype, optionele berichtgegevens en optioneel een `callbackUrl`).
+De NMC slaat de Profielservice-lookup (stap 2 hierboven) over en verstuurt direct
+via NotifyNL; stappen 3 t/m 6 (opslaan, `notificatieId` retourneren, asynchrone
+bezorgstatus via de NotifyNL-callback en de CloudEvents-statusupdate naar de
+`callbackUrl`) zijn identiek aan het centraal profiel.
+
 Nog **niet** geïmplementeerd, maar wel onderdeel van de visie verderop in dit
 document:
 
 - Contactherstel (fysieke post via Printstraat/Postadres,
   KvK/BRP/NHR-fallback)
 - Herverzending
-- Het decentraal profiel / doorgeefluik-scenario voor OMC's
+- Contactherstel bij het decentraal profiel (op verzoek van de aanroeper)
 - Een koppeling met de **Templating Service**: het `template_id` wordt voorlopig
   bepaald door een lokale `BerichtType`-enum in de NMC, niet via een externe Templating Service
 - Een observability-koppelvlak
@@ -305,12 +316,11 @@ Bovenstaande draait de app in **dev-mode** (`%dev`-profiel: Postgres uit
 
 ## Status & vervolgstappen
 
-De NMC implementeert de centraal-profiel happy-flow inclusief de
+De NMC implementeert de centraal- en decentraal-profiel happy-flows inclusief de
 asynchrone bezorgstatus en consument-callback, zoals beschreven onder
 "Geïmplementeerde functionaliteit". Nog **niet** aanwezig:
 
-- **Contactherstel** en **herverzending**
-- Het **decentraal profiel**-scenario
+- **Contactherstel** en **herverzending** (voor beide profielen)
 - Een koppeling met de **Templating Service** (het `template_id` wordt voorlopig
   bepaald door een lokale `BerichtType`-enum, niet via een externe Templating Service)
 - **`GET /centraal/notificaties/{id}`** voor statuspoll zonder callbackUrl
