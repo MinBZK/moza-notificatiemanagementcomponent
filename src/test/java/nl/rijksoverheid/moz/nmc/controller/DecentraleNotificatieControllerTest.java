@@ -151,7 +151,7 @@ class DecentraleNotificatieControllerTest {
     }
 
     @Test
-    void decentraleNotificatieVersturen_notifyGeenStatus201_retourneert500() {
+    void decentraleNotificatieVersturen_notifyGeeftFoutstatus_retourneert500() {
         Mockito.when(sendAMessageApi.sendEmail(any()))
                 .thenThrow(new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build()));
 

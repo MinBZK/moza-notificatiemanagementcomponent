@@ -22,8 +22,8 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
     // Betrokkene is bij decentraal alleen via het e-mailadres bekend (geen BSN/KVK/RSIN).
     private static final String BETROKKENE_TYPE_EMAIL = "EMAIL";
 
-    // Bean-validation op de request-body wordt in deze setup niet afgedwongen, dus valideren we
-    // het e-mailadresformaat hier expliciet (spec belooft format: email).
+    // Aanwezigheid van emailAdres dwingt de gegenereerde @NotNull/@Size af; het formaat niet
+    // (de generator maakt geen @Email/@Pattern uit `format: email`), dus dat checken we hier.
     private static final Pattern EMAIL_PATROON = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
     private final NotificatieService notificatieService;
@@ -42,6 +42,8 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
     @Logboek(name = "decentraleNotificatieVersturen", processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
     public NotificatieResponse decentraleNotificatieVersturen(DecentraleNotificatieAanvraagRequest request) {
         // TODO #758 (Logboek context setten via annotatie ipv in method body)
+        // Betrokkene-id eerst zetten: de @Logboek-interceptor eist een niet-lege data_subject_id,
+        // ook als valideerEmailAdres hieronder met een 400 afbreekt.
         logboekContext.setDataSubjectId(hashHelper.hashIdentifier(request.getEmailAdres()));
         logboekContext.setDataSubjectType(BETROKKENE_TYPE_EMAIL);
         valideerEmailAdres(request.getEmailAdres());
@@ -58,7 +60,7 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
     }
 
     private static void valideerEmailAdres(String emailAdres) {
-        if (emailAdres == null || !EMAIL_PATROON.matcher(emailAdres).matches()) {
+        if (!EMAIL_PATROON.matcher(emailAdres).matches()) {
             throw Problems.badRequest("Notificatie niet verstuurd.", "Ongeldig e-mailadres");
         }
     }
