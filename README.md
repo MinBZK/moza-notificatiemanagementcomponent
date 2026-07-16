@@ -27,7 +27,7 @@ de status opvragen via `GET /centraal/notificaties/{id}` (nog niet geïmplemente
 Dit is het **centraal profiel**-scenario (zie "De twee assen" hieronder),
 waarbij de NMC zelf de contactgegevens opzoekt.
 
-### Decentraal profiel (doorgeefluik)
+### Decentraal profiel
 
 Naast het centraal profiel ondersteunt de NMC het **decentraal profiel**: de
 aanroeper (doorgaans een OMC) heeft de contactgegevens zelf al bepaald en levert
