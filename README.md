@@ -189,13 +189,15 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   verstuurt de e-mail via NotifyNL, slaat de notificatie op en retourneert een
   `notificatieId`. Optioneel kan een `callbackUrl` worden meegegeven voor
   asynchrone statusupdates. Retourneert `200` op succes, `400` als er geen
-  partij of e-mailadres gevonden wordt, `500` bij een Profielservice-fout, en
-  `502` als NotifyNL geen `201` teruggeeft.
+  partij of e-mailadres gevonden wordt, en `500` bij een Profielservice-fout of
+  wanneer NotifyNL de verzending niet accepteert.
 - **`POST /decentraal/notificaties`**: verstuurt de e-mail rechtstreeks naar het
   meegegeven e-mailadres (geen Profielservice-lookup), slaat de notificatie op en
   retourneert een `notificatieId`. Optioneel kan een `callbackUrl` worden meegegeven.
-  Retourneert `200` op succes, `400` bij een ongeldig e-mailadres of onbekend
-  berichttype, en `500` als het versturen mislukt.
+  Retourneert `200` op succes, `400` bij een onbekend berichttype, en `500` als het
+  versturen mislukt. Een ongeldig e-mailadres hoort volgens de spec een `400` te geven,
+  maar geeft voorlopig een `500` (zie TODO #758); dat geldt net zo voor de
+  `minLength`-velden op beide endpoints.
 - **`POST /notifynl-callback`**: webhook waarop NotifyNL de bezorgstatus
   (delivery receipt) van een verzending terugmeldt. Beveiligd met een bearer
   token dat geconfigureerd wordt in NotifyNL's dashboard en via
@@ -240,7 +242,7 @@ specificaties:
   voor runtime-documentatie.
 - Bij elke build genereert de `openapi-generator-maven-plugin` (twee losse
   `<execution>`s, één per spec) hieruit de JAX-RS-interfaces
-  (`nl.rijksoverheid.moz.nmc.api.NotificatiesApi` en `DecentraleNotificatiesApi`,
+  (`nl.rijksoverheid.moz.nmc.api.CentraleNotificatiesApi` en `DecentraleNotificatiesApi`,
   `nl.rijksoverheid.moz.nmc.notifynlcallback.api.NotifyNlCallbackApi`) en de
   request/response-modellen (`nl.rijksoverheid.moz.nmc.api.model.*`,
   `nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.*`) in

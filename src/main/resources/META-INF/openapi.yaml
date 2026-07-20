@@ -15,7 +15,7 @@ info:
 # de prod-host — zonder per-omgeving een URL te hoeven invullen.
 
 tags:
-  - name: Notificaties
+  - name: CentraleNotificaties
     description: >-
       Centrale notificaties (centraal profiel); de NMC raadpleegt de Profielservice
       voor de contactgegevens van de ontvanger.
@@ -34,7 +34,7 @@ paths:
         en slaat de notificatie op. Als een callbackUrl is meegegeven, stuurt de
         NMC asynchroon een statusupdate (CloudEvents) zodra de bezorgstatus bekend is.
       tags:
-        - Notificaties
+        - CentraleNotificaties
       requestBody:
         required: true
         content:
@@ -174,7 +174,10 @@ components:
         emailAdres:
           type: string
           format: email
-          minLength: 1
+          # De generator maakt hier geen @Email van, dus het formaat staat expliciet als
+          # `pattern`. Let op: bean-validatie slaat toe vóór de method body, waardoor een
+          # ongeldig adres voorlopig een 500 geeft in plaats van een 400 (zie TODO #758).
+          pattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
           description: E-mailadres van de ontvanger
         berichtType:
           type: string

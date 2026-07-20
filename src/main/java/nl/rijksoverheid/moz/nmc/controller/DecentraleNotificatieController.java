@@ -15,16 +15,9 @@ import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 import nl.rijksoverheid.moz.nmc.service.OnbekendBerichtTypeException;
 import org.jspecify.annotations.NonNull;
 
-import java.util.regex.Pattern;
-
 public class DecentraleNotificatieController implements DecentraleNotificatiesApi {
 
-    // Betrokkene is bij decentraal alleen via het e-mailadres bekend (geen BSN/KVK/RSIN).
     private static final String BETROKKENE_TYPE_EMAIL = "EMAIL";
-
-    // `format: email` levert geen @Email/@Pattern op bij de generator, dus het e-mailadresformaat
-    // valideren we hier.
-    private static final Pattern EMAIL_PATROON = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
     private final NotificatieService notificatieService;
     private final LogboekContext logboekContext;
@@ -42,11 +35,9 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
     @Logboek(name = "decentraleNotificatieVersturen", processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
     public NotificatieResponse decentraleNotificatieVersturen(DecentraleNotificatieAanvraagRequest request) {
         // TODO #758 (Logboek context setten via annotatie ipv in method body)
-        // Betrokkene-id eerst zetten: de @Logboek-interceptor eist een niet-lege data_subject_id,
-        // ook als valideerEmailAdres hieronder met een 400 afbreekt.
+        // Betrokkene-id eerst zetten: de @Logboek-interceptor eist een niet-lege data_subject_id.
         logboekContext.setDataSubjectId(hashHelper.hashIdentifier(request.getEmailAdres()));
         logboekContext.setDataSubjectType(BETROKKENE_TYPE_EMAIL);
-        valideerEmailAdres(request.getEmailAdres());
 
         try {
             Notificatie notificatie = notificatieService.verstuurDecentraal(getOpdracht(request));
@@ -59,17 +50,12 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
         }
     }
 
-    private static void valideerEmailAdres(String emailAdres) {
-        if (emailAdres == null || !EMAIL_PATROON.matcher(emailAdres).matches()) {
-            throw Problems.badRequest("Notificatie niet verstuurd.", "Ongeldig e-mailadres");
-        }
-    }
-
     private static @NonNull DecentraleNotificatieVersturenOpdracht getOpdracht(DecentraleNotificatieAanvraagRequest request) {
         // TODO #752 (zie NMC: CallbackUrl wordt niet gevalideerd (SSRF risico))
         // (security): callbackUrl is unvalidated caller input that we later POST to — SSRF risk.
         String callbackUrl = request.getCallbackUrl() != null ? request.getCallbackUrl().toString() : null;
         String templateId = BerichtType.vanNaam(request.getBerichtType()).getTemplateId();
+
         return new DecentraleNotificatieVersturenOpdracht(
                 request.getEmailAdres(),
                 templateId,
