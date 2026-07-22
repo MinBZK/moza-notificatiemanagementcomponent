@@ -137,10 +137,15 @@ through only a bare identifier and let NMC lead.
   skeleton)
 
 ## Status
-- Inbound API contract (`/api/nmc/v1`: create notification, Notify
+- Inbound API contract (`/api/nmc/v1`: **centraal** create notification
+  `POST /centraal/notificaties` — resolves contact data via Profielservice;
+  **decentraal** create notification `POST /decentraal/notificaties` — caller
+  supplies the email address directly, no Profielservice lookup; Notify
   delivery-receipt webhook) and the domain model/repositories/service layer
   behind it are implemented, with `@QuarkusTest` + RestAssured controller
-  tests. `get status` and `initiate contactherstel` are planned but not yet
+  tests. Both create-flows share `NotificatieService.verstuurNaarEmail(...)`
+  (persist → NotifyNL → status); the centraal flow prepends the Profielservice
+  lookup. `get status` and `initiate contactherstel` are planned but not yet
   implemented — no such endpoints exist yet
 - Outbound integrations to Profielservice and NotifyNL are implemented as
   real `@RestClient`-backed adapters (mocked only in tests)

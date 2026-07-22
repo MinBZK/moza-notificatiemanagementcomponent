@@ -13,6 +13,7 @@ import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 
+import java.util.Map;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -43,17 +44,26 @@ public class NotificatieService {
                 opdracht.identificatieType(), opdracht.identificatieNummer(),
                 opdracht.dienstverlener(), opdracht.dienst()));
 
+        return verstuurNaarEmail(emailAdres, opdracht.templateId(), opdracht.berichtgegevens(), opdracht.callbackUrl());
+    }
+
+    @Transactional
+    public Notificatie verstuurDecentraal(DecentraleNotificatieVersturenOpdracht opdracht) {
+        return verstuurNaarEmail(opdracht.emailAdres(), opdracht.templateId(), opdracht.berichtgegevens(), opdracht.callbackUrl());
+    }
+
+    private Notificatie verstuurNaarEmail(String emailAdres, String templateId, Map<String, String> berichtgegevens, String callbackUrl) {
         // Persist (en flush) vóór de NotifyNL-aanroep, zodat een INSERT-fout (constraint, DB down,
         // pool uitgeput) opduikt vóórdat de e-mail verstuurd is. Let op: flush is geen commit — dit
         // dekt alleen faal vóór het versturen. Faalt de commit ná verstuurEmail(), dan rolt ook deze
         // INSERT terug: e-mail verstuurd, geen record. Dat venster sluiten (record in aparte transactie)
         // hoort bij TODO #732.
-        Notificatie notificatie = new Notificatie(opdracht.callbackUrl());
+        Notificatie notificatie = new Notificatie(callbackUrl);
         notificatieRepository.persist(notificatie);
         notificatieRepository.flush();
 
         try {
-            notificatie.setExternalReference(verzendAdapter.verstuurEmail(emailAdres, opdracht.templateId(), opdracht.berichtgegevens()));
+            notificatie.setExternalReference(verzendAdapter.verstuurEmail(emailAdres, templateId, berichtgegevens));
         } catch (NotifyNLConfiguratieException | NotifyNLVerzendException e) {
             Log.error("Fout bij versturen van notificatie", e);
             throw new NotificatieException("Notificatie kon niet worden verstuurd.");
