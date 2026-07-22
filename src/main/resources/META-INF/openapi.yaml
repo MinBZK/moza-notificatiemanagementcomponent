@@ -175,8 +175,7 @@ components:
           type: string
           format: email
           # De generator maakt hier geen @Email van, dus het formaat staat expliciet als
-          # `pattern`. Let op: bean-validatie slaat toe vóór de method body, waardoor een
-          # ongeldig adres voorlopig een 500 geeft in plaats van een 400 (zie TODO #804).
+          # `pattern`.
           pattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
           description: E-mailadres van de ontvanger
         berichtType:
