@@ -86,6 +86,20 @@ class NotificatieServiceTest {
     }
 
     @Test
+    void verstuurDecentraal_happyFlow_verstuurtNaarOpgegevenEmailZonderProfielserviceLookup() throws NotifyNLConfiguratieException, NotifyNLVerzendException {
+        UUID notifyNlId = UUID.randomUUID();
+        when(verzendAdapter.verstuurEmail(eq("burger@example.nl"), eq(TEST_TEMPLATE_ID), eq(Map.of("naam", "Voorbeeld BV")))).thenReturn(notifyNlId);
+
+        Notificatie resultaat = service.verstuurDecentraal(
+                new DecentraleNotificatieVersturenOpdracht("burger@example.nl", TEST_TEMPLATE_ID, Map.of("naam", "Voorbeeld BV"), "https://omc.example.nl/callback"));
+
+        assertEquals(NotificatieStatus.SENDING, resultaat.getStatus());
+        assertEquals(notifyNlId, resultaat.getExternalReference());
+        assertEquals("https://omc.example.nl/callback", resultaat.getCallbackUrl());
+        verifyNoInteractions(profielServiceAdapter);
+    }
+
+    @Test
     void verwerkAfleverstatus_onbekendNotifyNlId_gooitNotificatieNietGevondenException() {
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.empty());
 

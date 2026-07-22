@@ -14,6 +14,16 @@ info:
 # juiste host — lokaal `localhost`, elke PR-deploy zijn eigen `pr-N`-host, prod
 # de prod-host — zonder per-omgeving een URL te hoeven invullen.
 
+tags:
+  - name: CentraleNotificaties
+    description: >-
+      Centrale notificaties (centraal profiel); de NMC raadpleegt de Profielservice
+      voor de contactgegevens van de ontvanger.
+  - name: DecentraleNotificaties
+    description: >-
+      Decentrale notificaties (decentraal profiel / doorgeefluik); de aanroeper heeft
+      de contactgegevens zelf al bepaald en levert het e-mailadres rechtstreeks aan.
+
 paths:
   /api/nmc/v1/centraal/notificaties:
     post:
@@ -24,7 +34,7 @@ paths:
         en slaat de notificatie op. Als een callbackUrl is meegegeven, stuurt de
         NMC asynchroon een statusupdate (CloudEvents) zodra de bezorgstatus bekend is.
       tags:
-        - Notificaties
+        - CentraleNotificaties
       requestBody:
         required: true
         content:
@@ -48,6 +58,49 @@ paths:
             Ongeldige aanvraag, of er kon geen notificatie worden gedaan voor de
             opgegeven partij (geen partij of geen e-mailadres gevonden voor de
             opgegeven identificatie)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: De notificatie kon niet (succesvol) verzonden worden
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /api/nmc/v1/decentraal/notificaties:
+    post:
+      operationId: decentraleNotificatieVersturen
+      summary: Notificatie versturen op basis van een e-mailadres
+      description: |
+        Verstuurt een notificatie rechtstreeks naar het opgegeven e-mailadres, zonder
+        de Profielservice te raadplegen (decentraal profiel / doorgeefluik). De aanroeper
+        heeft de contactgegevens zelf al bepaald en geeft het e-mailadres mee. Als een
+        callbackUrl is meegegeven, stuurt de NMC asynchroon een statusupdate (CloudEvents)
+        zodra de bezorgstatus bekend is.
+      tags:
+        - DecentraleNotificaties
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecentraleNotificatieAanvraagRequest'
+      responses:
+        '200':
+          description: Notificatie succesvol verstuurd
+          headers:
+            API-Version:
+              schema:
+                type: string
+              description: Versie van de API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificatieResponse'
+        '400':
+          description: Ongeldige aanvraag (bijv. ontbrekend/ongeldig e-mailadres of onbekend berichttype)
           content:
             application/problem+json:
               schema:
@@ -108,6 +161,39 @@ components:
             Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
             terugstuurt zodra de bezorgstatus bekend is. Weglaten als de
             Dienstverlener de status zelf opvraagt via GET /notificaties/{id}.
+
+    DecentraleNotificatieAanvraagRequest:
+      type: object
+      description: >-
+        Aanvraag om een notificatie te versturen naar een reeds bekend e-mailadres
+        (decentraal profiel; geen Profielservice-lookup)
+      required:
+        - emailAdres
+        - berichtType
+      properties:
+        emailAdres:
+          type: string
+          format: email
+          # De generator maakt hier geen @Email van, dus het formaat staat expliciet als
+          # `pattern`. Let op: bean-validatie slaat toe vóór de method body, waardoor een
+          # ongeldig adres voorlopig een 500 geeft in plaats van een 400 (zie TODO #804).
+          pattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+          description: E-mailadres van de ontvanger
+        berichtType:
+          type: string
+          minLength: 1
+          description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template"
+        berichtgegevens:
+          type: object
+          description: Templatevariabelen voor het bericht
+          additionalProperties:
+            type: string
+        callbackUrl:
+          type: string
+          format: uri
+          description: >-
+            Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
+            terugstuurt zodra de bezorgstatus bekend is.
 
     NotificatieResponse:
       type: object

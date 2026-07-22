@@ -3,7 +3,7 @@ package nl.rijksoverheid.moz.nmc.controller;
 import io.quarkus.logging.Log;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.Logboek;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
-import nl.rijksoverheid.moz.nmc.api.NotificatiesApi;
+import nl.rijksoverheid.moz.nmc.api.CentraleNotificatiesApi;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieAanvraagRequest;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.GeenEmailadresGevondenException;
@@ -17,7 +17,7 @@ import nl.rijksoverheid.moz.nmc.service.NotificatieVersturenOpdracht;
 import nl.rijksoverheid.moz.nmc.service.OnbekendBerichtTypeException;
 import org.jspecify.annotations.NonNull;
 
-public class CentraleNotificatieController implements NotificatiesApi {
+public class CentraleNotificatieController implements CentraleNotificatiesApi {
 
     private final NotificatieService notificatieService;
     private final LogboekContext logboekContext;
