@@ -50,7 +50,7 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }} # immutable digest voor verse pull
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-java@v5.6.0
         with:
           distribution: temurin
