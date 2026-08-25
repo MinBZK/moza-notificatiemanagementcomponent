@@ -22,6 +22,19 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- Security-override op de Quarkus-BOM: die levert netty 4.1.136.Final via vertx-core,
+                 kwetsbaar voor GHSA-8c42-7qj2-3j46 (cache poisoning / informatielek doordat de
+                 CORS-handler de Vary-header overschrijft). Gepatcht in 4.1.137.Final. De BOM-import
+                 staat hieronder, en bij Maven wint de eerste declaratie, dus deze import bepaalt de
+                 netty-versie. Bewust binnen de 4.1-lijn blijven: Vert.x 4.5 verwacht netty 4.1, niet 4.2.
+                 Weghalen zodra de Quarkus-BOM zelf >= 4.1.137.Final levert. -->
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-bom</artifactId>
+                <version>4.1.137.Final</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>${quarkus.platform.group-id}</groupId>
                 <artifactId>${quarkus.platform.artifact-id}</artifactId>
