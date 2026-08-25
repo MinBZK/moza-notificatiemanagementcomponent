@@ -1,5 +1,13 @@
 *
 
+# ClusterFuzzLite Docker build (see .clusterfuzzlite/Dockerfile). Zonder deze
+# uitzonderingen valt de hele repo buiten de build-context en faalt de COPY.
+!.clusterfuzzlite/*
+!src/**
+!pom.xml
+!mvnw
+!.mvn/**
+
 # Quarkus production Docker builds (see src/main/docker/)
 !target/*-runner
 !target/*-runner.jar
