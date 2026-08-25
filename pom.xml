@@ -122,6 +122,16 @@
             <artifactId>quarkus-container-image-jib</artifactId>
         </dependency>
 
+        <!-- Fuzzing. jazzer-junit levert @FuzzTest voor de in-process fuzztests; dezelfde
+             API (FuzzedDataProvider) wordt gebruikt door de standalone fuzz-targets die
+             ClusterFuzzLite via .clusterfuzzlite/build.sh bouwt. Zonder JAZZER_FUZZ in de
+             omgeving draaien de @FuzzTests als regressietest over de opgeslagen corpus. -->
+        <dependency>
+            <groupId>com.code-intelligence</groupId>
+            <artifactId>jazzer-junit</artifactId>
+            <version>0.30.0</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-junit5</artifactId>
