@@ -20,6 +20,10 @@
 
 name: ZAD Deploy
 
+# Standaard alleen-lezen voor GITHUB_TOKEN; de jobs die meer nodig hebben (image
+# pushen, deployment/PR-comment aanmaken) zetten dat zelf per job.
+permissions: read-all
+
 on:
   pull_request:
     types: [opened, synchronize, reopened, closed]
@@ -50,8 +54,8 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }} # immutable digest voor verse pull
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v5.6.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: '25'
@@ -104,7 +108,7 @@ jobs:
     steps:
       - name: Deploy to ZAD
         id: deploy
-        uses: RijksICTGilde/zad-actions/deploy@v4
+        uses: RijksICTGilde/zad-actions/deploy@b844c76eba3502b40a19be868cdf0586e322f4b8 # v4.1.0
         with:
           api-key: ${{ secrets.ZAD_API_KEY }}
           project-id: ${{ env.ZAD_PROJECT_ID }}
@@ -131,7 +135,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Cleanup ZAD environment
-        uses: RijksICTGilde/zad-actions/cleanup@v4
+        uses: RijksICTGilde/zad-actions/cleanup@b844c76eba3502b40a19be868cdf0586e322f4b8 # v4.1.0
         with:
           api-key: ${{ secrets.ZAD_API_KEY }}
           project-id: ${{ env.ZAD_PROJECT_ID }}
@@ -163,7 +167,7 @@ jobs:
     steps:
       - name: Deploy to ZAD (stable)
         id: deploy
-        uses: RijksICTGilde/zad-actions/deploy@v4
+        uses: RijksICTGilde/zad-actions/deploy@b844c76eba3502b40a19be868cdf0586e322f4b8 # v4.1.0
         with:
           api-key: ${{ secrets.ZAD_API_KEY }}
           project-id: ${{ env.ZAD_PROJECT_ID }}

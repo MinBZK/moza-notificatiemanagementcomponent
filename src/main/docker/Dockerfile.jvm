@@ -17,7 +17,7 @@
 # Switch to registry.access.redhat.com/ubi9/openjdk-25 once it becomes available, to align
 # with the other services in this org.
 ###
-FROM eclipse-temurin:25-jre
+FROM eclipse-temurin:25-jre@sha256:f9e65324a37f28209ce7dd0e5149a7aa954520ed936fb87813cf6ded2400a112
 
 ENV LANGUAGE='en_US:en'
 
