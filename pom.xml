@@ -22,6 +22,18 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- Security-override op de Quarkus-BOM: de BOM levert jackson 2.22.0, dat kwetsbaar is
+                 voor GHSA-5gvw-p9qm-jgwh (@JsonView omzeild bij @JsonUnwrapped) en
+                 GHSA-5jmj-h7xm-6q6v (case-insensitive deserialisatie omzeilt @JsonIgnoreProperties).
+                 De BOM-import staat hieronder, en bij Maven wint de eerste declaratie, dus deze
+                 import bepaalt de jackson-versie. Weghalen zodra de Quarkus-BOM zelf >= 2.22.1 levert. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>2.22.2</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>${quarkus.platform.group-id}</groupId>
                 <artifactId>${quarkus.platform.artifact-id}</artifactId>
