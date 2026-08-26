@@ -36,3 +36,7 @@ bin/
 
 ### Local config ###
 src/main/resources/application-dev.properties
+
+### Fuzzing ###
+# Corpus jazzer writes during a local run with JAZZER_FUZZ=1
+.cifuzz-corpus/

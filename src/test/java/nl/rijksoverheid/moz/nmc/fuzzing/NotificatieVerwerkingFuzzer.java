@@ -1,0 +1,316 @@
+package nl.rijksoverheid.moz.nmc.fuzzing;
+
+import com.code_intelligence.jazzer.api.FuzzedDataProvider;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.quarkiverse.httpproblem.HttpProblem;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
+import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
+import nl.rijksoverheid.moz.nmc.api.model.DecentraleNotificatieAanvraagRequest;
+import nl.rijksoverheid.moz.nmc.api.model.NotificatieAanvraagRequest;
+import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
+import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackClient;
+import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLAuthorizationHolder;
+import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
+import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
+import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
+import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
+import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
+import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
+import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
+import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
+import nl.rijksoverheid.moz.nmc.controller.CentraleNotificatieController;
+import nl.rijksoverheid.moz.nmc.controller.DecentraleNotificatieController;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.helper.HashHelper;
+import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
+import nl.rijksoverheid.moz.nmc.notifynlcallback.controller.NotifyNLCallbackController;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.service.NotificatieService;
+import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Proxy;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.function.Supplier;
+
+/**
+ * Standalone fuzz target for ClusterFuzzLite.
+ * Drives caller-supplied JSON through the chain behind the three POST endpoints — Jackson, bean
+ * validation, controller, service, NotifyNL-adapter — with in-memory stand-ins for the IO.
+ *
+ * <p>In the fuzzer's own JVM, because jazzer_driver instruments only what it loads itself: the
+ * earlier variant fuzzed a separate Quarkus process, leaving libFuzzer without coverage to steer on.
+ *
+ * <p>A Jackson error, a constraint violation and an {@link HttpProblem} are expected outcomes.
+ * Anything else is a finding, and so is a 5xx while every stand-in was told to succeed.
+ */
+public class NotificatieVerwerkingFuzzer {
+
+    // NotifyNL key shape (naam-<serviceId>-<secret>); under 74 characters the factory rejects it.
+    private static final String API_KEY =
+            "niet-voor-productie-00000000-0000-0000-0000-000000000000-11111111-1111-1111-1111-111111111111";
+
+    private static final String[] IDENTIFICATIE_TYPES = {"BSN", "KVK", "RSIN", "INVALID"};
+    private static final String[] BERICHT_TYPES = {"Stuurgroep Agenda", "Demo template", "onbekend"};
+    private static final String[] AFLEVER_STATUSSEN = {
+        "delivered", "permanent-failure", "temporary-failure", "technical-failure", "onbekend"
+    };
+
+    private static final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+
+    private static final Validator validator = Validation.byDefaultProvider()
+            .configure()
+            .messageInterpolator(new ParameterMessageInterpolator())
+            .buildValidatorFactory()
+            .getValidator();
+
+    /** 0 = partij met e-mailadres, 1 = 404, 2 = 500. */
+    private static int profielAntwoord;
+    /** 0 = geaccepteerd, 1 = afgewezen, 2 = respons zonder notificatie-id. */
+    private static int notifyAntwoord;
+    private static boolean callbackLukt;
+
+    private static final GeheugenNotificatieRepository repository = new GeheugenNotificatieRepository();
+
+    private static final CentraleNotificatieController centraleController;
+    private static final DecentraleNotificatieController decentraleController;
+    private static final NotifyNLCallbackController callbackController;
+
+    static {
+        NotificatieService service = new NotificatieService(
+                new ProfielServiceAdapter(profielApiStandIn()),
+                new NotifyNLVerzendAdapter(notifyApiStandIn(), new NotifyNLJwtFactory(),
+                        new NotifyNLAuthorizationHolder(), Optional.of(API_KEY)),
+                repository,
+                // Zero backoff: the adapter sleeps between callback retries.
+                new ConsumentCallbackAdapter(url -> callbackClientStandIn(), 0));
+
+        LogboekContext logboekContext = new LogboekContext();
+        HashHelper hashHelper = new HashHelper(Optional.of("fuzz-pepper-niet-voor-productie"));
+
+        centraleController = new CentraleNotificatieController(service, logboekContext, hashHelper);
+        decentraleController = new DecentraleNotificatieController(service, logboekContext, hashHelper);
+        callbackController = new NotifyNLCallbackController(service);
+    }
+
+    public static void fuzzerTestOneInput(FuzzedDataProvider data) {
+        int route = data.consumeInt(0, 4);
+        profielAntwoord = data.consumeInt(0, 2);
+        notifyAntwoord = data.consumeInt(0, 2);
+        callbackLukt = data.consumeBoolean();
+        boolean notificatieIsBekend = data.consumeBoolean();
+
+        switch (route) {
+            case 0 -> centraal(centraleAanvraag(data));
+            case 1 -> decentraal(decentraleAanvraag(data));
+            case 2 -> afleverstatus(afleverstatusMelding(data), notificatieIsBekend);
+            case 3 -> centraal(data.consumeRemainingAsString());
+            case 4 -> decentraal(data.consumeRemainingAsString());
+        }
+    }
+
+    private static void centraal(String json) {
+        NotificatieAanvraagRequest aanvraag = lees(json, NotificatieAanvraagRequest.class);
+        if (aanvraag != null) {
+            roepAan(() -> centraleController.notificatieVersturen(aanvraag));
+        }
+    }
+
+    private static void decentraal(String json) {
+        DecentraleNotificatieAanvraagRequest aanvraag = lees(json, DecentraleNotificatieAanvraagRequest.class);
+        if (aanvraag != null) {
+            roepAan(() -> decentraleController.decentraleNotificatieVersturen(aanvraag));
+        }
+    }
+
+    private static void afleverstatus(String json, boolean notificatieIsBekend) {
+        AfleverstatusRequest melding = lees(json, AfleverstatusRequest.class);
+        if (melding == null) {
+            return;
+        }
+        if (notificatieIsBekend) {
+            repository.bewaarMetExterneReferentie(melding.getId());
+        }
+        roepAan(() -> callbackController.verwerkAfleverstatus(melding));
+    }
+
+    /**
+     * Returns null for everything the HTTP layer answers with a 400 before the controller runs.
+     * Bean validation lives in the JAX-RS layer, so skipping it here would report every empty
+     * string and malformed e-mail address as a crash.
+     */
+    private static <T> T lees(String json, Class<T> type) {
+        T request;
+        try {
+            request = mapper.readValue(json, type);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+
+        if (request == null || !validator.validate(request).isEmpty()) {
+            return null;
+        }
+        return request;
+    }
+
+    private static void roepAan(Runnable aanroep) {
+        try {
+            aanroep.run();
+        } catch (HttpProblem e) {
+            if (e.getStatusCode() >= 500 && profielAntwoord == 0 && notifyAntwoord == 0 && callbackLukt) {
+                throw new AssertionError("5xx voor invoer die de validatie doorkwam terwijl Profielservice, "
+                        + "NotifyNL en de consument-callback alledrie slagen", e);
+            }
+        }
+    }
+
+    private static String centraleAanvraag(FuzzedDataProvider data) {
+        ObjectNode body = mapper.createObjectNode();
+        body.put("identificatieType", data.pickValue(IDENTIFICATIE_TYPES));
+        body.put("identificatieNummer", data.consumeString(20));
+        body.put("dienstverlener", data.consumeString(50));
+        body.put("dienst", data.consumeString(50));
+        body.put("berichtType", data.pickValue(BERICHT_TYPES));
+        body.putObject("berichtgegevens").put(data.consumeString(20), data.consumeString(50));
+        body.put("callbackUrl", callbackUrl(data));
+        return body.toString();
+    }
+
+    private static String decentraleAanvraag(FuzzedDataProvider data) {
+        ObjectNode body = mapper.createObjectNode();
+        // Half the inputs pass the pattern, so the send path stays reachable.
+        body.put("emailAdres", data.consumeBoolean() ? "fuzz@example.invalid" : data.consumeString(60));
+        body.put("berichtType", data.pickValue(BERICHT_TYPES));
+        body.putObject("berichtgegevens").put(data.consumeString(20), data.consumeString(50));
+        body.put("callbackUrl", callbackUrl(data));
+        return body.toString();
+    }
+
+    private static String afleverstatusMelding(FuzzedDataProvider data) {
+        ObjectNode body = mapper.createObjectNode();
+        // id is a UUID and created_at an OffsetDateTime: a fuzzed string stops at the parser.
+        body.put("id", data.consumeBoolean() ? UUID.randomUUID().toString() : data.consumeString(40));
+        body.put("reference", data.consumeString(40));
+        body.put("to", data.consumeString(60));
+        body.put("status", data.pickValue(AFLEVER_STATUSSEN));
+        body.put("notification_type", data.consumeString(20));
+        body.put("created_at", data.consumeBoolean() ? "2026-01-01T00:00:00Z" : data.consumeString(30));
+        return body.toString();
+    }
+
+    /**
+     * A closed local port on purpose: the application POSTs to this URL later, so arbitrary hosts
+     * would turn the fuzzer into an outbound request generator.
+     */
+    private static String callbackUrl(FuzzedDataProvider data) {
+        return "http://localhost:9999/" + data.consumeString(20);
+    }
+
+    private static ProfielApi profielApiStandIn() {
+        return standIn(ProfielApi.class, "apiProfielserviceV1PartijPost", () -> switch (profielAntwoord) {
+            case 0 -> partijMetEmailadres();
+            case 1 -> throw new WebApplicationException(Response.status(Response.Status.NOT_FOUND).build());
+            default -> throw new WebApplicationException(Response.status(Response.Status.INTERNAL_SERVER_ERROR).build());
+        });
+    }
+
+    private static SendAMessageApi notifyApiStandIn() {
+        return standIn(SendAMessageApi.class, "sendEmail", () -> switch (notifyAntwoord) {
+            case 0 -> new SendEmailResponse().id(UUID.randomUUID().toString());
+            case 1 -> throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build());
+            default -> new SendEmailResponse();
+        });
+    }
+
+    private static ConsumentCallbackClient callbackClientStandIn() {
+        return event -> {
+            if (!callbackLukt) {
+                throw new WebApplicationException(Response.status(Response.Status.BAD_GATEWAY).build());
+            }
+        };
+    }
+
+    /** The generated clients carry a method per operation; the NMC calls exactly one of them. */
+    private static <T> T standIn(Class<T> api, String methode, Supplier<Object> antwoord) {
+        return api.cast(Proxy.newProxyInstance(api.getClassLoader(), new Class<?>[]{api},
+                (proxy, method, args) -> methode.equals(method.getName()) ? antwoord.get() : null));
+    }
+
+    private static PartijResponse partijMetEmailadres() {
+        return new PartijResponse()
+                .partijId(UUID.randomUUID())
+                .contactgegevens(List.of(new ContactgegevenResponse()
+                        .type(ContactgegevenResponse.TypeEnum.EMAIL)
+                        .waarde("fuzz@example.invalid")
+                        .isDefault(true)));
+    }
+
+    /**
+     * Stand-in for the Panache repository. Column constraints (such as the 2048 characters the
+     * schema gives a callback URL) are not enforced here.
+     */
+    private static final class GeheugenNotificatieRepository extends NotificatieRepository {
+
+        private static final Field ID_VELD = idVeld();
+
+        private final Map<UUID, Notificatie> opgeslagen = new HashMap<>();
+
+        @Override
+        public void persist(Notificatie notificatie) {
+            zetId(notificatie, UUID.randomUUID());
+            opgeslagen.put(notificatie.getId(), notificatie);
+        }
+
+        @Override
+        public void flush() {
+            // Nothing is written, so there is nothing to flush.
+        }
+
+        @Override
+        public boolean deleteById(UUID id) {
+            return opgeslagen.remove(id) != null;
+        }
+
+        @Override
+        public Optional<Notificatie> findByExternalReference(UUID externalReference) {
+            return opgeslagen.values().stream()
+                    .filter(n -> externalReference.equals(n.getExternalReference()))
+                    .findFirst();
+        }
+
+        /** Lets the callback route reach a notificatie instead of stopping at "niet gevonden". */
+        void bewaarMetExterneReferentie(UUID externalReference) {
+            Notificatie notificatie = new Notificatie("http://localhost:9999/callback");
+            notificatie.setExternalReference(externalReference);
+            persist(notificatie);
+        }
+
+        private static void zetId(Notificatie notificatie, UUID id) {
+            try {
+                ID_VELD.set(notificatie, id);
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        private static Field idVeld() {
+            try {
+                // JPA assigns the generated id on persist; the entity has no setter for it.
+                Field veld = Notificatie.class.getDeclaredField("id");
+                veld.setAccessible(true);
+                return veld;
+            } catch (NoSuchFieldException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+    }
+}

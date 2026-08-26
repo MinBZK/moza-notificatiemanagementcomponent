@@ -4,16 +4,34 @@ import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
+import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
+import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
+import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
+import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
+import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
+import org.junit.jupiter.api.BeforeEach;
+import org.mockito.Mockito;
+
+import java.util.List;
+import java.util.UUID;
+
+import static org.hamcrest.Matchers.lessThan;
+import static org.mockito.ArgumentMatchers.any;
 
 /**
- * In-process counterpart of {@link EndpointFuzzer}: the same endpoints, but driven
- * through a @QuarkusTest so they also run in a normal `mvn verify`. Without the
- * JAZZER_FUZZ environment variable set, jazzer replays the stored corpus instead of
- * generating new input, which makes this a regression test for anything the
- * ClusterFuzzLite runs found earlier.
+ * In-process counterpart of {@link NotificatieVerwerkingFuzzer}: the same request handling over
+ * HTTP through a @QuarkusTest, so the JAX-RS layer (bean validation, the callback auth filter) is
+ * fuzzed too and it runs in a normal `mvn verify`. Without the JAZZER_FUZZ environment variable
+ * set, jazzer replays the stored corpus instead of generating new input, which makes this a
+ * regression test for anything the ClusterFuzzLite runs found earlier.
+ *
+ * <p>Both outbound clients are mocked: an unreachable Profielservice or NotifyNL answers 500,
+ * which would drown out the 5xx responses this test is looking for.
  */
 @QuarkusTest
 public class EndpointFuzzTest {
@@ -22,6 +40,22 @@ public class EndpointFuzzTest {
 
     // Matches %test.notify.callback.bearer-token in application.properties.
     private static final String CALLBACK_TOKEN = "test-callback-token-niet-voor-productie";
+
+    @InjectMock
+    @RestClient
+    ProfielApi profielApi;
+
+    @InjectMock
+    @RestClient
+    SendAMessageApi sendAMessageApi;
+
+    @BeforeEach
+    void setUp() {
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmailadres());
+        // A fresh id per call: external_reference is unique, a fixed one would 500 on the second send.
+        Mockito.when(sendAMessageApi.sendEmail(any()))
+                .thenAnswer(aanroep -> new SendEmailResponse().id(UUID.randomUUID().toString()));
+    }
 
     @FuzzTest
     public void fuzzCentraleNotificatie(FuzzedDataProvider data) {
@@ -33,15 +67,7 @@ public class EndpointFuzzTest {
         body.put("berichtType", data.pickValue(new String[]{"Stuurgroep Agenda", "Demo template", "onbekend"}));
         body.put("callbackUrl", "http://localhost:9999/" + data.consumeString(20));
 
-        RestAssured.given()
-                .contentType(ContentType.JSON)
-                .body(body.toString())
-                .when()
-                .post("/api/nmc/v1/centraal/notificaties")
-                .then()
-                .extract().response();
-
-        // No assertion on the status code: any response is fine, a crash is not.
+        post("/api/nmc/v1/centraal/notificaties", body.toString(), null);
     }
 
     @FuzzTest
@@ -51,13 +77,7 @@ public class EndpointFuzzTest {
         body.put("berichtType", data.pickValue(new String[]{"Stuurgroep Agenda", "Demo template", "onbekend"}));
         body.put("callbackUrl", "http://localhost:9999/" + data.consumeString(20));
 
-        RestAssured.given()
-                .contentType(ContentType.JSON)
-                .body(body.toString())
-                .when()
-                .post("/api/nmc/v1/decentraal/notificaties")
-                .then()
-                .extract().response();
+        post("/api/nmc/v1/decentraal/notificaties", body.toString(), null);
     }
 
     @FuzzTest
@@ -75,14 +95,7 @@ public class EndpointFuzzTest {
         // accepted and the rejected path through the auth filter are covered.
         String token = data.consumeBoolean() ? CALLBACK_TOKEN : data.consumeString(40);
 
-        RestAssured.given()
-                .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer " + token)
-                .body(body.toString())
-                .when()
-                .post("/api/nmc/v1/notifynl-callback")
-                .then()
-                .extract().response();
+        post("/api/nmc/v1/notifynl-callback", body.toString(), token);
     }
 
     @FuzzTest
@@ -91,12 +104,28 @@ public class EndpointFuzzTest {
                 ? "/api/nmc/v1/centraal/notificaties"
                 : "/api/nmc/v1/decentraal/notificaties";
 
-        RestAssured.given()
-                .contentType(ContentType.JSON)
-                .body(data.consumeRemainingAsString())
-                .when()
-                .post(path)
-                .then()
-                .extract().response();
+        post(path, data.consumeRemainingAsString(), null);
+    }
+
+    /**
+     * Any 4xx is fine, the endpoints are supposed to reject nonsense. A 5xx is not: with both
+     * clients mocked, only the NMC itself is left to trip over the caller input.
+     */
+    private void post(String path, String body, String bearerToken) {
+        var request = RestAssured.given().contentType(ContentType.JSON).body(body);
+        if (bearerToken != null) {
+            request.header("Authorization", "Bearer " + bearerToken);
+        }
+
+        request.when().post(path).then().statusCode(lessThan(500));
+    }
+
+    private PartijResponse partijMetEmailadres() {
+        return new PartijResponse()
+                .partijId(UUID.randomUUID())
+                .contactgegevens(List.of(new ContactgegevenResponse()
+                        .type(ContactgegevenResponse.TypeEnum.EMAIL)
+                        .waarde("fuzz@example.invalid")
+                        .isDefault(true)));
     }
 }
