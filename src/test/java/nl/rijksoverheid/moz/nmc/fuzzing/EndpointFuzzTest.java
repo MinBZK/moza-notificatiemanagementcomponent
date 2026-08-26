@@ -52,9 +52,9 @@ public class EndpointFuzzTest {
     @BeforeEach
     void setUp() {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmailadres());
-        // A fresh id per call: external_reference is unique, a fixed one would 500 on the second send.
+        // One id per invocation: external_reference is unique and each fuzz method sends exactly once.
         Mockito.when(sendAMessageApi.sendEmail(any()))
-                .thenAnswer(aanroep -> new SendEmailResponse().id(UUID.randomUUID().toString()));
+                .thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
     }
 
     @FuzzTest
