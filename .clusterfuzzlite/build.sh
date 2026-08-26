@@ -1,7 +1,8 @@
 #!/bin/bash -eu
 
-# Build the application and the test classes that hold the fuzz targets.
-./mvnw package -DskipTests -Djacoco.skip=true -B
+# Build the application and the test classes that hold the fuzz targets. test-compile is enough:
+# the targets run against these classes, nothing here needs the packaged application.
+./mvnw test-compile -Djacoco.skip=true -B
 
 # Copy all dependencies to $OUT/lib
 mkdir -p $OUT/lib

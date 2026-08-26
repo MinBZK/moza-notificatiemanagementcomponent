@@ -41,6 +41,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Standalone fuzz target for ClusterFuzzLite.
@@ -91,6 +93,9 @@ public class NotificatieVerwerkingFuzzer {
     private static final NotifyNLCallbackController callbackController;
 
     static {
+        // Logging a stack trace per rejected input costs more time than the fuzzing itself.
+        Logger.getLogger("").setLevel(Level.OFF);
+
         NotificatieService service = new NotificatieService(
                 new ProfielServiceAdapter(profielApiStandIn()),
                 new NotifyNLVerzendAdapter(notifyApiStandIn(), new NotifyNLJwtFactory(),
@@ -257,7 +262,17 @@ public class NotificatieVerwerkingFuzzer {
     /** The generated clients carry a method per operation; the NMC calls exactly one of them. */
     private static <T> T standIn(Class<T> api, String methode, Supplier<Object> antwoord) {
         return api.cast(Proxy.newProxyInstance(api.getClassLoader(), new Class<?>[]{api},
-                (proxy, method, args) -> methode.equals(method.getName()) ? antwoord.get() : null));
+                (proxy, method, args) -> {
+                    if (method.getDeclaringClass() == Object.class) {
+                        // Without this hashCode() answers null and unboxing it throws.
+                        return switch (method.getName()) {
+                            case "hashCode" -> System.identityHashCode(proxy);
+                            case "equals" -> proxy == args[0];
+                            default -> api.getSimpleName() + "-stand-in";
+                        };
+                    }
+                    return methode.equals(method.getName()) ? antwoord.get() : null;
+                }));
     }
 
     private static PartijResponse partijMetEmailadres() {
