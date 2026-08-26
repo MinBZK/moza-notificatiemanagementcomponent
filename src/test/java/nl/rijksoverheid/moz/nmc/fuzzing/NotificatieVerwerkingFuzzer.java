@@ -59,6 +59,11 @@ public class NotificatieVerwerkingFuzzer {
     private static final String API_KEY =
             "niet-voor-productie-00000000-0000-0000-0000-000000000000-11111111-1111-1111-1111-111111111111";
 
+    // Fixed instead of random: the same input has to do the same thing every run, or a crash
+    // artifact will not replay.
+    private static final UUID NOTIFY_REFERENTIE = UUID.fromString("22222222-2222-2222-2222-222222222222");
+    private static final UUID PARTIJ_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
+
     private static final String[] IDENTIFICATIE_TYPES = {"BSN", "KVK", "RSIN", "INVALID"};
     private static final String[] BERICHT_TYPES = {"Stuurgroep Agenda", "Demo template", "onbekend"};
     private static final String[] AFLEVER_STATUSSEN = {
@@ -103,6 +108,8 @@ public class NotificatieVerwerkingFuzzer {
     }
 
     public static void fuzzerTestOneInput(FuzzedDataProvider data) {
+        repository.leegmaken();
+
         int route = data.consumeInt(0, 4);
         profielAntwoord = data.consumeInt(0, 2);
         notifyAntwoord = data.consumeInt(0, 2);
@@ -121,14 +128,15 @@ public class NotificatieVerwerkingFuzzer {
     private static void centraal(String json) {
         NotificatieAanvraagRequest aanvraag = lees(json, NotificatieAanvraagRequest.class);
         if (aanvraag != null) {
-            roepAan(() -> centraleController.notificatieVersturen(aanvraag));
+            roepAan(() -> centraleController.notificatieVersturen(aanvraag),
+                    profielAntwoord == 0 && notifyAntwoord == 0);
         }
     }
 
     private static void decentraal(String json) {
         DecentraleNotificatieAanvraagRequest aanvraag = lees(json, DecentraleNotificatieAanvraagRequest.class);
         if (aanvraag != null) {
-            roepAan(() -> decentraleController.decentraleNotificatieVersturen(aanvraag));
+            roepAan(() -> decentraleController.decentraleNotificatieVersturen(aanvraag), notifyAntwoord == 0);
         }
     }
 
@@ -140,7 +148,7 @@ public class NotificatieVerwerkingFuzzer {
         if (notificatieIsBekend) {
             repository.bewaarMetExterneReferentie(melding.getId());
         }
-        roepAan(() -> callbackController.verwerkAfleverstatus(melding));
+        roepAan(() -> callbackController.verwerkAfleverstatus(melding), callbackLukt);
     }
 
     /**
@@ -162,13 +170,18 @@ public class NotificatieVerwerkingFuzzer {
         return request;
     }
 
-    private static void roepAan(Runnable aanroep) {
+    /**
+     * @param standInsSlagen whether the stand-ins this route calls are all set to succeed. Only those
+     *                       count: gating on a stand-in the route never reaches leaves most of its
+     *                       input unchecked.
+     */
+    private static void roepAan(Runnable aanroep, boolean standInsSlagen) {
         try {
             aanroep.run();
         } catch (HttpProblem e) {
-            if (e.getStatusCode() >= 500 && profielAntwoord == 0 && notifyAntwoord == 0 && callbackLukt) {
-                throw new AssertionError("5xx voor invoer die de validatie doorkwam terwijl Profielservice, "
-                        + "NotifyNL en de consument-callback alledrie slagen", e);
+            if (e.getStatusCode() >= 500 && standInsSlagen) {
+                throw new AssertionError(
+                        "5xx voor invoer die de validatie doorkwam terwijl elke aangeroepen stand-in slaagt", e);
             }
         }
     }
@@ -198,7 +211,9 @@ public class NotificatieVerwerkingFuzzer {
     private static String afleverstatusMelding(FuzzedDataProvider data) {
         ObjectNode body = mapper.createObjectNode();
         // id is a UUID and created_at an OffsetDateTime: a fuzzed string stops at the parser.
-        body.put("id", data.consumeBoolean() ? UUID.randomUUID().toString() : data.consumeString(40));
+        body.put("id", data.consumeBoolean()
+                ? new UUID(data.consumeLong(), data.consumeLong()).toString()
+                : data.consumeString(40));
         body.put("reference", data.consumeString(40));
         body.put("to", data.consumeString(60));
         body.put("status", data.pickValue(AFLEVER_STATUSSEN));
@@ -225,7 +240,7 @@ public class NotificatieVerwerkingFuzzer {
 
     private static SendAMessageApi notifyApiStandIn() {
         return standIn(SendAMessageApi.class, "sendEmail", () -> switch (notifyAntwoord) {
-            case 0 -> new SendEmailResponse().id(UUID.randomUUID().toString());
+            case 0 -> new SendEmailResponse().id(NOTIFY_REFERENTIE.toString());
             case 1 -> throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build());
             default -> new SendEmailResponse();
         });
@@ -247,7 +262,7 @@ public class NotificatieVerwerkingFuzzer {
 
     private static PartijResponse partijMetEmailadres() {
         return new PartijResponse()
-                .partijId(UUID.randomUUID())
+                .partijId(PARTIJ_ID)
                 .contactgegevens(List.of(new ContactgegevenResponse()
                         .type(ContactgegevenResponse.TypeEnum.EMAIL)
                         .waarde("fuzz@example.invalid")
@@ -266,8 +281,13 @@ public class NotificatieVerwerkingFuzzer {
 
         @Override
         public void persist(Notificatie notificatie) {
-            zetId(notificatie, UUID.randomUUID());
+            zetId(notificatie, new UUID(0, opgeslagen.size() + 1L));
             opgeslagen.put(notificatie.getId(), notificatie);
+        }
+
+        /** Empty per input, otherwise found-or-not depends on what earlier inputs left behind. */
+        void leegmaken() {
+            opgeslagen.clear();
         }
 
         @Override

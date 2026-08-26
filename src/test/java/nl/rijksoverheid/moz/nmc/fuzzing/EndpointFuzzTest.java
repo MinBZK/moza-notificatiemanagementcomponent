@@ -26,9 +26,9 @@ import static org.mockito.ArgumentMatchers.any;
 /**
  * In-process counterpart of {@link NotificatieVerwerkingFuzzer}: the same request handling over
  * HTTP through a @QuarkusTest, so the JAX-RS layer (bean validation, the callback auth filter) is
- * fuzzed too and it runs in a normal `mvn verify`. Without the JAZZER_FUZZ environment variable
- * set, jazzer replays the stored corpus instead of generating new input, which makes this a
- * regression test for anything the ClusterFuzzLite runs found earlier.
+ * covered too. This replays the stored corpus in a normal `mvn verify`, as a regression test for
+ * whatever the ClusterFuzzLite runs found. It does not generate input itself: @QuarkusTest and
+ * jazzer both intercept the test-template invocation, and jazzer's libFuzzer loop loses.
  *
  * <p>Both outbound clients are mocked: an unreachable Profielservice or NotifyNL answers 500,
  * which would drown out the 5xx responses this test is looking for.
