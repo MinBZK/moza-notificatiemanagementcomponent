@@ -161,6 +161,9 @@ components:
             Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
             terugstuurt zodra de bezorgstatus bekend is. Weglaten als de
             Dienstverlener de status zelf opvraagt via GET /notificaties/{id}.
+            Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
+            tekens, zonder gebruikersinfo) wordt geaccepteerd; IP-adressen en interne
+            hostnamen worden geweigerd (400).
 
     DecentraleNotificatieAanvraagRequest:
       type: object
@@ -193,6 +196,9 @@ components:
           description: >-
             Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
             terugstuurt zodra de bezorgstatus bekend is.
+            Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
+            tekens, zonder gebruikersinfo) wordt geaccepteerd; IP-adressen en interne
+            hostnamen worden geweigerd (400).
 
     NotificatieResponse:
       type: object

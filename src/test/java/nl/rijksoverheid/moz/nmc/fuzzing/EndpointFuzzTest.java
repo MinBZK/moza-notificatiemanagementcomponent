@@ -31,7 +31,7 @@ public class EndpointFuzzTest {
         body.put("dienstverlener", data.consumeString(50));
         body.put("dienst", data.consumeString(50));
         body.put("berichtType", data.pickValue(new String[]{"Stuurgroep Agenda", "Demo template", "onbekend"}));
-        body.put("callbackUrl", "http://localhost:9999/" + data.consumeString(20));
+        body.put("callbackUrl", fuzzedCallbackUrl(data));
 
         RestAssured.given()
                 .contentType(ContentType.JSON)
@@ -49,7 +49,7 @@ public class EndpointFuzzTest {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("emailAdres", data.consumeString(60));
         body.put("berichtType", data.pickValue(new String[]{"Stuurgroep Agenda", "Demo template", "onbekend"}));
-        body.put("callbackUrl", "http://localhost:9999/" + data.consumeString(20));
+        body.put("callbackUrl", fuzzedCallbackUrl(data));
 
         RestAssured.given()
                 .contentType(ContentType.JSON)
@@ -83,6 +83,27 @@ public class EndpointFuzzTest {
                 .post("/api/nmc/v1/notifynl-callback")
                 .then()
                 .extract().response();
+    }
+
+    // Each entry trips a different CallbackUrlValidator reject branch. A raw fuzzed string
+    // almost always dies at URI parsing or the first scheme check, so it never reaches the
+    // host/userinfo/IP branches; a fixed pool of near-valid shapes does.
+    private static final String[] ONGELDIGE_CALLBACK_URLS = {
+            "http://consument.example.invalid/cb",          // scheme
+            "https://user:pw@consument.example.invalid/cb", // userinfo
+            "https://127.0.0.1/cb",                         // IPv4 literal
+            "https://[::1]/cb",                             // IPv6 literal
+            "https://intranet/cb",                          // single-label internal name
+            "https://svc.ns.svc/cb",                        // internal suffix
+            "geen-url",                                     // unparseable
+    };
+
+    // Half the URLs pass validation (reserved .invalid TLD, never resolves) so the send path
+    // stays reachable; half exercise the reject path.
+    private static String fuzzedCallbackUrl(FuzzedDataProvider data) {
+        return data.consumeBoolean()
+                ? "https://consument.example.invalid/" + data.consumeString(20)
+                : data.pickValue(ONGELDIGE_CALLBACK_URLS);
     }
 
     @FuzzTest
