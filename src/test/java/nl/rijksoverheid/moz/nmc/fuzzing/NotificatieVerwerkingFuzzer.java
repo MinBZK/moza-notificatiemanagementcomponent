@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.fuzzing;
 
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkiverse.httpproblem.HttpProblem;
@@ -73,7 +74,11 @@ public class NotificatieVerwerkingFuzzer {
         "delivered", "permanent-failure", "temporary-failure", "technical-failure", "onbekend"
     };
 
-    private static final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+    // Quarkus's mapper accepts unknown properties; rejecting them here would discard input the
+    // real endpoints process, and libFuzzer mutations add keys all the time.
+    private static final ObjectMapper mapper = new ObjectMapper()
+            .findAndRegisterModules()
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
     private static final Validator validator = Validation.byDefaultProvider()
             .configure()
@@ -298,7 +303,13 @@ public class NotificatieVerwerkingFuzzer {
                             default -> api.getSimpleName() + "-stand-in";
                         };
                     }
-                    return methode.equals(method.getName()) ? antwoord.get() : null;
+                    if (!methode.equals(method.getName())) {
+                        // Loud instead of null: a renamed generated operation would otherwise NPE
+                        // in the adapter and read as a product bug on every input.
+                        throw new UnsupportedOperationException(
+                                api.getSimpleName() + "-stand-in kent " + method.getName() + " niet");
+                    }
+                    return antwoord.get();
                 }));
     }
 

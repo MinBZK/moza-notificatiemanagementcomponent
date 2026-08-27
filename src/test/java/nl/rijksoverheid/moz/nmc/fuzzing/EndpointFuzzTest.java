@@ -4,15 +4,19 @@ import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
+import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.mockito.Mockito;
@@ -28,12 +32,16 @@ import static org.mockito.ArgumentMatchers.any;
  * HTTP through a @QuarkusTest, so the JAX-RS layer (bean validation, the callback auth filter) is
  * covered too. In a normal `mvn verify` each method replays the seed corpus under
  * `src/test/resources/.../EndpointFuzzTestInputs/&lt;methode&gt;/` — happy paths, rejected input,
- * both branches of the auth filter. Crash artifacts from ClusterFuzzLite runs belong there too, as
- * regression inputs. The test does not generate input itself: @QuarkusTest and jazzer both
- * intercept the test-template invocation, and jazzer's libFuzzer loop loses.
+ * both branches of the auth filter. Crash artifacts from ClusterFuzzLite carry
+ * {@link NotificatieVerwerkingFuzzer}'s own input encoding, not this one, and belong in
+ * `.clusterfuzzlite/seed-corpus/NotificatieVerwerkingFuzzer/`, where the next fuzz run replays
+ * them. The test does not generate input itself: @QuarkusTest and jazzer both intercept the
+ * test-template invocation, and jazzer's libFuzzer loop loses.
  *
- * <p>Both outbound clients are mocked: an unreachable Profielservice or NotifyNL answers 500,
- * which would drown out the 5xx responses this test is looking for.
+ * <p>The Profielservice and NotifyNL clients are mocked: unreachable, they answer 500, which
+ * would drown out the 5xx responses this test is looking for. The consument-callback client is
+ * real; the seeded notificaties carry no callbackUrl, so the callback adapter returns without
+ * network IO.
  */
 @QuarkusTest
 public class EndpointFuzzTest {
@@ -43,6 +51,13 @@ public class EndpointFuzzTest {
     // Matches %test.notify.callback.bearer-token in application.properties.
     private static final String CALLBACK_TOKEN = "test-callback-token-niet-voor-productie";
 
+    // The external references the juiste-token seeds under EndpointFuzzTestInputs/fuzzAfleverstatus
+    // carry. Persisted per invocation so those seeds reach verwerkAfleverstatus instead of
+    // stopping at 404; without callbackUrl, so the (unmocked) callback adapter does no IO.
+    private static final List<UUID> BEKENDE_NOTIFY_REFERENTIES = List.of(
+            UUID.fromString("123e4567-e89b-12d3-a456-426614174000"),
+            UUID.fromString("5a1f0c3e-2b4d-4e6f-8a9b-0c1d2e3f4a5b"));
+
     @InjectMock
     @RestClient
     ProfielApi profielApi;
@@ -51,8 +66,22 @@ public class EndpointFuzzTest {
     @RestClient
     SendAMessageApi sendAMessageApi;
 
+    @Inject
+    NotificatieRepository notificatieRepository;
+
     @BeforeEach
     void setUp() {
+        // Wipes what earlier invocations committed, then seeds the notificaties the
+        // afleverstatus-corpus refers to.
+        QuarkusTransaction.requiringNew().run(() -> {
+            notificatieRepository.deleteAll();
+            for (UUID referentie : BEKENDE_NOTIFY_REFERENTIES) {
+                Notificatie notificatie = new Notificatie(null);
+                notificatie.setExternalReference(referentie);
+                notificatieRepository.persist(notificatie);
+            }
+        });
+
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmailadres());
         // One id per invocation: external_reference is unique and each fuzz method sends exactly once.
         Mockito.when(sendAMessageApi.sendEmail(any()))

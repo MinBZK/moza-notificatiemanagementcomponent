@@ -4,7 +4,9 @@
 # the targets run against these classes, nothing here needs the packaged application.
 ./mvnw test-compile -Djacoco.skip=true -B
 
-# Copy all dependencies to $OUT/lib
+# Copy all dependencies to $OUT/lib. Test scope stays in on purpose: untransformed
+# io.quarkus.logging.Log falls back to org.junit.jupiter.api.Assertions outside Quarkus,
+# so without junit-jupiter-api every Log.* call in an error path throws.
 mkdir -p $OUT/lib
 ./mvnw dependency:copy-dependencies -DoutputDirectory=$OUT/lib -B
 
@@ -58,4 +60,11 @@ WRAPPER_EOF
 
   sed -i "s|TARGET_CLASS_PLACEHOLDER|$class_name|" "$OUT/$simple_name"
   chmod +x "$OUT/$simple_name"
+done
+
+# Package seed corpora: the runner unpacks $OUT/<fuzzer>_seed_corpus.zip into the corpus
+# before fuzzing, so short PR runs start from valid requests instead of empty input.
+for corpus_dir in .clusterfuzzlite/seed-corpus/*/; do
+  [ -d "$corpus_dir" ] || continue
+  zip -j "$OUT/$(basename "$corpus_dir")_seed_corpus.zip" "$corpus_dir"*
 done
