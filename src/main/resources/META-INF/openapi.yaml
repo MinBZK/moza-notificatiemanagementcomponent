@@ -57,7 +57,8 @@ paths:
           description: >-
             Ongeldige aanvraag, of er kon geen notificatie worden gedaan voor de
             opgegeven partij (geen partij of geen e-mailadres gevonden voor de
-            opgegeven identificatie)
+            opgegeven identificatie). Bij bean-validatie, zoals een ongeldige
+            callbackUrl, is `violations` gevuld.
           content:
             application/problem+json:
               schema:
@@ -100,7 +101,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/NotificatieResponse'
         '400':
-          description: Ongeldige aanvraag (bijv. ontbrekend/ongeldig e-mailadres of onbekend berichttype)
+          description: >-
+            Ongeldige aanvraag (bijv. ontbrekend/ongeldig e-mailadres of onbekend
+            berichttype). Bij bean-validatie, zoals een ongeldig e-mailadres of een
+            ongeldige callbackUrl, is `violations` gevuld.
           content:
             application/problem+json:
               schema:
@@ -233,3 +237,28 @@ components:
         instance:
           type: string
           format: uri
+        violations:
+          type: array
+          description: >-
+            Gevuld als de aanvraag door bean-validatie is afgekeurd, bijvoorbeeld bij een
+            ongeldig e-mailadres of een ongeldige callbackUrl. `detail` blijft dan leeg;
+            de reden staat per veld in deze lijst.
+          items:
+            $ref: '#/components/schemas/Violation'
+
+    Violation:
+      type: object
+      description: Eén afgekeurd veld uit de aanvraag
+      properties:
+        field:
+          type: string
+          description: Het veld waarop de validatie is mislukt
+          example: notificatieAanvraagRequest.callbackUrl
+        in:
+          type: string
+          description: >-
+            Het deel van het HTTP-verzoek waar de validatiefout optrad, zoals query, path,
+            header, form of body. Voor velden in de requestbody staat hier `?`.
+        message:
+          type: string
+          description: Omschrijving van de validatiefout
