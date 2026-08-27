@@ -53,7 +53,8 @@ import java.util.logging.Logger;
  * earlier variant fuzzed a separate Quarkus process, leaving libFuzzer without coverage to steer on.
  *
  * <p>A Jackson error, a constraint violation and an {@link HttpProblem} are expected outcomes.
- * Anything else is a finding, and so is a 5xx while every stand-in was told to succeed.
+ * Anything else is a finding, and so is a 5xx while every stand-in was told to succeed, or a
+ * notificatie that survives a delivered callback or disappears after a failed one.
  */
 public class NotificatieVerwerkingFuzzer {
 
@@ -116,8 +117,8 @@ public class NotificatieVerwerkingFuzzer {
         repository.leegmaken();
 
         int route = data.consumeInt(0, 4);
-        profielAntwoord = data.consumeInt(0, 2);
-        notifyAntwoord = data.consumeInt(0, 2);
+        profielAntwoord = gewogenAntwoord(data);
+        notifyAntwoord = gewogenAntwoord(data);
         callbackLukt = data.consumeBoolean();
         boolean notificatieIsBekend = data.consumeBoolean();
 
@@ -153,7 +154,19 @@ public class NotificatieVerwerkingFuzzer {
         if (notificatieIsBekend) {
             repository.bewaarMetExterneReferentie(melding.getId());
         }
-        roepAan(() -> callbackController.verwerkAfleverstatus(melding), callbackLukt);
+        // Unconditionally true: the adapter absorbs a failing callback (retries, then false), so
+        // this route may never answer 5xx, whatever the callback stand-in does.
+        roepAan(() -> callbackController.verwerkAfleverstatus(melding), true);
+
+        // The service deletes the notificatie only after a delivered callback; a failed callback
+        // keeps it for a retry.
+        if (notificatieIsBekend) {
+            boolean bewaard = repository.findByExternalReference(melding.getId()).isPresent();
+            if (bewaard == callbackLukt) {
+                throw new AssertionError("notificatie %s na %s consument-callback".formatted(
+                        bewaard ? "bewaard" : "verwijderd", callbackLukt ? "geslaagde" : "mislukte"));
+            }
+        }
     }
 
     /**
@@ -176,17 +189,31 @@ public class NotificatieVerwerkingFuzzer {
     }
 
     /**
-     * @param standInsSlagen whether the stand-ins this route calls are all set to succeed. Only those
-     *                       count: gating on a stand-in the route never reaches leaves most of its
-     *                       input unchecked.
+     * Weights success 4:1:1 over the three answers. The 5xx-oracle in {@link #roepAan} only fires
+     * when every stand-in the route reaches succeeds; uniform answers would leave the centrale
+     * route checked for 1 in 9 inputs.
      */
-    private static void roepAan(Runnable aanroep, boolean standInsSlagen) {
+    private static int gewogenAntwoord(FuzzedDataProvider data) {
+        int keuze = data.consumeInt(0, 5);
+        return keuze <= 3 ? 0 : keuze - 3;
+    }
+
+    /**
+     * @param geen5xxVerwacht whether a 5xx counts as a finding on this route. For the notificatie
+     *                        routes: every stand-in the route reaches is set to succeed — only
+     *                        those count, gating on a stand-in the route never calls would leave
+     *                        most of its input unchecked.
+     */
+    private static void roepAan(Runnable aanroep, boolean geen5xxVerwacht) {
         try {
             aanroep.run();
         } catch (HttpProblem e) {
-            if (e.getStatusCode() >= 500 && standInsSlagen) {
+            if (e.getStatusCode() >= 500 && geen5xxVerwacht) {
+                // The HttpProblem carries no cause (the controller only logs it), so the crash
+                // artifact must name the stand-in states to be reconstructable.
                 throw new AssertionError(
-                        "5xx voor invoer die de validatie doorkwam terwijl elke aangeroepen stand-in slaagt", e);
+                        "5xx voor invoer die de validatie doorkwam (profielAntwoord=%d, notifyAntwoord=%d, callbackLukt=%b)"
+                                .formatted(profielAntwoord, notifyAntwoord, callbackLukt), e);
             }
         }
     }
