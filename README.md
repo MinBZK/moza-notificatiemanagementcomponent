@@ -189,13 +189,14 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   verstuurt de e-mail via NotifyNL, slaat de notificatie op en retourneert een
   `notificatieId`. Optioneel kan een `callbackUrl` worden meegegeven voor
   asynchrone statusupdates. Retourneert `200` op succes, `400` als er geen
-  partij of e-mailadres gevonden wordt, en `500` bij een Profielservice-fout of
-  wanneer NotifyNL de verzending niet accepteert.
+  partij of e-mailadres gevonden wordt of als de `callbackUrl` ongeldig is, en
+  `500` bij een Profielservice-fout of wanneer NotifyNL de verzending niet
+  accepteert.
 - **`POST /decentraal/notificaties`**: verstuurt de e-mail rechtstreeks naar het
   meegegeven e-mailadres (geen Profielservice-lookup), slaat de notificatie op en
   retourneert een `notificatieId`. Optioneel kan een `callbackUrl` worden meegegeven.
-  Retourneert `200` op succes, `400` bij een onbekend berichttype of een ongeldig
-  e-mailadres, en `500` als het versturen mislukt.
+  Retourneert `200` op succes, `400` bij een onbekend berichttype, een ongeldig
+  e-mailadres of een ongeldige `callbackUrl`, en `500` als het versturen mislukt.
 - **`POST /notifynl-callback`**: webhook waarop NotifyNL de bezorgstatus
   (delivery receipt) van een verzending terugmeldt. Beveiligd met een bearer
   token dat geconfigureerd wordt in NotifyNL's dashboard en via

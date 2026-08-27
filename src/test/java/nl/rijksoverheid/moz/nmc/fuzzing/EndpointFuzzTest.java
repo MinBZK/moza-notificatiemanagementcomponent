@@ -8,6 +8,9 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 /**
  * In-process counterpart of {@link EndpointFuzzer}: the same endpoints, but driven
  * through a @QuarkusTest so they also run in a normal `mvn verify`. Without the
@@ -86,7 +89,7 @@ public class EndpointFuzzTest {
     }
 
     // Each entry trips a different CallbackUrlValidator reject branch. A raw fuzzed string
-    // almost always dies at URI parsing or the first scheme check, so it never reaches the
+    // almost always dies at the first scheme check, so it never reaches the
     // host/userinfo/IP branches; a fixed pool of near-valid shapes does.
     private static final String[] ONGELDIGE_CALLBACK_URLS = {
             "http://consument.example.invalid/cb",          // scheme
@@ -95,14 +98,17 @@ public class EndpointFuzzTest {
             "https://[::1]/cb",                             // IPv6 literal
             "https://intranet/cb",                          // single-label internal name
             "https://svc.ns.svc/cb",                        // internal suffix
-            "geen-url",                                     // unparseable
+            "https:///cb",                                  // geen hostnaam
+            "https://consument.example.invalid:99999/cb",   // poort buiten bereik
     };
 
     // Half the URLs pass validation (reserved .invalid TLD, never resolves) so the send path
-    // stays reachable; half exercise the reject path.
+    // stays reachable; half exercise the reject path. The fuzzed suffix is percent-encoded:
+    // a raw one makes URI parsing fail, which 400s in Jackson before the controller runs.
     private static String fuzzedCallbackUrl(FuzzedDataProvider data) {
         return data.consumeBoolean()
-                ? "https://consument.example.invalid/" + data.consumeString(20)
+                ? "https://consument.example.invalid/"
+                        + URLEncoder.encode(data.consumeString(20), StandardCharsets.UTF_8)
                 : data.pickValue(ONGELDIGE_CALLBACK_URLS);
     }
 

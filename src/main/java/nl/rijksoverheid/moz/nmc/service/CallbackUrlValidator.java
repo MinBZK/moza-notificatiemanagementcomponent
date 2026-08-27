@@ -71,9 +71,10 @@ public final class CallbackUrlValidator {
             throw new OngeldigeCallbackUrlException("een interne hostnaam is niet toegestaan");
         }
         String laatsteLabel = genormaliseerd.substring(laatstePunt + 1);
-        // A public hostname never ends in a numeric label; this catches IPv4 literals
-        // including decimal/short forms such as 2130706433 or 127.1.
-        if (laatsteLabel.isEmpty() || laatsteLabel.chars().allMatch(Character::isDigit)) {
+        // Rejects a host whose last label is all digits, which covers dotted-quad IPv4
+        // literals. Short and hex forms (127.1, 0x7f.0x1) get a null host from URI and
+        // are already rejected above.
+        if (laatsteLabel.chars().allMatch(Character::isDigit)) {
             throw new OngeldigeCallbackUrlException("een IP-adres als host is niet toegestaan");
         }
         for (String suffix : INTERNE_SUFFIXEN) {
