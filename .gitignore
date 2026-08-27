@@ -36,3 +36,9 @@ bin/
 
 ### Local config ###
 src/main/resources/application-dev.properties
+
+### Fuzzing ###
+# Directory jazzer creates during a local JAZZER_FUZZ=1 run. Such a run covers a single
+# @FuzzTest at a time and tends to leave this empty; the checked-in seed corpus lives in
+# src/test/resources under EndpointFuzzTestInputs.
+.cifuzz-corpus/

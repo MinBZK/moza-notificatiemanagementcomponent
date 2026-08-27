@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.fuzzing;
 
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import nl.rijksoverheid.moz.nmc.api.model.DecentraleNotificatieAanvraagRequest;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieAanvraagRequest;
@@ -15,7 +16,8 @@ import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
  */
 public class JsonDeserializationFuzzer {
 
-    private static final ObjectMapper mapper = new ObjectMapper();
+    // AfleverstatusRequest carries an OffsetDateTime, which a bare mapper refuses outright.
+    private static final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
     private static final Class<?>[] MESSAGE_TYPES = {
         NotificatieAanvraagRequest.class,
@@ -29,8 +31,9 @@ public class JsonDeserializationFuzzer {
         String json = data.consumeRemainingAsString();
         try {
             mapper.readValue(json, targetType);
-        } catch (Exception e) {
-            // Expected for invalid JSON or incompatible types
+        } catch (JsonProcessingException e) {
+            // Only this one: jazzer's own FuzzerSecurityIssue* extend RuntimeException, so
+            // catch (Exception) would swallow every sanitizer finding.
         }
     }
 }
