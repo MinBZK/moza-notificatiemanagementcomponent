@@ -14,7 +14,6 @@ import nl.rijksoverheid.moz.nmc.service.CallbackUrlValidator;
 import nl.rijksoverheid.moz.nmc.service.DecentraleNotificatieVersturenOpdracht;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 import nl.rijksoverheid.moz.nmc.service.OnbekendBerichtTypeException;
-import nl.rijksoverheid.moz.nmc.service.OngeldigeCallbackUrlException;
 import org.jspecify.annotations.NonNull;
 
 public class DecentraleNotificatieController implements DecentraleNotificatiesApi {
@@ -44,7 +43,7 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
         try {
             Notificatie notificatie = notificatieService.verstuurDecentraal(getOpdracht(request));
             return new NotificatieResponse(notificatie.getId());
-        } catch (OnbekendBerichtTypeException | OngeldigeCallbackUrlException e) {
+        } catch (OnbekendBerichtTypeException e) {
             throw Problems.badRequest("Notificatie niet verstuurd.", e.getMessage());
         } catch (Exception e) {
             Log.error("Onverwachte fout bij versturen van decentrale notificatie", e);
@@ -53,7 +52,7 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
     }
 
     private static @NonNull DecentraleNotificatieVersturenOpdracht getOpdracht(DecentraleNotificatieAanvraagRequest request) {
-        String callbackUrl = CallbackUrlValidator.valideer(request.getCallbackUrl());
+        String callbackUrl = CallbackUrlValidator.normaliseer(request.getCallbackUrl());
         String templateId = BerichtType.vanNaam(request.getBerichtType()).getTemplateId();
 
         return new DecentraleNotificatieVersturenOpdracht(

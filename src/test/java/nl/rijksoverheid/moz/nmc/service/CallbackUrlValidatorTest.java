@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -17,15 +18,13 @@ class CallbackUrlValidatorTest {
     private static final String GEEN_HOSTNAAM = "geen geldige hostnaam";
 
     @Test
-    void geldigeHttpsUrl_wordtOngewijzigdTeruggegeven() {
-        assertEquals("https://consument.example.nl/status",
-                CallbackUrlValidator.valideer(URI.create("https://consument.example.nl/status")));
+    void geldigeHttpsUrl_wordtGeaccepteerd() {
+        assertGeaccepteerd("https://consument.example.nl/status");
     }
 
     @Test
     void poortEnQueryZijnToegestaan() {
-        assertEquals("https://consument.example.nl:8443/pad?notificatie=1",
-                CallbackUrlValidator.valideer(URI.create("https://consument.example.nl:8443/pad?notificatie=1")));
+        assertGeaccepteerd("https://consument.example.nl:8443/pad?notificatie=1");
     }
 
     @Test
@@ -33,12 +32,19 @@ class CallbackUrlValidatorTest {
         // De uitgaande REST-client vergelijkt het scheme hoofdlettergevoelig, dus "HTTPS"
         // mag niet ongewijzigd worden opgeslagen (anders gaat de callback over plain HTTP).
         assertEquals("https://consument.example.nl/status",
-                CallbackUrlValidator.valideer(URI.create("HTTPS://consument.example.nl/status")));
+                CallbackUrlValidator.normaliseer(URI.create("HTTPS://consument.example.nl/status")));
     }
 
     @Test
-    void zonderCallbackUrl_geeftNull() {
-        assertNull(CallbackUrlValidator.valideer(null));
+    void kleineletterSchemeWordtOngewijzigdTeruggegeven() {
+        assertEquals("https://consument.example.nl:8443/pad?notificatie=1",
+                CallbackUrlValidator.normaliseer(URI.create("https://consument.example.nl:8443/pad?notificatie=1")));
+    }
+
+    @Test
+    void zonderCallbackUrl_wordtGeaccepteerdEnGeeftNull() {
+        assertDoesNotThrow(() -> CallbackUrlValidator.valideer(null));
+        assertNull(CallbackUrlValidator.normaliseer(null));
     }
 
     @Test
@@ -90,8 +96,7 @@ class CallbackUrlValidatorTest {
 
     @Test
     void afsluitendePuntInHostnaam_wordtGeaccepteerd() {
-        assertEquals("https://consument.example.nl./status",
-                CallbackUrlValidator.valideer(URI.create("https://consument.example.nl./status")));
+        assertGeaccepteerd("https://consument.example.nl./status");
     }
 
     @Test
@@ -109,7 +114,7 @@ class CallbackUrlValidatorTest {
         String prefix = "https://consument.example.nl/";
         String url = prefix + "a".repeat(2048 - prefix.length());
         assertEquals(2048, url.length());
-        assertEquals(url, CallbackUrlValidator.valideer(URI.create(url)));
+        assertGeaccepteerd(url);
     }
 
     @Test
@@ -122,6 +127,11 @@ class CallbackUrlValidatorTest {
         OngeldigeCallbackUrlException e = assertThrows(OngeldigeCallbackUrlException.class,
                 () -> CallbackUrlValidator.valideer(URI.create("http://consument.example.nl/status")));
         assertTrue(e.getMessage().contains("callbackUrl"));
+    }
+
+    private static void assertGeaccepteerd(String url) {
+        assertDoesNotThrow(() -> CallbackUrlValidator.valideer(URI.create(url)),
+                url + " zou geaccepteerd moeten worden");
     }
 
     /** Asserts both the rejection and the reden, so a case cannot pass via another regel. */

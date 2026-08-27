@@ -11,6 +11,10 @@ import java.util.Locale;
  * {@value #MAX_LENGTE} characters. Rejected: other schemes, userinfo, IP-literal hosts
  * and internal hostnames (localhost, single-label names, *.local/*.internal/*.svc).
  * <p>
+ * The endpoints reach these rules through
+ * {@link nl.rijksoverheid.moz.nmc.validation.ValidCallbackUrl} in the contract, not by
+ * calling this class; they only call {@link #normaliseer(URI)} afterwards.
+ * <p>
  * This is a shape-based denylist, so it does not catch every internal destination: a
  * hostname that merely resolves to an internal IP, or a short in-cluster form such as
  * {@code service.namespace}, still passes. https-only limits the damage (the target must
@@ -27,13 +31,11 @@ public final class CallbackUrlValidator {
     }
 
     /**
-     * Returns the validated URL as a string, or null when no callbackUrl was supplied.
-     *
      * @throws OngeldigeCallbackUrlException when the URL fails one of the checks above
      */
-    public static String valideer(URI callbackUrl) {
+    public static void valideer(URI callbackUrl) {
         if (callbackUrl == null) {
-            return null;
+            return;
         }
         String url = callbackUrl.toString();
         if (url.length() > MAX_LENGTE) {
@@ -54,8 +56,20 @@ public final class CallbackUrlValidator {
         if (poort != -1 && (poort < 1 || poort > 65535)) {
             throw new OngeldigeCallbackUrlException("de poort valt buiten het bereik 1-65535");
         }
-        // Normalize the scheme to lowercase: the outbound REST client compares the scheme
-        // case-sensitively and would send an "HTTPS" URL over plaintext HTTP.
+    }
+
+    /**
+     * Returns the URL with a lowercase scheme, or null when no callbackUrl was supplied.
+     * The outbound REST client compares the scheme case-sensitively and would send an
+     * "HTTPS" URL over plaintext HTTP.
+     *
+     * @param callbackUrl a URL that passed {@link #valideer(URI)}
+     */
+    public static String normaliseer(URI callbackUrl) {
+        if (callbackUrl == null) {
+            return null;
+        }
+        String url = callbackUrl.toString();
         return "https" + url.substring(callbackUrl.getScheme().length());
     }
 

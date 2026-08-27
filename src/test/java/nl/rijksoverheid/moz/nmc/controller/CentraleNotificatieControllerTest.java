@@ -88,7 +88,9 @@ class CentraleNotificatieControllerTest {
                 .when().post("/api/nmc/v1/centraal/notificaties")
                 .then()
                 .statusCode(400)
-                .contentType("application/problem+json");
+                .contentType("application/problem+json")
+                .body("violations[0].field", org.hamcrest.Matchers.endsWith("callbackUrl"))
+                .body("violations[0].message", org.hamcrest.Matchers.containsString("IP-adres"));
     }
 
     @Test
