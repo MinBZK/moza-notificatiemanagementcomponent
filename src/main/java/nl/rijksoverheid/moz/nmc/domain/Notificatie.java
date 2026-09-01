@@ -86,11 +86,7 @@ public class Notificatie {
     // sync. De geschiedenis-toevoeging staat eerst omdat dat de enige stap is die kan falen
     // (@OrderColumn initialiseert de lazy collectie, wat op een detached entiteit een
     // LazyInitializationException geeft) — zo blijft een fout hier nooit half toegepast.
-    // Package-private (niet private): domain-tests geven hiermee een expliciet, ver uiteenliggend
-    // tijdstip mee om de laatsteStatusUpdate-invariant deterministisch te toetsen — twee now()-
-    // aanroepen kunnen anders in dezelfde kloktik vallen, waardoor een test die niet meer bijwerkt
-    // zou missen.
-    void registreerStatus(StatusWaarde status, OffsetDateTime tijdstip) {
+    private void registreerStatus(StatusWaarde status, OffsetDateTime tijdstip) {
         this.statusGeschiedenis.add(new NotificatieStatus(status, tijdstip));
         this.status = status;
         this.laatsteStatusUpdate = tijdstip;
