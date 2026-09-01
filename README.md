@@ -18,8 +18,13 @@ asynchrone bezorgstatus:
    bezorgstatus (delivery receipt).
 6. De NMC zoekt de notificatie op, werkt de status bij en stuurt — als er een
    `callbackUrl` is meegegeven — een statusupdate (**CloudEvents NL GOV**) naar
-   die URL. Na een geslaagde callback wordt het record verwijderd (minimale
-   dataminimalisatie).
+   die URL. Het al dan niet slagen van die callback bepaalt niet of het record
+   blijft bestaan: een retentiejob verwijdert een notificatie met een
+   definitieve status (bijv. `delivered`/`permanent-failure`) pas nadat er
+   `notificatie.retentie.bewaartermijn` (standaard 30 dagen) verstreken is
+   sinds de laatste statusupdate — ongeacht of de callback naar de
+   Dienstverlener is afgeleverd. Een notificatie zonder definitieve status
+   (bijv. nog `sending`) wordt hierdoor niet verwijderd, alleen gesignaleerd.
 
 De `callbackUrl` is optioneel: Dienstverleners zonder eigen webhook-endpoint kunnen
 de status opvragen via `GET /centraal/notificaties/{id}` (nog niet geïmplementeerd).
@@ -150,7 +155,7 @@ Geïmplementeerde componenten zijn vetgedrukt; de rest is toekomstig ontwerp.
 | **Profielservice-adapter** | Client | Haalt contactvoorkeur op bij de Profielservice en kan een e-mailadres invalideren. |
 | **Verzendadapter** | Client (bearer-JWT) | Verstuurt berichten via NotifyNL (`template_id` + `personalisation`). |
 | **Consument-callback-adapter** | Webhook-client (CloudEvents NL GOV) | Stuurt de afleverstatus asynchroon terug naar de aanroeper via de opgegeven `callbackUrl`. |
-| **notificatiedatabase** | PostgreSQL | Slaat referentie, status en (bij centraal profiel) het versleuteld identificerend nummer op; records worden verwijderd zodra de callback is verstuurd. |
+| **notificatiedatabase** | PostgreSQL | Slaat referentie, status, statusgeschiedenis en (bij centraal profiel) het versleuteld identificerend nummer op; een retentiejob verwijdert records mét een definitieve status `notificatie.retentie.bewaartermijn` na de laatste statusupdate, los van of de callback is afgeleverd. |
 | **Decentrale-regie-API** | REST (controller) | Inbound endpoint voor het decentraal profiel: intake op het meegegeven e-mailadres, zonder Profielservice-lookup. |
 | Adres-adapter | Client | Haalt een postadres op bij KvK Handelsregister of BRP als fallback bij contactherstel. |
 | Contactherstel-coordinator | Component | Coördineert de contactherselstroom bij onbereikbaarheid; initieert een nieuwe verzendpoging via een ander kanaal en meldt dit aan de Contactherstel-dienst. |
@@ -165,21 +170,30 @@ De externe systemen die de NMC aanroept of van ontvangt:
 
 ## Domeinmodel
 
-De `Notificatie`-entiteit is minimaal geïmplementeerd: hij bevat een
-NMC-interne `notificatieId` (UUID), de `notifyNlNotificatieId` (de referentie
-die NotifyNL intern gebruikt voor correlatie met delivery receipts), de
-optionele `callbackUrl` en de huidige `status`. Records worden verwijderd zodra
-de callback succesvol is verstuurd (dataminimalisatie).
+De `Notificatie`-entiteit bevat een NMC-interne `notificatieId` (UUID), de
+`notifyNlNotificatieId`, de optionele `callbackUrl`, de huidige `status`, het
+aanmaaktijdstip en `laatsteStatusUpdate`. Elke statusovergang wordt ook
+vastgelegd in een geordende geschiedenis van `NotificatieStatus`-waarden
+(status + tijdstip), als basis voor een toekomstig observability-koppelvlak.
 
-Onderstaande entiteiten zijn de **beoogde eindsituatie** voor latere stories en
+Een retentiejob (`NotificatieRetentieScheduler`) verwijdert een `Notificatie`
+— inclusief zijn statusgeschiedenis — zodra deze een definitieve status heeft
+(`StatusWaarde#isDefinitief`: `delivered`, `permanent-failure`,
+`temporary-failure` of `technical-failure`, de eindstatussen van NotifyNL's
+delivery-receipt-model) én `laatsteStatusUpdate` ouder is dan
+`notificatie.retentie.bewaartermijn` (standaard 30 dagen). Dit staat los van
+het slagen van de consument-callback. Een notificatie zonder definitieve
+status (`created`/`sending`) wordt nooit verwijderd, alleen gesignaleerd
+(WARN-log) als ook die de bewaartermijn overschrijdt.
+
+Onderstaande entiteit is de **beoogde eindsituatie** voor latere stories en
 nog niet geïmplementeerd:
 
 - **`Verzending`**: één concrete verzendpoging (primaire verzending of
-  contactherstelpoging). Houdt het verzendkanaal, de ontvangergegevens, de
-  huidige status en de Notify-referentie bij.
-- **`StatusGebeurtenis`**: een append-only logboek van statusupdates per
-  verzending (bijv. delivery receipts van NotifyNL). Basis voor een toekomstig
-  observability-koppelvlak.
+  contactherstelpoging), met verzendkanaal, ontvangergegevens, status en
+  Notify-referentie. De huidige `NotificatieStatus`-geschiedenis hangt
+  rechtstreeks aan `Notificatie`; zodra `Verzending` bestaat, verschuift die
+  vermoedelijk naar per-verzendpoging.
 
 ## API
 

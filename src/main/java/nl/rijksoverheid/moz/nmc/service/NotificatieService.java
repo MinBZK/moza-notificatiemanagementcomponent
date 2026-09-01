@@ -9,8 +9,8 @@ import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.PartijIdentificatie;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 
 import java.util.Map;
@@ -68,7 +68,7 @@ public class NotificatieService {
             Log.error("Fout bij versturen van notificatie", e);
             throw new NotificatieException("Notificatie kon niet worden verstuurd.");
         }
-        notificatie.setStatus(NotificatieStatus.SENDING);
+        notificatie.registreerStatus(StatusWaarde.SENDING);
 
         return notificatie;
     }
@@ -80,21 +80,20 @@ public class NotificatieService {
                 .orElseThrow(() -> new NotificatieNietGevondenException(
                         "Geen notificatie gevonden voor NotifyNL-referentie " + notifyNlNotificatieId));
 
-        notificatie.setStatus(parseStatus(status));
+        notificatie.registreerStatus(parseStatus(status));
 
-        // Een JTA-timeout tijdens de retries in stuurStatusUpdate() zou notificatie detached maken,
-        // waardoor deleteById() hieronder een DetachedObjectException geeft. Zie ConsumentCallbackAdapter.
-        if (consumentCallbackAdapter.stuurStatusUpdate(notificatie)) {
-            notificatieRepository.deleteById(notificatie.getId());
-        }
+        // TODO #732: stuurStatusUpdate() doet tot 3 synchrone HTTP-pogingen binnen deze transactie.
+        // Een JTA-timeout hier rolt de registreerStatus()-aanroep hierboven stilletjes terug — de
+        // net verwerkte NotifyNL-uitkomst gaat dan verloren in plaats van dat er een fout opduikt.
+        consumentCallbackAdapter.stuurStatusUpdate(notificatie);
     }
 
-    private NotificatieStatus parseStatus(String notifyStatus) {
+    private StatusWaarde parseStatus(String notifyStatus) {
         try {
-            return NotificatieStatus.valueOf(notifyStatus.replace("-", "_").toUpperCase());
+            return StatusWaarde.valueOf(notifyStatus.replace("-", "_").toUpperCase());
         } catch (IllegalArgumentException e) {
             Log.errorf("Onbekende NotifyNL-status ontvangen: %s — opgeslagen als technische fout", notifyStatus);
-            return NotificatieStatus.TECHNICAL_FAILURE;
+            return StatusWaarde.TECHNICAL_FAILURE;
         }
     }
 }

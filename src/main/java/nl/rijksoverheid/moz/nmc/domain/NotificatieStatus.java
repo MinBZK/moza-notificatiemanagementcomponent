@@ -1,18 +1,21 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
-import com.fasterxml.jackson.annotation.JsonValue;
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 
-public enum NotificatieStatus {
-    SENDING,
-    DELIVERED,
-    PERMANENT_FAILURE,
-    TEMPORARY_FAILURE,
-    TECHNICAL_FAILURE,
-    CREATED;
+import java.time.OffsetDateTime;
+import java.util.Objects;
 
-    /** Returns the kebab-case representation for use in API responses (e.g. permanent-failure). */
-    @JsonValue
-    public String toApiValue() {
-        return name().toLowerCase().replace('_', '-');
+/** De status van een Notificatie op een gegeven moment. Waarde-object, eigendom van één Notificatie. */
+@Embeddable
+public record NotificatieStatus(
+        @Enumerated(EnumType.STRING) @Column(nullable = false, length = 32) StatusWaarde status,
+        @Column(nullable = false) OffsetDateTime tijdstip) {
+
+    public NotificatieStatus {
+        Objects.requireNonNull(status, "status is verplicht");
+        Objects.requireNonNull(tijdstip, "tijdstip is verplicht");
     }
 }

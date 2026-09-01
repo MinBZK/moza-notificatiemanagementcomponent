@@ -28,12 +28,23 @@ public class ConsumentCallbackAdapter {
         this.initieleWachtMs = initieleWachtMs;
     }
 
-    // TODO #757 (NMC: Notificaties zonder callback url verwijderen uit database)
-    // Zonder callbackUrl blijft de notificatie voor altijd staan (nooit verwijderd) — voor nu
-    // acceptabel, maar vraagt later om een lastUpdated-veld en cleanup-job.
     public boolean stuurStatusUpdate(Notificatie notificatie) {
         if (notificatie.getCallbackUrl() == null) {
             Log.infof("Geen callback-URL geconfigureerd voor notificatie %s — statusupdate niet verstuurd", notificatie.getId());
+            return false;
+        }
+
+        String callbackUrl = notificatie.getCallbackUrl();
+        ConsumentCallbackClient client;
+        try {
+            client = clientFactory.maakClient(callbackUrl);
+        } catch (Exception e) {
+            // Buiten de retry-lus: een ongeldige URL (bijv. geen absolute http(s)-URI) is een
+            // permanente fout die bij elke poging identiek zou falen. Ongevangen zou dit de aanroepende
+            // @Transactional-methode laten rollbacken, met als gevolg dat ook de zojuist verwerkte
+            // NotifyNL-statusupdate verloren gaat — zie NotificatieService.verwerkAfleverstatus.
+            Log.errorf(e, "Ongeldige callback-URL %s voor notificatie %s — statusupdate niet verstuurd",
+                    callbackUrl, notificatie.getId());
             return false;
         }
 
@@ -47,9 +58,7 @@ public class ConsumentCallbackAdapter {
                 "application/json",
                 new NotificatieData(notificatie.getId(), notificatie.getStatus()));
 
-        ConsumentCallbackClient client = clientFactory.maakClient(notificatie.getCallbackUrl());
-
-        return verstuurSuccesvol(client, event, notificatie.getCallbackUrl());
+        return verstuurSuccesvol(client, event, callbackUrl);
     }
 
     private boolean verstuurSuccesvol(ConsumentCallbackClient client, NotificatieStatusEvent event, String callbackUrl) {
@@ -60,16 +69,17 @@ public class ConsumentCallbackAdapter {
                 return true;
             } catch (Exception e) {
                 if (poging == MAX_POGINGEN) {
-                    Log.errorf(e, "Consument-callback naar %s mislukt na %d pogingen — notificatie bewaard voor herpoging",
+                    Log.errorf(e, "Consument-callback naar %s mislukt na %d pogingen — statusupdate niet "
+                            + "afgeleverd aan de Dienstverlener; er volgt geen automatische herpoging",
                             callbackUrl, MAX_POGINGEN);
                 } else {
-                    Log.warnf(e, "Consument-callback naar %s mislukt (poging %d/%d) — herpoging na %dms",
+                    Log.warnf(e, "Consument-callback naar %s mislukt (poging %d/%d) — nieuwe poging na %dms",
                             callbackUrl, poging, MAX_POGINGEN, wachtMs);
                     try {
                         Thread.sleep(wachtMs);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        Log.warnf(ie, "Consument-callback naar %s onderbroken na poging %d — notificatie bewaard", callbackUrl, poging);
+                        Log.warnf(ie, "Consument-callback naar %s onderbroken na poging %d", callbackUrl, poging);
                         return false;
                     }
                     wachtMs *= 2;

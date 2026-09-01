@@ -12,8 +12,8 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
@@ -140,7 +140,7 @@ class NotifyNLCallbackControllerTest {
 
         ArgumentCaptor<Notificatie> captor = ArgumentCaptor.forClass(Notificatie.class);
         Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(captor.capture());
-        assertEquals(NotificatieStatus.TECHNICAL_FAILURE, captor.getValue().getStatus());
+        assertEquals(StatusWaarde.TECHNICAL_FAILURE, captor.getValue().getStatus());
     }
 
     @Test
@@ -166,7 +166,9 @@ class NotifyNLCallbackControllerTest {
     }
 
     @Test
-    void verwerkAfleverstatus_callbackSuccesvol_verwijdertNotificatieUitDatabase() {
+    void verwerkAfleverstatus_callbackSuccesvol_bewaartNotificatieInDatabase() {
+        // Verwijderen is losgekoppeld van het afleveren van de callback (zie NotificatieRetentieScheduler)
+        // — een geslaagde callback naar de Dienstverlener mag de notificatie niet meer verwijderen.
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
         Mockito.when(consumentCallbackAdapter.stuurStatusUpdate(any())).thenReturn(true);
@@ -185,7 +187,7 @@ class NotifyNLCallbackControllerTest {
                 .then()
                 .statusCode(204);
 
-        assertTrue(notificatieRepository.findByExternalReference(notifyNlId).isEmpty());
+        assertTrue(notificatieRepository.findByExternalReference(notifyNlId).isPresent());
     }
 
     @Test

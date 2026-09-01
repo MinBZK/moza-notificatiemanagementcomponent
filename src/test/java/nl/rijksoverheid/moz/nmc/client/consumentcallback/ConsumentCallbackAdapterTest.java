@@ -1,7 +1,7 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -90,13 +90,34 @@ class ConsumentCallbackAdapterTest {
         assertNotNull(event.subject());
         assertNotNull(event.time());
         assertEquals(notificatie.getId(), event.data().notificatieId());
-        assertEquals(NotificatieStatus.DELIVERED, event.data().status());
+        assertEquals(StatusWaarde.DELIVERED, event.data().status());
+    }
+
+    @Test
+    void stuurStatusUpdate_ongeldigeCallbackUrl_gooitNietMaarRetourneertFalse() {
+        // Regressietest: clientFactory.maakClient(...) zit buiten de retry-try/catch — een
+        // ongeldige URL mag daarom niet uit stuurStatusUpdate ontsnappen, want dat zou de
+        // aanroepende @Transactional-methode in NotificatieService laten rollbacken (zie de TODO
+        // #732-toelichting daar). Telt de aanroepen i.p.v. alleen het resultaat te checken: een
+        // permanente fout (ongeldige URL) hoort niet 3x herhaald te worden zoals een tijdelijke.
+        int[] aanroepen = {0};
+        ConsumentCallbackAdapter adapterMetOngeldigeUrl = new ConsumentCallbackAdapter(
+                url -> {
+                    aanroepen[0]++;
+                    throw new IllegalArgumentException("ongeldige callback-URL: " + url);
+                }, 0L);
+        Notificatie notificatie = notificatie("niet-een-geldige-url");
+
+        boolean resultaat = adapterMetOngeldigeUrl.stuurStatusUpdate(notificatie);
+
+        assertFalse(resultaat);
+        assertEquals(1, aanroepen[0]);
     }
 
     private Notificatie notificatie(String callbackUrl) {
         Notificatie notificatie = new Notificatie(callbackUrl);
         stelIdIn(notificatie, UUID.randomUUID());
-        notificatie.setStatus(NotificatieStatus.DELIVERED);
+        notificatie.registreerStatus(StatusWaarde.DELIVERED);
         return notificatie;
     }
 
