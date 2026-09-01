@@ -1,0 +1,67 @@
+package nl.rijksoverheid.moz.nmc.domain;
+
+import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.quarkus.test.junit.QuarkusTest;
+import jakarta.inject.Inject;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+/**
+ * Persisteert en herlaadt een Notificatie in twee losse transacties: bewijst dat NotificatieStatus-
+ * hydratatie, @OrderColumn-volgorde en de status/laatsteStatusUpdate-invariant ook standhouden na
+ * een echte round-trip door de database, niet alleen in-memory (zie NotificatieTest).
+ */
+@QuarkusTest
+class NotificatiePersistentieTest {
+
+    @Inject
+    NotificatieRepository notificatieRepository;
+
+    @BeforeEach
+    void setUp() {
+        QuarkusTransaction.requiringNew().run(notificatieRepository::deleteAll);
+    }
+
+    @Test
+    void notificatie_naHerladen_behoudtStatusGeschiedenisInVolgordeEnBlijftInvariantKloppen() {
+        // Expliciet, ver uiteenliggend tijdstip voor de laatste overgang i.p.v. terugvallen op
+        // opeenvolgende now()-aanroepen: die kunnen in dezelfde kloktik vallen, waardoor de
+        // laatsteStatusUpdate-assertie verderop ook zou slagen als het veld niet meer bijwerkte.
+        // Afgerond op microseconden: de kolom is timestamp(6), anders faalt de vergelijking met de
+        // herladen (afgeronde) waarde op de nanoseconden die de database toch niet bewaart.
+        OffsetDateTime laatsteTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(1).truncatedTo(ChronoUnit.MICROS);
+
+        UUID id = QuarkusTransaction.requiringNew().call(() -> {
+            Notificatie notificatie = new Notificatie(null);
+            notificatie.registreerStatus(StatusWaarde.SENDING);
+            notificatie.registreerStatus(StatusWaarde.TEMPORARY_FAILURE);
+            notificatie.registreerStatus(StatusWaarde.DELIVERED, laatsteTijdstip);
+            notificatieRepository.persist(notificatie);
+            return notificatie.getId();
+        });
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            Notificatie herladen = notificatieRepository.findById(id);
+
+            List<NotificatieStatus> geschiedenis = herladen.getStatusGeschiedenis();
+            assertEquals(4, geschiedenis.size());
+            assertEquals(StatusWaarde.CREATED, geschiedenis.get(0).status());
+            assertEquals(StatusWaarde.SENDING, geschiedenis.get(1).status());
+            assertEquals(StatusWaarde.TEMPORARY_FAILURE, geschiedenis.get(2).status());
+            assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(3).status());
+            assertEquals(laatsteTijdstip, geschiedenis.get(3).tijdstip());
+
+            assertEquals(StatusWaarde.DELIVERED, herladen.getStatus());
+            assertEquals(laatsteTijdstip, herladen.getLaatsteStatusUpdate());
+        });
+    }
+}

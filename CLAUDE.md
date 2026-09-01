@@ -97,7 +97,7 @@ through only a bare identifier and let NMC lead.
   likely for wMEBV bewijslast) is **not a priority for this skeleton**, but the
   data model should naturally support an audit trail of statuses/attempts per
   notification so this can be added later without a redesign.
-- **`NotificatieStatus` vocabulary** (`created, sending, pending, sent,
+- **`StatusWaarde` vocabulary** (`created, sending, pending, sent,
   delivered, accepted, received, cancelled, permanent-failure,
   temporary-failure, technical-failure`) is grounded directly in GOV.UK
   Notify's own published delivery-receipt statuses. We earlier also looked at
@@ -106,7 +106,7 @@ through only a bare identifier and let NMC lead.
   swagger likely belongs to a *different* system than the per-Dienstverlener
   OMC (`../moza-omc`) — possibly an "Output Management Systeem"
   (e.g. a Printstraat/output system). Treat that swagger as **unconfirmed**;
-  it doesn't block the current `NotificatieStatus` design (which stands on its
+  it doesn't block the current `StatusWaarde` design (which stands on its
   own via Notify's docs), but should be clarified before being used as the
   contract for future OMC-status-reporting / Printstraat integrations.
 
@@ -116,7 +116,7 @@ through only a bare identifier and let NMC lead.
 - `../moza-verificatie-service` — Quarkus; reference for the NotifyNL integration pattern
 - `../moza-portaal` — Next.js portal; has `dependencies/omc/swagger.json`. Possibly
   an "Output Management Systeem"/Printstraat API contract rather than `../moza-omc`
-  — relation unconfirmed, see the `NotificatieStatus` caveat above
+  — relation unconfirmed, see the `StatusWaarde` caveat above
 
 ## Technical conventions for this project
 - Stack: Java 25 + Quarkus 3.35.1 (RESTEasy Reactive, Hibernate ORM/Panache),

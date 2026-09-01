@@ -7,14 +7,16 @@ import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.GeenEmailadresGevondenException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
 import nl.rijksoverheid.moz.nmc.controller.IdentificatieType;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -57,7 +59,7 @@ class NotificatieServiceTest {
 
         Notificatie resultaat = service.versturen(opdracht("https://omc.example.nl/callback"));
 
-        assertEquals(NotificatieStatus.SENDING, resultaat.getStatus());
+        assertEquals(StatusWaarde.SENDING, resultaat.getStatus());
         assertEquals(notifyNlId, resultaat.getExternalReference());
         assertEquals("https://omc.example.nl/callback", resultaat.getCallbackUrl());
     }
@@ -93,7 +95,7 @@ class NotificatieServiceTest {
         Notificatie resultaat = service.verstuurDecentraal(
                 new DecentraleNotificatieVersturenOpdracht("burger@example.nl", TEST_TEMPLATE_ID, Map.of("naam", "Voorbeeld BV"), "https://omc.example.nl/callback"));
 
-        assertEquals(NotificatieStatus.SENDING, resultaat.getStatus());
+        assertEquals(StatusWaarde.SENDING, resultaat.getStatus());
         assertEquals(notifyNlId, resultaat.getExternalReference());
         assertEquals("https://omc.example.nl/callback", resultaat.getCallbackUrl());
         verifyNoInteractions(profielServiceAdapter);
@@ -116,7 +118,7 @@ class NotificatieServiceTest {
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "permanent-failure");
 
-        assertEquals(NotificatieStatus.PERMANENT_FAILURE, notificatie.getStatus());
+        assertEquals(StatusWaarde.PERMANENT_FAILURE, notificatie.getStatus());
     }
 
     @Test
@@ -126,22 +128,22 @@ class NotificatieServiceTest {
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "een-rare-status");
 
-        assertEquals(NotificatieStatus.TECHNICAL_FAILURE, notificatie.getStatus());
+        assertEquals(StatusWaarde.TECHNICAL_FAILURE, notificatie.getStatus());
     }
 
     @Test
-    void verwerkAfleverstatus_callbackSuccesvol_verwijdertNotificatie() {
+    void verwerkAfleverstatus_callbackSuccesvol_verwijdertNotificatieNiet() {
         Notificatie notificatie = notificatie("https://omc.example.nl/callback");
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
         when(consumentCallbackAdapter.stuurStatusUpdate(notificatie)).thenReturn(true);
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
 
-        verify(notificatieRepository).deleteById(notificatie.getId());
+        verify(notificatieRepository, never()).deleteById(any());
     }
 
     @Test
-    void verwerkAfleverstatus_callbackMislukt_bewaartNotificatie() {
+    void verwerkAfleverstatus_callbackMislukt_verwijdertNotificatieNiet() {
         Notificatie notificatie = notificatie("https://omc.example.nl/callback");
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
         when(consumentCallbackAdapter.stuurStatusUpdate(notificatie)).thenReturn(false);
@@ -149,6 +151,21 @@ class NotificatieServiceTest {
         service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
 
         verify(notificatieRepository, never()).deleteById(any());
+    }
+
+    // Vergelijkt met het laatste geschiedenisrecord i.p.v. een isBefore-check tegen de vorige
+    // waarde: die vorm zou ook slagen als laatsteStatusUpdate helemaal niet meer werd bijgewerkt
+    // (gelijke tijdstippen falen isBefore niet). Zie ook NotificatieTest voor dezelfde invariant
+    // op het domeinobject zelf.
+    @Test
+    void verwerkAfleverstatus_laatsteStatusUpdateBlijftGelijkAanLaatsteGeschiedenisRecord() {
+        Notificatie notificatie = notificatie(null);
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
+
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
+
+        List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
+        assertEquals(geschiedenis.get(geschiedenis.size() - 1).tijdstip(), notificatie.getLaatsteStatusUpdate());
     }
 
     private NotificatieVersturenOpdracht opdracht(String callbackUrl) {

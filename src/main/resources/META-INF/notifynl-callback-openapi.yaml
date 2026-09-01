@@ -27,8 +27,13 @@ paths:
         Webhook waarop de bezorgstatus (delivery receipt) van een eerder
         verstuurde e-mail gemeld wordt. Na verwerking wordt de status opgeslagen en, als
         er een callbackUrl is meegegeven bij de oorspronkelijke aanvraag, een
-        statusupdate (CloudEvents NL GOV) naar die URL gestuurd. Na een geslaagde
-        callback wordt het notificatierecord verwijderd.
+        statusupdate (CloudEvents NL GOV) naar die URL gestuurd. Het notificatierecord
+        wordt niet verwijderd als gevolg van deze callback — een retentiejob ruimt een
+        notificatie met een definitieve status (delivered/permanent-failure/
+        temporary-failure/technical-failure) pas op nadat de geconfigureerde
+        bewaartermijn (standaard 30 dagen) is verstreken sinds de laatste statusupdate,
+        ongeacht of de callback naar de aanroeper is afgeleverd. Een notificatie zonder
+        definitieve status (created/sending) wordt hierdoor niet verwijderd.
       tags:
         - NotifyNLCallback
       requestBody:
