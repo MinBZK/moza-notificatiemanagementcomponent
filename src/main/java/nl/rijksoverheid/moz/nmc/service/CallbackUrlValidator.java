@@ -9,7 +9,8 @@ import java.util.Locale;
  * POSTs a statusupdate to this address, so the URL must not point at an internal
  * destination (SSRF). Accepted: an absolute https-URL to a public hostname, at most
  * {@value #MAX_LENGTE} characters. Rejected: other schemes, userinfo, IP-literal hosts
- * and internal hostnames (localhost, single-label names, *.local/*.internal/*.svc).
+ * and internal hostnames (localhost, single-label names, *.localhost/*.local/*.internal/*.svc,
+ * *.home.arpa/*.home/*.corp/*.lan/*.intranet).
  * <p>
  * The endpoints reach these rules through
  * {@link nl.rijksoverheid.moz.nmc.validation.ValidCallbackUrl} in the contract, not by
@@ -19,13 +20,16 @@ import java.util.Locale;
  * hostname that merely resolves to an internal IP, or a short in-cluster form such as
  * {@code service.namespace}, still passes. https-only limits the damage (the target must
  * present a valid certificate for its hostname), but full SSRF protection belongs at
- * connect time (resolve-and-refuse private/loopback/cluster IPs, or an egress allowlist).
+ * connect time (resolve-and-refuse private/loopback/cluster IPs, or an egress allowlist);
+ * follow-up: MinBZK/MijnOverheidZakelijk#1049.
  */
 public final class CallbackUrlValidator {
 
     // Matches the callback_url column (varchar(2048)) so a long URL fails as 400, not at insert.
     private static final int MAX_LENGTE = 2048;
-    private static final List<String> INTERNE_SUFFIXEN = List.of(".localhost", ".local", ".internal", ".svc");
+    private static final List<String> INTERNE_SUFFIXEN = List.of(
+            ".localhost", ".local", ".internal", ".svc",
+            ".home.arpa", ".home", ".corp", ".lan", ".intranet");
 
     private CallbackUrlValidator() {
     }
@@ -62,6 +66,7 @@ public final class CallbackUrlValidator {
      * Returns the URL with a lowercase scheme, or null when no callbackUrl was supplied.
      * The outbound REST client compares the scheme case-sensitively and would send an
      * "HTTPS" URL over plaintext HTTP.
+     * A URI without a scheme is returned unchanged.
      *
      * @param callbackUrl a URL that passed {@link #valideer(URI)}
      */
@@ -70,6 +75,9 @@ public final class CallbackUrlValidator {
             return null;
         }
         String url = callbackUrl.toString();
+        if (callbackUrl.getScheme() == null) {
+            return url;
+        }
         return "https" + url.substring(callbackUrl.getScheme().length());
     }
 

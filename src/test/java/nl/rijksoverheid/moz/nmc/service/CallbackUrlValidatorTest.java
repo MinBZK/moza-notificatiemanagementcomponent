@@ -42,6 +42,11 @@ class CallbackUrlValidatorTest {
     }
 
     @Test
+    void uriZonderScheme_wordtOngewijzigdTeruggegeven() {
+        assertEquals("/alleen-een-pad", CallbackUrlValidator.normaliseer(URI.create("/alleen-een-pad")));
+    }
+
+    @Test
     void zonderCallbackUrl_wordtGeaccepteerdEnGeeftNull() {
         assertDoesNotThrow(() -> CallbackUrlValidator.valideer(null));
         assertNull(CallbackUrlValidator.normaliseer(null));
@@ -90,8 +95,14 @@ class CallbackUrlValidatorTest {
         assertGeweigerd("https://intranet/status", INTERNE_HOSTNAAM);
         assertGeweigerd("https://foo.localhost/status", INTERNE_HOSTNAAM);
         assertGeweigerd("https://profielservice.moza.svc/status", INTERNE_HOSTNAAM);
+        assertGeweigerd("https://profielservice.moza.svc./status", INTERNE_HOSTNAAM);
         assertGeweigerd("https://service.ns.svc.cluster.local/status", INTERNE_HOSTNAAM);
         assertGeweigerd("https://metadata.google.internal/status", INTERNE_HOSTNAAM);
+        assertGeweigerd("https://nas.home.arpa/status", INTERNE_HOSTNAAM);
+        assertGeweigerd("https://router.home/status", INTERNE_HOSTNAAM);
+        assertGeweigerd("https://fileserver.corp/status", INTERNE_HOSTNAAM);
+        assertGeweigerd("https://printer.lan/status", INTERNE_HOSTNAAM);
+        assertGeweigerd("https://portaal.intranet/status", INTERNE_HOSTNAAM);
     }
 
     @Test
