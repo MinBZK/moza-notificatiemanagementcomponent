@@ -7,6 +7,7 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
@@ -37,14 +38,16 @@ class NotificatiePersistentieTest {
         // opeenvolgende now()-aanroepen: die kunnen in dezelfde kloktik vallen, waardoor de
         // laatsteStatusUpdate-assertie verderop ook zou slagen als het veld niet meer bijwerkte.
         // Afgerond op microseconden: de kolom is timestamp(6), anders faalt de vergelijking met de
-        // herladen (afgeronde) waarde op de nanoseconden die de database toch niet bewaart.
+        // herladen (afgeronde) waarde op de nanoseconden die de database toch niet bewaart. Het
+        // tijdstip wordt via reflectie meegegeven aan de private overload: die blijft private omdat
+        // er geen productiereden is om hem breder te openen, alleen een testbehoefte.
         OffsetDateTime laatsteTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(1).truncatedTo(ChronoUnit.MICROS);
 
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(null);
             notificatie.registreerStatus(StatusWaarde.SENDING);
             notificatie.registreerStatus(StatusWaarde.TEMPORARY_FAILURE);
-            notificatie.registreerStatus(StatusWaarde.DELIVERED, laatsteTijdstip);
+            registreerStatusOp(notificatie, StatusWaarde.DELIVERED, laatsteTijdstip);
             notificatieRepository.persist(notificatie);
             return notificatie.getId();
         });
@@ -63,5 +66,15 @@ class NotificatiePersistentieTest {
             assertEquals(StatusWaarde.DELIVERED, herladen.getStatus());
             assertEquals(laatsteTijdstip, herladen.getLaatsteStatusUpdate());
         });
+    }
+
+    private static void registreerStatusOp(Notificatie notificatie, StatusWaarde status, OffsetDateTime tijdstip) {
+        try {
+            Method methode = Notificatie.class.getDeclaredMethod("registreerStatus", StatusWaarde.class, OffsetDateTime.class);
+            methode.setAccessible(true);
+            methode.invoke(notificatie, status, tijdstip);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
