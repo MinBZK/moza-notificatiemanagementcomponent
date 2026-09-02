@@ -11,8 +11,12 @@ import java.util.Objects;
 /** De status van een Notificatie op een gegeven moment. Waarde-object, eigendom van één Notificatie. */
 @Embeddable
 public record NotificatieStatus(
-        @Enumerated(EnumType.STRING) @Column(nullable = false, length = 32) StatusWaarde status,
-        @Column(nullable = false) OffsetDateTime tijdstip) {
+        @Enumerated(EnumType.STRING)
+        @Column(nullable = false, length = 32)
+        StatusWaarde status,
+
+        @Column(nullable = false)
+        OffsetDateTime tijdstip) {
 
     public NotificatieStatus {
         Objects.requireNonNull(status, "status is verplicht");

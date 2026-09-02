@@ -18,8 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Persisteert en herlaadt een Notificatie in twee losse transacties: bewijst dat NotificatieStatus-
- * hydratatie, @OrderColumn-volgorde en de status/laatsteStatusUpdate-invariant ook standhouden na
- * een echte round-trip door de database, niet alleen in-memory (zie NotificatieTest).
+ * hydratatie, @OrderBy-volgorde (op tijdstip, niet op invoegvolgorde) en de daarvan afgeleide
+ * getStatus()/getLaatsteStatusUpdate() ook standhouden na een echte round-trip door de database,
+ * niet alleen in-memory (zie NotificatieTest).
  */
 @QuarkusTest
 class NotificatiePersistentieTest {
@@ -65,6 +66,39 @@ class NotificatiePersistentieTest {
 
             assertEquals(StatusWaarde.DELIVERED, herladen.getStatus());
             assertEquals(laatsteTijdstip, herladen.getLaatsteStatusUpdate());
+        });
+    }
+
+    // SENDING wordt hier ná DELIVERED geregistreerd, maar met een eerder tijdstip: na herladen moet
+    // SENDING alsnog vóór DELIVERED staan (@OrderBy("tijdstip ASC") ordent op tijdstip, niet op
+    // invoegvolgorde), en moet getStatus()/getLaatsteStatusUpdate() DELIVERED teruggeven — het
+    // chronologisch laatste record, ook al is SENDING het laatst-ingevoegde. Een test die hier per
+    // ongeluk chronologische en invoegvolgorde gelijk zou laten lopen, zou ook slagen zonder dat
+    // @OrderBy ooit daadwerkelijk herordent.
+    @Test
+    void notificatie_metNietMonotoneRegistratievolgorde_herlaadtChronologischGeordend() {
+        OffsetDateTime sendingTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(1).truncatedTo(ChronoUnit.MICROS);
+        OffsetDateTime deliveredTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(2).truncatedTo(ChronoUnit.MICROS);
+
+        UUID id = QuarkusTransaction.requiringNew().call(() -> {
+            Notificatie notificatie = new Notificatie(null);
+            registreerStatusOp(notificatie, StatusWaarde.DELIVERED, deliveredTijdstip);
+            registreerStatusOp(notificatie, StatusWaarde.SENDING, sendingTijdstip);
+            notificatieRepository.persist(notificatie);
+            return notificatie.getId();
+        });
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            Notificatie herladen = notificatieRepository.findById(id);
+
+            List<NotificatieStatus> geschiedenis = herladen.getStatusGeschiedenis();
+            assertEquals(3, geschiedenis.size());
+            assertEquals(StatusWaarde.CREATED, geschiedenis.get(0).status());
+            assertEquals(StatusWaarde.SENDING, geschiedenis.get(1).status());
+            assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(2).status());
+
+            assertEquals(StatusWaarde.DELIVERED, herladen.getStatus());
+            assertEquals(deliveredTijdstip, herladen.getLaatsteStatusUpdate());
         });
     }
 
