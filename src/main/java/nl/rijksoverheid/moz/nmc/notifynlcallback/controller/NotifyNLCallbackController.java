@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.notifynlcallback.controller;
 
+import io.quarkus.logging.Log;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.NotifyNlCallbackApi;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
@@ -21,6 +22,12 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
         try {
             notificatieService.verwerkAfleverstatus(afleverstatusRequest.getId(), afleverstatusRequest.getStatus());
         } catch (NotificatieNietGevondenException e) {
+            // Kan een late/vertraagde callback zijn voor een notificatie die de retentiejob
+            // inmiddels al heeft opgeruimd (laatsteStatusUpdate ouder dan de bewaartermijn, ook als
+            // er nog geen NotifyNL-uitkomst was) — zonder deze log is dat niet te onderscheiden van
+            // een onbekende/foutieve referentie.
+            Log.warnf("NotifyNL-callback voor onbekende of reeds verwijderde notificatie (notifyNlNotificatieId=%s)",
+                    afleverstatusRequest.getId());
             throw Problems.notFound("Notificatie niet gevonden", e.getMessage());
         }
     }

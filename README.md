@@ -19,12 +19,9 @@ asynchrone bezorgstatus:
 6. De NMC zoekt de notificatie op, werkt de status bij en stuurt — als er een
    `callbackUrl` is meegegeven — een statusupdate (**CloudEvents NL GOV**) naar
    die URL. Het al dan niet slagen van die callback bepaalt niet of het record
-   blijft bestaan: een retentiejob verwijdert een notificatie met een
-   definitieve status (bijv. `delivered`/`permanent-failure`) pas nadat er
+   blijft bestaan: een retentiejob verwijdert een notificatie pas nadat er
    `notificatie.retentie.bewaartermijn` (standaard 30 dagen) verstreken is
-   sinds de laatste statusupdate — ongeacht of de callback naar de
-   Dienstverlener is afgeleverd. Een notificatie zonder definitieve status
-   (bijv. nog `sending`) wordt hierdoor niet verwijderd, alleen gesignaleerd.
+   sinds de laatste statusupdate.
 
 De `callbackUrl` is optioneel: Dienstverleners zonder eigen webhook-endpoint kunnen
 de status opvragen via `GET /centraal/notificaties/{id}` (nog niet geïmplementeerd).
@@ -155,7 +152,7 @@ Geïmplementeerde componenten zijn vetgedrukt; de rest is toekomstig ontwerp.
 | **Profielservice-adapter** | Client | Haalt contactvoorkeur op bij de Profielservice en kan een e-mailadres invalideren. |
 | **Verzendadapter** | Client (bearer-JWT) | Verstuurt berichten via NotifyNL (`template_id` + `personalisation`). |
 | **Consument-callback-adapter** | Webhook-client (CloudEvents NL GOV) | Stuurt de afleverstatus asynchroon terug naar de aanroeper via de opgegeven `callbackUrl`. |
-| **notificatiedatabase** | PostgreSQL | Slaat referentie, status, statusgeschiedenis en (bij centraal profiel) het versleuteld identificerend nummer op; een retentiejob verwijdert records mét een definitieve status `notificatie.retentie.bewaartermijn` na de laatste statusupdate, los van of de callback is afgeleverd. |
+| **notificatiedatabase** | PostgreSQL | Slaat referentie, status, statusgeschiedenis en (bij centraal profiel) het versleuteld identificerend nummer op; een retentiejob verwijdert records `notificatie.retentie.bewaartermijn` na de laatste statusupdate, los van of de callback is afgeleverd. |
 | **Decentrale-regie-API** | REST (controller) | Inbound endpoint voor het decentraal profiel: intake op het meegegeven e-mailadres, zonder Profielservice-lookup. |
 | Adres-adapter | Client | Haalt een postadres op bij KvK Handelsregister of BRP als fallback bij contactherstel. |
 | Contactherstel-coordinator | Component | Coördineert de contactherselstroom bij onbereikbaarheid; initieert een nieuwe verzendpoging via een ander kanaal en meldt dit aan de Contactherstel-dienst. |
@@ -177,14 +174,14 @@ vastgelegd in een geordende geschiedenis van `NotificatieStatus`-waarden
 (status + tijdstip), als basis voor een toekomstig observability-koppelvlak.
 
 Een retentiejob (`NotificatieRetentieScheduler`) verwijdert een `Notificatie`
-— inclusief zijn statusgeschiedenis — zodra deze een definitieve status heeft
-(`StatusWaarde#isDefinitief`: `delivered`, `permanent-failure`,
-`temporary-failure` of `technical-failure`, de eindstatussen van NotifyNL's
-delivery-receipt-model) én `laatsteStatusUpdate` ouder is dan
+— inclusief zijn statusgeschiedenis — zodra `laatsteStatusUpdate` ouder is dan
 `notificatie.retentie.bewaartermijn` (standaard 30 dagen). Dit staat los van
-het slagen van de consument-callback. Een notificatie zonder definitieve
-status (`created`/`sending`) wordt nooit verwijderd, alleen gesignaleerd
-(WARN-log) als ook die de bewaartermijn overschrijdt.
+het slagen van de consument-callback. De job draait dagelijks om 03:00
+Europese/Amsterdamse tijd (`notificatie.retentie.cron`) en verwijdert in
+begrensde batches, zodat één run niet vastloopt op een grote achterstand. Het
+verwijderen van een notificatie die nog geen definitieve status had
+(`StatusWaarde#isDefinitief`, bijv. nog `sending`) wordt apart gelogd
+(WARN) — NotifyNL heeft daar dan nooit een eindstatus over teruggekoppeld.
 
 Onderstaande entiteit is de **beoogde eindsituatie** voor latere stories en
 nog niet geïmplementeerd:
