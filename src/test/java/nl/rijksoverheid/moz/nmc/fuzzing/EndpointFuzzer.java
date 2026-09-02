@@ -9,6 +9,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
 /**
@@ -69,14 +71,33 @@ public class EndpointFuzzer {
         client.send(request.build(), HttpResponse.BodyHandlers.discarding());
     }
 
+    // Each entry trips a different CallbackUrlValidator reject branch. A raw fuzzed string
+    // almost always dies at the first scheme check, so it never reaches the
+    // host/userinfo/IP branches; a fixed pool of near-valid shapes does.
+    private static final String[] ONGELDIGE_CALLBACK_URLS = {
+            "http://consument.example.invalid/cb",          // scheme
+            "https://user:pw@consument.example.invalid/cb", // userinfo
+            "https://127.0.0.1/cb",                         // IPv4 literal
+            "https://[::1]/cb",                             // IPv6 literal
+            "https://intranet/cb",                          // single-label internal name
+            "https://svc.ns.svc/cb",                        // internal suffix
+            "https:///cb",                                  // geen hostnaam
+            "https://consument.example.invalid:99999/cb",   // poort buiten bereik
+    };
+
     /**
-     * Callback URLs are kept on a closed local port on purpose. The field is
-     * unvalidated caller input that the application POSTs to later, so feeding it
-     * arbitrary hosts would turn the fuzzer into an outbound request generator.
-     * A dead local port still exercises the same code path.
+     * Half the URLs pass the callback-URL validation, so the send path stays
+     * reachable; the other half exercises the reject path. The valid variant uses the
+     * reserved .invalid TLD, which never resolves: the field is caller input that the
+     * application POSTs to later, so a resolvable host would turn the fuzzer into an
+     * outbound request generator. The fuzzed suffix is percent-encoded: a raw one makes
+     * URI parsing fail, which 400s in Jackson before the controller runs.
      */
     private static String fuzzedCallbackUrl(FuzzedDataProvider data) {
-        return "http://localhost:9999/" + data.consumeString(20);
+        return data.consumeBoolean()
+                ? "https://consument.example.invalid/"
+                        + URLEncoder.encode(data.consumeString(20), StandardCharsets.UTF_8)
+                : data.pickValue(ONGELDIGE_CALLBACK_URLS);
     }
 
     private static void fuzzCentraleNotificatie(FuzzedDataProvider data) throws Exception {

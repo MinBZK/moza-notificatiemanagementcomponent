@@ -71,6 +71,29 @@ class CentraleNotificatieControllerTest {
     }
 
     @Test
+    void notificatieVersturen_ongeldigeCallbackUrl_retourneert400() {
+        String aanvraag = """
+                {
+                  "identificatieType": "KVK",
+                  "identificatieNummer": "12345678",
+                  "dienstverlener": "Gemeente Voorbeeld",
+                  "berichtType": "Stuurgroep Agenda",
+                  "callbackUrl": "https://10.0.0.1/callback"
+                }
+                """;
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(aanvraag)
+                .when().post("/api/nmc/v1/centraal/notificaties")
+                .then()
+                .statusCode(400)
+                .contentType("application/problem+json")
+                .body("violations[0].field", org.hamcrest.Matchers.endsWith("callbackUrl"))
+                .body("violations[0].message", org.hamcrest.Matchers.containsString("IP-adres"));
+    }
+
+    @Test
     void notificatieVersturen_geenEmailadresGevonden_retourneert400() {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijZonderEmail());
 
