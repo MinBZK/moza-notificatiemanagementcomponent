@@ -4,12 +4,10 @@ import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.OrderColumn;
+import jakarta.persistence.OrderBy;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -30,21 +28,16 @@ public class Notificatie {
     @Column(name = "callback_url", length = 2048)
     private String callbackUrl;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 32)
-    private StatusWaarde status;
-
     @Column(nullable = false)
     private OffsetDateTime aangemaakt;
 
-    @Column(name = "laatste_status_update", nullable = false)
-    private OffsetDateTime laatsteStatusUpdate;
-
-    // @OrderColumn: anders is dit een ongeordende JPA-bag (geen garantie op volgorde bij herladen,
-    // en elke wijziging herschrijft de hele collectie i.p.v. één rij toe te voegen).
+    // Herstelt bij elk laden de chronologische volgorde op basis van het daadwerkelijke tijdstip —
+    // belangrijk omdat getStatus()/getLaatsteStatusUpdate() op het laatste element van deze lijst
+    // leunen. Herschrijft de collectie in zijn geheel bij elke wijziging: verwaarloosbaar omdat deze
+    // lijst nooit meer dan een handvol rijen bevat (hooguit één per StatusWaarde).
     @ElementCollection
     @CollectionTable(name = "notificatie_status", joinColumns = @JoinColumn(name = "notificatie_id"))
-    @OrderColumn(name = "volgnummer")
+    @OrderBy("tijdstip ASC")
     private List<NotificatieStatus> statusGeschiedenis = new ArrayList<>();
 
     protected Notificatie() {
@@ -66,8 +59,10 @@ public class Notificatie {
         return callbackUrl;
     }
 
+    // Afgeleid van het laatste statusGeschiedenis-record, dus vereist een actieve persistence
+    // context (net als getStatusGeschiedenis()).
     public StatusWaarde getStatus() {
-        return status;
+        return laatsteStatus().status();
     }
 
     public UUID getExternalReference() {
@@ -82,25 +77,27 @@ public class Notificatie {
         registreerStatus(status, OffsetDateTime.now(ZoneOffset.UTC));
     }
 
-    // Enige mutatiepunt voor status: houdt status, laatsteStatusUpdate en statusGeschiedenis in
-    // sync. De geschiedenis-toevoeging staat eerst omdat dat de enige stap is die kan falen
-    // (@OrderColumn initialiseert de lazy collectie, wat op een detached entiteit een
-    // LazyInitializationException geeft) — zo blijft een fout hier nooit half toegepast.
+    // Enige mutatiepunt voor status: statusGeschiedenis is de enige bron van waarheid, getStatus()
+    // en getLaatsteStatusUpdate() lezen hier gewoon van af.
     private void registreerStatus(StatusWaarde status, OffsetDateTime tijdstip) {
         this.statusGeschiedenis.add(new NotificatieStatus(status, tijdstip));
-        this.status = status;
-        this.laatsteStatusUpdate = tijdstip;
     }
 
     public OffsetDateTime getAangemaakt() {
         return aangemaakt;
     }
 
+    // Afgeleid van het laatste statusGeschiedenis-record — vereist een actieve persistence context.
     public OffsetDateTime getLaatsteStatusUpdate() {
-        return laatsteStatusUpdate;
+        return laatsteStatus().tijdstip();
     }
 
+    // Vereist een actieve persistence context: statusGeschiedenis is een lazy @ElementCollection.
     public List<NotificatieStatus> getStatusGeschiedenis() {
         return List.copyOf(statusGeschiedenis);
+    }
+
+    private NotificatieStatus laatsteStatus() {
+        return statusGeschiedenis.get(statusGeschiedenis.size() - 1);
     }
 }

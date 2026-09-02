@@ -8,6 +8,7 @@ import io.quarkus.scheduler.SkippedExecution;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus_;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -15,8 +16,11 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Ruimt Notificatie-rijen op waarvan de status langer dan de bewaartermijn niet is bijgewerkt.
@@ -69,7 +73,7 @@ public class NotificatieRetentieScheduler {
             resultaat = QuarkusTransaction.requiringNew().call(() -> verwijderBatch(grens));
             totaalVerwijderd += resultaat.totaal();
             totaalNietDefinitief += resultaat.nietDefinitiefAantal();
-        } while (resultaat.totaal() == BATCH_GROOTTE);
+        } while (resultaat.vollePagina());
 
         Log.infof("Retentiejob: %d verlopen notificatie(s) verwijderd (grens=%s)", totaalVerwijderd, grens);
 
@@ -86,34 +90,48 @@ public class NotificatieRetentieScheduler {
     // Selecteert eerst een begrensd aantal kandidaten (JPQL SELECT ... LIMIT is overal ondersteund)
     // en verwijdert die vervolgens via een JPQL bulk-delete op id — zo blijft dit een JPQL-statement
     // (Hibernate ruimt de @ElementCollection-rijen dan zelf op, zie NotificatieRetentieSchedulerTest)
-    // in plaats van native SQL. De status wordt in dezelfde SELECT meegelezen, zodat de
-    // definitief/niet-definitief-telling voor de WARN-log geen aparte (en dus potentieel
-    // inconsistente) query nodig heeft — de classificatie gebeurt op precies de rijen die ook echt
-    // verwijderd worden.
+    // in plaats van native SQL. De laatste statusregel per notificatie wordt via een op n
+    // gecorreleerde subquery (MAX-tijdstip binnen n.statusGeschiedenis) afgeleid, zodat de
+    // definitief/niet-definitief-telling voor de WARN-log op precies dezelfde rijen gebeurt als
+    // waarop ook echt verwijderd wordt — geen aparte (en dus potentieel inconsistente) query.
     private BatchResultaat verwijderBatch(OffsetDateTime grens) {
         List<Object[]> kandidaten = notificatieRepository.getEntityManager()
-                .createQuery("SELECT n.id, n." + Notificatie_.STATUS + " FROM Notificatie n WHERE n."
-                        + Notificatie_.LAATSTE_STATUS_UPDATE + " <= :grens ORDER BY n."
-                        + Notificatie_.LAATSTE_STATUS_UPDATE, Object[].class)
+                .createQuery("SELECT n.id, ns." + NotificatieStatus_.STATUS + " FROM Notificatie n JOIN n."
+                        + Notificatie_.STATUS_GESCHIEDENIS + " ns WHERE ns." + NotificatieStatus_.TIJDSTIP
+                        + " <= :grens AND ns." + NotificatieStatus_.TIJDSTIP + " = (SELECT MAX(ns2."
+                        + NotificatieStatus_.TIJDSTIP + ") FROM n." + Notificatie_.STATUS_GESCHIEDENIS
+                        + " ns2) ORDER BY ns." + NotificatieStatus_.TIJDSTIP, Object[].class)
                 .setParameter("grens", grens)
                 .setMaxResults(BATCH_GROOTTE)
                 .getResultList();
 
         if (kandidaten.isEmpty()) {
-            return new BatchResultaat(0, 0);
+            return new BatchResultaat(0, 0, false);
         }
 
-        List<UUID> ids = kandidaten.stream().map(rij -> (UUID) rij[0]).toList();
-        long nietDefinitiefAantal = kandidaten.stream()
-                .map(rij -> (StatusWaarde) rij[1])
+        // De MAX-subquery filtert niet per se op een unieke waarde: heeft een notificatie twee
+        // statusregels met hetzelfde tijdstip, dan matcht de subquery ze allebei en levert de JOIN
+        // meer dan één rij voor die notificatie op. Dedupliceren op id houdt de telling en de
+        // verwijdering hieronder correct ongeacht of dat voorkomt; welke van de gelijke tijdstippen
+        // bewaard blijft voor nietDefinitiefAantal is dan een willekeurige keuze.
+        Map<UUID, StatusWaarde> laatsteStatusPerNotificatie = kandidaten.stream()
+                .collect(Collectors.toMap(rij -> (UUID) rij[0], rij -> (StatusWaarde) rij[1],
+                        (eersteStatus, tweedeStatus) -> eersteStatus, LinkedHashMap::new));
+
+        long nietDefinitiefAantal = laatsteStatusPerNotificatie.values().stream()
                 .filter(status -> !status.isDefinitief())
                 .count();
 
-        int verwijderd = (int) notificatieRepository.delete("id IN ?1", ids);
-        return new BatchResultaat(verwijderd, (int) nietDefinitiefAantal);
+        int verwijderd = (int) notificatieRepository.delete("id IN ?1", laatsteStatusPerNotificatie.keySet());
+        // vollePagina (niet verwijderd!) bepaalt of de lus doorgaat: de deduplicatie hierboven kan het
+        // aantal verwijderde notificaties lager maken dan het aantal opgehaalde kandidaatrijen, terwijl
+        // er nog wel kandidaten resteren — de lus moet dus op de queryresultaatpagina varen, niet op
+        // het aantal verwijderde rijen.
+        boolean vollePagina = kandidaten.size() == BATCH_GROOTTE;
+        return new BatchResultaat(verwijderd, (int) nietDefinitiefAantal, vollePagina);
     }
 
-    record BatchResultaat(int totaal, int nietDefinitiefAantal) {
+    record BatchResultaat(int totaal, int nietDefinitiefAantal, boolean vollePagina) {
     }
 
     // Vuurt voor elke @Scheduled-methode in de applicatie; momenteel de enige, dus geen filtering

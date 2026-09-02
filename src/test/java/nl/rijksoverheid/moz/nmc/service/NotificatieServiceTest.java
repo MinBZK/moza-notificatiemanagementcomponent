@@ -8,7 +8,6 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.GeenEmailadresGevondenExce
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
 import nl.rijksoverheid.moz.nmc.controller.IdentificatieType;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
 import java.lang.reflect.Field;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -151,21 +149,6 @@ class NotificatieServiceTest {
         service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
 
         verify(notificatieRepository, never()).deleteById(any());
-    }
-
-    // Vergelijkt met het laatste geschiedenisrecord i.p.v. een isBefore-check tegen de vorige
-    // waarde: die vorm zou ook slagen als laatsteStatusUpdate helemaal niet meer werd bijgewerkt
-    // (gelijke tijdstippen falen isBefore niet). Zie ook NotificatieTest voor dezelfde invariant
-    // op het domeinobject zelf.
-    @Test
-    void verwerkAfleverstatus_laatsteStatusUpdateBlijftGelijkAanLaatsteGeschiedenisRecord() {
-        Notificatie notificatie = notificatie(null);
-        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
-
-        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
-
-        List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
-        assertEquals(geschiedenis.get(geschiedenis.size() - 1).tijdstip(), notificatie.getLaatsteStatusUpdate());
     }
 
     private NotificatieVersturenOpdracht opdracht(String callbackUrl) {

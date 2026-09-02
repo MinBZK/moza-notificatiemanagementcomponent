@@ -4,6 +4,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,10 +12,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -75,12 +79,7 @@ class NotificatieRetentieSchedulerTest {
         int aantalRijen = 1005;
         OffsetDateTime verlopenTijdstip = OffsetDateTime.now(ZoneOffset.UTC).minusDays(31);
 
-        QuarkusTransaction.requiringNew().run(() -> notificatieRepository.getEntityManager()
-                .createNativeQuery("INSERT INTO notificatie (id, status, aangemaakt, laatste_status_update) "
-                        + "SELECT RANDOM_UUID(), 'DELIVERED', ?1, ?1 FROM SYSTEM_RANGE(1, ?2)")
-                .setParameter(1, verlopenTijdstip)
-                .setParameter(2, aantalRijen)
-                .executeUpdate());
+        plantVerlopenNotificaties(aantalRijen, verlopenTijdstip, "DELIVERED");
 
         scheduler.verwijderVerlopenNotificaties();
 
@@ -98,12 +97,7 @@ class NotificatieRetentieSchedulerTest {
         int aantalRijen = 1005;
         OffsetDateTime verlopenTijdstip = OffsetDateTime.now(ZoneOffset.UTC).minusDays(31);
 
-        QuarkusTransaction.requiringNew().run(() -> notificatieRepository.getEntityManager()
-                .createNativeQuery("INSERT INTO notificatie (id, status, aangemaakt, laatste_status_update) "
-                        + "SELECT RANDOM_UUID(), 'DELIVERED', ?1, ?1 FROM SYSTEM_RANGE(1, ?2)")
-                .setParameter(1, verlopenTijdstip)
-                .setParameter(2, aantalRijen)
-                .executeUpdate());
+        plantVerlopenNotificaties(aantalRijen, verlopenTijdstip, "DELIVERED");
 
         // grens is "nu", niet exact verlopenTijdstip: een gelijke grens loopt tegen
         // afrondingsverschil in de timestamp(6)-kolom aan (opgeslagen waarde vs. in-memory waarde
@@ -129,6 +123,68 @@ class NotificatieRetentieSchedulerTest {
 
         assertEquals(3, resultaat.totaal());
         assertEquals(1, resultaat.nietDefinitiefAantal());
+    }
+
+    // Als de MAX-subquery in verwijderBatch door een gelijk tijdstip toch twee rijen voor dezelfde
+    // notificatie oplevert, moet die notificatie desondanks maar één keer meetellen. Beide statussen
+    // hier zijn bewust niet-definitief, zodat de verwachte telling niet afhangt van welke van de twee
+    // de MAX-subquery toevallig laat "winnen".
+    @Test
+    void verwijderBatch_metTweeGelijktijdigeStatussenVoorEenNotificatie_teltDieNotificatieMaarEenKeer() {
+        OffsetDateTime verlopenTijdstip = OffsetDateTime.now(ZoneOffset.UTC).minusDays(31);
+        QuarkusTransaction.requiringNew().run(() -> {
+            Notificatie notificatie = new Notificatie(null);
+            vervangGeschiedenisDoor(notificatie, List.of(
+                    new NotificatieStatus(StatusWaarde.CREATED, verlopenTijdstip),
+                    new NotificatieStatus(StatusWaarde.SENDING, verlopenTijdstip)));
+            notificatieRepository.persist(notificatie);
+        });
+
+        NotificatieRetentieScheduler.BatchResultaat resultaat = QuarkusTransaction.requiringNew()
+                .call(() -> verwijderBatchOp(OffsetDateTime.now(ZoneOffset.UTC)));
+
+        assertEquals(1, resultaat.totaal());
+        assertEquals(1, resultaat.nietDefinitiefAantal());
+    }
+
+    // Dekt de realistische situatie die de MAX-subquery in verwijderBatch moet afhandelen: een oude
+    // aanmaakstatus mag een notificatie niet laten verwijderen als er nadien een recente(re) status is
+    // bijgekomen. Zonder de MAX-correlatie (bijv. als de query per ongeluk op élk geschiedenisrecord
+    // in plaats van alleen het laatste zou filteren) zou deze notificatie ten onrechte verwijderd
+    // worden op basis van de verlopen CREATED-datum.
+    @Test
+    void verwijderVerlopenNotificaties_notificatieMetOudeCreatedMaarRecenteStatus_wordtNietVerwijderd() {
+        UUID id = QuarkusTransaction.requiringNew().call(() -> {
+            Notificatie notificatie = new Notificatie(null);
+            vervangGeschiedenisDoor(notificatie, List.of(
+                    new NotificatieStatus(StatusWaarde.CREATED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(40)),
+                    new NotificatieStatus(StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1))));
+            notificatieRepository.persist(notificatie);
+            return notificatie.getId();
+        });
+
+        scheduler.verwijderVerlopenNotificaties();
+
+        QuarkusTransaction.requiringNew().run(() ->
+                assertTrue(notificatieRepository.findByIdOptional(id).isPresent()));
+    }
+
+    // Twee statussen per notificatie op hetzelfde tijdstip laat de kandidatenquery meer rijen dan
+    // distincte notificaties opleveren: één queryresultaatpagina van BATCH_GROOTTE (1000) rijen dekt
+    // dan maar 500 distincte notificaties. Bewijst dat de lus dat verschil verdraagt en doorgaat zolang
+    // de queryresultaatpagina vol is, ook al ligt het aantal verwijderde notificaties per batch dan
+    // lager dan BATCH_GROOTTE.
+    @Test
+    void verwijderVerlopenNotificaties_metGelijktijdigeStatussenOverMeerdereBatches_verwijdertUiteindelijkAlles() {
+        int aantalNotificaties = 1005;
+        OffsetDateTime verlopenTijdstip = OffsetDateTime.now(ZoneOffset.UTC).minusDays(31);
+
+        plantVerlopenNotificaties(aantalNotificaties, verlopenTijdstip, "SENDING", "DELIVERED");
+
+        scheduler.verwijderVerlopenNotificaties();
+
+        long overgebleven = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count());
+        assertEquals(0L, overgebleven);
     }
 
     // Bewust vastgelegd gedrag, geen toevalstreffer: een notificatie mét callbackUrl waarvan de
@@ -182,22 +238,50 @@ class NotificatieRetentieSchedulerTest {
 
     private UUID maakNotificatie(String callbackUrl, StatusWaarde status, OffsetDateTime laatsteStatusUpdate) {
         return QuarkusTransaction.requiringNew().call(() -> {
-            // De constructor registreert CREATED al zelf — nogmaals registreren zou een dubbel
-            // geschiedenisrecord opleveren.
             Notificatie notificatie = new Notificatie(callbackUrl);
-            if (status != StatusWaarde.CREATED) {
-                notificatie.registreerStatus(status);
-            }
+            vervangGeschiedenisDoor(notificatie, List.of(new NotificatieStatus(status, laatsteStatusUpdate)));
             notificatieRepository.persist(notificatie);
-            notificatieRepository.flush();
-
-            notificatieRepository.getEntityManager()
-                    .createQuery("UPDATE Notificatie n SET n.laatsteStatusUpdate = :tijdstip WHERE n.id = :id")
-                    .setParameter("tijdstip", laatsteStatusUpdate)
-                    .setParameter("id", notificatie.getId())
-                    .executeUpdate();
-
             return notificatie.getId();
+        });
+    }
+
+    // De constructor registreert altijd zelf CREATED@now(), wat na @OrderBy("tijdstip ASC") ná een
+    // bewust terug- of vooruitgedateerde teststatus zou sorteren en zo deze fixture stilletjes zou
+    // breken. Vervangt de hele geschiedenis daarom door precies de gewenste record(s).
+    private static void vervangGeschiedenisDoor(Notificatie notificatie, List<NotificatieStatus> geschiedenis) {
+        try {
+            Field veld = Notificatie.class.getDeclaredField("statusGeschiedenis");
+            veld.setAccessible(true);
+            veld.set(notificatie, new ArrayList<>(geschiedenis));
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // Status en tijdstip leven in notificatie_status, een aparte tabel van notificatie (zie
+    // V2__notificatie_retentie.sql) — vandaar een apart INSERT...SELECT per status. RANDOM_UUID() in
+    // losse statements zou niet corresponderen tussen beide tabellen; een deterministisch UUID
+    // afgeleid van SYSTEM_RANGE's rijnummer (X) laat alle inserts voor dezelfde rij naar dezelfde
+    // gegenereerde notificatie-id verwijzen. Meerdere statussen geeft een fixture met meer dan één
+    // rij per notificatie op hetzelfde tijdstip (zie
+    // ...metGelijktijdigeStatussenOverMeerdereBatches_... hierboven).
+    private void plantVerlopenNotificaties(int aantalRijen, OffsetDateTime tijdstip, String... statussen) {
+        String idExpressie = "CAST(('00000000-0000-0000-0000-' || LPAD(CAST(X AS VARCHAR), 12, '0')) AS UUID)";
+        QuarkusTransaction.requiringNew().run(() -> {
+            notificatieRepository.getEntityManager()
+                    .createNativeQuery("INSERT INTO notificatie (id, aangemaakt) SELECT " + idExpressie
+                            + ", ?1 FROM SYSTEM_RANGE(1, ?2)")
+                    .setParameter(1, tijdstip)
+                    .setParameter(2, aantalRijen)
+                    .executeUpdate();
+            for (String status : statussen) {
+                notificatieRepository.getEntityManager()
+                        .createNativeQuery("INSERT INTO notificatie_status (notificatie_id, status, tijdstip) SELECT "
+                                + idExpressie + ", '" + status + "', ?1 FROM SYSTEM_RANGE(1, ?2)")
+                        .setParameter(1, tijdstip)
+                        .setParameter(2, aantalRijen)
+                        .executeUpdate();
+            }
         });
     }
 
