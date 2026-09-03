@@ -99,14 +99,23 @@ through only a bare identifier and let NMC lead.
   history (`statusGeschiedenis`, a `NotificatieStatus` per transition) rather
   than just a current-status field, so an audit trail per notification can be
   exposed later without a redesign.
-- **`StatusWaarde`** models NotifyNL's delivery-receipt statuses it actually
-  needs to act on (`created, sending, delivered, permanent-failure,
-  temporary-failure, technical-failure`) plus `onbekend` — a catch-all for any
-  NotifyNL status outside that list (NotifyNL's own API defines more; see
-  `src/main/resources/openapi/notifynl_api.yaml`). An unrecognized status is
-  logged and stored as `onbekend` rather than guessed as one of the known
-  ones, and is treated as non-definitief (see `StatusWaarde#isDefinitief`)
-  since it's not established whether NotifyNL still sends a follow-up for it.
+- **`StatusWaarde`** models exactly what NotifyNL's *email* delivery-receipt
+  callback actually sends today — `delivered`, `permanent-failure`,
+  `temporary-failure`, `technical-failure` (see `notifynl_api.yaml`'s email
+  callback schema, ~line 212) — plus `created`/`sending`, which are NMC's own
+  internal registrations (`Notificatie`'s constructor,
+  `NotificatieService#verstuurNaarEmail`) and never values `parseStatus` parses
+  *from* NotifyNL. Deliberately **not** modeled: NotifyNL's SMS vocabulary
+  (adds `pending`/`sent`) and its Letter vocabulary (`accepted`/`received`/
+  `cancelled` instead of `created`/`sending`/`delivered` at all) — NMC only
+  ever sends email through NotifyNL today. `onbekend` is `parseStatus`'s
+  catch-all for anything outside the modeled set (logged when it happens) —
+  today mainly a defense against NotifyNL violating its own documented
+  contract, but it'll matter for real once a non-email channel (e.g.
+  contactherstel via Printstraat) starts feeding a status through this same
+  path with a vocabulary `StatusWaarde` doesn't cover yet. `onbekend` is
+  deliberately non-definitief (see `StatusWaarde#isDefinitief`), so an
+  unrecognized status can't silently masquerade as a final outcome.
 
 ## Reference repos (siblings, same level as this repo)
 - `../moza-omc` — OMC, .NET (Moza.Omc.Api)

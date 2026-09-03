@@ -167,12 +167,13 @@ class NotifyNLCallbackControllerTest {
     }
 
     @Test
-    void verwerkAfleverstatus_callbackSuccesvol_bewaartNotificatieInDatabase() {
+    void verwerkAfleverstatus_bewaartNotificatieInDatabase() {
         // Verwijderen is losgekoppeld van het afleveren van de callback (zie NotificatieRetentieScheduler)
-        // — een geslaagde callback naar de Dienstverlener mag de notificatie niet meer verwijderen.
+        // — een callback naar de Dienstverlener mag de notificatie niet meer verwijderen. Er valt hier
+        // niets te variëren op het slagen van die callback: stuurStatusUpdate() geeft niets terug en
+        // de aanroeper doet niets met de uitkomst.
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
-        Mockito.when(consumentCallbackAdapter.stuurStatusUpdate(any(), any())).thenReturn(true);
 
         given()
                 .contentType(ContentType.JSON)
@@ -191,27 +192,37 @@ class NotifyNLCallbackControllerTest {
         assertTrue(notificatieRepository.findByExternalReference(notifyNlId).isPresent());
     }
 
+    // Einde-tot-eind-tegenhanger van de unit test in NotificatieServiceTest: een laat aangekomen
+    // niet-definitieve callback ná een definitieve status wordt geaccepteerd (204, zodat NotifyNL
+    // niet blijft herhalen) maar niet geregistreerd — de eindstatus blijft staan.
     @Test
-    void verwerkAfleverstatus_callbackMislukt_bewaartNotificatieInDatabase() {
+    void verwerkAfleverstatus_nietDefinitieveStatusNaDefinitieve_laatDeEindstatusStaan() {
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
-        Mockito.when(consumentCallbackAdapter.stuurStatusUpdate(any(), any())).thenReturn(false);
 
         given()
                 .contentType(ContentType.JSON)
-                .body(aanvraag("https://omc.example.com/callback"))
+                .body(aanvraag(null))
                 .when().post("/api/nmc/v1/centraal/notificaties")
                 .then().statusCode(200);
 
+        stuurDeliveryReceipt(notifyNlId, "delivered");
+        stuurDeliveryReceipt(notifyNlId, "sending");
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            Notificatie notificatie = notificatieRepository.findByExternalReference(notifyNlId).orElseThrow();
+            assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
+        });
+    }
+
+    private void stuurDeliveryReceipt(UUID notifyNlId, String status) {
         given()
                 .contentType(ContentType.JSON)
                 .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
-                .body(deliveryReceipt(notifyNlId, "delivered"))
+                .body(deliveryReceipt(notifyNlId, status))
                 .when().post("/api/nmc/v1/notifynl-callback")
                 .then()
                 .statusCode(204);
-
-        assertTrue(notificatieRepository.findByExternalReference(notifyNlId).isPresent());
     }
 
     private String aanvraag(String callbackUrl) {

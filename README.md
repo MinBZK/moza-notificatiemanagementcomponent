@@ -167,13 +167,19 @@ De externe systemen die de NMC aanroept of van ontvangt:
 
 ## Domeinmodel
 
-De `Notificatie`-entiteit bevat een NMC-interne `notificatieId` (UUID), de
-`notifyNlNotificatieId`, de optionele `callbackUrl` en het aanmaaktijdstip.
-Elke statusovergang wordt vastgelegd in een geordende geschiedenis van
-`NotificatieStatus`-waarden (status + tijdstip) — dit is ook de basis voor een
-toekomstig observability-koppelvlak. De huidige status en het tijdstip van de
-laatste statuswijziging zijn geen aparte velden, maar worden afgeleid van het
-laatste record in die geschiedenis.
+De `Notificatie`-entiteit bevat een NMC-interne `id` (UUID), de
+`externalReference` (het notificatie-id van NotifyNL, voor correlatie met
+delivery receipts) en de optionele `callbackUrl`. Elke statusovergang wordt
+vastgelegd in een geordende geschiedenis van `NotificatieStatus`-waarden
+(status + tijdstip) — dit is ook de basis voor een toekomstig
+observability-koppelvlak. Het aanmaaktijdstip, de huidige status en het
+tijdstip van de laatste statuswijziging staan niet als kolom op `Notificatie`,
+maar zijn afgeleid van respectievelijk het eerste en het laatste record in die
+geschiedenis (`getAangemaakt()` / `getStatus()` / `getLaatsteStatusUpdate()`).
+De entiteit heeft optimistic locking (`@Version`): twee gelijktijdig verwerkte
+delivery receipts voor dezelfde notificatie zouden elkaars statusregel anders
+geruisloos overschrijven. De tweede transactie faalt nu zichtbaar, waarna
+NotifyNL de callback opnieuw aanbiedt.
 
 Een retentiejob (`NotificatieRetentieScheduler`) verwijdert een `Notificatie`
 — inclusief zijn statusgeschiedenis — zodra die laatste statuswijziging ouder
@@ -217,7 +223,14 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   stuurt — indien een `callbackUrl` aanwezig is — een **CloudEvents NL GOV**
   statusupdate naar die URL. Retourneert `204` op succes, `401` bij een
   ontbrekend of ongeldig bearer token, en `404` als de NotifyNL-referentie
-  onbekend is. Dit endpoint heeft een eigen, losse OpenAPI-specificatie (zie
+  onbekend is. Een niet-definitieve status die binnenkomt nadat er al een
+  definitieve status is vastgelegd (`StatusWaarde#isDefinitief`, bijv. een laat
+  aangekomen of herhaalde `sending` na `delivered`) wordt geweigerd: hij wordt
+  gelogd (WARN) maar niet geregistreerd, en er gaat geen statusupdate over naar
+  de Dienstverlener. De eerder vastgelegde eindstatus blijft zo staan en de
+  bewaartermijn (zie hieronder) begint niet opnieuw te lopen. Het endpoint
+  antwoordt in dat geval alsnog `204`, zodat NotifyNL de callback niet blijft
+  herhalen. Dit endpoint heeft een eigen, losse OpenAPI-specificatie (zie
   hieronder), zodat het makkelijk te verwijderen is zodra de NMC publiek
   bereikbaar is en NotifyNL een echte callback-URL kan benaderen.
 
