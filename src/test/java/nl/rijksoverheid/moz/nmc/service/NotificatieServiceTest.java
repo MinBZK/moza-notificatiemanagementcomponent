@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -129,39 +130,51 @@ class NotificatieServiceTest {
         assertEquals(StatusWaarde.ONBEKEND, notificatie.getStatus());
     }
 
-    // NotifyNL is leidend: een status die "teruggaat" van definitief naar niet-definitief (bijv. een
-    // dubbele of laat aangekomen callback bij NotifyNL zelf) wordt gewoon geregistreerd, niet
-    // geweigerd — dit wordt alleen gelogd (zie NotificatieService#verwerkAfleverstatus).
+    // Een niet-definitieve status ná een definitieve is geen nieuwe uitkomst maar een dubbele of laat
+    // aangekomen callback; die wordt geweigerd zodat de vastgelegde eindstatus blijft staan (en de
+    // bewaartermijn niet opnieuw begint te lopen). Zie NotificatieService#verwerkAfleverstatus.
     @Test
-    void verwerkAfleverstatus_vanDefinitieveNaarNietDefinitieveStatus_registreertTochDeNieuweStatus() {
+    void verwerkAfleverstatus_vanDefinitieveNaarNietDefinitieveStatus_negeertDeNieuweStatus() {
         Notificatie notificatie = notificatie(null);
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
+        int aantalStatussenNaDelivered = notificatie.getStatusGeschiedenis().size();
+
+        service.verwerkAfleverstatus(UUID.randomUUID(), "sending");
+
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
+        // Niet alleen de afgeleide status, ook de geschiedenis zelf moet onaangeroerd blijven: een
+        // extra (genegeerde) record zou het laatste tijdstip verzetten en daarmee de retentieklok
+        // resetten, ook al bleef getStatus() dan toevallig DELIVERED.
+        assertEquals(aantalStatussenNaDelivered, notificatie.getStatusGeschiedenis().size());
+    }
+
+    // De statusupdate naar de Dienstverlener hoort bij een geweigerde status óók achterwege te
+    // blijven: er is niets nieuws te melden, en een CloudEvent met SENDING zou de Dienstverlener een
+    // teruggedraaide bezorgstatus voorspiegelen.
+    @Test
+    void verwerkAfleverstatus_vanDefinitieveNaarNietDefinitieveStatus_stuurtGeenStatusUpdate() {
+        Notificatie notificatie = notificatie("https://omc.example.nl/callback");
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
         service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "sending");
 
-        assertEquals(StatusWaarde.SENDING, notificatie.getStatus());
+        verify(consumentCallbackAdapter, times(1)).stuurStatusUpdate(any(), any());
+        verify(consumentCallbackAdapter, never()).stuurStatusUpdate(any(), eq(StatusWaarde.SENDING));
     }
 
+    // Verwijderen is losgekoppeld van het afleveren van de callback (zie NotificatieRetentieScheduler).
+    // stuurStatusUpdate() geeft niets terug, dus er valt hier niets te variëren op de uitkomst van de
+    // callback: de notificatie blijft hoe dan ook staan.
     @Test
-    void verwerkAfleverstatus_callbackSuccesvol_verwijdertNotificatieNiet() {
+    void verwerkAfleverstatus_verwijdertNotificatieNiet() {
         Notificatie notificatie = notificatie("https://omc.example.nl/callback");
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
-        when(consumentCallbackAdapter.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED)).thenReturn(true);
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
 
-        verify(notificatieRepository, never()).deleteById(any());
-    }
-
-    @Test
-    void verwerkAfleverstatus_callbackMislukt_verwijdertNotificatieNiet() {
-        Notificatie notificatie = notificatie("https://omc.example.nl/callback");
-        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
-        when(consumentCallbackAdapter.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED)).thenReturn(false);
-
-        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
-
+        verify(consumentCallbackAdapter).stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED);
         verify(notificatieRepository, never()).deleteById(any());
     }
 

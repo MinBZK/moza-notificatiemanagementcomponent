@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OrderBy;
+import jakarta.persistence.Version;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -21,6 +22,15 @@ public class Notificatie {
     @Id
     @GeneratedValue
     private UUID id;
+
+    // statusGeschiedenis is een Hibernate-bag (List + @OrderBy, geen @OrderColumn): elke mutatie
+    // wordt uitgevoerd als "verwijder alle rijen van deze notificatie en voeg de hele lijst opnieuw
+    // toe". Zonder versiecontrole overschrijft van twee gelijktijdige NotifyNL-callbacks de
+    // laatste commit de statusregel van de eerste zonder enig signaal. Met @Version faalt die
+    // tweede commit op een OptimisticLockException; die ontsnapt uit verwerkAfleverstatus, zodat
+    // NotifyNL een 5xx krijgt en dezelfde callback opnieuw aanbiedt — dan zonder concurrentie.
+    @Version
+    private long versie;
 
     @Column(name = "external_reference", unique = true)
     private UUID externalReference;
@@ -77,7 +87,7 @@ public class Notificatie {
     // Afgeleid van het eerste statusGeschiedenis-record (altijd CREATED, zie de constructor) —
     // vereist een actieve persistence context.
     public OffsetDateTime getAangemaakt() {
-        return statusGeschiedenis.get(0).tijdstip();
+        return eersteStatus().tijdstip();
     }
 
     // Afgeleid van het laatste statusGeschiedenis-record — vereist een actieve persistence context.
@@ -90,7 +100,26 @@ public class Notificatie {
         return List.copyOf(statusGeschiedenis);
     }
 
+    private NotificatieStatus eersteStatus() {
+        controleerGeschiedenisGevuld();
+
+        return statusGeschiedenis.getFirst();
+    }
+
     private NotificatieStatus laatsteStatus() {
-        return statusGeschiedenis.get(statusGeschiedenis.size() - 1);
+        controleerGeschiedenisGevuld();
+
+        return statusGeschiedenis.getLast();
+    }
+
+    // Een Notificatie zonder statusgeschiedenis kan langs deze code niet ontstaan: de constructor
+    // legt altijd CREATED vast. Blijft toch als vangnet staan omdat niets buiten Java dat afdwingt
+    // (de tabel heeft geen constraint die minstens één statusregel eist), en een lege lijst hier
+    // anders een IndexOutOfBoundsException oplevert die niets over de oorzaak zegt.
+    private void controleerGeschiedenisGevuld() {
+        if (statusGeschiedenis.isEmpty()) {
+            throw new IllegalStateException(
+                    "Notificatie " + id + " heeft geen statusgeschiedenis — datamigratie onvolledig?");
+        }
     }
 }

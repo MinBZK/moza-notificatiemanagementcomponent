@@ -3,7 +3,9 @@ package nl.rijksoverheid.moz.nmc.domain;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import jakarta.persistence.OptimisticLockException;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import org.hibernate.StaleStateException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -17,6 +19,8 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Persisteert en herlaadt een Notificatie in twee losse transacties: bewijst dat NotificatieStatus-
@@ -117,6 +121,61 @@ class NotificatiePersistentieTest {
             notificatieRepository.persist(notificatie);
             notificatieRepository.flush();
         });
+    }
+
+    // statusGeschiedenis is een Hibernate-bag: elke toevoeging herschrijft alle statusregels van de
+    // notificatie. Zonder @Version op Notificatie zouden twee gelijktijdige callbacks die allebei
+    // dezelfde geschiedenis inlezen en er ieder een regel aan toevoegen, elkaars regel geruisloos
+    // overschrijven — de laatste commit wint volledig. Deze test bootst dat na: de buitenste
+    // transactie leest de notificatie in, een geneste requiringNew()-transactie (die de buitenste
+    // schorst en dus een eigen persistence context krijgt) commit ondertussen een eigen statusregel,
+    // waarna de buitenste alsnog zijn eigen wijziging probeert te committen.
+    @Test
+    void notificatie_tweeTransactiesWijzigenDezelfdeStatusGeschiedenis_laatDeTweedeCommitFalen() {
+        UUID id = QuarkusTransaction.requiringNew().call(() -> {
+            Notificatie notificatie = new Notificatie(null);
+            notificatieRepository.persist(notificatie);
+            return notificatie.getId();
+        });
+
+        Throwable fout = assertThrows(Throwable.class, () -> QuarkusTransaction.requiringNew().run(() -> {
+            Notificatie eerste = notificatieRepository.findById(id);
+            // Dwingt de lazy @ElementCollection af binnen deze transactie, zodat de bag écht
+            // ingelezen is vóór de concurrent gecommitte wijziging hieronder.
+            assertEquals(1, eerste.getStatusGeschiedenis().size());
+
+            QuarkusTransaction.requiringNew().run(() -> {
+                Notificatie tweede = notificatieRepository.findById(id);
+                tweede.registreerStatus(StatusWaarde.DELIVERED);
+            });
+
+            eerste.registreerStatus(StatusWaarde.PERMANENT_FAILURE);
+        }));
+
+        assertTrue(bevatOptimisticLockException(fout),
+                "Verwachtte een OptimisticLockException in de oorzaakketen, maar kreeg: " + fout);
+
+        // De kern van het probleem: de statusregel van de gecommitte transactie mag niet stilzwijgend
+        // verdwenen zijn.
+        QuarkusTransaction.requiringNew().run(() -> {
+            List<NotificatieStatus> geschiedenis = notificatieRepository.findById(id).getStatusGeschiedenis();
+
+            assertEquals(2, geschiedenis.size());
+            assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(1).status());
+        });
+    }
+
+    // De exceptie komt naar boven verpakt door zowel JTA (RollbackException) als
+    // QuarkusTransaction; welke laag precies bovenaan staat is een implementatiedetail waar deze
+    // test niet op vast hoort te zitten — het gaat erom dát de versiecontrole heeft toegeslagen.
+    private static boolean bevatOptimisticLockException(Throwable fout) {
+        for (Throwable oorzaak = fout; oorzaak != null; oorzaak = oorzaak.getCause()) {
+            if (oorzaak instanceof OptimisticLockException || oorzaak instanceof StaleStateException) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void registreerStatusOp(Notificatie notificatie, StatusWaarde status, OffsetDateTime tijdstip) {

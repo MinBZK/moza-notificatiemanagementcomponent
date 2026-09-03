@@ -82,20 +82,28 @@ public class NotificatieService {
 
         StatusWaarde huidigeStatus = notificatie.getStatus();
         StatusWaarde nieuweStatus = parseStatus(status);
-        // NotifyNL is leidend: de NMC registreert wat binnenkomt, ook als dat een eerder ontvangen
-        // definitieve status weer "terugdraait" naar een niet-definitieve. Dat kan wijzen op een
-        // dubbele of laat aangekomen callback bij NotifyNL zelf — de moeite van het opmerken waard,
-        // maar geen reden om de nieuwe status te weigeren.
+        // Een niet-definitieve status ná een definitieve is geen nieuwe uitkomst maar een dubbele of
+        // laat aangekomen callback (NotifyNL herhaalt een callback bij elke niet-2xx). Zo'n update
+        // registreren zou de laatst bekende uitkomst overschrijven, de Dienstverlener een
+        // teruggedraaide bezorgstatus melden én — omdat de retentiejob op het laatste tijdstip in de
+        // statusgeschiedenis vaart — de bewaartermijn opnieuw laten beginnen. Daarom wordt hij
+        // genegeerd; de eerder vastgelegde eindstatus blijft staan.
         if (huidigeStatus.isDefinitief() && !nieuweStatus.isDefinitief()) {
-            Log.warnf("Notificatie %s ging van definitieve status %s terug naar niet-definitieve status "
-                    + "%s (NotifyNL-referentie %s)", notificatie.getId(), huidigeStatus, nieuweStatus,
-                    notifyNlNotificatieId);
+            Log.warnf("Notificatie %s heeft al definitieve status %s; niet-definitieve status %s "
+                    + "(NotifyNL-referentie %s) wordt genegeerd", notificatie.getId(), huidigeStatus,
+                    nieuweStatus, notifyNlNotificatieId);
+
+            return;
         }
         notificatie.registreerStatus(nieuweStatus);
 
         // TODO #732: stuurStatusUpdate() doet tot 3 synchrone HTTP-pogingen binnen deze transactie.
-        // Een JTA-timeout hier rolt de registreerStatus()-aanroep hierboven stilletjes terug — de
-        // net verwerkte NotifyNL-uitkomst gaat dan verloren in plaats van dat er een fout opduikt.
+        // Een JTA-timeout hier rolt de registreerStatus()-aanroep hierboven terug: de net verwerkte
+        // NotifyNL-uitkomst gaat dan verloren. Niet stil richting de aanroeper — de RollbackException
+        // ontsnapt uit deze methode en NotifyNLCallbackController vangt hem niet, dus NotifyNL krijgt
+        // een 5xx en biedt de callback opnieuw aan (het herhaalt bij elke niet-2xx). Het verlies is
+        // dus echt, maar wordt gemeld; die 5xx is tegelijk precies wat de dubbele callback uitlokt
+        // die hierboven wordt afgevangen.
         consumentCallbackAdapter.stuurStatusUpdate(notificatie, nieuweStatus);
     }
 

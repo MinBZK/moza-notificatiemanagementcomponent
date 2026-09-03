@@ -2,15 +2,19 @@ package nl.rijksoverheid.moz.nmc.job;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -18,20 +22,30 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.doAnswer;
 
 @QuarkusTest
 class NotificatieRetentieSchedulerTest {
 
-    @Inject
+    // @InjectSpy i.p.v. @Inject: zonder stubbing gedraagt de spy zich als de echte repository, dus
+    // alle tests hieronder draaien gewoon tegen de echte database. Alleen
+    // ...alsEenLatereBatchFaalt_... stubt hem, om een storing halverwege de batchlus af te dwingen.
+    @InjectSpy
     NotificatieRepository notificatieRepository;
 
     @Inject
     NotificatieRetentieScheduler scheduler;
+
+    @Inject
+    NotificatieService notificatieService;
 
     @BeforeEach
     void setUp() {
@@ -61,6 +75,27 @@ class NotificatieRetentieSchedulerTest {
         UUID nietVerlopenId = maakNotificatie(null, StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
 
         scheduler.verwijderVerlopenNotificaties();
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            assertTrue(notificatieRepository.findByIdOptional(verlopenId).isEmpty());
+            assertTrue(notificatieRepository.findByIdOptional(nietVerlopenId).isPresent());
+        });
+    }
+
+    // Alle andere tests werken met uitersten (31 dagen oud versus 1 dag oud) rond de standaard
+    // bewaartermijn van 30 dagen en zouden daarom net zo goed slagen met een hardgecodeerde grens.
+    // Deze test draait een scheduler met een bewaartermijn van 2 dagen op een populatie waarvan
+    // beide rijen ruim bínnen de standaardtermijn vallen: alleen als de geconfigureerde waarde de
+    // grens écht bepaalt, verdwijnt de rij van 3 dagen oud en blijft die van 1 dag oud staan.
+    // Een kale scheduler i.p.v. een @TestProfile: dat scheelt een tweede Quarkus-context, en de
+    // constructorparameter is precies wat hier bewezen moet worden (zie verwijderBatchOp voor waarom
+    // rechtstreeks construeren hier veilig is).
+    @Test
+    void verwijderVerlopenNotificaties_metEenAfwijkendeBewaartermijn_gebruiktDieAlsGrens() {
+        UUID verlopenId = maakNotificatie(null, StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(3));
+        UUID nietVerlopenId = maakNotificatie(null, StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+
+        new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(2)).verwijderVerlopenNotificaties();
 
         QuarkusTransaction.requiringNew().run(() -> {
             assertTrue(notificatieRepository.findByIdOptional(verlopenId).isEmpty());
@@ -105,9 +140,43 @@ class NotificatieRetentieSchedulerTest {
         NotificatieRetentieScheduler.BatchResultaat eersteBatch = QuarkusTransaction.requiringNew()
                 .call(() -> verwijderBatchOp(OffsetDateTime.now(ZoneOffset.UTC)));
 
-        assertEquals(1000, eersteBatch.totaal());
+        assertEquals(1000, eersteBatch.kandidaten());
+        assertEquals(1000, eersteBatch.verwijderd());
         long overgebleven = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count());
         assertEquals(5L, overgebleven);
+    }
+
+    // Bewijst de transactie-per-batch waar de hele veiligheidsredenering van de job op rust: zonder
+    // QuarkusTransaction.requiringNew() per batch (bijv. als verwijderVerlopenNotificaties() ooit
+    // "vereenvoudigd" wordt tot één @Transactional-methode) zou een fout in batch 2 ook de al
+    // verwijderde 1000 rijen van batch 1 terugdraaien — en zou elke andere test in deze suite gewoon
+    // groen blijven.
+    //
+    // De storing wordt afgedwongen door getEntityManager() vanaf de derde aanroep te laten falen:
+    // een geslaagde batch roept hem precies twee keer aan (verwijderBatch voor de SELECT, verwijder
+    // voor de DELETE), dus aanroep 1 en 2 zijn batch 1 en aanroep 3 is de SELECT van batch 2. De
+    // echte EntityManager wordt vooraf opgehaald zodat de eerste twee aanroepen gewoon werken.
+    @Test
+    void verwijderVerlopenNotificaties_alsEenLatereBatchFaalt_blijftDeEerdereBatchVerwijderd() {
+        plantVerlopenNotificaties(1500, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
+
+        EntityManager echteEntityManager = notificatieRepository.getEntityManager();
+        AtomicInteger aanroepen = new AtomicInteger();
+        doAnswer(invocation -> {
+            if (aanroepen.incrementAndGet() > 2) {
+                throw new RuntimeException("gesimuleerde storing in batch 2");
+            }
+
+            return echteEntityManager;
+        }).when(notificatieRepository).getEntityManager();
+
+        assertThrows(RuntimeException.class, scheduler::verwijderVerlopenNotificaties);
+
+        // Stubbing weg vóór de telling, anders zou die zelf op de gesimuleerde storing stuklopen.
+        Mockito.reset(notificatieRepository);
+        long overgebleven = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count());
+        assertEquals(500L, overgebleven, "Batch 1 was al gecommit en mag niet zijn teruggedraaid door "
+                + "de fout in batch 2");
     }
 
     // Pint de definitief/niet-definitief-telling die de WARN-log voedt: een niet-definitieve rij
@@ -121,8 +190,9 @@ class NotificatieRetentieSchedulerTest {
         NotificatieRetentieScheduler.BatchResultaat resultaat = QuarkusTransaction.requiringNew()
                 .call(() -> verwijderBatchOp(OffsetDateTime.now(ZoneOffset.UTC)));
 
-        assertEquals(3, resultaat.totaal());
-        assertEquals(1, resultaat.nietDefinitiefAantal());
+        assertEquals(3, resultaat.kandidaten());
+        assertEquals(3, resultaat.verwijderd());
+        assertEquals(1, resultaat.nietDefinitiefKandidaten());
     }
 
     // Als de MAX-subquery in verwijderBatch door een gelijk tijdstip toch twee rijen voor dezelfde
@@ -143,8 +213,9 @@ class NotificatieRetentieSchedulerTest {
         NotificatieRetentieScheduler.BatchResultaat resultaat = QuarkusTransaction.requiringNew()
                 .call(() -> verwijderBatchOp(OffsetDateTime.now(ZoneOffset.UTC)));
 
-        assertEquals(1, resultaat.totaal());
-        assertEquals(1, resultaat.nietDefinitiefAantal());
+        assertEquals(1, resultaat.kandidaten());
+        assertEquals(1, resultaat.verwijderd());
+        assertEquals(1, resultaat.nietDefinitiefKandidaten());
     }
 
     // Dekt de realistische situatie die de MAX-subquery in verwijderBatch moet afhandelen: een oude
@@ -171,9 +242,9 @@ class NotificatieRetentieSchedulerTest {
 
     // Twee statussen per notificatie op hetzelfde tijdstip laat de kandidatenquery meer rijen dan
     // distincte notificaties opleveren: één queryresultaatpagina van BATCH_GROOTTE (1000) rijen dekt
-    // dan maar 500 distincte notificaties. Bewijst dat de lus dat verschil verdraagt en doorgaat zolang
-    // de queryresultaatpagina vol is, ook al ligt het aantal verwijderde notificaties per batch dan
-    // lager dan BATCH_GROOTTE.
+    // dan maar 500 distincte notificaties. Bewijst dat de lus dat verschil verdraagt: hij vaart op het
+    // aantal verwijderde notificaties en gaat dus door, ook al ligt dat per batch lager dan
+    // BATCH_GROOTTE.
     @Test
     void verwijderVerlopenNotificaties_metGelijktijdigeStatussenOverMeerdereBatches_verwijdertUiteindelijkAlles() {
         int aantalNotificaties = 1005;
@@ -185,6 +256,42 @@ class NotificatieRetentieSchedulerTest {
 
         long overgebleven = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count());
         assertEquals(0L, overgebleven);
+    }
+
+    // Dekt de TOCTOU tussen de kandidatenquery en de DELETE in verwijderBatch: tussen beide door kan
+    // een gelijktijdige verwerkAfleverstatus een verse statusregel committen, waardoor een kandidaat
+    // niet meer verlopen is. Zo'n gelijktijdige commit is in een test niet betrouwbaar te timen;
+    // daarom wordt hier de DELETE zelf (privé, via reflectie) aangeroepen met het id van een
+    // notificatie die níet verlopen is — precies de toestand die het echte venster oplevert. Een
+    // blinde DELETE op id zou de rij weghalen; het herhaalde retentiepredicaat hoort dat te
+    // verhinderen.
+    @Test
+    void verwijder_metEenIdDatNietMeerVerlopenIs_verwijdertDieNotificatieNiet() {
+        UUID nietVerlopenId = maakNotificatie(null, StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC));
+        OffsetDateTime grens = OffsetDateTime.now(ZoneOffset.UTC).minusDays(30);
+
+        int verwijderd = QuarkusTransaction.requiringNew()
+                .call(() -> verwijderOp(List.of(nietVerlopenId), grens));
+
+        assertEquals(0, verwijderd);
+        QuarkusTransaction.requiringNew().run(() ->
+                assertTrue(notificatieRepository.findByIdOptional(nietVerlopenId).isPresent()));
+    }
+
+    // Tegenhanger van de test hierboven: dezelfde aanroep met een wél verlopen notificatie moet die
+    // juist verwijderen. Zonder deze test zou de assertie hierboven ook slagen als de DELETE per
+    // ongeluk nooit meer iets verwijdert.
+    @Test
+    void verwijder_metEenVerlopenId_verwijdertDieNotificatieWel() {
+        UUID verlopenId = maakNotificatie(null, StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
+        OffsetDateTime grens = OffsetDateTime.now(ZoneOffset.UTC).minusDays(30);
+
+        int verwijderd = QuarkusTransaction.requiringNew()
+                .call(() -> verwijderOp(List.of(verlopenId), grens));
+
+        assertEquals(1, verwijderd);
+        QuarkusTransaction.requiringNew().run(() ->
+                assertTrue(notificatieRepository.findByIdOptional(verlopenId).isEmpty()));
     }
 
     // Bewust vastgelegd gedrag, geen toevalstreffer: een notificatie mét callbackUrl waarvan de
@@ -200,6 +307,34 @@ class NotificatieRetentieSchedulerTest {
 
         QuarkusTransaction.requiringNew().run(() ->
                 assertTrue(notificatieRepository.findByIdOptional(verlopenIdMetCallbackUrl).isEmpty()));
+    }
+
+    // De tegenhanger van de test hierboven: die bewijst de negatieve helft (het afleveren van een
+    // status aan de Dienstverlener verzet de bewaartermijn níet), deze de positieve helft — een
+    // binnenkomende NotifyNL-statusupdate registreert een nieuw statusgeschiedenisrecord en zet de
+    // teller daarmee terug op nu. De notificatie start bewust ruim verlopen (31 dagen, bij de
+    // standaardtermijn van 30): zou de statusupdate de bewaartermijn niet verzetten, dan haalt de
+    // retentiejob hem hier alsnog weg. SENDING → DELIVERED is een realistische opeenvolging die niet
+    // door de afwijzing van een niet-definitieve status ná een definitieve wordt tegengehouden (zie
+    // NotificatieService#verwerkAfleverstatus).
+    @Test
+    void verwerkAfleverstatus_voorEenVerlopenNotificatie_verzetDeBewaartermijnZodatDeRetentiejobHemLaatStaan() {
+        UUID notifyNlReferentie = UUID.randomUUID();
+        UUID id = QuarkusTransaction.requiringNew().call(() -> {
+            Notificatie notificatie = new Notificatie(null);
+            notificatie.setExternalReference(notifyNlReferentie);
+            vervangGeschiedenisDoor(notificatie, List.of(new NotificatieStatus(StatusWaarde.SENDING,
+                    OffsetDateTime.now(ZoneOffset.UTC).minusDays(31))));
+            notificatieRepository.persist(notificatie);
+            return notificatie.getId();
+        });
+
+        notificatieService.verwerkAfleverstatus(notifyNlReferentie, "delivered");
+
+        scheduler.verwijderVerlopenNotificaties();
+
+        QuarkusTransaction.requiringNew().run(() ->
+                assertTrue(notificatieRepository.findByIdOptional(id).isPresent()));
     }
 
     // Deze test dekt wat Hibernate zelf al doet: bij een JPQL bulk-delete ruimt Hibernate de
@@ -295,6 +430,20 @@ class NotificatieRetentieSchedulerTest {
             Method methode = NotificatieRetentieScheduler.class.getDeclaredMethod("verwijderBatch", OffsetDateTime.class);
             methode.setAccessible(true);
             return (NotificatieRetentieScheduler.BatchResultaat) methode.invoke(kaleScheduler, grens);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // Zie verwijderBatchOp hierboven voor waarom er een kale scheduler wordt geconstrueerd.
+    private int verwijderOp(Collection<UUID> ids, OffsetDateTime grens) {
+        try {
+            NotificatieRetentieScheduler kaleScheduler =
+                    new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(30));
+            Method methode = NotificatieRetentieScheduler.class.getDeclaredMethod("verwijder",
+                    Collection.class, OffsetDateTime.class);
+            methode.setAccessible(true);
+            return (int) methode.invoke(kaleScheduler, ids, grens);
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }
