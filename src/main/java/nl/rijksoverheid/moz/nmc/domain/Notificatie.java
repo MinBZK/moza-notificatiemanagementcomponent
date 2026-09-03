@@ -28,10 +28,6 @@ public class Notificatie {
     @Column(name = "callback_url", length = 2048)
     private String callbackUrl;
 
-    // Herstelt bij elk laden de chronologische volgorde op basis van het daadwerkelijke tijdstip —
-    // belangrijk omdat getStatus()/getLaatsteStatusUpdate() op het laatste element van deze lijst
-    // leunen. Herschrijft de collectie in zijn geheel bij elke wijziging: verwaarloosbaar omdat deze
-    // lijst nooit meer dan een handvol rijen bevat (hooguit één per StatusWaarde).
     @ElementCollection
     @CollectionTable(name = "notificatie_status", joinColumns = @JoinColumn(name = "notificatie_id"))
     @OrderBy("tijdstip ASC")
