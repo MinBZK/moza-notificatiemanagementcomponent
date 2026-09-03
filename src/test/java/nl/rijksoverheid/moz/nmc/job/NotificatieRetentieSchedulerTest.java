@@ -269,10 +269,9 @@ class NotificatieRetentieSchedulerTest {
         String idExpressie = "CAST(('00000000-0000-0000-0000-' || LPAD(CAST(X AS VARCHAR), 12, '0')) AS UUID)";
         QuarkusTransaction.requiringNew().run(() -> {
             notificatieRepository.getEntityManager()
-                    .createNativeQuery("INSERT INTO notificatie (id, aangemaakt) SELECT " + idExpressie
-                            + ", ?1 FROM SYSTEM_RANGE(1, ?2)")
-                    .setParameter(1, tijdstip)
-                    .setParameter(2, aantalRijen)
+                    .createNativeQuery("INSERT INTO notificatie (id) SELECT " + idExpressie
+                            + " FROM SYSTEM_RANGE(1, ?1)")
+                    .setParameter(1, aantalRijen)
                     .executeUpdate();
             for (String status : statussen) {
                 notificatieRepository.getEntityManager()

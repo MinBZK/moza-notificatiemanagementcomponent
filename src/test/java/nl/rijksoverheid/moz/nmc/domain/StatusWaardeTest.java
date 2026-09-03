@@ -19,7 +19,8 @@ class StatusWaardeTest {
             "PERMANENT_FAILURE, permanent-failure",
             "TEMPORARY_FAILURE, temporary-failure",
             "TECHNICAL_FAILURE, technical-failure",
-            "CREATED, created"
+            "CREATED, created",
+            "ONBEKEND, onbekend"
     })
     void toApiValue_retourneertKebabCase(StatusWaarde status, String verwacht) {
         assertEquals(verwacht, status.toApiValue());
@@ -33,8 +34,8 @@ class StatusWaardeTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = StatusWaarde.class, names = {"CREATED", "SENDING"})
-    void isDefinitief_statussenWaarNotifyNlNogEenVervolgcallbackKanSturen_retourneertFalse(StatusWaarde status) {
+    @EnumSource(value = StatusWaarde.class, names = {"CREATED", "SENDING", "ONBEKEND"})
+    void isDefinitief_statussenWaarNietZekerIsDatErGeenVervolgcallbackKomt_retourneertFalse(StatusWaarde status) {
         assertFalse(status.isDefinitief());
     }
 }

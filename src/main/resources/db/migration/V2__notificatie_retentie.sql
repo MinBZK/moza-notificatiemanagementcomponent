@@ -1,11 +1,13 @@
 -- V2: Notificatie-retentie loskoppelen van callback-afhandeling.
--- status en laatste_status_update van een Notificatie leven alleen in notificatie_status (het
--- laatste record daarvan is de single source of truth). De retentiejob gebruikt dat laatste
--- tijdstip om te bepalen welke rijen mogen worden opgeruimd, los van of/hoe een callback naar de
+-- status, aangemaakt en laatste_status_update van een Notificatie leven alleen in
+-- notificatie_status (het eerste record is altijd de aanmaakstatus CREATED, het laatste record is
+-- de single source of truth voor de huidige status). De retentiejob gebruikt dat laatste tijdstip
+-- om te bepalen welke rijen mogen worden opgeruimd, los van of/hoe een callback naar de
 -- Dienstverlener verliep.
 -- Geen backfill van bestaande rijen nodig: dit component draait nog niet live.
 
 ALTER TABLE notificatie DROP COLUMN status;
+ALTER TABLE notificatie DROP COLUMN aangemaakt;
 
 -- Geschiedenis van statusovergangen per notificatie (Notificatie#registreerStatus legt hier
 -- telkens een rij in vast). Een @ElementCollection-tabel: geen eigen id, de rij heeft geen
@@ -21,7 +23,7 @@ ALTER TABLE notificatie DROP COLUMN status;
 CREATE TABLE notificatie_status (
     notificatie_id uuid NOT NULL REFERENCES notificatie(id) ON DELETE CASCADE,
     status varchar(32) NOT NULL CHECK (status IN (
-        'SENDING', 'DELIVERED', 'PERMANENT_FAILURE', 'TEMPORARY_FAILURE', 'TECHNICAL_FAILURE', 'CREATED'
+        'SENDING', 'DELIVERED', 'PERMANENT_FAILURE', 'TEMPORARY_FAILURE', 'TECHNICAL_FAILURE', 'CREATED', 'ONBEKEND'
     )),
     tijdstip timestamp(6) with time zone NOT NULL
 );

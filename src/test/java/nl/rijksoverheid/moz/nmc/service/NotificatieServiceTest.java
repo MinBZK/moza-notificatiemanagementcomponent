@@ -120,20 +120,34 @@ class NotificatieServiceTest {
     }
 
     @Test
-    void verwerkAfleverstatus_onbekendeStatus_valtTerugOpTechnicalFailure() {
+    void verwerkAfleverstatus_onbekendeStatus_valtTerugOpOnbekend() {
         Notificatie notificatie = notificatie(null);
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "een-rare-status");
 
-        assertEquals(StatusWaarde.TECHNICAL_FAILURE, notificatie.getStatus());
+        assertEquals(StatusWaarde.ONBEKEND, notificatie.getStatus());
+    }
+
+    // NotifyNL is leidend: een status die "teruggaat" van definitief naar niet-definitief (bijv. een
+    // dubbele of laat aangekomen callback bij NotifyNL zelf) wordt gewoon geregistreerd, niet
+    // geweigerd — dit wordt alleen gelogd (zie NotificatieService#verwerkAfleverstatus).
+    @Test
+    void verwerkAfleverstatus_vanDefinitieveNaarNietDefinitieveStatus_registreertTochDeNieuweStatus() {
+        Notificatie notificatie = notificatie(null);
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
+
+        service.verwerkAfleverstatus(UUID.randomUUID(), "sending");
+
+        assertEquals(StatusWaarde.SENDING, notificatie.getStatus());
     }
 
     @Test
     void verwerkAfleverstatus_callbackSuccesvol_verwijdertNotificatieNiet() {
         Notificatie notificatie = notificatie("https://omc.example.nl/callback");
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
-        when(consumentCallbackAdapter.stuurStatusUpdate(notificatie)).thenReturn(true);
+        when(consumentCallbackAdapter.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED)).thenReturn(true);
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
 
@@ -144,7 +158,7 @@ class NotificatieServiceTest {
     void verwerkAfleverstatus_callbackMislukt_verwijdertNotificatieNiet() {
         Notificatie notificatie = notificatie("https://omc.example.nl/callback");
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
-        when(consumentCallbackAdapter.stuurStatusUpdate(notificatie)).thenReturn(false);
+        when(consumentCallbackAdapter.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED)).thenReturn(false);
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
 

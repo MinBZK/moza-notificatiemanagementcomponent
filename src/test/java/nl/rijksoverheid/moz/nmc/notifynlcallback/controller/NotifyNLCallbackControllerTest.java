@@ -119,8 +119,9 @@ class NotifyNLCallbackControllerTest {
     }
 
     @Test
-    void verwerkAfleverstatus_onbekendStatus_slaatTechnischeFoutOp() {
-        // Onbekende statussen van NotifyNL moeten als TECHNICAL_FAILURE worden opgeslagen
+    void verwerkAfleverstatus_onbekendStatus_slaatOnbekendOp() {
+        // Onbekende statussen van NotifyNL moeten als ONBEKEND worden opgeslagen (niet als een
+        // bekende, mogelijk definitieve status)
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
 
@@ -139,8 +140,8 @@ class NotifyNLCallbackControllerTest {
                 .statusCode(204);
 
         ArgumentCaptor<Notificatie> captor = ArgumentCaptor.forClass(Notificatie.class);
-        Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(captor.capture());
-        assertEquals(StatusWaarde.TECHNICAL_FAILURE, captor.getValue().getStatus());
+        Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(captor.capture(), any());
+        assertEquals(StatusWaarde.ONBEKEND, captor.getValue().getStatus());
     }
 
     @Test
@@ -162,7 +163,7 @@ class NotifyNLCallbackControllerTest {
                 .then()
                 .statusCode(204);
 
-        Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(any());
+        Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(any(), any());
     }
 
     @Test
@@ -171,7 +172,7 @@ class NotifyNLCallbackControllerTest {
         // — een geslaagde callback naar de Dienstverlener mag de notificatie niet meer verwijderen.
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
-        Mockito.when(consumentCallbackAdapter.stuurStatusUpdate(any())).thenReturn(true);
+        Mockito.when(consumentCallbackAdapter.stuurStatusUpdate(any(), any())).thenReturn(true);
 
         given()
                 .contentType(ContentType.JSON)
@@ -194,7 +195,7 @@ class NotifyNLCallbackControllerTest {
     void verwerkAfleverstatus_callbackMislukt_bewaartNotificatieInDatabase() {
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
-        Mockito.when(consumentCallbackAdapter.stuurStatusUpdate(any())).thenReturn(false);
+        Mockito.when(consumentCallbackAdapter.stuurStatusUpdate(any(), any())).thenReturn(false);
 
         given()
                 .contentType(ContentType.JSON)

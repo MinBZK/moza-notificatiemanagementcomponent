@@ -28,9 +28,6 @@ public class Notificatie {
     @Column(name = "callback_url", length = 2048)
     private String callbackUrl;
 
-    @Column(nullable = false)
-    private OffsetDateTime aangemaakt;
-
     // Herstelt bij elk laden de chronologische volgorde op basis van het daadwerkelijke tijdstip —
     // belangrijk omdat getStatus()/getLaatsteStatusUpdate() op het laatste element van deze lijst
     // leunen. Herschrijft de collectie in zijn geheel bij elke wijziging: verwaarloosbaar omdat deze
@@ -46,9 +43,7 @@ public class Notificatie {
 
     public Notificatie(String callbackUrl) {
         this.callbackUrl = callbackUrl;
-        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
-        this.aangemaakt = nu;
-        registreerStatus(StatusWaarde.CREATED, nu);
+        registreerStatus(StatusWaarde.CREATED, OffsetDateTime.now(ZoneOffset.UTC));
     }
 
     public UUID getId() {
@@ -83,8 +78,10 @@ public class Notificatie {
         this.statusGeschiedenis.add(new NotificatieStatus(status, tijdstip));
     }
 
+    // Afgeleid van het eerste statusGeschiedenis-record (altijd CREATED, zie de constructor) —
+    // vereist een actieve persistence context.
     public OffsetDateTime getAangemaakt() {
-        return aangemaakt;
+        return statusGeschiedenis.get(0).tijdstip();
     }
 
     // Afgeleid van het laatste statusGeschiedenis-record — vereist een actieve persistence context.
