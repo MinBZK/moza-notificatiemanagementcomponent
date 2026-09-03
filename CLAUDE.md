@@ -95,28 +95,39 @@ through only a bare identifier and let NMC lead.
   template is sufficient for now — low priority.
 - **Observability koppelvlak** (exposing processing/status info to Dienstafnemers,
   likely for wMEBV bewijslast) is **not a priority for this skeleton**, but the
-  data model should naturally support an audit trail of statuses/attempts per
-  notification so this can be added later without a redesign.
-- **`NotificatieStatus` vocabulary** (`created, sending, pending, sent,
-  delivered, accepted, received, cancelled, permanent-failure,
-  temporary-failure, technical-failure`) is grounded directly in GOV.UK
-  Notify's own published delivery-receipt statuses. We earlier also looked at
-  `moza-portaal/dependencies/omc/swagger.json`'s `DeliveryReceipt`/
-  `DeliveryStatuses` schema as corroborating evidence, but per Joeri that
-  swagger likely belongs to a *different* system than the per-Dienstverlener
-  OMC (`../moza-omc`) — possibly an "Output Management Systeem"
-  (e.g. a Printstraat/output system). Treat that swagger as **unconfirmed**;
-  it doesn't block the current `NotificatieStatus` design (which stands on its
-  own via Notify's docs), but should be clarified before being used as the
-  contract for future OMC-status-reporting / Printstraat integrations.
+  data model already supports it: `Notificatie` keeps a full, ordered status
+  history (`statusGeschiedenis`, a `NotificatieStatus` per transition) rather
+  than just a current-status field, so an audit trail per notification can be
+  exposed later without a redesign.
+- **`StatusWaarde`** models exactly what NotifyNL's *email* delivery-receipt
+  callback actually sends today — `delivered`, `permanent-failure`,
+  `temporary-failure`, `technical-failure` (see `notifynl_api.yaml`'s email
+  callback schema, ~line 212) — plus `created`/`sending`, which are NMC's own
+  internal registrations (`Notificatie`'s constructor,
+  `NotificatieService#verstuurNaarEmail`) and never values `parseStatus` parses
+  *from* NotifyNL. Deliberately **not** modeled: NotifyNL's SMS vocabulary
+  (adds `pending`/`sent`) and its Letter vocabulary (`accepted`/`received`/
+  `cancelled` instead of `created`/`sending`/`delivered` at all) — NMC only
+  ever sends email through NotifyNL today. `onbekend` is `parseStatus`'s
+  catch-all for anything outside the modeled set (logged when it happens) —
+  today mainly a defense against NotifyNL violating its own documented
+  contract, but it'll matter for real once a non-email channel (e.g.
+  contactherstel via Printstraat) starts feeding a status through this same
+  path with a vocabulary `StatusWaarde` doesn't cover yet. `onbekend` is
+  deliberately non-definitief (see `StatusWaarde#isDefinitief`), so an
+  unrecognized status can't silently masquerade as a final outcome.
 
 ## Reference repos (siblings, same level as this repo)
 - `../moza-omc` — OMC, .NET (Moza.Omc.Api)
 - `../moza-profiel-service` — Profielservice, Quarkus (`src/main/openapi/api_basisprofiel.yaml`)
 - `../moza-verificatie-service` — Quarkus; reference for the NotifyNL integration pattern
 - `../moza-portaal` — Next.js portal; has `dependencies/omc/swagger.json`. Possibly
-  an "Output Management Systeem"/Printstraat API contract rather than `../moza-omc`
-  — relation unconfirmed, see the `NotificatieStatus` caveat above
+  an "Output Management Systeem"/Printstraat API contract rather than `../moza-omc`.
+  We looked at its `DeliveryReceipt`/`DeliveryStatuses` schema as corroborating
+  evidence for the `StatusWaarde` vocabulary, but per Joeri that swagger likely
+  belongs to a *different* system than the per-Dienstverlener OMC — relation
+  unconfirmed; should be clarified before being used as the contract for future
+  OMC-status-reporting/Printstraat integrations
 
 ## Technical conventions for this project
 - Stack: Java 25 + Quarkus 3.35.1 (RESTEasy Reactive, Hibernate ORM/Panache),
@@ -149,6 +160,12 @@ through only a bare identifier and let NMC lead.
   implemented — no such endpoints exist yet
 - Outbound integrations to Profielservice and NotifyNL are implemented as
   real `@RestClient`-backed adapters (mocked only in tests)
+- `Notificatie`'s status is not a plain column: every transition is appended to
+  an ordered `statusGeschiedenis` (see "Observability koppelvlak" above), and
+  the current status/last-update are derived from it. A `NotificatieRetentieScheduler`
+  deletes a `Notificatie` (and its history) once that history is older than
+  `notificatie.retentie.bewaartermijn`, independent of whether the consumer
+  callback succeeded — see `README.md` for the full behavior
 - See `README.md` (Dutch) for a functional overview
 - Not yet implemented (see "Integration assumptions" above): the Templating
   Service integration, OMC integration, the orchestration logic that ties the
