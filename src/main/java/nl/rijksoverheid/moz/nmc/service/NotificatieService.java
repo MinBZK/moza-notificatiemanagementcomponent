@@ -80,20 +80,32 @@ public class NotificatieService {
                 .orElseThrow(() -> new NotificatieNietGevondenException(
                         "Geen notificatie gevonden voor NotifyNL-referentie " + notifyNlNotificatieId));
 
-        notificatie.registreerStatus(parseStatus(status));
+        StatusWaarde huidigeStatus = notificatie.getStatus();
+        StatusWaarde nieuweStatus = parseStatus(status);
+        // NotifyNL is leidend: de NMC registreert wat binnenkomt, ook als dat een eerder ontvangen
+        // definitieve status weer "terugdraait" naar een niet-definitieve. Dat kan wijzen op een
+        // dubbele of laat aangekomen callback bij NotifyNL zelf — de moeite van het opmerken waard,
+        // maar geen reden om de nieuwe status te weigeren.
+        if (huidigeStatus.isDefinitief() && !nieuweStatus.isDefinitief()) {
+            Log.warnf("Notificatie %s ging van definitieve status %s terug naar niet-definitieve status "
+                    + "%s (NotifyNL-referentie %s)", notificatie.getId(), huidigeStatus, nieuweStatus,
+                    notifyNlNotificatieId);
+        }
+        notificatie.registreerStatus(nieuweStatus);
 
         // TODO #732: stuurStatusUpdate() doet tot 3 synchrone HTTP-pogingen binnen deze transactie.
         // Een JTA-timeout hier rolt de registreerStatus()-aanroep hierboven stilletjes terug — de
         // net verwerkte NotifyNL-uitkomst gaat dan verloren in plaats van dat er een fout opduikt.
-        consumentCallbackAdapter.stuurStatusUpdate(notificatie);
+        consumentCallbackAdapter.stuurStatusUpdate(notificatie, nieuweStatus);
     }
 
     private StatusWaarde parseStatus(String notifyStatus) {
         try {
             return StatusWaarde.valueOf(notifyStatus.replace("-", "_").toUpperCase());
         } catch (IllegalArgumentException e) {
-            Log.errorf("Onbekende NotifyNL-status ontvangen: %s — opgeslagen als technische fout", notifyStatus);
-            return StatusWaarde.TECHNICAL_FAILURE;
+            Log.errorf("Onbekende NotifyNL-status ontvangen: %s — opgeslagen als %s", notifyStatus,
+                    StatusWaarde.ONBEKEND.toApiValue());
+            return StatusWaarde.ONBEKEND;
         }
     }
 }

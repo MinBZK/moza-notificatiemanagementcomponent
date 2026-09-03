@@ -19,9 +19,9 @@ asynchrone bezorgstatus:
 6. De NMC zoekt de notificatie op, werkt de status bij en stuurt — als er een
    `callbackUrl` is meegegeven — een statusupdate (**CloudEvents NL GOV**) naar
    die URL. Het al dan niet slagen van die callback bepaalt niet of het record
-   blijft bestaan: een retentiejob verwijdert een notificatie pas nadat er
-   `notificatie.retentie.bewaartermijn` (standaard 30 dagen) verstreken is
-   sinds de laatste statusupdate.
+   blijft bestaan: een retentiejob verwijdert een notificatie pas nadat de
+   geconfigureerde `notificatie.retentie.bewaartermijn` (zie
+   `application.properties`) verstreken is sinds de laatste statusupdate.
 
 De `callbackUrl` is optioneel: Dienstverleners zonder eigen webhook-endpoint kunnen
 de status opvragen via `GET /centraal/notificaties/{id}` (nog niet geïmplementeerd).
@@ -168,14 +168,17 @@ De externe systemen die de NMC aanroept of van ontvangt:
 ## Domeinmodel
 
 De `Notificatie`-entiteit bevat een NMC-interne `notificatieId` (UUID), de
-`notifyNlNotificatieId`, de optionele `callbackUrl`, de huidige `status`, het
-aanmaaktijdstip en `laatsteStatusUpdate`. Elke statusovergang wordt ook
-vastgelegd in een geordende geschiedenis van `NotificatieStatus`-waarden
-(status + tijdstip), als basis voor een toekomstig observability-koppelvlak.
+`notifyNlNotificatieId`, de optionele `callbackUrl` en het aanmaaktijdstip.
+Elke statusovergang wordt vastgelegd in een geordende geschiedenis van
+`NotificatieStatus`-waarden (status + tijdstip) — dit is ook de basis voor een
+toekomstig observability-koppelvlak. De huidige status en het tijdstip van de
+laatste statuswijziging zijn geen aparte velden, maar worden afgeleid van het
+laatste record in die geschiedenis.
 
 Een retentiejob (`NotificatieRetentieScheduler`) verwijdert een `Notificatie`
-— inclusief zijn statusgeschiedenis — zodra `laatsteStatusUpdate` ouder is dan
-`notificatie.retentie.bewaartermijn` (standaard 30 dagen). Dit staat los van
+— inclusief zijn statusgeschiedenis — zodra die laatste statuswijziging ouder
+is dan de geconfigureerde `notificatie.retentie.bewaartermijn` (zie
+`application.properties`). Dit staat los van
 het slagen van de consument-callback. De job draait dagelijks om 03:00
 Europese/Amsterdamse tijd (`notificatie.retentie.cron`) en verwijdert in
 begrensde batches, zodat één run niet vastloopt op een grote achterstand. Het

@@ -32,7 +32,7 @@ class ConsumentCallbackAdapterTest {
     void stuurStatusUpdate_geenCallbackUrl_doetGeenHttpAanroep() {
         Notificatie notificatie = notificatie(null);
 
-        boolean resultaat = adapter.stuurStatusUpdate(notificatie);
+        boolean resultaat = adapter.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED);
 
         verifyNoInteractions(callbackClient);
         assertFalse(resultaat);
@@ -42,7 +42,7 @@ class ConsumentCallbackAdapterTest {
     void stuurStatusUpdate_eerstePoging_succesvol_retourneertTrue() {
         Notificatie notificatie = notificatie("https://omc.example.nl/callback");
 
-        boolean resultaat = adapter.stuurStatusUpdate(notificatie);
+        boolean resultaat = adapter.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED);
 
         verify(callbackClient, times(1)).stuurStatusUpdate(any());
         assertTrue(resultaat);
@@ -55,7 +55,7 @@ class ConsumentCallbackAdapterTest {
                 .doNothing()
                 .when(callbackClient).stuurStatusUpdate(any());
 
-        boolean resultaat = adapter.stuurStatusUpdate(notificatie);
+        boolean resultaat = adapter.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED);
 
         verify(callbackClient, times(2)).stuurStatusUpdate(any());
         assertTrue(resultaat);
@@ -67,7 +67,7 @@ class ConsumentCallbackAdapterTest {
         doThrow(new RuntimeException("onbereikbaar"))
                 .when(callbackClient).stuurStatusUpdate(any());
 
-        boolean resultaat = adapter.stuurStatusUpdate(notificatie);
+        boolean resultaat = adapter.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED);
 
         verify(callbackClient, times(3)).stuurStatusUpdate(any());
         assertFalse(resultaat);
@@ -77,7 +77,7 @@ class ConsumentCallbackAdapterTest {
     void stuurStatusUpdate_event_bevat_correcteData() {
         Notificatie notificatie = notificatie("https://omc.example.nl/callback");
 
-        adapter.stuurStatusUpdate(notificatie);
+        adapter.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED);
 
         ArgumentCaptor<NotificatieStatusEvent> captor = ArgumentCaptor.forClass(NotificatieStatusEvent.class);
         verify(callbackClient).stuurStatusUpdate(captor.capture());
@@ -108,7 +108,7 @@ class ConsumentCallbackAdapterTest {
                 }, 0L);
         Notificatie notificatie = notificatie("niet-een-geldige-url");
 
-        boolean resultaat = adapterMetOngeldigeUrl.stuurStatusUpdate(notificatie);
+        boolean resultaat = adapterMetOngeldigeUrl.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED);
 
         assertFalse(resultaat);
         assertEquals(1, aanroepen[0]);

@@ -6,6 +6,8 @@ import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.lang.reflect.Method;
 import java.time.OffsetDateTime;
@@ -99,6 +101,21 @@ class NotificatiePersistentieTest {
 
             assertEquals(StatusWaarde.DELIVERED, herladen.getStatus());
             assertEquals(deliveredTijdstip, herladen.getLaatsteStatusUpdate());
+        });
+    }
+
+    // Bewaakt dat de CHECK-constraint op notificatie_status.status (V2__notificatie_retentie.sql)
+    // elke StatusWaarde-constante toestaat. Zonder deze test zou een nieuwe of hernoemde constante
+    // compileren en alle Java-tests laten slagen, maar pas bij de eerste echte INSERT in productie
+    // op een constraint-violation stuiten.
+    @ParameterizedTest
+    @EnumSource(StatusWaarde.class)
+    void registreerStatus_elkeStatusWaarde_voldoetAanDatabaseCheckConstraint(StatusWaarde status) {
+        QuarkusTransaction.requiringNew().run(() -> {
+            Notificatie notificatie = new Notificatie(null);
+            notificatie.registreerStatus(status);
+            notificatieRepository.persist(notificatie);
+            notificatieRepository.flush();
         });
     }
 

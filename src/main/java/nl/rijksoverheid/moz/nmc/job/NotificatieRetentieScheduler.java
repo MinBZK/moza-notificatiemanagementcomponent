@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.job;
 
 import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.quarkus.runtime.Startup;
 import io.quarkus.scheduler.FailedExecution;
 import io.quarkus.scheduler.Scheduled;
 import io.quarkus.scheduler.SkippedExecution;
@@ -29,6 +30,10 @@ import java.util.stream.Collectors;
  * bewaartermijn geldt gelijk voor elke status; StatusWaarde#isDefinitief bepaalt hier alleen op
  * welk niveau een verwijdering gelogd wordt (zie verwijderVerlopenNotificaties).
  */
+// @Startup: @ApplicationScoped beans zijn standaard lazy — zonder dit forceert Quarkus de
+// constructor pas bij de eerste @Scheduled-vuring, dus een ongeldige bewaartermijn zou pas om 3 uur
+// 's nachts aan het licht komen (zie de constructor) in plaats van bij het opstarten.
+@Startup
 @ApplicationScoped
 public class NotificatieRetentieScheduler {
 
@@ -57,10 +62,12 @@ public class NotificatieRetentieScheduler {
 
     // concurrentExecution = SKIP: een langlopende run mag niet overlappen met de volgende vuring.
     // Geen Quartz-clustering nodig: elke batch is een idempotente bulk-delete, dus meerdere pods die
-    // tegelijk vuren botsen niet fataal — de tragere pod loopt tegen rijlocks aan, verwijdert 0 rijen
-    // in die batch en stopt zijn lus, en eventuele restachterstand wordt bij de volgende run alsnog
-    // opgeruimd. Geen @Transactional op deze methode zelf: elke batch draait in zijn eigen
-    // transactie, zodat al verwijderde batches niet worden teruggedraaid als een latere batch faalt.
+    // tegelijk vuren botsen niet fataal — de tragere pod verwijdert 0 rijen in een batch waar een
+    // andere pod al eerst was, en haalt bij de volgende iteratie gewoon een nieuwe kandidatenpagina op
+    // (vollePagina hangt af van de queryresultaatpagina, niet van het aantal verwijderde rijen, dus 0
+    // verwijderd in een batch stopt de lus niet voortijdig). Geen @Transactional op deze methode zelf:
+    // elke batch draait in zijn eigen transactie, zodat al verwijderde batches niet worden
+    // teruggedraaid als een latere batch faalt.
     @Scheduled(identity = "notificatie-retentie", cron = "{notificatie.retentie.cron}",
             timeZone = "Europe/Amsterdam", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     public void verwijderVerlopenNotificaties() {
@@ -94,13 +101,17 @@ public class NotificatieRetentieScheduler {
     // gecorreleerde subquery (MAX-tijdstip binnen n.statusGeschiedenis) afgeleid, zodat de
     // definitief/niet-definitief-telling voor de WARN-log op precies dezelfde rijen gebeurt als
     // waarop ook echt verwijderd wordt — geen aparte (en dus potentieel inconsistente) query.
+    // externalReference wordt meegelezen zodat een niet-definitieve verwijdering per notificatie
+    // gelogd kan worden (zie hieronder) — met alleen het id is zo'n regel niet te herleiden tot een
+    // NotifyNL-notificatie om te debuggen.
     private BatchResultaat verwijderBatch(OffsetDateTime grens) {
         List<Object[]> kandidaten = notificatieRepository.getEntityManager()
-                .createQuery("SELECT n.id, ns." + NotificatieStatus_.STATUS + " FROM Notificatie n JOIN n."
-                        + Notificatie_.STATUS_GESCHIEDENIS + " ns WHERE ns." + NotificatieStatus_.TIJDSTIP
-                        + " <= :grens AND ns." + NotificatieStatus_.TIJDSTIP + " = (SELECT MAX(ns2."
-                        + NotificatieStatus_.TIJDSTIP + ") FROM n." + Notificatie_.STATUS_GESCHIEDENIS
-                        + " ns2) ORDER BY ns." + NotificatieStatus_.TIJDSTIP, Object[].class)
+                .createQuery("SELECT n.id, n." + Notificatie_.EXTERNAL_REFERENCE + ", ns."
+                        + NotificatieStatus_.STATUS + " FROM Notificatie n JOIN n." + Notificatie_.STATUS_GESCHIEDENIS
+                        + " ns WHERE ns." + NotificatieStatus_.TIJDSTIP + " <= :grens AND ns."
+                        + NotificatieStatus_.TIJDSTIP + " = (SELECT MAX(ns2." + NotificatieStatus_.TIJDSTIP
+                        + ") FROM n." + Notificatie_.STATUS_GESCHIEDENIS + " ns2) ORDER BY ns."
+                        + NotificatieStatus_.TIJDSTIP, Object[].class)
                 .setParameter("grens", grens)
                 .setMaxResults(BATCH_GROOTTE)
                 .getResultList();
@@ -112,14 +123,28 @@ public class NotificatieRetentieScheduler {
         // De MAX-subquery filtert niet per se op een unieke waarde: heeft een notificatie twee
         // statusregels met hetzelfde tijdstip, dan matcht de subquery ze allebei en levert de JOIN
         // meer dan één rij voor die notificatie op. Dedupliceren op id houdt de telling en de
-        // verwijdering hieronder correct ongeacht of dat voorkomt; welke van de gelijke tijdstippen
-        // bewaard blijft voor nietDefinitiefAantal is dan een willekeurige keuze.
-        Map<UUID, StatusWaarde> laatsteStatusPerNotificatie = kandidaten.stream()
-                .collect(Collectors.toMap(rij -> (UUID) rij[0], rij -> (StatusWaarde) rij[1],
-                        (eersteStatus, tweedeStatus) -> eersteStatus, LinkedHashMap::new));
+        // verwijdering hieronder correct ongeacht of dat voorkomt. Bij zo'n gelijkspel telt de
+        // notificatie als definitief zodra één van de gelijktijdige statussen dat is — welke van de
+        // (eventueel meerdere) definitieve statussen precies bewaard blijft is dan verder een
+        // willekeurige keuze, want dat verandert niets aan de definitief/niet-definitief-telling.
+        Map<UUID, Kandidaat> laatsteStatusPerNotificatie = kandidaten.stream()
+                .collect(Collectors.toMap(rij -> (UUID) rij[0],
+                        rij -> new Kandidaat((UUID) rij[1], (StatusWaarde) rij[2]),
+                        (eerste, tweede) -> eerste.status().isDefinitief() ? eerste : tweede,
+                        LinkedHashMap::new));
+
+        // Per notificatie gelogd (i.p.v. alleen de aggregaatteller hieronder) zodat een niet-
+        // definitieve verwijdering met de NotifyNL-referentie te herleiden/debuggen is.
+        laatsteStatusPerNotificatie.forEach((id, kandidaat) -> {
+            if (!kandidaat.status().isDefinitief()) {
+                Log.warnf("Retentiejob: notificatie %s (NotifyNL-referentie %s) verwijderd met "
+                        + "niet-definitieve status %s — nooit een eindstatus van NotifyNL ontvangen",
+                        id, kandidaat.externalReference(), kandidaat.status());
+            }
+        });
 
         long nietDefinitiefAantal = laatsteStatusPerNotificatie.values().stream()
-                .filter(status -> !status.isDefinitief())
+                .filter(kandidaat -> !kandidaat.status().isDefinitief())
                 .count();
 
         int verwijderd = (int) notificatieRepository.delete("id IN ?1", laatsteStatusPerNotificatie.keySet());
@@ -129,6 +154,9 @@ public class NotificatieRetentieScheduler {
         // het aantal verwijderde rijen.
         boolean vollePagina = kandidaten.size() == BATCH_GROOTTE;
         return new BatchResultaat(verwijderd, (int) nietDefinitiefAantal, vollePagina);
+    }
+
+    private record Kandidaat(UUID externalReference, StatusWaarde status) {
     }
 
     record BatchResultaat(int totaal, int nietDefinitiefAantal, boolean vollePagina) {

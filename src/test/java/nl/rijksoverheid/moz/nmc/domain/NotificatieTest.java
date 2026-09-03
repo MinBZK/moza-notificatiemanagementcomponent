@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.domain;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -44,5 +45,18 @@ class NotificatieTest {
         NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
         assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
         assertEquals(laatste.tijdstip(), notificatie.getLaatsteStatusUpdate());
+    }
+
+    // getAangemaakt() is afgeleid van het eerste geschiedenisrecord: bewaakt dat dat echt het eerste
+    // (index 0) record is, niet per ongeluk het laatste (waar getLaatsteStatusUpdate() op leunt).
+    @Test
+    void getAangemaakt_retourneertEersteGeschiedenisRecordNietHetLaatste() {
+        Notificatie notificatie = new Notificatie(null);
+        OffsetDateTime aanmaakTijdstip = notificatie.getStatusGeschiedenis().get(0).tijdstip();
+
+        notificatie.registreerStatus(StatusWaarde.SENDING);
+        notificatie.registreerStatus(StatusWaarde.DELIVERED);
+
+        assertEquals(aanmaakTijdstip, notificatie.getAangemaakt());
     }
 }

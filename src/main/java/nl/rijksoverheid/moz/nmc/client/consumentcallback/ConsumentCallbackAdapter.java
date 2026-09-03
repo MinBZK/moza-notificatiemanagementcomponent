@@ -3,6 +3,7 @@ package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.OffsetDateTime;
@@ -28,7 +29,12 @@ public class ConsumentCallbackAdapter {
         this.initieleWachtMs = initieleWachtMs;
     }
 
-    public boolean stuurStatusUpdate(Notificatie notificatie) {
+    // status wordt meegegeven i.p.v. hier notificatie.getStatus() te lezen: die laatste is afgeleid
+    // van een lazy @ElementCollection (Notificatie#statusGeschiedenis) en kan dus — in tegenstelling
+    // tot een aanroep die de al-opgehaalde status doorgeeft — in theorie een exception opleveren,
+    // wat deze methode nooit mag doen (zie hierboven): de aanroeper zit nog in een actieve
+    // transactie waarvan een net verwerkte NotifyNL-statusupdate dan verloren zou gaan.
+    public boolean stuurStatusUpdate(Notificatie notificatie, StatusWaarde status) {
         if (notificatie.getCallbackUrl() == null) {
             Log.infof("Geen callback-URL geconfigureerd voor notificatie %s — statusupdate niet verstuurd", notificatie.getId());
             return false;
@@ -56,7 +62,7 @@ public class ConsumentCallbackAdapter {
                 "notificatie/" + notificatie.getId(),
                 OffsetDateTime.now(ZoneOffset.UTC),
                 "application/json",
-                new NotificatieData(notificatie.getId(), notificatie.getStatus()));
+                new NotificatieData(notificatie.getId(), status));
 
         return verstuurSuccesvol(client, event, callbackUrl);
     }
