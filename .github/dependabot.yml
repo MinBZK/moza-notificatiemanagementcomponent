@@ -3,12 +3,16 @@ updates:
   - package-ecosystem: "maven"
     directory: "/"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
   - package-ecosystem: "docker-compose"
     directory: "/"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
   - package-ecosystem: "github-actions"
     directory: /
     schedule:
-      interval: "monthly"
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
