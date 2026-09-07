@@ -93,6 +93,27 @@ class DecentraleNotificatieControllerTest {
     }
 
     @Test
+    void decentraleNotificatieVersturen_ongeldigeCallbackUrl_retourneert400() {
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "emailAdres": "burger@example.nl",
+                          "berichtType": "Stuurgroep Agenda",
+                          "callbackUrl": "http://localhost:9999/status"
+                        }
+                        """)
+                .when().post("/api/nmc/v1/decentraal/notificaties")
+                .then()
+                .statusCode(400)
+                .contentType("application/problem+json")
+                // @ValidCallbackUrl weigert de aanvraag voor de methodebody, dus de reden komt
+                // als veldgebonden violation terug in plaats van als los detail-veld.
+                .body("violations[0].field", org.hamcrest.Matchers.endsWith("callbackUrl"))
+                .body("violations[0].message", org.hamcrest.Matchers.containsString("absolute https-URL"));
+    }
+
+    @Test
     void decentraleNotificatieVersturen_ontbrekendEmailAdres_retourneert400() {
         given()
                 .contentType(ContentType.JSON)

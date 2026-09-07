@@ -36,6 +36,8 @@ import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -245,9 +247,10 @@ public class NotificatieVerwerkingFuzzer {
         return body.toString();
     }
 
-    /** Points at a closed local port. */
+    /** A URL that passes CallbackUrlValidator; the .invalid TLD never resolves. */
     private static String callbackUrl(FuzzedDataProvider data) {
-        return "http://localhost:9999/" + data.consumeString(20);
+        return "https://consument.example.invalid/"
+                + URLEncoder.encode(data.consumeString(20), StandardCharsets.UTF_8);
     }
 
     private static ProfielApi profielApiStandIn() {
@@ -338,7 +341,7 @@ public class NotificatieVerwerkingFuzzer {
 
         /** Stores a notificatie under the given NotifyNL reference. */
         void bewaarMetExterneReferentie(UUID externalReference) {
-            Notificatie notificatie = new Notificatie("http://localhost:9999/callback");
+            Notificatie notificatie = new Notificatie("https://consument.example.invalid/callback");
             notificatie.setExternalReference(externalReference);
             persist(notificatie);
         }

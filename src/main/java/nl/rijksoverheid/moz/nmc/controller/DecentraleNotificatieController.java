@@ -10,6 +10,7 @@ import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
 import nl.rijksoverheid.moz.nmc.service.BerichtType;
+import nl.rijksoverheid.moz.nmc.service.CallbackUrlValidator;
 import nl.rijksoverheid.moz.nmc.service.DecentraleNotificatieVersturenOpdracht;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 import nl.rijksoverheid.moz.nmc.service.OnbekendBerichtTypeException;
@@ -51,9 +52,7 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
     }
 
     private static @NonNull DecentraleNotificatieVersturenOpdracht getOpdracht(DecentraleNotificatieAanvraagRequest request) {
-        // TODO #752 (zie NMC: CallbackUrl wordt niet gevalideerd (SSRF risico))
-        // (security): callbackUrl is unvalidated caller input that we later POST to — SSRF risk.
-        String callbackUrl = request.getCallbackUrl() != null ? request.getCallbackUrl().toString() : null;
+        String callbackUrl = CallbackUrlValidator.normaliseer(request.getCallbackUrl());
         String templateId = BerichtType.vanNaam(request.getBerichtType()).getTemplateId();
 
         return new DecentraleNotificatieVersturenOpdracht(

@@ -57,7 +57,8 @@ paths:
           description: >-
             Ongeldige aanvraag, of er kon geen notificatie worden gedaan voor de
             opgegeven partij (geen partij of geen e-mailadres gevonden voor de
-            opgegeven identificatie)
+            opgegeven identificatie). Bij bean-validatie, zoals een ongeldige
+            callbackUrl, is `violations` gevuld.
           content:
             application/problem+json:
               schema:
@@ -100,7 +101,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/NotificatieResponse'
         '400':
-          description: Ongeldige aanvraag (bijv. ontbrekend/ongeldig e-mailadres of onbekend berichttype)
+          description: >-
+            Ongeldige aanvraag (bijv. ontbrekend/ongeldig e-mailadres of onbekend
+            berichttype). Bij bean-validatie, zoals een ongeldig e-mailadres of een
+            ongeldige callbackUrl, is `violations` gevuld.
           content:
             application/problem+json:
               schema:
@@ -157,10 +161,17 @@ components:
         callbackUrl:
           type: string
           format: uri
+          # `format: uri` typeert het veld als java.net.URI, waar Hibernate Validator geen
+          # @Size-validator voor heeft (HV000030). Vandaar een eigen constraint in plaats van
+          # maxLength; die dekt meteen de scheme-, host- en poortregels uit de description.
+          x-field-extra-annotation: "@nl.rijksoverheid.moz.nmc.validation.ValidCallbackUrl"
           description: >-
             Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
             terugstuurt zodra de bezorgstatus bekend is. Weglaten als de
             Dienstverlener de status zelf opvraagt via GET /notificaties/{id}.
+            Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
+            tekens, zonder gebruikersinfo) wordt geaccepteerd; IP-adressen en interne
+            hostnamen worden geweigerd (400).
 
     DecentraleNotificatieAanvraagRequest:
       type: object
@@ -190,9 +201,14 @@ components:
         callbackUrl:
           type: string
           format: uri
+          # Zie de toelichting bij NotificatieAanvraagRequest.callbackUrl.
+          x-field-extra-annotation: "@nl.rijksoverheid.moz.nmc.validation.ValidCallbackUrl"
           description: >-
             Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
             terugstuurt zodra de bezorgstatus bekend is.
+            Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
+            tekens, zonder gebruikersinfo) wordt geaccepteerd; IP-adressen en interne
+            hostnamen worden geweigerd (400).
 
     NotificatieResponse:
       type: object
@@ -221,3 +237,28 @@ components:
         instance:
           type: string
           format: uri
+        violations:
+          type: array
+          description: >-
+            Gevuld als de aanvraag door bean-validatie is afgekeurd, bijvoorbeeld bij een
+            ongeldig e-mailadres of een ongeldige callbackUrl. `detail` blijft dan leeg;
+            de reden staat per veld in deze lijst.
+          items:
+            $ref: '#/components/schemas/Violation'
+
+    Violation:
+      type: object
+      description: Eén afgekeurd veld uit de aanvraag
+      properties:
+        field:
+          type: string
+          description: Het veld waarop de validatie is mislukt
+          example: notificatieAanvraagRequest.callbackUrl
+        in:
+          type: string
+          description: >-
+            Het deel van het HTTP-verzoek waar de validatiefout optrad, zoals query, path,
+            header, form of body. Voor velden in de requestbody staat hier `?`.
+        message:
+          type: string
+          description: Omschrijving van de validatiefout
