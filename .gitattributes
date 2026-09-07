@@ -1,0 +1,3 @@
+# Fuzz seeds are raw FuzzedDataProvider input.
+src/test/resources/nl/rijksoverheid/moz/nmc/fuzzing/EndpointFuzzTestInputs/** binary
+.clusterfuzzlite/seed-corpus/** binary
