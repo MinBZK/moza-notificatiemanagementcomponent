@@ -72,6 +72,19 @@ public class NotificatieVerwerkingFuzzer {
         "delivered", "permanent-failure", "temporary-failure", "technical-failure", "onbekend"
     };
 
+    // One shape per reject branch of CallbackUrlValidator: scheme, userinfo, IPv4- and
+    // IPv6-literal, single-label name, internal suffix, missing host, port out of range.
+    private static final String[] ONGELDIGE_CALLBACK_URLS = {
+        "http://consument.example.invalid/cb",
+        "https://user:pw@consument.example.invalid/cb",
+        "https://127.0.0.1/cb",
+        "https://[::1]/cb",
+        "https://intranet/cb",
+        "https://svc.ns.svc/cb",
+        "https:///cb",
+        "https://consument.example.invalid:99999/cb"
+    };
+
     // Same as the Quarkus mapper: unknown properties are ignored.
     private static final ObjectMapper mapper = new ObjectMapper()
             .findAndRegisterModules()
@@ -247,8 +260,15 @@ public class NotificatieVerwerkingFuzzer {
         return body.toString();
     }
 
-    /** A URL that passes CallbackUrlValidator; the .invalid TLD never resolves. */
+    /**
+     * Half the inputs get a URL CallbackUrlValidator rejects, half one it accepts. Percent-encoding
+     * the suffix keeps scheme, host and port fixed on the accepted branch; the .invalid TLD never
+     * resolves.
+     */
     private static String callbackUrl(FuzzedDataProvider data) {
+        if (data.consumeBoolean()) {
+            return data.pickValue(ONGELDIGE_CALLBACK_URLS);
+        }
         return "https://consument.example.invalid/"
                 + URLEncoder.encode(data.consumeString(20), StandardCharsets.UTF_8);
     }
