@@ -1,12 +1,10 @@
 #!/bin/bash -eu
 
-# Build the application and the test classes that hold the fuzz targets. test-compile is enough:
-# the targets run against these classes, nothing here needs the packaged application.
+# Compile the application and the test classes that hold the fuzz targets.
 ./mvnw test-compile -Djacoco.skip=true -B
 
-# Copy all dependencies to $OUT/lib. Test scope stays in on purpose: untransformed
-# io.quarkus.logging.Log falls back to org.junit.jupiter.api.Assertions outside Quarkus,
-# so without junit-jupiter-api every Log.* call in an error path throws.
+# Copy all dependencies to $OUT/lib, test scope included: outside Quarkus,
+# io.quarkus.logging.Log delegates to org.junit.jupiter.api.Assertions.
 mkdir -p $OUT/lib
 ./mvnw dependency:copy-dependencies -DoutputDirectory=$OUT/lib -B
 
@@ -62,8 +60,8 @@ WRAPPER_EOF
   chmod +x "$OUT/$simple_name"
 done
 
-# Package seed corpora: the runner unpacks $OUT/<fuzzer>_seed_corpus.zip into the corpus
-# before fuzzing, so short PR runs start from valid requests instead of empty input.
+# Package the seed corpora; the runner unpacks $OUT/<fuzzer>_seed_corpus.zip into the corpus
+# before fuzzing.
 for corpus_dir in .clusterfuzzlite/seed-corpus/*/; do
   [ -d "$corpus_dir" ] || continue
   zip -j "$OUT/$(basename "$corpus_dir")_seed_corpus.zip" "$corpus_dir"*

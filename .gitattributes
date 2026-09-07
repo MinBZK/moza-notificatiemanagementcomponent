@@ -1,4 +1,3 @@
-# Fuzz seeds are byte-exact FuzzedDataProvider input (trailing control bytes steer
-# pickValue/consumeBoolean); never normalize, diff, or merge them as text.
+# Fuzz seeds are raw FuzzedDataProvider input.
 src/test/resources/nl/rijksoverheid/moz/nmc/fuzzing/EndpointFuzzTestInputs/** binary
 .clusterfuzzlite/seed-corpus/** binary

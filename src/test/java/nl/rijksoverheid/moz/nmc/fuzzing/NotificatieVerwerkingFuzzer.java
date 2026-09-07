@@ -46,25 +46,21 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Standalone fuzz target for ClusterFuzzLite.
- * Drives caller-supplied JSON through the chain behind the three POST endpoints — Jackson, bean
- * validation, controller, service, NotifyNL-adapter — with in-memory stand-ins for the IO.
- *
- * <p>In the fuzzer's own JVM, because jazzer_driver instruments only what it loads itself: the
- * earlier variant fuzzed a separate Quarkus process, leaving libFuzzer without coverage to steer on.
+ * Fuzz target for ClusterFuzzLite. Runs caller-supplied JSON through Jackson, bean validation,
+ * the three POST controllers, the service and the NotifyNL adapter in the fuzzer's own JVM, with
+ * in-memory stand-ins for the outbound clients and the repository.
  *
  * <p>A Jackson error, a constraint violation and an {@link HttpProblem} are expected outcomes.
- * Anything else is a finding, and so is a 5xx while every stand-in was told to succeed, or a
- * notificatie that survives a delivered callback or disappears after a failed one.
+ * Findings: any other exception, a 5xx while every stand-in the route reaches succeeds, and a
+ * notificatie that is kept after a delivered callback or deleted after a failed one.
  */
 public class NotificatieVerwerkingFuzzer {
 
-    // NotifyNL key shape (naam-<serviceId>-<secret>); under 74 characters the factory rejects it.
+    // Shape NotifyNLJwtFactory accepts: naam-<serviceId>-<secret>, at least 74 characters.
     private static final String API_KEY =
             "niet-voor-productie-00000000-0000-0000-0000-000000000000-11111111-1111-1111-1111-111111111111";
 
-    // Fixed instead of random: the same input has to do the same thing every run, or a crash
-    // artifact will not replay.
+    // Fixed ids keep the target deterministic per input.
     private static final UUID NOTIFY_REFERENTIE = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final UUID PARTIJ_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
 
@@ -74,8 +70,7 @@ public class NotificatieVerwerkingFuzzer {
         "delivered", "permanent-failure", "temporary-failure", "technical-failure", "onbekend"
     };
 
-    // Quarkus's mapper accepts unknown properties; rejecting them here would discard input the
-    // real endpoints process, and libFuzzer mutations add keys all the time.
+    // Same as the Quarkus mapper: unknown properties are ignored.
     private static final ObjectMapper mapper = new ObjectMapper()
             .findAndRegisterModules()
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
@@ -86,9 +81,9 @@ public class NotificatieVerwerkingFuzzer {
             .buildValidatorFactory()
             .getValidator();
 
-    /** 0 = partij met e-mailadres, 1 = 404, 2 = 500. */
+    /** 0 = partij with an e-mail address, 1 = 404, 2 = 500. */
     private static int profielAntwoord;
-    /** 0 = geaccepteerd, 1 = afgewezen, 2 = respons zonder notificatie-id. */
+    /** 0 = accepted, 1 = rejected, 2 = response without a notification id. */
     private static int notifyAntwoord;
     private static boolean callbackLukt;
 
@@ -99,7 +94,7 @@ public class NotificatieVerwerkingFuzzer {
     private static final NotifyNLCallbackController callbackController;
 
     static {
-        // Logging a stack trace per rejected input costs more time than the fuzzing itself.
+        // Application logging off. The AssertionError in roepAan names the stand-in states.
         Logger.getLogger("").setLevel(Level.OFF);
 
         NotificatieService service = new NotificatieService(
@@ -107,7 +102,7 @@ public class NotificatieVerwerkingFuzzer {
                 new NotifyNLVerzendAdapter(notifyApiStandIn(), new NotifyNLJwtFactory(),
                         new NotifyNLAuthorizationHolder(), Optional.of(API_KEY)),
                 repository,
-                // Zero backoff: the adapter sleeps between callback retries.
+                // No wait between callback retries.
                 new ConsumentCallbackAdapter(url -> callbackClientStandIn(), 0));
 
         LogboekContext logboekContext = new LogboekContext();
@@ -159,12 +154,11 @@ public class NotificatieVerwerkingFuzzer {
         if (notificatieIsBekend) {
             repository.bewaarMetExterneReferentie(melding.getId());
         }
-        // Unconditionally true: the adapter absorbs a failing callback (retries, then false), so
-        // this route may never answer 5xx, whatever the callback stand-in does.
+        // The callback adapter absorbs a failing callback; a 5xx on this route is always a finding.
         roepAan(() -> callbackController.verwerkAfleverstatus(melding), true);
 
-        // The service deletes the notificatie only after a delivered callback; a failed callback
-        // keeps it for a retry.
+        // The service deletes the notificatie after a delivered callback and keeps it after a
+        // failed one.
         if (notificatieIsBekend) {
             boolean bewaard = repository.findByExternalReference(melding.getId()).isPresent();
             if (bewaard == callbackLukt) {
@@ -175,9 +169,8 @@ public class NotificatieVerwerkingFuzzer {
     }
 
     /**
-     * Returns null for everything the HTTP layer answers with a 400 before the controller runs.
-     * Bean validation lives in the JAX-RS layer, so skipping it here would report every empty
-     * string and malformed e-mail address as a crash.
+     * Returns null for input the HTTP layer answers with a 400 before the controller runs:
+     * unparseable JSON and constraint violations.
      */
     private static <T> T lees(String json, Class<T> type) {
         T request;
@@ -193,29 +186,22 @@ public class NotificatieVerwerkingFuzzer {
         return request;
     }
 
-    /**
-     * Weights success 4:1:1 over the three answers. The 5xx-oracle in {@link #roepAan} only fires
-     * when every stand-in the route reaches succeeds; uniform answers would leave the centrale
-     * route checked for 1 in 9 inputs.
-     */
+    /** Success weighted 4:1:1 over the three answers. */
     private static int gewogenAntwoord(FuzzedDataProvider data) {
         int keuze = data.consumeInt(0, 5);
         return keuze <= 3 ? 0 : keuze - 3;
     }
 
     /**
-     * @param geen5xxVerwacht whether a 5xx counts as a finding on this route. For the notificatie
-     *                        routes: every stand-in the route reaches is set to succeed — only
-     *                        those count, gating on a stand-in the route never calls would leave
-     *                        most of its input unchecked.
+     * @param geen5xxVerwacht whether a 5xx counts as a finding; the notificatie routes pass true
+     *                        when every stand-in they reach is set to succeed
      */
     private static void roepAan(Runnable aanroep, boolean geen5xxVerwacht) {
         try {
             aanroep.run();
         } catch (HttpProblem e) {
             if (e.getStatusCode() >= 500 && geen5xxVerwacht) {
-                // The HttpProblem carries no cause (the controller only logs it), so the crash
-                // artifact must name the stand-in states to be reconstructable.
+                // The HttpProblem carries no cause; the message names the stand-in states.
                 throw new AssertionError(
                         "5xx voor invoer die de validatie doorkwam (profielAntwoord=%d, notifyAntwoord=%d, callbackLukt=%b)"
                                 .formatted(profielAntwoord, notifyAntwoord, callbackLukt), e);
@@ -237,7 +223,7 @@ public class NotificatieVerwerkingFuzzer {
 
     private static String decentraleAanvraag(FuzzedDataProvider data) {
         ObjectNode body = mapper.createObjectNode();
-        // Half the inputs pass the pattern, so the send path stays reachable.
+        // Half the inputs get an address that passes validation.
         body.put("emailAdres", data.consumeBoolean() ? "fuzz@example.invalid" : data.consumeString(60));
         body.put("berichtType", data.pickValue(BERICHT_TYPES));
         body.putObject("berichtgegevens").put(data.consumeString(20), data.consumeString(50));
@@ -247,7 +233,7 @@ public class NotificatieVerwerkingFuzzer {
 
     private static String afleverstatusMelding(FuzzedDataProvider data) {
         ObjectNode body = mapper.createObjectNode();
-        // id is a UUID and created_at an OffsetDateTime: a fuzzed string stops at the parser.
+        // id (UUID) and created_at (OffsetDateTime) get a parseable value half the time.
         body.put("id", data.consumeBoolean()
                 ? new UUID(data.consumeLong(), data.consumeLong()).toString()
                 : data.consumeString(40));
@@ -259,10 +245,7 @@ public class NotificatieVerwerkingFuzzer {
         return body.toString();
     }
 
-    /**
-     * A closed local port on purpose: the application POSTs to this URL later, so arbitrary hosts
-     * would turn the fuzzer into an outbound request generator.
-     */
+    /** Points at a closed local port. */
     private static String callbackUrl(FuzzedDataProvider data) {
         return "http://localhost:9999/" + data.consumeString(20);
     }
@@ -291,12 +274,11 @@ public class NotificatieVerwerkingFuzzer {
         };
     }
 
-    /** The generated clients carry a method per operation; the NMC calls exactly one of them. */
+    /** Answers one operation of a generated client; every other operation throws. */
     private static <T> T standIn(Class<T> api, String methode, Supplier<Object> antwoord) {
         return api.cast(Proxy.newProxyInstance(api.getClassLoader(), new Class<?>[]{api},
                 (proxy, method, args) -> {
                     if (method.getDeclaringClass() == Object.class) {
-                        // Without this hashCode() answers null and unboxing it throws.
                         return switch (method.getName()) {
                             case "hashCode" -> System.identityHashCode(proxy);
                             case "equals" -> proxy == args[0];
@@ -304,8 +286,6 @@ public class NotificatieVerwerkingFuzzer {
                         };
                     }
                     if (!methode.equals(method.getName())) {
-                        // Loud instead of null: a renamed generated operation would otherwise NPE
-                        // in the adapter and read as a product bug on every input.
                         throw new UnsupportedOperationException(
                                 api.getSimpleName() + "-stand-in kent " + method.getName() + " niet");
                     }
@@ -322,10 +302,7 @@ public class NotificatieVerwerkingFuzzer {
                         .isDefault(true)));
     }
 
-    /**
-     * Stand-in for the Panache repository. Column constraints (such as the 2048 characters the
-     * schema gives a callback URL) are not enforced here.
-     */
+    /** In-memory stand-in for the Panache repository; column constraints are not enforced. */
     private static final class GeheugenNotificatieRepository extends NotificatieRepository {
 
         private static final Field ID_VELD = idVeld();
@@ -338,14 +315,13 @@ public class NotificatieVerwerkingFuzzer {
             opgeslagen.put(notificatie.getId(), notificatie);
         }
 
-        /** Empty per input, otherwise found-or-not depends on what earlier inputs left behind. */
         void leegmaken() {
             opgeslagen.clear();
         }
 
         @Override
         public void flush() {
-            // Nothing is written, so there is nothing to flush.
+            // No-op; nothing is buffered.
         }
 
         @Override
@@ -360,7 +336,7 @@ public class NotificatieVerwerkingFuzzer {
                     .findFirst();
         }
 
-        /** Lets the callback route reach a notificatie instead of stopping at "niet gevonden". */
+        /** Stores a notificatie under the given NotifyNL reference. */
         void bewaarMetExterneReferentie(UUID externalReference) {
             Notificatie notificatie = new Notificatie("http://localhost:9999/callback");
             notificatie.setExternalReference(externalReference);

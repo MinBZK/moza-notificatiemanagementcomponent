@@ -16,7 +16,7 @@ import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
  */
 public class JsonDeserializationFuzzer {
 
-    // AfleverstatusRequest carries an OffsetDateTime, which a bare mapper refuses outright.
+    // Registers the modules on the classpath, among them JSR-310 for AfleverstatusRequest.created_at.
     private static final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
     private static final Class<?>[] MESSAGE_TYPES = {
@@ -32,8 +32,7 @@ public class JsonDeserializationFuzzer {
         try {
             mapper.readValue(json, targetType);
         } catch (JsonProcessingException e) {
-            // Only this one: jazzer's own FuzzerSecurityIssue* extend RuntimeException, so
-            // catch (Exception) would swallow every sanitizer finding.
+            // Expected for malformed or mismatched JSON; anything else propagates as a finding.
         }
     }
 }

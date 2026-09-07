@@ -28,20 +28,16 @@ import static org.hamcrest.Matchers.lessThan;
 import static org.mockito.ArgumentMatchers.any;
 
 /**
- * In-process counterpart of {@link NotificatieVerwerkingFuzzer}: the same request handling over
- * HTTP through a @QuarkusTest, so the JAX-RS layer (bean validation, the callback auth filter) is
- * covered too. In a normal `mvn verify` each method replays the seed corpus under
- * `src/test/resources/.../EndpointFuzzTestInputs/&lt;methode&gt;/` — happy paths, rejected input,
- * both branches of the auth filter. Crash artifacts from ClusterFuzzLite carry
- * {@link NotificatieVerwerkingFuzzer}'s own input encoding, not this one, and belong in
- * `.clusterfuzzlite/seed-corpus/NotificatieVerwerkingFuzzer/`, where the next fuzz run replays
- * them. The test does not generate input itself: @QuarkusTest and jazzer both intercept the
- * test-template invocation, and jazzer's libFuzzer loop loses.
+ * HTTP counterpart of {@link NotificatieVerwerkingFuzzer} through a @QuarkusTest, which adds the
+ * JAX-RS layer: bean validation and the callback auth filter. Each method replays the seed corpus
+ * under `src/test/resources/.../EndpointFuzzTestInputs/&lt;methode&gt;/`: happy paths, rejected
+ * input, both branches of the auth filter. No input is generated here; under @QuarkusTest the
+ * test-template interceptor skips jazzer's fuzzing loop. Crash artifacts from ClusterFuzzLite use
+ * {@link NotificatieVerwerkingFuzzer}'s input encoding and belong in
+ * `.clusterfuzzlite/seed-corpus/NotificatieVerwerkingFuzzer/`.
  *
- * <p>The Profielservice and NotifyNL clients are mocked: unreachable, they answer 500, which
- * would drown out the 5xx responses this test is looking for. The consument-callback client is
- * real; the seeded notificaties carry no callbackUrl, so the callback adapter returns without
- * network IO.
+ * <p>The Profielservice and NotifyNL clients are mocked. The consument-callback client is real;
+ * the seeded notificaties carry no callbackUrl and trigger no callback.
  */
 @QuarkusTest
 public class EndpointFuzzTest {
@@ -51,9 +47,8 @@ public class EndpointFuzzTest {
     // Matches %test.notify.callback.bearer-token in application.properties.
     private static final String CALLBACK_TOKEN = "test-callback-token-niet-voor-productie";
 
-    // The external references the juiste-token seeds under EndpointFuzzTestInputs/fuzzAfleverstatus
-    // carry. Persisted per invocation so those seeds reach verwerkAfleverstatus instead of
-    // stopping at 404; without callbackUrl, so the (unmocked) callback adapter does no IO.
+    // External references used by the juiste-token seeds under
+    // EndpointFuzzTestInputs/fuzzAfleverstatus.
     private static final List<UUID> BEKENDE_NOTIFY_REFERENTIES = List.of(
             UUID.fromString("123e4567-e89b-12d3-a456-426614174000"),
             UUID.fromString("5a1f0c3e-2b4d-4e6f-8a9b-0c1d2e3f4a5b"));
@@ -138,10 +133,7 @@ public class EndpointFuzzTest {
         post(path, data.consumeRemainingAsString(), null);
     }
 
-    /**
-     * Any 4xx is fine, the endpoints are supposed to reject nonsense. A 5xx is not: with both
-     * clients mocked, only the NMC itself is left to trip over the caller input.
-     */
+    /** Posts the body and asserts a status below 500. */
     private void post(String path, String body, String bearerToken) {
         var request = RestAssured.given().contentType(ContentType.JSON).body(body);
         if (bearerToken != null) {
