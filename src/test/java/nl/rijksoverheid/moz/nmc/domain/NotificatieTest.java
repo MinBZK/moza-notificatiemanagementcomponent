@@ -32,8 +32,8 @@ class NotificatieTest {
         assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(2).status());
     }
 
-    // getStatus()/getLaatsteStatusUpdate() zijn afgeleid van het laatste geschiedenisrecord: bewaakt
-    // dat dat echt het láátste (index size-1) record is, niet per ongeluk het eerste.
+    // getStatus()/getLaatsteStatusUpdate() lezen de projectiekolommen, niet de geschiedenis: bewaakt
+    // dat die het láátste record volgen, niet per ongeluk het eerste.
     @Test
     void getStatusEnGetLaatsteStatusUpdate_retourneertLaatsteGeschiedenisRecordNietHetEerste() {
         Notificatie notificatie = new Notificatie(null);
@@ -47,6 +47,25 @@ class NotificatieTest {
         assertEquals(laatste.tijdstip(), notificatie.getLaatsteStatusUpdate());
     }
 
+    // laatsteStatus/laatsteStatusUpdate zijn een projectie van de statusgeschiedenis, geen tweede
+    // bron van waarheid: na elke registratie moeten ze exact het chronologisch laatste record
+    // teruggeven. Zonder deze test zou een registratiepad dat de projectie vergeet bij te werken
+    // (of ernaast gaat zitten) pas in de retentiejob opvallen, die er als enige op selecteert.
+    @Test
+    void registreerStatus_naElkeWijziging_blijftDeProjectieGelijkAanDeGeschiedenis() {
+        Notificatie notificatie = new Notificatie(null);
+        bevestigProjectieVolgtGeschiedenis(notificatie);
+
+        notificatie.registreerStatus(StatusWaarde.SENDING);
+        bevestigProjectieVolgtGeschiedenis(notificatie);
+
+        notificatie.registreerStatus(StatusWaarde.TEMPORARY_FAILURE);
+        bevestigProjectieVolgtGeschiedenis(notificatie);
+
+        notificatie.registreerStatus(StatusWaarde.DELIVERED);
+        bevestigProjectieVolgtGeschiedenis(notificatie);
+    }
+
     // getAangemaakt() is afgeleid van het eerste geschiedenisrecord: bewaakt dat dat echt het eerste
     // (index 0) record is, niet per ongeluk het laatste (waar getLaatsteStatusUpdate() op leunt).
     @Test
@@ -58,5 +77,15 @@ class NotificatieTest {
         notificatie.registreerStatus(StatusWaarde.DELIVERED);
 
         assertEquals(aanmaakTijdstip, notificatie.getAangemaakt());
+    }
+
+    private static void bevestigProjectieVolgtGeschiedenis(Notificatie notificatie) {
+        // Zelfde regel als registreerStatus: bij een gelijk tijdstip telt de laatst geregistreerde.
+        NotificatieStatus chronologischLaatste = notificatie.getStatusGeschiedenis().stream()
+                .reduce((eerder, later) -> later.tijdstip().isBefore(eerder.tijdstip()) ? eerder : later)
+                .orElseThrow();
+
+        assertEquals(chronologischLaatste.status(), notificatie.getStatus());
+        assertEquals(chronologischLaatste.tijdstip(), notificatie.getLaatsteStatusUpdate());
     }
 }

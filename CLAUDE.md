@@ -96,8 +96,8 @@ through only a bare identifier and let NMC lead.
 - **Observability koppelvlak** (exposing processing/status info to Dienstafnemers,
   likely for wMEBV bewijslast) is **not a priority for this skeleton**, but the
   data model already supports it: `Notificatie` keeps a full, ordered status
-  history (`statusGeschiedenis`, a `NotificatieStatus` per transition) rather
-  than just a current-status field, so an audit trail per notification can be
+  history (`statusGeschiedenis`, a `NotificatieStatus` per transition), not
+  just a current status, so an audit trail per notification can be
   exposed later without a redesign.
 - **`StatusWaarde`** models exactly what NotifyNL's *email* delivery-receipt
   callback actually sends today — `delivered`, `permanent-failure`,
@@ -160,9 +160,11 @@ through only a bare identifier and let NMC lead.
   implemented — no such endpoints exist yet
 - Outbound integrations to Profielservice and NotifyNL are implemented as
   real `@RestClient`-backed adapters (mocked only in tests)
-- `Notificatie`'s status is not a plain column: every transition is appended to
-  an ordered `statusGeschiedenis` (see "Observability koppelvlak" above), and
-  the current status/last-update are derived from it. A `NotificatieRetentieScheduler`
+- Every status transition is appended to an ordered `statusGeschiedenis` (see
+  "Observability koppelvlak" above), which is the source of truth.
+  `laatste_status`/`laatste_status_update` on `notificatie` are a projection of
+  its last record, maintained by `registreerStatus`, so the retention job can
+  select on one indexed column. A `NotificatieRetentieScheduler`
   deletes a `Notificatie` (and its history) once that history is older than
   `notificatie.retentie.bewaartermijn`, independent of whether the consumer
   callback succeeded — see `README.md` for the full behavior

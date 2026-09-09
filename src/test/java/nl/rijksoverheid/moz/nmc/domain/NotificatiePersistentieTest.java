@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Persisteert en herlaadt een Notificatie in twee losse transacties: bewijst dat NotificatieStatus-
- * hydratatie, @OrderBy-volgorde (op tijdstip, niet op invoegvolgorde) en de daarvan afgeleide
+ * hydratatie, @OrderBy-volgorde (op tijdstip, niet op invoegvolgorde) en de projectie in
  * getStatus()/getLaatsteStatusUpdate() ook standhouden na een echte round-trip door de database,
  * niet alleen in-memory (zie NotificatieTest).
  */
@@ -75,12 +75,13 @@ class NotificatiePersistentieTest {
         });
     }
 
-    // SENDING wordt hier ná DELIVERED geregistreerd, maar met een eerder tijdstip: na herladen moet
+    // SENDING wordt hier na DELIVERED geregistreerd, maar met een eerder tijdstip: na herladen moet
     // SENDING alsnog vóór DELIVERED staan (@OrderBy("tijdstip ASC") ordent op tijdstip, niet op
-    // invoegvolgorde), en moet getStatus()/getLaatsteStatusUpdate() DELIVERED teruggeven — het
-    // chronologisch laatste record, ook al is SENDING het laatst-ingevoegde. Een test die hier per
-    // ongeluk chronologische en invoegvolgorde gelijk zou laten lopen, zou ook slagen zonder dat
-    // @OrderBy ooit daadwerkelijk herordent.
+    // invoegvolgorde), en moet getStatus()/getLaatsteStatusUpdate() DELIVERED teruggeven, het
+    // chronologisch laatste record, ook al is SENDING het laatst-geregistreerde. Dat pint meteen
+    // vast dat de projectie op Notificatie een terug gedateerde registratie niet volgt. Een test
+    // die hier per ongeluk chronologische en invoegvolgorde gelijk zou laten lopen, zou ook
+    // slagen zonder dat @OrderBy ooit daadwerkelijk herordent.
     @Test
     void notificatie_metNietMonotoneRegistratievolgorde_herlaadtChronologischGeordend() {
         OffsetDateTime sendingTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(1).truncatedTo(ChronoUnit.MICROS);

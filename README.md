@@ -172,10 +172,12 @@ De `Notificatie`-entiteit bevat een NMC-interne `id` (UUID), de
 delivery receipts) en de optionele `callbackUrl`. Elke statusovergang wordt
 vastgelegd in een geordende geschiedenis van `NotificatieStatus`-waarden
 (status + tijdstip) — dit is ook de basis voor een toekomstig
-observability-koppelvlak. Het aanmaaktijdstip, de huidige status en het
-tijdstip van de laatste statuswijziging staan niet als kolom op `Notificatie`,
-maar zijn afgeleid van respectievelijk het eerste en het laatste record in die
-geschiedenis (`getAangemaakt()` / `getStatus()` / `getLaatsteStatusUpdate()`).
+observability-koppelvlak. Het aanmaaktijdstip is afgeleid van het eerste record
+in die geschiedenis (`getAangemaakt()`). De huidige status en het tijdstip van
+de laatste statuswijziging staan als projectie van het laatste record op
+`Notificatie` zelf (`laatste_status` / `laatste_status_update`), bijgewerkt door
+`registreerStatus`, zodat de retentiejob op een geindexeerde kolom kan
+selecteren in plaats van per notificatie een MAX over de geschiedenis.
 De entiteit heeft optimistic locking (`@Version`): twee gelijktijdig verwerkte
 delivery receipts voor dezelfde notificatie zouden elkaars statusregel anders
 geruisloos overschrijven. De tweede transactie faalt nu zichtbaar, waarna
@@ -187,10 +189,11 @@ is dan de geconfigureerde `notificatie.retentie.bewaartermijn` (zie
 `application.properties`). Dit staat los van
 het slagen van de consument-callback. De job draait dagelijks om 03:00
 Europese/Amsterdamse tijd (`notificatie.retentie.cron`) en verwijdert in
-begrensde batches, zodat één run niet vastloopt op een grote achterstand. Het
-verwijderen van een notificatie die nog geen definitieve status had
-(`StatusWaarde#isDefinitief`, bijv. nog `sending`) wordt apart gelogd
-(WARN) — NotifyNL heeft daar dan nooit een eindstatus over teruggekoppeld.
+begrensde batches, zodat één run niet vastloopt op een grote achterstand.
+Verlopen notificaties die nog geen definitieve status hadden
+(`StatusWaarde#isDefinitief`, bijv. nog `sending`) worden aan het begin van de
+run apart gelogd (WARN, begrensd op 100 regels): NotifyNL heeft daar dan nooit
+een eindstatus over teruggekoppeld.
 
 Onderstaande entiteit is de **beoogde eindsituatie** voor latere stories en
 nog niet geïmplementeerd:
