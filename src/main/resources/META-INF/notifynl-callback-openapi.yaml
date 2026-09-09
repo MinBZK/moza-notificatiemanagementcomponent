@@ -27,8 +27,7 @@ paths:
         Webhook waarop de bezorgstatus (delivery receipt) van een eerder
         verstuurde e-mail gemeld wordt. Na verwerking wordt de status opgeslagen en, als
         er een callbackUrl is meegegeven bij de oorspronkelijke aanvraag, een
-        statusupdate (CloudEvents NL GOV) naar die URL gestuurd. Na een geslaagde
-        callback wordt het notificatierecord verwijderd.
+        statusupdate (CloudEvents NL GOV) naar die URL gestuurd.
       tags:
         - NotifyNLCallback
       requestBody:

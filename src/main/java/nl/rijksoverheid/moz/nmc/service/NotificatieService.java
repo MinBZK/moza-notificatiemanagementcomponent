@@ -9,8 +9,8 @@ import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.PartijIdentificatie;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 
 import java.util.Map;
@@ -68,7 +68,7 @@ public class NotificatieService {
             Log.error("Fout bij versturen van notificatie", e);
             throw new NotificatieException("Notificatie kon niet worden verstuurd.");
         }
-        notificatie.setStatus(NotificatieStatus.SENDING);
+        notificatie.registreerStatus(StatusWaarde.SENDING);
 
         return notificatie;
     }
@@ -80,21 +80,40 @@ public class NotificatieService {
                 .orElseThrow(() -> new NotificatieNietGevondenException(
                         "Geen notificatie gevonden voor NotifyNL-referentie " + notifyNlNotificatieId));
 
-        notificatie.setStatus(parseStatus(status));
+        StatusWaarde huidigeStatus = notificatie.getStatus();
+        StatusWaarde nieuweStatus = parseStatus(status);
+        // Een niet-definitieve status ná een definitieve is geen nieuwe uitkomst maar een dubbele of
+        // laat aangekomen callback (NotifyNL herhaalt een callback bij elke niet-2xx). Zo'n update
+        // registreren zou de laatst bekende uitkomst overschrijven, de Dienstverlener een
+        // teruggedraaide bezorgstatus melden én — omdat de retentiejob op het laatste tijdstip in de
+        // statusgeschiedenis vaart — de bewaartermijn opnieuw laten beginnen. Daarom wordt hij
+        // genegeerd; de eerder vastgelegde eindstatus blijft staan.
+        if (huidigeStatus.isDefinitief() && !nieuweStatus.isDefinitief()) {
+            Log.warnf("Notificatie %s heeft al definitieve status %s; niet-definitieve status %s "
+                    + "(NotifyNL-referentie %s) wordt genegeerd", notificatie.getId(), huidigeStatus,
+                    nieuweStatus, notifyNlNotificatieId);
 
-        // Een JTA-timeout tijdens de retries in stuurStatusUpdate() zou notificatie detached maken,
-        // waardoor deleteById() hieronder een DetachedObjectException geeft. Zie ConsumentCallbackAdapter.
-        if (consumentCallbackAdapter.stuurStatusUpdate(notificatie)) {
-            notificatieRepository.deleteById(notificatie.getId());
+            return;
         }
+        notificatie.registreerStatus(nieuweStatus);
+
+        // TODO #732: stuurStatusUpdate() doet tot 3 synchrone HTTP-pogingen binnen deze transactie.
+        // Een JTA-timeout hier rolt de registreerStatus()-aanroep hierboven terug: de net verwerkte
+        // NotifyNL-uitkomst gaat dan verloren. Niet stil richting de aanroeper — de RollbackException
+        // ontsnapt uit deze methode en NotifyNLCallbackController vangt hem niet, dus NotifyNL krijgt
+        // een 5xx en biedt de callback opnieuw aan (het herhaalt bij elke niet-2xx). Het verlies is
+        // dus echt, maar wordt gemeld; die 5xx is tegelijk precies wat de dubbele callback uitlokt
+        // die hierboven wordt afgevangen.
+        consumentCallbackAdapter.stuurStatusUpdate(notificatie, nieuweStatus);
     }
 
-    private NotificatieStatus parseStatus(String notifyStatus) {
+    private StatusWaarde parseStatus(String notifyStatus) {
         try {
-            return NotificatieStatus.valueOf(notifyStatus.replace("-", "_").toUpperCase());
+            return StatusWaarde.valueOf(notifyStatus.replace("-", "_").toUpperCase());
         } catch (IllegalArgumentException e) {
-            Log.errorf("Onbekende NotifyNL-status ontvangen: %s — opgeslagen als technische fout", notifyStatus);
-            return NotificatieStatus.TECHNICAL_FAILURE;
+            Log.errorf("Onbekende NotifyNL-status ontvangen: %s — opgeslagen als %s", notifyStatus,
+                    StatusWaarde.ONBEKEND.toApiValue());
+            return StatusWaarde.ONBEKEND;
         }
     }
 }
