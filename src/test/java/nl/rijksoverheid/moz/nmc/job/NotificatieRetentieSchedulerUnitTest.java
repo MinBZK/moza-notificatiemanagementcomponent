@@ -9,15 +9,14 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-// De constructorvalidatie van de scheduler, die van BatchResultaat en de twee @Observes-methodes:
-// alle drie hebben ze geen database of transactie nodig. verwijderVerlopenNotificaties() zelf
+// De constructorvalidatie van de scheduler en de twee @Observes-methodes:
+// geen van beide heeft een database of transactie nodig. verwijderVerlopenNotificaties() zelf
 // gebruikt sinds de batchgewijze verwijdering QuarkusTransaction.requiringNew(), wat een actieve
 // Arc-container vereist en dus niet in een kale Mockito-test werkt. Dat gedrag wordt gedekt door
 // NotificatieRetentieSchedulerTest (@QuarkusTest, echte database).
@@ -40,36 +39,6 @@ class NotificatieRetentieSchedulerUnitTest {
     void constructor_nulBewaartermijn_gooitIllegalArgumentException() {
         assertThrows(IllegalArgumentException.class,
                 () -> new NotificatieRetentieScheduler(notificatieRepository, Duration.ZERO));
-    }
-
-    @Test
-    void batchResultaat_negatiefAantal_gooitIllegalArgumentException() {
-        assertThrows(IllegalArgumentException.class,
-                () -> new NotificatieRetentieScheduler.BatchResultaat(-1, 0, 0));
-        assertThrows(IllegalArgumentException.class,
-                () -> new NotificatieRetentieScheduler.BatchResultaat(0, -1, 0));
-        assertThrows(IllegalArgumentException.class,
-                () -> new NotificatieRetentieScheduler.BatchResultaat(1, 0, -1));
-    }
-
-    // Bewaakt de invariant die de aggregaat-WARN-log ("x van de y kandidaten") betekenis geeft:
-    // teller en noemer gaan over dezelfde populatie, dus de teller kan nooit groter zijn.
-    @Test
-    void batchResultaat_meerNietDefinitiefDanKandidaten_gooitIllegalArgumentException() {
-        assertThrows(IllegalArgumentException.class,
-                () -> new NotificatieRetentieScheduler.BatchResultaat(2, 2, 3));
-    }
-
-    // Minder verwijderd dan kandidaten is juist een geldige uitkomst (een andere pod was eerder, of
-    // een kandidaat is intussen niet meer verlopen) en mag dus niet afketsen op de validatie.
-    @Test
-    void batchResultaat_minderVerwijderdDanKandidaten_isGeldig() {
-        NotificatieRetentieScheduler.BatchResultaat resultaat =
-                new NotificatieRetentieScheduler.BatchResultaat(10, 4, 3);
-
-        assertEquals(10, resultaat.kandidaten());
-        assertEquals(4, resultaat.verwijderd());
-        assertEquals(3, resultaat.nietDefinitiefKandidaten());
     }
 
     // De observers vuren voor élke @Scheduled-methode in de applicatie; zonder de filtering op
