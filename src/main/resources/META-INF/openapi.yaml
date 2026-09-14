@@ -41,6 +41,33 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/NotificatieAanvraagRequest'
+      callbacks:
+        statusupdate:
+          '{$request.body#/callbackUrl}':
+            post:
+              summary: Statusupdate (CloudEvents NL GOV)
+              description: |
+                De NMC stuurt deze callback zodra NotifyNL de bezorgstatus terugmeldt,
+                en alleen als bij de aanvraag een `callbackUrl` is meegegeven. De
+                callback gaat pas uit nadat de status is vastgelegd.
+
+                De NMC doet maximaal drie pogingen met oplopende tussenpozen. Slagen
+                die geen van alle, dan wordt de statusupdate niet opnieuw aangeboden;
+                de Dienstverlener kan de status dan alleen nog zelf opvragen.
+
+                Een status komt hooguit één keer voorbij. Een herhaalde of laat
+                aangekomen melding van NotifyNL die geen vooruitgang is op de al
+                vastgelegde status, levert geen callback op — een bezorging wordt dus
+                nooit teruggedraaid naar een foutstatus.
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema:
+                      $ref: '#/components/schemas/NotificatieStatusEvent'
+              responses:
+                '2XX':
+                  description: Statusupdate ontvangen
       responses:
         '200':
           description: Notificatie succesvol verstuurd
@@ -87,6 +114,33 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DecentraleNotificatieAanvraagRequest'
+      callbacks:
+        statusupdate:
+          '{$request.body#/callbackUrl}':
+            post:
+              summary: Statusupdate (CloudEvents NL GOV)
+              description: |
+                De NMC stuurt deze callback zodra NotifyNL de bezorgstatus terugmeldt,
+                en alleen als bij de aanvraag een `callbackUrl` is meegegeven. De
+                callback gaat pas uit nadat de status is vastgelegd.
+
+                De NMC doet maximaal drie pogingen met oplopende tussenpozen. Slagen
+                die geen van alle, dan wordt de statusupdate niet opnieuw aangeboden;
+                de Dienstverlener kan de status dan alleen nog zelf opvragen.
+
+                Een status komt hooguit één keer voorbij. Een herhaalde of laat
+                aangekomen melding van NotifyNL die geen vooruitgang is op de al
+                vastgelegde status, levert geen callback op — een bezorging wordt dus
+                nooit teruggedraaid naar een foutstatus.
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema:
+                      $ref: '#/components/schemas/NotificatieStatusEvent'
+              responses:
+                '2XX':
+                  description: Statusupdate ontvangen
       responses:
         '200':
           description: Notificatie succesvol verstuurd
@@ -203,6 +257,94 @@ components:
           type: string
           format: uuid
           description: NMC-interne referentie voor deze notificatie
+
+    NotificatieStatusEvent:
+      type: object
+      description: >-
+        Statusupdate als CloudEvent (NL GOV profiel). De envelop volgt CloudEvents 1.0;
+        de bezorgstatus zelf staat in `data`.
+      required:
+        - specversion
+        - id
+        - type
+        - source
+        - time
+        - datacontenttype
+        - data
+      properties:
+        specversion:
+          type: string
+          example: '1.0'
+        id:
+          type: string
+          format: uuid
+          description: Unieke identificatie van dit event, niet van de notificatie
+        type:
+          type: string
+          example: nl.rijksoverheid.moz.nmc.notificatie.status
+        source:
+          type: string
+          format: uri-reference
+          example: /api/nmc/v1/notificaties/3f1a...
+        subject:
+          type: string
+          example: notificatie/3f1a...
+        time:
+          type: string
+          format: date-time
+          description: Tijdstip waarop de NMC dit event verstuurde
+        datacontenttype:
+          type: string
+          example: application/json
+        data:
+          $ref: '#/components/schemas/NotificatieStatusData'
+
+    NotificatieStatusData:
+      type: object
+      required:
+        - notificatieId
+        - status
+      properties:
+        notificatieId:
+          type: string
+          format: uuid
+          description: De NMC-interne referentie die bij de aanvraag is teruggegeven
+        status:
+          $ref: '#/components/schemas/NotificatieStatus'
+
+    NotificatieStatus:
+      type: string
+      description: |
+        Bezorgstatus van de notificatie.
+
+        De eerste zes waarden komen overeen met het delivery-receiptmodel van
+        NotifyNL voor e-mail. `onbekend` is een waarde van de NMC zelf.
+
+        | Waarde | Betekenis |
+        |---|---|
+        | `created` | Door de NMC vastgelegd, nog niet aangeboden bij NotifyNL |
+        | `sending` | Aangeboden bij NotifyNL, nog geen uitkomst |
+        | `delivered` | Bezorgd |
+        | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
+        | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
+        | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
+        | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
+
+        `onbekend` betekent niet dat er iets mis is met de notificatie zelf: de NMC
+        heeft wél een terugmelding ontvangen, maar die viel buiten de statussen die
+        dit component kent. Dat gebeurt bijvoorbeeld als NotifyNL zijn vocabulaire
+        uitbreidt of als er een ander kanaal dan e-mail in het spel komt. De melding
+        wordt vastgelegd en de NMC logt hem, zodat de waarde alsnog toegevoegd kan
+        worden. Behandel `onbekend` niet als eindstatus: er kan later alsnog een
+        bekende uitkomst binnenkomen.
+      enum:
+        - created
+        - sending
+        - delivered
+        - temporary-failure
+        - permanent-failure
+        - technical-failure
+        - onbekend
 
     Problem:
       type: object
