@@ -1,14 +1,34 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
+
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StatusWaardeTest {
+
+    // Regressietest: met de standaardlocale maakt toLowerCase() in een Turkse locale van de I een
+    // dotless i, waardoor sending, delivered en de drie failure-waarden verminkt het CloudEvent naar
+    // de Dienstverlener in gaan. Locale.ROOT in toApiValue voorkomt dat.
+    @Test
+    void toApiValue_inEenTurkseLocale_blijftOngewijzigd() {
+        Locale oorspronkelijk = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.of("tr", "TR"));
+
+            assertEquals("sending", StatusWaarde.SENDING.toApiValue());
+            assertEquals("delivered", StatusWaarde.DELIVERED.toApiValue());
+            assertEquals("technical-failure", StatusWaarde.TECHNICAL_FAILURE.toApiValue());
+        } finally {
+            Locale.setDefault(oorspronkelijk);
+        }
+    }
 
     // toApiValue() is de @JsonValue-serialisatie in de CloudEvent naar de Dienstverlener: een
     // regressie hier breekt consumenten stil, zonder dat enige andere test dit zou opmerken.

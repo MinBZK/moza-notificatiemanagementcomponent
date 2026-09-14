@@ -2,6 +2,8 @@ package nl.rijksoverheid.moz.nmc.domain;
 
 import com.fasterxml.jackson.annotation.JsonValue;
 
+import java.util.Locale;
+
 public enum StatusWaarde {
     SENDING,
     DELIVERED,
@@ -15,10 +17,16 @@ public enum StatusWaarde {
     // (en mogelijk definitieve) status wordt geregistreerd.
     ONBEKEND;
 
-    /** Returns the kebab-case representation for use in API responses (e.g. permanent-failure). */
+    /**
+     * De kebab-case-weergave voor API-antwoorden, bijvoorbeeld {@code permanent-failure}.
+     * <p>
+     * Locale.ROOT en niet de standaardlocale van de JVM: in een Turkse locale maakt
+     * {@code toLowerCase()} van de I een dotless i, en die waarde gaat via het CloudEvent
+     * rechtstreeks naar de Dienstverlener.
+     */
     @JsonValue
     public String toApiValue() {
-        return name().toLowerCase().replace('_', '-');
+        return name().toLowerCase(Locale.ROOT).replace('_', '-');
     }
 
     // Hardcoded (niet configureerbaar) — een keuze van de NMC zelf. Switch i.p.v. Set dwingt dat
