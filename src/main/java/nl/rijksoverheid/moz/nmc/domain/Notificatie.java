@@ -17,6 +17,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Entity
@@ -82,8 +83,27 @@ public class Notificatie {
         return externalReference;
     }
 
-    public void setExternalReference(UUID externalReference) {
+    /**
+     * Koppelt de notificatie aan de verzending bij NotifyNL en legt {@code SENDING} vast.
+     * <p>
+     * Die twee horen altijd samen. Een {@code SENDING} zonder referentie is onbereikbaar voor elke
+     * delivery receipt — {@code findByExternalReference} vindt hem nooit meer — en een referentie
+     * zonder {@code SENDING} laat de notificatie op {@code CREATED} staan terwijl de e-mail al weg
+     * is. Als losse setter was het aan de aanroeper om ze allebei te doen, in de goede volgorde.
+     *
+     * @throws IllegalStateException als er al een referentie gekoppeld is; twee verzendingen onder
+     *         één notificatie zou de tweede de eerste laten overschrijven, waarna de receipts van de
+     *         eerste nergens meer thuishoren
+     */
+    public void markeerVerzonden(UUID externalReference) {
+        Objects.requireNonNull(externalReference, "externalReference is verplicht");
+
+        if (this.externalReference != null) {
+            throw new IllegalStateException("Notificatie " + id + " is al gekoppeld aan NotifyNL-referentie "
+                    + this.externalReference);
+        }
         this.externalReference = externalReference;
+        registreerStatus(StatusWaarde.SENDING);
     }
 
     /** Registreert een status die de NMC zelf vaststelt; gebeurtenis- en registratietijd vallen samen. */

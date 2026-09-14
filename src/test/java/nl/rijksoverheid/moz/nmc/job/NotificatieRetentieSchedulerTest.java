@@ -152,6 +152,37 @@ class NotificatieRetentieSchedulerTest {
     // verwijderde 1000 rijen van batch 1 terugdraaien, en zou elke andere test in deze suite gewoon
     // groen blijven.
     //
+    // Een batch die gooit mag de rest van de achterstand niet gijzelen. Voorheen ontsnapte de
+    // exceptie uit de lus en stopte de hele run; omdat de claim op laatste_status_update ordent kwam
+    // dezelfde rij de volgende nacht weer als eerste terug, en lag de opruiming permanent stil. De
+    // lus slaat de geclaimde ids nu over en gaat door.
+    @Test
+    void verwijderVerlopenNotificaties_alsEenBatchFaalt_gaatDoorMetDeVolgende() {
+        plantVerlopenNotificaties(1005, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
+
+        EntityManager echteEntityManager = notificatieRepository.getEntityManager();
+        AtomicInteger aanroepen = new AtomicInteger();
+        doAnswer(invocation -> {
+            // Alleen de DELETE van batch 1 (aanroep 2) faalt; de claim ervoor en alles daarna werkt.
+            if (aanroepen.incrementAndGet() == 2) {
+                throw new RuntimeException("gesimuleerde storing in batch 1");
+            }
+
+            return echteEntityManager;
+        }).when(notificatieRepository).getEntityManager();
+
+        scheduler.verwijderVerlopenNotificaties();
+
+        Mockito.reset(notificatieRepository);
+        long overgebleven = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count());
+        assertEquals(1000L, overgebleven, "de 1000 rijen van de mislukte batch blijven staan, de rest "
+                + "van de achterstand wordt alsnog opgeruimd");
+    }
+
+    // Let op: de lus vangt een mislukte batch sinds de poison-row-afhandeling zelf af en gaat door
+    // met de volgende. Deze test laat daarom álles vanaf de derde aanroep falen, zodat ook de
+    // vervolgbatches stuklopen en de run uiteindelijk opgeeft op MAX_MISLUKTE_BATCHES.
+    //
     // De storing wordt afgedwongen door getEntityManager() vanaf de derde aanroep te laten falen:
     // een run roept hem twee keer per batch aan (de claim met FOR UPDATE SKIP LOCKED en de DELETE)
     // en verder nergens — de melding zit sinds de herziening in de batchtransactie en gebruikt de
@@ -209,9 +240,13 @@ class NotificatieRetentieSchedulerTest {
                 .filter(regel -> regel.contains("verlopen zonder eindstatus notificatieId="))
                 .toList();
         assertEquals(1, perNotificatie.size(), "alleen de niet-definitieve notificatie hoort gemeld");
+        // Alle vier de velden afzonderlijk: dit is tegelijk de bewaking op de kolomvolgorde van de
+        // claim-query, die met positionele casts op Kandidaat wordt afgebeeld (zie claimBatch).
         assertTrue(perNotificatie.getFirst().contains("notificatieId=" + sendingId));
         assertTrue(perNotificatie.getFirst().contains("notifyNlReferentie=" + notifyNlReferentie));
         assertTrue(perNotificatie.getFirst().contains("status=SENDING"));
+        assertTrue(perNotificatie.getFirst().matches(".*laatsteStatusUpdate=\\d{4}-\\d{2}-\\d{2}T.*"),
+                "het vierde veld hoort een tijdstip te zijn, niet een van de andere kolommen");
         assertTrue(meldingen.stream().noneMatch(regel -> regel.contains(bezorgdId.toString())));
     }
 
@@ -367,7 +402,7 @@ class NotificatieRetentieSchedulerTest {
         UUID notifyNlReferentie = UUID.randomUUID();
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(null);
-            notificatie.setExternalReference(notifyNlReferentie);
+            notificatie.markeerVerzonden(notifyNlReferentie);
             vervangGeschiedenisDoor(notificatie, List.of(NotificatieStatus.opEigenKlok(StatusWaarde.SENDING,
                     OffsetDateTime.now(ZoneOffset.UTC).minusDays(31))));
             notificatieRepository.persist(notificatie);
@@ -428,7 +463,9 @@ class NotificatieRetentieSchedulerTest {
             UUID externalReference) {
         return QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(callbackUrl);
-            notificatie.setExternalReference(externalReference);
+            if (externalReference != null) {
+                notificatie.markeerVerzonden(externalReference);
+            }
             vervangGeschiedenisDoor(notificatie, List.of(NotificatieStatus.opEigenKlok(status, laatsteStatusUpdate)));
             notificatieRepository.persist(notificatie);
             return notificatie.getId();
@@ -494,7 +531,8 @@ class NotificatieRetentieSchedulerTest {
     private int verwijderBatchOp(OffsetDateTime grens) {
         NotificatieRetentieScheduler.BatchResultaat resultaat =
                 (NotificatieRetentieScheduler.BatchResultaat) roepPrivateMethodeAan("verwijderBatch",
-                        new Class<?>[] {OffsetDateTime.class, int.class}, grens, 0);
+                        new Class<?>[] {OffsetDateTime.class, int.class, List.class, List.class},
+                        grens, 0, List.of(), new ArrayList<UUID>());
 
         return resultaat.verwijderd();
     }

@@ -117,6 +117,24 @@ class ConsumentCallbackAdapterTest {
                 () -> adapterMetKapotteFabriek.stuurStatusUpdate(opdracht("https://omc.example.nl/callback")));
     }
 
+    // De controle staat in de constructor en niet bij het versturen: StatusUpdateVerzender pakt de
+    // opdracht op in een AFTER_SUCCESS-observer, waar een NPE ná de commit door de transactiemanager
+    // wordt opgeslokt. Vanuit de constructor valt dezelfde fout nog binnen de transactie.
+    @Test
+    void opdracht_zonderNotificatieIdOfStatus_weigert() {
+        assertThrows(NullPointerException.class,
+                () -> new StatusUpdateOpdracht(null, "https://omc.example.nl/callback", StatusWaarde.DELIVERED));
+        assertThrows(NullPointerException.class,
+                () -> new StatusUpdateOpdracht(UUID.randomUUID(), "https://omc.example.nl/callback", null));
+    }
+
+    // Een lege callbackUrl is geen fout maar een betekenisdragende waarde: de Dienstverlener heeft
+    // geen callback geconfigureerd en vraagt de status zelf op.
+    @Test
+    void opdracht_zonderCallbackUrl_isToegestaan() {
+        assertDoesNotThrow(() -> new StatusUpdateOpdracht(UUID.randomUUID(), null, StatusWaarde.DELIVERED));
+    }
+
     private static StatusUpdateOpdracht opdracht(String callbackUrl) {
         return new StatusUpdateOpdracht(UUID.randomUUID(), callbackUrl, StatusWaarde.DELIVERED);
     }

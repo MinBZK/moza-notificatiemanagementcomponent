@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -13,4 +14,15 @@ import java.util.UUID;
  * (Notificatie#statusGeschiedenis) niet meer kunnen inlezen.
  */
 public record StatusUpdateOpdracht(UUID notificatieId, String callbackUrl, StatusWaarde status) {
+
+    public StatusUpdateOpdracht {
+        // Hier controleren en niet pas bij het versturen: StatusUpdateVerzender pakt deze opdracht
+        // op in een AFTER_SUCCESS-observer, dus een NPE zou daar afgaan — ná de commit, waar de
+        // transactiemanager hem opslokt. Vanuit de constructor valt dezelfde fout binnen de
+        // transactie van de aanroeper, waar hij nog te zien en terug te draaien is.
+        Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
+        Objects.requireNonNull(status, "status is verplicht");
+        // callbackUrl mag bewust null zijn: dat betekent dat de Dienstverlener geen callback heeft
+        // geconfigureerd en de status zelf opvraagt.
+    }
 }
