@@ -211,6 +211,9 @@ termijn te kiezen. Dit staat los van
 het slagen van de consument-callback. De job draait dagelijks om 03:00
 Europese/Amsterdamse tijd (`notificatie.retentie.cron`) en verwijdert in
 begrensde batches, zodat één run niet vastloopt op een grote achterstand.
+Elke batch wordt geclaimd met `FOR UPDATE SKIP LOCKED`: bij meerdere replica's
+verdelen de pods de achterstand onder elkaar in plaats van allemaal dezelfde
+oudste rijen te selecteren en op elkaars rijlocks te wachten.
 Verlopen notificaties die nog geen definitieve status hadden
 (`StatusWaarde#isDefinitief`, bijv. nog `sending`) worden aan het begin van de
 run apart gelogd (WARN, begrensd op 100 regels): NotifyNL heeft daar dan nooit

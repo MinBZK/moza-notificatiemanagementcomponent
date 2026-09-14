@@ -97,7 +97,18 @@ ALTER TABLE notificatie ALTER COLUMN laatste_status_update SET NOT NULL;
 ALTER TABLE notificatie ADD CONSTRAINT chk_notificatie_laatste_status CHECK (laatste_status IN (
     'SENDING', 'DELIVERED', 'PERMANENT_FAILURE', 'TEMPORARY_FAILURE', 'TECHNICAL_FAILURE', 'CREATED', 'ONBEKEND'
 ));
-CREATE INDEX idx_notificatie_laatste_status_update ON notificatie (laatste_status_update);
+-- Samengestelde index, geen losse op laatste_status_update. De retentiejob doet drie queries op
+-- deze tabel en alle drie filteren op laatste_status_update; twee daarvan filteren daarnaast op
+-- laatste_status (de melding van verlopen notificaties zonder definitieve status). Met alleen de
+-- datumkolom moet PostgreSQL voor die twee elke rij in het verlopen bereik uit de heap halen om de
+-- status te toetsen; met beide kolommen kan dat een index-only scan worden. Bij miljoenen rijen
+-- scheelt dat de heap-toegang over het hele bereik.
+--
+-- De datumkolom staat voorop zodat de index ook de queries bedient die alleen daarop filteren (een
+-- btree is bruikbaar op elk prefix van zijn kolommen). Een losse index op laatste_status_update
+-- ernaast zou dus niets toevoegen en alleen schrijfkosten opleveren.
+CREATE INDEX idx_notificatie_laatste_status_update_status
+    ON notificatie (laatste_status_update, laatste_status);
 
 ALTER TABLE notificatie DROP COLUMN status;
 ALTER TABLE notificatie DROP COLUMN aangemaakt;

@@ -153,9 +153,9 @@ class NotificatieRetentieSchedulerTest {
     //
     // De storing wordt afgedwongen door getEntityManager() vanaf de vierde aanroep te laten falen:
     // een run roept hem één keer aan om de niet-definitieve kandidaten te tellen (die telling levert
-    // hier 0 op, dus er volgt geen detailquery) en daarna twee keer per batch (verwijderBatch voor de
-    // SELECT, verwijder voor de DELETE). Aanroep 1 is dus de telling, 2 en 3 zijn batch 1 en aanroep
-    // 4 is de SELECT van batch 2. De echte EntityManager wordt vooraf opgehaald zodat de eerste drie
+    // hier 0 op, dus er volgt geen detailquery) en daarna twee keer per batch (de claim met FOR
+    // UPDATE SKIP LOCKED en de DELETE). Aanroep 1 is dus de telling, 2 en 3 zijn batch 1 en aanroep
+    // 4 is de claim van batch 2. De echte EntityManager wordt vooraf opgehaald zodat de eerste drie
     // aanroepen gewoon werken.
     @Test
     void verwijderVerlopenNotificaties_alsEenLatereBatchFaalt_blijftDeEerdereBatchVerwijderd() {
@@ -307,36 +307,29 @@ class NotificatieRetentieSchedulerTest {
         assertEquals(0L, overgebleven);
     }
 
-    // Dekt de TOCTOU tussen de kandidatenquery en de DELETE in verwijderBatch: tussen beide door kan
-    // een gelijktijdige verwerkAfleverstatus een verse statusregel committen, waardoor een kandidaat
-    // niet meer verlopen is. Zo'n gelijktijdige commit is in een test niet betrouwbaar te timen;
-    // daarom wordt hier de DELETE zelf (privé, via reflectie) aangeroepen met het id van een
-    // notificatie die níet verlopen is, precies de toestand die het echte venster oplevert. Een
-    // blinde DELETE op id zou de rij weghalen; het herhaalde retentiepredicaat hoort dat te
-    // verhinderen.
+    // De TOCTOU die hier eerder getest werd — een kandidaat die tussen de SELECT en de DELETE een
+    // verse statusregel kreeg — bestaat niet meer: verwijderBatch selecteert en verwijdert in één
+    // statement. Wat blijft is dat het retentiepredicaat klopt, en dat toetsen deze twee: een
+    // notificatie die niet verlopen is blijft staan, een die dat wel is gaat weg. Zonder de
+    // tegenhanger zou de eerste assertie ook slagen als de DELETE nooit meer iets verwijdert.
     @Test
-    void verwijder_metEenIdDatNietMeerVerlopenIs_verwijdertDieNotificatieNiet() {
+    void verwijderBatch_metEenNotificatieDieNietVerlopenIs_verwijdertDieNiet() {
         UUID nietVerlopenId = maakNotificatie(null, StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC));
         OffsetDateTime grens = OffsetDateTime.now(ZoneOffset.UTC).minusDays(30);
 
-        int verwijderd = QuarkusTransaction.requiringNew()
-                .call(() -> verwijderOp(List.of(nietVerlopenId), grens));
+        int verwijderd = QuarkusTransaction.requiringNew().call(() -> verwijderBatchOp(grens));
 
         assertEquals(0, verwijderd);
         QuarkusTransaction.requiringNew().run(() ->
                 assertTrue(notificatieRepository.findByIdOptional(nietVerlopenId).isPresent()));
     }
 
-    // Tegenhanger van de test hierboven: dezelfde aanroep met een wél verlopen notificatie moet die
-    // juist verwijderen. Zonder deze test zou de assertie hierboven ook slagen als de DELETE per
-    // ongeluk nooit meer iets verwijdert.
     @Test
-    void verwijder_metEenVerlopenId_verwijdertDieNotificatieWel() {
+    void verwijderBatch_metEenVerlopenNotificatie_verwijdertDieWel() {
         UUID verlopenId = maakNotificatie(null, StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
         OffsetDateTime grens = OffsetDateTime.now(ZoneOffset.UTC).minusDays(30);
 
-        int verwijderd = QuarkusTransaction.requiringNew()
-                .call(() -> verwijderOp(List.of(verlopenId), grens));
+        int verwijderd = QuarkusTransaction.requiringNew().call(() -> verwijderBatchOp(grens));
 
         assertEquals(1, verwijderd);
         QuarkusTransaction.requiringNew().run(() ->
@@ -510,10 +503,6 @@ class NotificatieRetentieSchedulerTest {
                 new Class<?>[] {OffsetDateTime.class}, grens);
     }
 
-    private int verwijderOp(Collection<UUID> ids, OffsetDateTime grens) {
-        return (int) roepPrivateMethodeAan("verwijder",
-                new Class<?>[] {Collection.class, OffsetDateTime.class}, ids, grens);
-    }
 
     private Object roepPrivateMethodeAan(String naam, Class<?>[] parameterTypes, Object... argumenten) {
         try {

@@ -13,6 +13,7 @@ import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.hibernate.query.NativeQuery;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -60,6 +61,16 @@ public class NotificatieRetentieScheduler {
 
     // Zowel de @Scheduled-identity als het trigger-id waarop de observers hieronder filteren.
     private static final String TRIGGER_ID = "notificatie-retentie";
+
+    // Zie verwijderBatch. Native SQL omdat JPQL geen lock-clausule met SKIP LOCKED kent.
+    private static final String CLAIM_BATCH_SQL = """
+            SELECT id
+              FROM notificatie
+             WHERE laatste_status_update <= ?1
+             ORDER BY laatste_status_update
+             FETCH FIRST ?2 ROWS ONLY
+               FOR UPDATE SKIP LOCKED
+            """;
 
     // JPQL-pad naar de registratietijd van de laatste status: een @Embedded NotificatieStatus op
     // Notificatie (kolom laatste_status_update). Het Notificatie_-metamodel geeft alleen het
@@ -116,10 +127,11 @@ public class NotificatieRetentieScheduler {
                 totaalVerwijderd += verwijderd;
                 Log.debugf("Retentiejob: batch %d verwijderde %d notificatie(s)", batches, verwijderd);
 
-                // 0 verwijderd betekent ofwel niets meer te doen, ofwel dat de kandidaten van deze
-                // batch niet weg te krijgen zijn (andere pod was eerder, of een rij die structureel
-                // blijft staan). In beide gevallen heeft dóórgaan binnen deze run geen zin.
-                klaar = verwijderd == 0;
+                // Een batch die niet vol is, is de laatste: er waren geen BATCH_GROOTTE rijen meer
+                // die deze pod kon claimen. Nog een ronde zou een query kosten die per definitie
+                // niets oplevert. Wat een andere pod op dat moment vasthoudt (SKIP LOCKED) is diens
+                // werk; die verwijdert het in dezelfde nacht.
+                klaar = verwijderd < BATCH_GROOTTE;
             }
 
             if (!klaar) {
@@ -145,18 +157,23 @@ public class NotificatieRetentieScheduler {
     // exceptie laten ontsnappen, dan werd er die nacht geen enkele batch verwijderd terwijl de
     // achterstand doorgroeit, precies de koppeling die deze job juist wil vermijden.
     private void meldNietDefinitieveKandidaten(OffsetDateTime grens) {
+        long[] totaalHouder = {0};
         try {
-            long totaal = QuarkusTransaction.requiringNew().call(() -> telNietDefinitieveKandidaten(grens));
+            // Beide reads in één transactie: ze horen bij elkaar, en twee keer requiringNew() kost
+            // twee keer een connectie plus BEGIN/COMMIT voor hetzelfde antwoord.
+            List<Kandidaat> kandidaten = QuarkusTransaction.requiringNew().call(() -> {
+                long aantal = telNietDefinitieveKandidaten(grens);
 
-            if (totaal == 0) {
-                return;
-            }
+                if (aantal == 0) {
+                    return List.<Kandidaat>of();
+                }
+                Log.warnf("Retentiejob: %d verlopen notificatie(s) zonder definitieve status (grens=%s), "
+                        + "nooit een eindstatus van NotifyNL ontvangen", aantal, grens);
+                totaalHouder[0] = aantal;
 
-            Log.warnf("Retentiejob: %d verlopen notificatie(s) zonder definitieve status (grens=%s), "
-                    + "nooit een eindstatus van NotifyNL ontvangen", totaal, grens);
-
-            List<Kandidaat> kandidaten = QuarkusTransaction.requiringNew()
-                    .call(() -> zoekNietDefinitieveKandidaten(grens));
+                return zoekNietDefinitieveKandidaten(grens);
+            });
+            long totaal = totaalHouder[0];
             kandidaten.forEach(kandidaat -> Log.warnf("Retentiejob: notificatie %s (NotifyNL-referentie "
                     + "%s) is verlopen met niet-definitieve status %s", kandidaat.id(),
                     kandidaat.externalReference(), kandidaat.status()));
@@ -202,50 +219,43 @@ public class NotificatieRetentieScheduler {
                 .toList();
     }
 
-    // Selecteert een begrensd aantal ids (begrensd via setMaxResults, dat Hibernate per dialect naar
-    // LIMIT/FETCH FIRST vertaalt, JPQL zelf kent geen draagbare LIMIT-syntax) en verwijdert die
-    // vervolgens via een JPQL bulk-delete. Blijft bewust JPQL in plaats van native SQL: Hibernate
-    // ruimt de @ElementCollection-rijen dan zelf op (aangetoond op H2 in
-    // NotificatieRetentieSchedulerTest, dat een andere mutation-strategy gebruikt dan Postgres; op
-    // Postgres is de ON DELETE CASCADE-foreignkey het vangnet).
+    // Claimt een batch met FOR UPDATE SKIP LOCKED en verwijdert daarna precies die rijen.
+    //
+    // Waarom SKIP LOCKED: in productie draaien minimaal drie pods. Zonder deze clausule selecteren
+    // ze allemaal dezelfde oudste rijen en blokkeren ze op elkaars rijlocks, zodat uiteindelijk één
+    // pod het werk doet terwijl de rest wacht; bij miljoenen rijen is dat elke nacht N keer dezelfde
+    // scan. Met SKIP LOCKED slaat een pod over wat een ander vasthoudt en pakt hij het volgende blok,
+    // zodat de pods de achterstand verdelen in plaats van erom te vechten.
+    //
+    // De lock haalt tegelijk de TOCTOU weg die hier eerder zat. Een gelijktijdige
+    // verwerkAfleverstatus die een verse statusregel wil schrijven voor een van deze notificaties
+    // blokkeert tot deze transactie commit, dus tussen de claim en de DELETE kan een kandidaat niet
+    // meer van status veranderen. Het retentiepredicaat hoeft daarom niet herhaald te worden in de
+    // DELETE: de lock is de garantie, niet het predicaat.
+    //
+    // ORDER BY zodat de oudste rijen eerst weggaan: past een achterstand niet in één run, dan is dat
+    // de volgorde die de tabel het snelst weer normaal maakt.
+    //
+    // De DELETE is JPQL, zodat Hibernate de notificatie_status-rijen zelf opruimt; de ON DELETE
+    // CASCADE op de foreignkey (V2) blijft het vangnet voor verwijderingen buiten Hibernate om.
     private int verwijderBatch(OffsetDateTime grens) {
+        // addScalar en niet blind casten: een native query levert het id per dialect anders op
+        // (PostgreSQL een UUID, H2 een byte[]), addScalar laat Hibernate de conversie doen.
         List<UUID> ids = notificatieRepository.getEntityManager()
-                .createQuery("SELECT n.id FROM Notificatie n WHERE n."
-                        + LAATSTE_STATUS_GEREGISTREERD + " <= :grens", UUID.class)
-                .setParameter("grens", grens)
-                .setMaxResults(BATCH_GROOTTE)
+                .createNativeQuery(CLAIM_BATCH_SQL)
+                .unwrap(NativeQuery.class)
+                .addScalar("id", UUID.class)
+                .setParameter(1, grens)
+                .setParameter(2, BATCH_GROOTTE)
                 .getResultList();
 
         if (ids.isEmpty()) {
             return 0;
         }
 
-        int verwijderd = verwijder(ids, grens);
-
-        if (verwijderd < ids.size()) {
-            // Zichtbaar maken wat anders geruisloos verdwijnt: tussen de SELECT en de DELETE is voor
-            // een of meer kandidaten iets veranderd, een andere pod was eerder, of er kwam net een
-            // nieuwe statusregel binnen waardoor de notificatie niet meer verlopen is (die wordt door
-            // de predicaatherhaling in de DELETE hieronder bewust overgeslagen).
-            Log.warnf("Retentiejob: %d van de %d kandidaten in deze batch zijn niet verwijderd, "
-                    + "gelijktijdig al opgeruimd of niet meer verlopen (grens=%s)",
-                    ids.size() - verwijderd, ids.size(), grens);
-        }
-
-        return verwijderd;
-    }
-
-    // De DELETE herhaalt het retentiepredicaat uit de kandidatenquery in plaats van blind op id te
-    // verwijderen: tussen beide statements door kan een gelijktijdige verwerkAfleverstatus een verse
-    // statusregel gecommit hebben, waardoor de notificatie niet meer verlopen is. Dat predicaat is
-    // hier de enige bescherming: een JPQL bulk-delete werkt per definitie rechtstreeks op de
-    // database en toetst dus geen @Version.
-    private int verwijder(Collection<UUID> ids, OffsetDateTime grens) {
         return notificatieRepository.getEntityManager()
-                .createQuery("DELETE FROM Notificatie n WHERE n.id IN :ids AND n."
-                        + LAATSTE_STATUS_GEREGISTREERD + " <= :grens")
+                .createQuery("DELETE FROM Notificatie n WHERE n.id IN :ids")
                 .setParameter("ids", ids)
-                .setParameter("grens", grens)
                 .executeUpdate();
     }
 
