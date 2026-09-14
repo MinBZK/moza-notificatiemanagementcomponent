@@ -3,9 +3,12 @@ package nl.rijksoverheid.moz.nmc.domain;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NotificatieTest {
 
@@ -32,10 +35,10 @@ class NotificatieTest {
         assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(2).status());
     }
 
-    // getStatus()/getLaatsteStatusUpdate() lezen de projectiekolommen, niet de geschiedenis: bewaakt
-    // dat die het láátste record volgen, niet per ongeluk het eerste.
+    // getStatus()/getLaatsteStatusTijdstip() lezen de projectiekolommen, niet de geschiedenis:
+    // bewaakt dat die het láátste record volgen, niet per ongeluk het eerste.
     @Test
-    void getStatusEnGetLaatsteStatusUpdate_retourneertLaatsteGeschiedenisRecordNietHetEerste() {
+    void getStatusEnGetLaatsteStatusTijdstip_retourneertLaatsteGeschiedenisRecordNietHetEerste() {
         Notificatie notificatie = new Notificatie(null);
 
         notificatie.registreerStatus(StatusWaarde.SENDING);
@@ -44,7 +47,54 @@ class NotificatieTest {
         List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
         NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
         assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
-        assertEquals(laatste.tijdstip(), notificatie.getLaatsteStatusUpdate());
+        assertEquals(laatste.tijdstip(), notificatie.getLaatsteStatusTijdstip());
+    }
+
+    // De gebeurtenistijd komt van de bron (NotifyNL), de registratietijd van de eigen klok. Voor een
+    // status die de NMC zelf vaststelt vallen ze samen; voor een delivery receipt niet.
+    @Test
+    void registreerStatus_metGebeurtenistijd_scheidtGebeurtenisVanRegistratie() {
+        Notificatie notificatie = new Notificatie(null);
+        OffsetDateTime opgetreden = OffsetDateTime.now(ZoneOffset.UTC).minusHours(2);
+
+        notificatie.registreerStatus(StatusWaarde.DELIVERED, opgetreden);
+
+        List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
+        NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
+        assertEquals(opgetreden, laatste.tijdstip());
+        assertTrue(laatste.geregistreerd().isAfter(opgetreden));
+    }
+
+    // De bewaartermijn vaart op laatsteStatusUpdate en dat is de eigen klok, niet die van NotifyNL.
+    // Een receipt met een oude completed_at — bijvoorbeeld een herhaling, NotifyNL probeert tot 5x
+    // met 5 minuten ertussen — mag een notificatie niet meteen opruimbaar maken: er is zojuist nog
+    // iets over binnengekomen, dus ze is niet inactief.
+    @Test
+    void registreerStatus_metOudeGebeurtenistijd_zetDeBewaartermijnNietTerug() {
+        Notificatie notificatie = new Notificatie(null);
+        OffsetDateTime voorRegistratie = OffsetDateTime.now(ZoneOffset.UTC);
+
+        notificatie.registreerStatus(StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(40));
+
+        assertFalse(notificatie.getLaatsteStatusUpdate().isBefore(voorRegistratie));
+    }
+
+    // De projectie volgt het laatst geregistreerde record, ook als de gebeurtenistijd ouder is dan
+    // die van de vorige status. Welke overgangen mogen wordt bepaald door StatusWaarde#volgtOp in
+    // NotificatieService, niet door een tweede tijdcontrole hier: zou deze klasse een registratie
+    // alsnog weigeren te projecteren, dan bevat de geschiedenis een status die laatsteStatus
+    // tegenspreekt. De gebeurtenistijd komt van een externe klok en kan scheef zijn.
+    @Test
+    void registreerStatus_metOudereGebeurtenistijdDanDeHuidige_volgtDeProjectieDeLaatsteRegistratie() {
+        Notificatie notificatie = new Notificatie(null);
+        notificatie.registreerStatus(StatusWaarde.SENDING);
+        OffsetDateTime oudereGebeurtenistijd = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1);
+
+        notificatie.registreerStatus(StatusWaarde.DELIVERED, oudereGebeurtenistijd);
+
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
+        assertEquals(oudereGebeurtenistijd, notificatie.getLaatsteStatusTijdstip());
+        assertEquals(3, notificatie.getStatusGeschiedenis().size());
     }
 
     // laatsteStatus/laatsteStatusUpdate zijn een projectie van de statusgeschiedenis, geen tweede
@@ -80,12 +130,13 @@ class NotificatieTest {
     }
 
     private static void bevestigProjectieVolgtGeschiedenis(Notificatie notificatie) {
-        // Zelfde regel als registreerStatus: bij een gelijk tijdstip telt de laatst geregistreerde.
-        NotificatieStatus chronologischLaatste = notificatie.getStatusGeschiedenis().stream()
-                .reduce((eerder, later) -> later.tijdstip().isBefore(eerder.tijdstip()) ? eerder : later)
-                .orElseThrow();
+        // De geschiedenis is geordend op registratietijd, dus het laatste element is de laatste
+        // registratie — precies wat de projectie hoort te volgen.
+        List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
+        NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
 
-        assertEquals(chronologischLaatste.status(), notificatie.getStatus());
-        assertEquals(chronologischLaatste.tijdstip(), notificatie.getLaatsteStatusUpdate());
+        assertEquals(laatste.status(), notificatie.getStatus());
+        assertEquals(laatste.tijdstip(), notificatie.getLaatsteStatusTijdstip());
+        assertEquals(laatste.geregistreerd(), notificatie.getLaatsteStatusUpdate());
     }
 }

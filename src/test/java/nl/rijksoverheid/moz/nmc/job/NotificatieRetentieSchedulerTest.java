@@ -279,8 +279,8 @@ class NotificatieRetentieSchedulerTest {
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(null);
             vervangGeschiedenisDoor(notificatie, List.of(
-                    new NotificatieStatus(StatusWaarde.CREATED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(40)),
-                    new NotificatieStatus(StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1))));
+                    NotificatieStatus.opEigenKlok(StatusWaarde.CREATED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(40)),
+                    NotificatieStatus.opEigenKlok(StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1))));
             notificatieRepository.persist(notificatie);
             return notificatie.getId();
         });
@@ -372,13 +372,17 @@ class NotificatieRetentieSchedulerTest {
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(null);
             notificatie.setExternalReference(notifyNlReferentie);
-            vervangGeschiedenisDoor(notificatie, List.of(new NotificatieStatus(StatusWaarde.SENDING,
+            vervangGeschiedenisDoor(notificatie, List.of(NotificatieStatus.opEigenKlok(StatusWaarde.SENDING,
                     OffsetDateTime.now(ZoneOffset.UTC).minusDays(31))));
             notificatieRepository.persist(notificatie);
             return notificatie.getId();
         });
 
-        notificatieService.verwerkAfleverstatus(notifyNlReferentie, "delivered");
+        // Met een completed_at die zelf al buiten de bewaartermijn valt: de gebeurtenistijd komt van
+        // de klok van NotifyNL en mag de bewaartermijn niet bepalen. Vaart de retentiejob er toch op,
+        // dan verdwijnt deze notificatie terwijl er zojuist nog een receipt over binnenkwam.
+        notificatieService.verwerkAfleverstatus(notifyNlReferentie, "delivered",
+                OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
 
         scheduler.verwijderVerlopenNotificaties();
 
@@ -429,7 +433,7 @@ class NotificatieRetentieSchedulerTest {
         return QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(callbackUrl);
             notificatie.setExternalReference(externalReference);
-            vervangGeschiedenisDoor(notificatie, List.of(new NotificatieStatus(status, laatsteStatusUpdate)));
+            vervangGeschiedenisDoor(notificatie, List.of(NotificatieStatus.opEigenKlok(status, laatsteStatusUpdate)));
             notificatieRepository.persist(notificatie);
             return notificatie.getId();
         });
@@ -440,13 +444,14 @@ class NotificatieRetentieSchedulerTest {
     // breken. Vervangt de hele geschiedenis daarom door precies de gewenste record(s), inclusief de
     // projectie (laatsteStatus/laatsteStatusUpdate) die registreerStatus normaal bijwerkt.
     private static void vervangGeschiedenisDoor(Notificatie notificatie, List<NotificatieStatus> geschiedenis) {
-        NotificatieStatus laatste = geschiedenis.stream()
-                .reduce((eerder, later) -> later.tijdstip().isBefore(eerder.tijdstip()) ? eerder : later)
-                .orElseThrow();
+        NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
 
         zetVeld(notificatie, "statusGeschiedenis", new ArrayList<>(geschiedenis));
         zetVeld(notificatie, "laatsteStatus", laatste.status());
-        zetVeld(notificatie, "laatsteStatusUpdate", laatste.tijdstip());
+        zetVeld(notificatie, "laatsteStatusTijdstip", laatste.tijdstip());
+        // De retentiejob selecteert op laatsteStatusUpdate (registratietijd). Deze fixtures gebruiken
+        // NotificatieStatus#opEigenKlok, dus gebeurtenis- en registratietijd vallen hier samen.
+        zetVeld(notificatie, "laatsteStatusUpdate", laatste.geregistreerd());
     }
 
     private static void zetVeld(Notificatie notificatie, String naam, Object waarde) {
@@ -471,15 +476,16 @@ class NotificatieRetentieSchedulerTest {
         String laatsteStatus = statussen[statussen.length - 1];
         QuarkusTransaction.requiringNew().run(() -> {
             notificatieRepository.getEntityManager()
-                    .createNativeQuery("INSERT INTO notificatie (id, laatste_status, laatste_status_update) SELECT "
-                            + idExpressie + ", '" + laatsteStatus + "', ?1 FROM SYSTEM_RANGE(1, ?2)")
+                    .createNativeQuery("INSERT INTO notificatie (id, laatste_status, laatste_status_tijdstip, "
+                            + "laatste_status_update) SELECT "
+                            + idExpressie + ", '" + laatsteStatus + "', ?1, ?1 FROM SYSTEM_RANGE(1, ?2)")
                     .setParameter(1, tijdstip)
                     .setParameter(2, aantalRijen)
                     .executeUpdate();
             for (String status : statussen) {
                 notificatieRepository.getEntityManager()
-                        .createNativeQuery("INSERT INTO notificatie_status (notificatie_id, status, tijdstip) SELECT "
-                                + idExpressie + ", '" + status + "', ?1 FROM SYSTEM_RANGE(1, ?2)")
+                        .createNativeQuery("INSERT INTO notificatie_status (notificatie_id, status, tijdstip, geregistreerd) "
+                                + "SELECT " + idExpressie + ", '" + status + "', ?1, ?1 FROM SYSTEM_RANGE(1, ?2)")
                         .setParameter(1, tijdstip)
                         .setParameter(2, aantalRijen)
                         .executeUpdate();

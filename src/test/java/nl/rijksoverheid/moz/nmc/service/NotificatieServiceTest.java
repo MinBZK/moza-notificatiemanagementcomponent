@@ -108,7 +108,7 @@ class NotificatieServiceTest {
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.empty());
 
         assertThrows(NotificatieNietGevondenException.class,
-                () -> service.verwerkAfleverstatus(UUID.randomUUID(), "delivered"));
+                () -> service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null));
 
         verifyNoInteractions(statusUpdateEvent);
     }
@@ -118,7 +118,7 @@ class NotificatieServiceTest {
         Notificatie notificatie = notificatie(null);
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
 
-        service.verwerkAfleverstatus(UUID.randomUUID(), "permanent-failure");
+        service.verwerkAfleverstatus(UUID.randomUUID(), "permanent-failure", null);
 
         assertEquals(StatusWaarde.PERMANENT_FAILURE, notificatie.getStatus());
     }
@@ -128,7 +128,7 @@ class NotificatieServiceTest {
         Notificatie notificatie = notificatie(null);
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
 
-        service.verwerkAfleverstatus(UUID.randomUUID(), "een-rare-status");
+        service.verwerkAfleverstatus(UUID.randomUUID(), "een-rare-status", null);
 
         assertEquals(StatusWaarde.ONBEKEND, notificatie.getStatus());
     }
@@ -140,10 +140,10 @@ class NotificatieServiceTest {
     void verwerkAfleverstatus_vanDefinitieveNaarNietDefinitieveStatus_negeertDeNieuweStatus() {
         Notificatie notificatie = notificatie(null);
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
-        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null);
         int aantalStatussenNaDelivered = notificatie.getStatusGeschiedenis().size();
 
-        service.verwerkAfleverstatus(UUID.randomUUID(), "sending");
+        service.verwerkAfleverstatus(UUID.randomUUID(), "sending", null);
 
         assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
         // Niet alleen de afgeleide status, ook de geschiedenis zelf moet onaangeroerd blijven: een
@@ -159,10 +159,10 @@ class NotificatieServiceTest {
     void verwerkAfleverstatus_lateFaalstatusNaDelivered_negeertDeNieuweStatus() {
         Notificatie notificatie = notificatie(null);
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
-        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null);
         int aantalStatussenNaDelivered = notificatie.getStatusGeschiedenis().size();
 
-        service.verwerkAfleverstatus(UUID.randomUUID(), "temporary-failure");
+        service.verwerkAfleverstatus(UUID.randomUUID(), "temporary-failure", null);
 
         assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
         assertEquals(aantalStatussenNaDelivered, notificatie.getStatusGeschiedenis().size());
@@ -175,10 +175,10 @@ class NotificatieServiceTest {
     void verwerkAfleverstatus_zelfdeStatusTweeKeer_negeertDeHerhaling() {
         Notificatie notificatie = notificatie(null);
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
-        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null);
         int aantalStatussenNaDelivered = notificatie.getStatusGeschiedenis().size();
 
-        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null);
 
         assertEquals(aantalStatussenNaDelivered, notificatie.getStatusGeschiedenis().size());
     }
@@ -190,9 +190,9 @@ class NotificatieServiceTest {
     void verwerkAfleverstatus_vanDefinitieveNaarNietDefinitieveStatus_stuurtGeenStatusUpdate() {
         Notificatie notificatie = notificatie("https://omc.example.nl/callback");
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
-        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null);
 
-        service.verwerkAfleverstatus(UUID.randomUUID(), "sending");
+        service.verwerkAfleverstatus(UUID.randomUUID(), "sending", null);
 
         ArgumentCaptor<StatusUpdateOpdracht> captor = ArgumentCaptor.forClass(StatusUpdateOpdracht.class);
         verify(statusUpdateEvent, times(1)).fire(captor.capture());
@@ -208,7 +208,7 @@ class NotificatieServiceTest {
         Notificatie notificatie = notificatie("https://omc.example.nl/callback");
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
 
-        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null);
 
         ArgumentCaptor<StatusUpdateOpdracht> captor = ArgumentCaptor.forClass(StatusUpdateOpdracht.class);
         verify(statusUpdateEvent).fire(captor.capture());
@@ -225,7 +225,7 @@ class NotificatieServiceTest {
         Notificatie notificatie = notificatie("https://omc.example.nl/callback");
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
 
-        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null);
 
         verify(statusUpdateEvent).fire(any());
         verify(notificatieRepository, never()).deleteById(any());

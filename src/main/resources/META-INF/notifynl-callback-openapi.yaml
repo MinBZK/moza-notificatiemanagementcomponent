@@ -68,12 +68,15 @@ components:
     AfleverstatusRequest:
       type: object
       description: Bezorgstatus-melding van een eerder verstuurd bericht
+      # Bewust smal: NotifyNL's eigen callbackschema (EmailCallbackRequest in
+      # src/main/resources/openapi/notifynl_api.yaml) kent geen enkel verplicht veld, en
+      # completed_at/sent_at mogen expliciet null zijn. Elk veld dat de NMC hier verplicht stelt maar
+      # zelf niet nodig heeft, levert bij afwezigheid een 400 op — en NotifyNL herhaalt een mislukte
+      # callback maar 5x, waarna de receipt weg is. Alleen id en status zijn echt nodig om de
+      # afleverstatus te kunnen verwerken.
       required:
         - id
         - status
-        - notification_type
-        - to
-        - created_at
       properties:
         id:
           type: string

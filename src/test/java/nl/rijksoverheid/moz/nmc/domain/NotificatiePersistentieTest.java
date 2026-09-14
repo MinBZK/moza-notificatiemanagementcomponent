@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
-import java.lang.reflect.Method;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
@@ -24,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Persisteert en herlaadt een Notificatie in twee losse transacties: bewijst dat NotificatieStatus-
- * hydratatie, @OrderBy-volgorde (op tijdstip, niet op invoegvolgorde) en de projectie in
- * getStatus()/getLaatsteStatusUpdate() ook standhouden na een echte round-trip door de database,
+ * hydratatie, @OrderBy-volgorde (op geregistreerd, de eigen klok) en de projectie in
+ * getStatus()/getLaatsteStatusTijdstip() ook standhouden na een echte round-trip door de database,
  * niet alleen in-memory (zie NotificatieTest).
  */
 @QuarkusTest
@@ -71,21 +70,21 @@ class NotificatiePersistentieTest {
             assertEquals(laatsteTijdstip, geschiedenis.get(3).tijdstip());
 
             assertEquals(StatusWaarde.DELIVERED, herladen.getStatus());
-            assertEquals(laatsteTijdstip, herladen.getLaatsteStatusUpdate());
+            assertEquals(laatsteTijdstip, herladen.getLaatsteStatusTijdstip());
         });
     }
 
-    // SENDING wordt hier na DELIVERED geregistreerd, maar met een eerder tijdstip: na herladen moet
-    // SENDING alsnog vóór DELIVERED staan (@OrderBy("tijdstip ASC") ordent op tijdstip, niet op
-    // invoegvolgorde), en moet getStatus()/getLaatsteStatusUpdate() DELIVERED teruggeven, het
-    // chronologisch laatste record, ook al is SENDING het laatst-geregistreerde. Dat pint meteen
-    // vast dat de projectie op Notificatie een terug gedateerde registratie niet volgt. Een test
-    // die hier per ongeluk chronologische en invoegvolgorde gelijk zou laten lopen, zou ook
-    // slagen zonder dat @OrderBy ooit daadwerkelijk herordent.
+    // De gebeurtenistijden lopen hier bewust tegen de registratievolgorde in: SENDING krijgt een
+    // latere completed_at dan DELIVERED, terwijl DELIVERED als eerste geregistreerd wordt. Na
+    // herladen moet de geschiedenis nog steeds op registratievolgorde staan (@OrderBy op
+    // "geregistreerd", de eigen klok) en moet de projectie de laatste registratie volgen, hier
+    // SENDING. Zou @OrderBy op tijdstip ordenen, dan zou een receipt met een scheve of oude
+    // completed_at de volgorde omgooien en getAangemaakt() (dat getFirst() leest) de verkeerde rij
+    // teruggeven.
     @Test
-    void notificatie_metNietMonotoneRegistratievolgorde_herlaadtChronologischGeordend() {
-        OffsetDateTime sendingTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(1).truncatedTo(ChronoUnit.MICROS);
-        OffsetDateTime deliveredTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(2).truncatedTo(ChronoUnit.MICROS);
+    void notificatie_metGebeurtenistijdenTegenDeRegistratievolgordeIn_herlaadtOpRegistratievolgorde() {
+        OffsetDateTime deliveredTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(1).truncatedTo(ChronoUnit.MICROS);
+        OffsetDateTime sendingTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(2).truncatedTo(ChronoUnit.MICROS);
 
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(null);
@@ -101,11 +100,11 @@ class NotificatiePersistentieTest {
             List<NotificatieStatus> geschiedenis = herladen.getStatusGeschiedenis();
             assertEquals(3, geschiedenis.size());
             assertEquals(StatusWaarde.CREATED, geschiedenis.get(0).status());
-            assertEquals(StatusWaarde.SENDING, geschiedenis.get(1).status());
-            assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(2).status());
+            assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(1).status());
+            assertEquals(StatusWaarde.SENDING, geschiedenis.get(2).status());
 
-            assertEquals(StatusWaarde.DELIVERED, herladen.getStatus());
-            assertEquals(deliveredTijdstip, herladen.getLaatsteStatusUpdate());
+            assertEquals(StatusWaarde.SENDING, herladen.getStatus());
+            assertEquals(sendingTijdstip, herladen.getLaatsteStatusTijdstip());
         });
     }
 
@@ -179,13 +178,10 @@ class NotificatiePersistentieTest {
         return false;
     }
 
+    // registreerStatus(status, gebeurtenistijd) is publiek sinds NotificatieService hem gebruikt om
+    // de completed_at van een NotifyNL-receipt vast te leggen; deze helper blijft staan om te laten
+    // zien dat dit hier bewust een terug- of vooruitgedateerde registratie is.
     private static void registreerStatusOp(Notificatie notificatie, StatusWaarde status, OffsetDateTime tijdstip) {
-        try {
-            Method methode = Notificatie.class.getDeclaredMethod("registreerStatus", StatusWaarde.class, OffsetDateTime.class);
-            methode.setAccessible(true);
-            methode.invoke(notificatie, status, tijdstip);
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
+        notificatie.registreerStatus(status, tijdstip);
     }
 }
