@@ -68,12 +68,11 @@ public class NotificatieService {
         notificatieRepository.flush();
 
         try {
-            notificatie.setExternalReference(verzendAdapter.verstuurEmail(emailAdres, templateId, berichtgegevens));
+            notificatie.markeerVerzonden(verzendAdapter.verstuurEmail(emailAdres, templateId, berichtgegevens));
         } catch (NotifyNLConfiguratieException | NotifyNLVerzendException e) {
             Log.error("Fout bij versturen van notificatie", e);
             throw new NotificatieException("Notificatie kon niet worden verstuurd.");
         }
-        notificatie.registreerStatus(StatusWaarde.SENDING);
 
         return notificatie;
     }

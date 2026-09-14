@@ -16,6 +16,7 @@ import org.hibernate.query.NativeQuery;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,12 +43,15 @@ public class NotificatieRetentieScheduler {
     // binnen de timeout, ongeacht hoe groot de achterstand is.
     private static final int BATCH_GROOTTE = 1000;
 
-    // Bovengrens op het aantal batches per run. De lus stopt normaal vanzelf zodra een batch niets
-    // meer verwijdert; deze grens is er voor het geval een rij structureel niet weg te krijgen is
-    // (bijv. een toekomstige foreignkey zonder cascade die de DELETE laat falen), zodat de job dan
-    // niet eindeloos dezelfde pagina blijft ophalen. Ruim boven elke realistische achterstand:
-    // 10.000 batches is 10 miljoen notificaties in één run.
+    // Bovengrens op het aantal batches per run, tegen een onverwacht grote achterstand. Ruim boven
+    // elk realistisch volume: 10.000 batches is 10 miljoen notificaties in één run.
     private static final int MAX_BATCHES = 10_000;
+
+    // Bovengrens op het aantal batches dat mag mislukken voordat de run alsnog opgeeft. Een batch
+    // die gooit is niet vanzelf fataal — bijvoorbeeld een rij die door een toekomstige foreignkey
+    // zonder cascade niet te verwijderen is — maar zonder grens zou een structurele storing (DB weg,
+    // schema kapot) de job elke batch opnieuw laten proberen tot MAX_BATCHES.
+    private static final int MAX_MISLUKTE_BATCHES = 5;
 
     // Bovengrens op het aantal notificaties dat per run afzonderlijk wordt gemeld. Bij een storing
     // aan de kant van NotifyNL kan de hele achterstand niet-definitief zijn; zonder deze grens zou
@@ -65,6 +69,17 @@ public class NotificatieRetentieScheduler {
             SELECT id, external_reference, laatste_status, laatste_status_update
               FROM notificatie
              WHERE laatste_status_update <= ?1
+             ORDER BY laatste_status_update
+             FETCH FIRST ?2 ROWS ONLY
+               FOR UPDATE SKIP LOCKED
+            """;
+
+    // Variant die eerder mislukte rijen overslaat; zie de lus in verwijderVerlopenNotificaties.
+    private static final String CLAIM_BATCH_MET_UITSLUITING_SQL = """
+            SELECT id, external_reference, laatste_status, laatste_status_update
+              FROM notificatie
+             WHERE laatste_status_update <= ?1
+               AND id NOT IN (?3)
              ORDER BY laatste_status_update
              FETCH FIRST ?2 ROWS ONLY
                FOR UPDATE SKIP LOCKED
@@ -103,7 +118,12 @@ public class NotificatieRetentieScheduler {
         int totaalVerwijderd = 0;
         int totaalZonderEindstatus = 0;
         int gemeldeRegels = 0;
+        int mislukteBatches = 0;
         boolean klaar = false;
+        // Ids die deze run zijn overgeslagen omdat hun batch gooide. Zonder deze uitsluiting claimt
+        // de volgende ronde exact dezelfde rijen — de transactie is teruggerold, dus de lock is weg
+        // en de ORDER BY levert ze opnieuw als oudste op — en blijft de job op dezelfde rij hangen.
+        List<UUID> overgeslagen = new ArrayList<>();
         // try/finally zodat de samenvatting ook wordt gelogd als een batch een exceptie gooit: de
         // batches daarvóór zijn dan al gecommit, en zonder deze finally zou die (deels geslaagde)
         // voortgang nergens uit blijken. De exceptie ontsnapt daarna gewoon, zodat FailedExecution
@@ -112,8 +132,30 @@ public class NotificatieRetentieScheduler {
             while (!klaar && batches < MAX_BATCHES) {
                 batches++;
                 int budget = Math.max(0, MAX_MELDINGEN - gemeldeRegels);
-                BatchResultaat resultaat = QuarkusTransaction.requiringNew()
-                        .call(() -> verwijderBatch(grens, budget));
+                // Gevuld door verwijderBatch vóór de DELETE, zodat de ids ook na een rollback bekend
+                // zijn: een gewone Java-lijst wordt niet teruggedraaid.
+                List<UUID> geclaimd = new ArrayList<>();
+                BatchResultaat resultaat;
+                try {
+                    List<UUID> uitgesloten = List.copyOf(overgeslagen);
+                    resultaat = QuarkusTransaction.requiringNew()
+                            .call(() -> verwijderBatch(grens, budget, uitgesloten, geclaimd));
+                } catch (RuntimeException e) {
+                    mislukteBatches++;
+                    overgeslagen.addAll(geclaimd);
+                    Log.errorf(e, "Retentiejob: batch %d kon niet verwijderd worden (grens=%s, %d rijen "
+                            + "geclaimd) — deze rijen worden deze run overgeslagen en de job gaat door "
+                            + "met de volgende batch", batches, grens, geclaimd.size());
+
+                    if (mislukteBatches >= MAX_MISLUKTE_BATCHES) {
+                        Log.errorf("Retentiejob: %d batches op rij mislukt, run afgebroken",
+                                mislukteBatches);
+
+                        throw e;
+                    }
+
+                    continue;
+                }
 
                 totaalVerwijderd += resultaat.verwijderd();
                 totaalZonderEindstatus += resultaat.zonderEindstatus();
@@ -169,8 +211,10 @@ public class NotificatieRetentieScheduler {
     //
     // De DELETE is JPQL, zodat Hibernate de notificatie_status-rijen zelf opruimt; de ON DELETE
     // CASCADE op de foreignkey (V2) blijft het vangnet voor verwijderingen buiten Hibernate om.
-    private BatchResultaat verwijderBatch(OffsetDateTime grens, int meldbudget) {
-        List<Kandidaat> kandidaten = claimBatch(grens);
+    private BatchResultaat verwijderBatch(OffsetDateTime grens, int meldbudget, List<UUID> uitgesloten,
+            List<UUID> geclaimd) {
+        List<Kandidaat> kandidaten = claimBatch(grens, uitgesloten);
+        kandidaten.forEach(kandidaat -> geclaimd.add(kandidaat.id()));
 
         if (kandidaten.isEmpty()) {
             return new BatchResultaat(0, 0, 0, 0);
@@ -191,19 +235,30 @@ public class NotificatieRetentieScheduler {
     }
 
     // addScalar en niet blind casten: een native query levert de kolommen per dialect anders op
-    // (PostgreSQL een UUID, H2 een byte[]), addScalar laat Hibernate de conversie doen.
+    // (PostgreSQL een UUID, H2 een byte[]), addScalar laat Hibernate de conversie doen. Geen
+    // JPQL-constructorexpressie, want die bestaat niet voor native queries — en native is nodig voor
+    // de lock-clausule.
+    //
+    // De volgorde van de addScalar-aanroepen, van de SELECT-kolommen en van de Kandidaat-componenten
+    // moet gelijk blijven; de compiler bewaakt dat niet. Wat het wél bewaakt is
+    // verwijderVerlopenNotificaties_meldtAlleenDeNotificatiesZonderEindstatus: die test asserteert
+    // alle vier de velden afzonderlijk in de logregel, dus een herordening laat hem vallen.
     @SuppressWarnings("unchecked")
-    private List<Kandidaat> claimBatch(OffsetDateTime grens) {
-        List<Object[]> rijen = notificatieRepository.getEntityManager()
-                .createNativeQuery(CLAIM_BATCH_SQL)
+    private List<Kandidaat> claimBatch(OffsetDateTime grens, List<UUID> uitgesloten) {
+        NativeQuery<Object[]> query = notificatieRepository.getEntityManager()
+                .createNativeQuery(uitgesloten.isEmpty() ? CLAIM_BATCH_SQL : CLAIM_BATCH_MET_UITSLUITING_SQL)
                 .unwrap(NativeQuery.class)
                 .addScalar("id", UUID.class)
                 .addScalar("external_reference", UUID.class)
                 .addScalar("laatste_status", String.class)
                 .addScalar("laatste_status_update", OffsetDateTime.class)
                 .setParameter(1, grens)
-                .setParameter(2, BATCH_GROOTTE)
-                .getResultList();
+                .setParameter(2, BATCH_GROOTTE);
+
+        if (!uitgesloten.isEmpty()) {
+            query.setParameter(3, uitgesloten);
+        }
+        List<Object[]> rijen = query.getResultList();
 
         return rijen.stream()
                 .map(rij -> new Kandidaat((UUID) rij[0], (UUID) rij[1],

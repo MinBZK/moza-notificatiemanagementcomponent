@@ -6,9 +6,11 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NotificatieTest {
@@ -128,6 +130,36 @@ class NotificatieTest {
         notificatie.registreerStatus(StatusWaarde.DELIVERED);
 
         assertEquals(aanmaakTijdstip, notificatie.getAangemaakt());
+    }
+
+    // markeerVerzonden doet de twee dingen die altijd samen horen: koppelen aan NotifyNL en SENDING
+    // vastleggen. Als losse setter kon een van beide overgeslagen worden.
+    @Test
+    void markeerVerzonden_koppeltDeReferentieEnLegtSendingVast() {
+        Notificatie notificatie = new Notificatie(null);
+        UUID referentie = UUID.randomUUID();
+
+        notificatie.markeerVerzonden(referentie);
+
+        assertEquals(referentie, notificatie.getExternalReference());
+        assertEquals(StatusWaarde.SENDING, notificatie.getStatus().status());
+    }
+
+    // Een tweede koppeling zou de eerste overschrijven, waarna de delivery receipts van die eerste
+    // verzending nergens meer thuishoren: findByExternalReference vindt de notificatie dan niet meer.
+    @Test
+    void markeerVerzonden_tweeKeer_weigertDeTweede() {
+        Notificatie notificatie = new Notificatie(null);
+        notificatie.markeerVerzonden(UUID.randomUUID());
+
+        assertThrows(IllegalStateException.class, () -> notificatie.markeerVerzonden(UUID.randomUUID()));
+    }
+
+    @Test
+    void markeerVerzonden_zonderReferentie_weigert() {
+        Notificatie notificatie = new Notificatie(null);
+
+        assertThrows(NullPointerException.class, () -> notificatie.markeerVerzonden(null));
     }
 
     private static void bevestigProjectieVolgtGeschiedenis(Notificatie notificatie) {
