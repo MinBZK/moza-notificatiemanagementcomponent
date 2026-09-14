@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.logging.Level;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -151,12 +152,11 @@ class NotificatieRetentieSchedulerTest {
     // verwijderde 1000 rijen van batch 1 terugdraaien, en zou elke andere test in deze suite gewoon
     // groen blijven.
     //
-    // De storing wordt afgedwongen door getEntityManager() vanaf de vierde aanroep te laten falen:
-    // een run roept hem één keer aan om de niet-definitieve kandidaten te tellen (die telling levert
-    // hier 0 op, dus er volgt geen detailquery) en daarna twee keer per batch (de claim met FOR
-    // UPDATE SKIP LOCKED en de DELETE). Aanroep 1 is dus de telling, 2 en 3 zijn batch 1 en aanroep
-    // 4 is de claim van batch 2. De echte EntityManager wordt vooraf opgehaald zodat de eerste drie
-    // aanroepen gewoon werken.
+    // De storing wordt afgedwongen door getEntityManager() vanaf de derde aanroep te laten falen:
+    // een run roept hem twee keer per batch aan (de claim met FOR UPDATE SKIP LOCKED en de DELETE)
+    // en verder nergens — de melding zit sinds de herziening in de batchtransactie en gebruikt de
+    // rijen die de claim al heeft opgehaald. Aanroep 1 en 2 zijn dus batch 1, aanroep 3 is de claim
+    // van batch 2. De echte EntityManager wordt vooraf opgehaald zodat de eerste twee werken.
     @Test
     void verwijderVerlopenNotificaties_alsEenLatereBatchFaalt_blijftDeEerdereBatchVerwijderd() {
         plantVerlopenNotificaties(1500, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
@@ -164,7 +164,7 @@ class NotificatieRetentieSchedulerTest {
         EntityManager echteEntityManager = notificatieRepository.getEntityManager();
         AtomicInteger aanroepen = new AtomicInteger();
         doAnswer(invocation -> {
-            if (aanroepen.incrementAndGet() > 3) {
+            if (aanroepen.incrementAndGet() > 2) {
                 throw new RuntimeException("gesimuleerde storing in batch 2");
             }
 
@@ -183,91 +183,94 @@ class NotificatieRetentieSchedulerTest {
     // De melding van niet-definitieve kandidaten is signalering en draait vóór de batchlus; een
     // storing daarin mag de opruiming van die nacht niet tegenhouden. De eerste getEntityManager()-
     // aanroep is de telquery van die melding, dus alleen die faalt hier; alles daarna werkt gewoon.
-    // Zonder de try/catch in meldNietDefinitieveKandidaten zou hier geen enkele rij verdwijnen.
+    // De melding zit sinds de herziening ín de batchtransactie en gaat over exact de geclaimde rijen.
+    // Daarmee is de oude test "als de melding faalt, verwijdert de job alsnog" vervallen: melding en
+    // verwijdering kunnen niet meer los van elkaar slagen. Dat een falende batch zijn eigen rijen
+    // laat staan, is gedekt door verwijderVerlopenNotificaties_alsEenLatereBatchFaalt_....
+
+    // Pint de melding waar dashboards op gebouwd worden: elke verlopen notificatie zonder eindstatus
+    // levert precies één WARN-regel op, een verlopen notificatie mét eindstatus niet, ook al worden
+    // beide verwijderd. Zonder deze assertie kan het niveau of de regel verdwijnen zonder dat een
+    // test valt, terwijl dit het enige signaal is dat overblijft nadat de rij weg is.
     @Test
-    void verwijderVerlopenNotificaties_alsDeMeldingFaalt_verwijdertAlsnog() {
-        plantVerlopenNotificaties(3, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "SENDING");
-
-        EntityManager echteEntityManager = notificatieRepository.getEntityManager();
-        AtomicInteger aanroepen = new AtomicInteger();
-        doAnswer(invocation -> {
-            if (aanroepen.incrementAndGet() == 1) {
-                throw new RuntimeException("gesimuleerde storing in de melding");
-            }
-
-            return echteEntityManager;
-        }).when(notificatieRepository).getEntityManager();
-
-        scheduler.verwijderVerlopenNotificaties();
-
-        Mockito.reset(notificatieRepository);
-        long overgebleven = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count());
-        assertEquals(0L, overgebleven);
-    }
-
-    // Pint de selectie die de WARN-log voedt: alleen een verlopen notificatie met een niet-definitieve
-    // status (SENDING) hoort erin, een verlopen notificatie met een definitieve status niet, ook al
-    // worden beide verwijderd.
-    @Test
-    void zoekNietDefinitieveKandidaten_metGemengdeStatussen_levertAlleenDeNietDefinitieveRijen() {
+    void verwijderVerlopenNotificaties_meldtAlleenDeNotificatiesZonderEindstatus() {
         UUID notifyNlReferentie = UUID.randomUUID();
-        maakNotificatie(null, StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
+        UUID bezorgdId = maakNotificatie(null, StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
         UUID sendingId = maakNotificatie(null, StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31),
                 notifyNlReferentie);
-        maakNotificatie(null, StatusWaarde.TEMPORARY_FAILURE, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
 
-        List<NotificatieRetentieScheduler.Kandidaat> kandidaten = QuarkusTransaction.requiringNew()
-                .call(() -> zoekNietDefinitieveKandidatenOp(OffsetDateTime.now(ZoneOffset.UTC)));
+        List<String> meldingen;
+        try (LogVanger vanger = LogVanger.van(NotificatieRetentieScheduler.class)) {
+            scheduler.verwijderVerlopenNotificaties();
+            meldingen = vanger.regelsOpNiveau(Level.WARNING);
+        }
 
-        assertEquals(1, kandidaten.size());
-        assertEquals(sendingId, kandidaten.getFirst().id());
-        assertEquals(notifyNlReferentie, kandidaten.getFirst().externalReference());
-        assertEquals(StatusWaarde.SENDING, kandidaten.getFirst().status());
+        List<String> perNotificatie = meldingen.stream()
+                .filter(regel -> regel.contains("verlopen zonder eindstatus notificatieId="))
+                .toList();
+        assertEquals(1, perNotificatie.size(), "alleen de niet-definitieve notificatie hoort gemeld");
+        assertTrue(perNotificatie.getFirst().contains("notificatieId=" + sendingId));
+        assertTrue(perNotificatie.getFirst().contains("notifyNlReferentie=" + notifyNlReferentie));
+        assertTrue(perNotificatie.getFirst().contains("status=SENDING"));
+        assertTrue(meldingen.stream().noneMatch(regel -> regel.contains(bezorgdId.toString())));
     }
 
-    // Een niet-verlopen notificatie hoort niet gemeld te worden, ook niet als zijn status
-    // niet-definitief is: de melding gaat over notificaties die de bewaartermijn hebben volgemaakt
-    // zonder eindstatus, niet over elke notificatie die nog onderweg is.
+    // Een notificatie die nog niet verlopen is, hoort niet gemeld te worden ook al is zijn status
+    // niet-definitief: de melding gaat over de bewaartermijn volmaken zonder eindstatus, niet over
+    // elke notificatie die nog onderweg is.
     @Test
-    void zoekNietDefinitieveKandidaten_metEenNietVerlopenRij_levertDieNiet() {
+    void verwijderVerlopenNotificaties_meldtGeenNietVerlopenNotificatie() {
         maakNotificatie(null, StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
 
-        List<NotificatieRetentieScheduler.Kandidaat> kandidaten = QuarkusTransaction.requiringNew()
-                .call(() -> zoekNietDefinitieveKandidatenOp(OffsetDateTime.now(ZoneOffset.UTC).minusDays(30)));
+        List<String> meldingen;
+        try (LogVanger vanger = LogVanger.van(NotificatieRetentieScheduler.class)) {
+            scheduler.verwijderVerlopenNotificaties();
+            meldingen = vanger.regelsOpNiveau(Level.WARNING);
+        }
 
-        assertTrue(kandidaten.isEmpty());
+        assertTrue(meldingen.stream().noneMatch(regel -> regel.contains("verlopen zonder eindstatus")));
     }
 
-    // De detailregels zijn begrensd op MAX_MELDINGEN (100); zonder die begrenzing zou een storing
-    // bij NotifyNL de logs vullen met een regel per notificatie. De telling loopt apart en blijft
-    // wél volledig, zodat het totaal ook zichtbaar is als de detailregels worden afgekapt.
+    // De detailregels zijn begrensd op MAX_MELDINGEN (100); zonder die begrenzing zou een storing bij
+    // NotifyNL de logs vullen met een regel per notificatie. Het totaal in de samenvatting blijft wél
+    // volledig, zodat een dashboard dat daarop telt niet stilzwijgend afkapt.
     @Test
-    void nietDefinitieveKandidaten_metMeerRijenDanDeMeldgrens_kaptDeDetailregelsAfMaarNietDeTelling() {
+    void verwijderVerlopenNotificaties_metMeerRijenDanDeMeldgrens_kaptDetailregelsAfMaarNietDeTelling() {
         plantVerlopenNotificaties(150, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "SENDING");
 
-        OffsetDateTime grens = OffsetDateTime.now(ZoneOffset.UTC);
-        List<NotificatieRetentieScheduler.Kandidaat> kandidaten = QuarkusTransaction.requiringNew()
-                .call(() -> zoekNietDefinitieveKandidatenOp(grens));
-        long totaal = QuarkusTransaction.requiringNew().call(() -> telNietDefinitieveKandidatenOp(grens));
+        List<String> meldingen;
+        try (LogVanger vanger = LogVanger.van(NotificatieRetentieScheduler.class)) {
+            scheduler.verwijderVerlopenNotificaties();
+            meldingen = vanger.regelsOpNiveau(Level.WARNING);
+        }
 
-        assertEquals(100, kandidaten.size());
-        assertEquals(150L, totaal);
+        assertEquals(100, meldingen.stream()
+                .filter(regel -> regel.contains("verlopen zonder eindstatus notificatieId="))
+                .count());
+        assertTrue(meldingen.stream().anyMatch(regel ->
+                regel.contains("alleen de eerste 100 van 150")));
     }
 
-    // De afgekapte lijst moet een reproduceerbare selectie zijn, niet een willekeurige greep uit de
-    // achterstand: oudste eerst, zodat de langst vastzittende notificaties gemeld worden. Zonder de
-    // ORDER BY in de query is de volgorde die de database teruggeeft niet gegarandeerd.
+    // De afgekapte lijst moet een reproduceerbare selectie zijn, niet een willekeurige greep: oudste
+    // eerst, zodat de langst vastzittende notificaties gemeld worden. Zonder de ORDER BY in de
+    // claim-query is de volgorde die de database teruggeeft niet gegarandeerd.
     @Test
-    void zoekNietDefinitieveKandidaten_levertDeOudsteEerst() {
+    void verwijderVerlopenNotificaties_meldtDeOudsteEerst() {
         UUID jongsteId = maakNotificatie(null, StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
         UUID oudsteId = maakNotificatie(null, StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC).minusDays(90));
         UUID middelsteId = maakNotificatie(null, StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC).minusDays(60));
 
-        List<NotificatieRetentieScheduler.Kandidaat> kandidaten = QuarkusTransaction.requiringNew()
-                .call(() -> zoekNietDefinitieveKandidatenOp(OffsetDateTime.now(ZoneOffset.UTC)));
+        List<String> meldingen;
+        try (LogVanger vanger = LogVanger.van(NotificatieRetentieScheduler.class)) {
+            scheduler.verwijderVerlopenNotificaties();
+            meldingen = vanger.regelsOpNiveau(Level.WARNING);
+        }
 
-        assertEquals(List.of(oudsteId, middelsteId, jongsteId),
-                kandidaten.stream().map(NotificatieRetentieScheduler.Kandidaat::id).toList());
+        List<String> gemeldeIds = meldingen.stream()
+                .filter(regel -> regel.contains("verlopen zonder eindstatus notificatieId="))
+                .map(regel -> regel.replaceAll(".*notificatieId=(\\S+).*", "$1"))
+                .toList();
+        assertEquals(List.of(oudsteId.toString(), middelsteId.toString(), jongsteId.toString()), gemeldeIds);
     }
 
     // Bewaakt dat de retentie op het láátste geschiedenisrecord vaart en niet op een willekeurig
@@ -489,18 +492,11 @@ class NotificatieRetentieSchedulerTest {
     // methode via reflectie op de proxy aanroepen omzeilt de CDI-delegatie en geeft een NPE. De
     // meegegeven Duration doet er niet toe: verwijderBatch gebruikt alleen de grens-parameter.
     private int verwijderBatchOp(OffsetDateTime grens) {
-        return (int) roepPrivateMethodeAan("verwijderBatch", new Class<?>[] {OffsetDateTime.class}, grens);
-    }
+        NotificatieRetentieScheduler.BatchResultaat resultaat =
+                (NotificatieRetentieScheduler.BatchResultaat) roepPrivateMethodeAan("verwijderBatch",
+                        new Class<?>[] {OffsetDateTime.class, int.class}, grens, 0);
 
-    @SuppressWarnings("unchecked")
-    private List<NotificatieRetentieScheduler.Kandidaat> zoekNietDefinitieveKandidatenOp(OffsetDateTime grens) {
-        return (List<NotificatieRetentieScheduler.Kandidaat>) roepPrivateMethodeAan(
-                "zoekNietDefinitieveKandidaten", new Class<?>[] {OffsetDateTime.class}, grens);
-    }
-
-    private long telNietDefinitieveKandidatenOp(OffsetDateTime grens) {
-        return (long) roepPrivateMethodeAan("telNietDefinitieveKandidaten",
-                new Class<?>[] {OffsetDateTime.class}, grens);
+        return resultaat.verwijderd();
     }
 
 
