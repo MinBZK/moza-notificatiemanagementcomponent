@@ -6,6 +6,8 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
 /**
@@ -36,6 +38,22 @@ public record NotificatieStatus(
         Objects.requireNonNull(status, "status is verplicht");
         Objects.requireNonNull(tijdstip, "tijdstip is verplicht");
         Objects.requireNonNull(geregistreerd, "geregistreerd is verplicht");
+
+        // Normaliseren naar UTC en afkappen op microseconden, zodat de waarde hier gelijk is aan de
+        // waarde die uit de database terugkomt.
+        //
+        // De offset: PostgreSQL bewaart in een timestamptz-kolom alleen het moment, niet de offset
+        // waarmee het geschreven is, en levert bij het lezen UTC terug. H2 (de teststack) bewaart de
+        // offset wel. Een tijdstip met een andere offset dan UTC — NotifyNL mag in completed_at een
+        // offset meesturen — zou daardoor op H2 anders terugkomen dan op PostgreSQL, en een
+        // vergelijking die op H2 slaagt zou op PostgreSQL falen. OffsetDateTime#equals eist immers
+        // dezelfde offset, niet alleen hetzelfde moment.
+        //
+        // De precisie: de kolommen zijn timestamp(6), dus de nanoseconden van OffsetDateTime#now
+        // overleven het schrijven niet. Zonder afkappen verschilt een net aangemaakt record van
+        // datzelfde record na herladen.
+        tijdstip = tijdstip.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        geregistreerd = geregistreerd.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
     }
 
     /** Registratie op de klok van de NMC zelf: gebeurtenis- en registratietijd vallen dan samen. */

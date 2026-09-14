@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -55,7 +56,7 @@ class NotificatieTest {
     @Test
     void registreerStatus_metGebeurtenistijd_scheidtGebeurtenisVanRegistratie() {
         Notificatie notificatie = new Notificatie(null);
-        OffsetDateTime opgetreden = OffsetDateTime.now(ZoneOffset.UTC).minusHours(2);
+        OffsetDateTime opgetreden = OffsetDateTime.now(ZoneOffset.UTC).minusHours(2).truncatedTo(ChronoUnit.MICROS);
 
         notificatie.registreerStatus(StatusWaarde.DELIVERED, opgetreden);
 
@@ -88,7 +89,7 @@ class NotificatieTest {
     void registreerStatus_metOudereGebeurtenistijdDanDeHuidige_volgtDeProjectieDeLaatsteRegistratie() {
         Notificatie notificatie = new Notificatie(null);
         notificatie.registreerStatus(StatusWaarde.SENDING);
-        OffsetDateTime oudereGebeurtenistijd = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1);
+        OffsetDateTime oudereGebeurtenistijd = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1).truncatedTo(ChronoUnit.MICROS);
 
         notificatie.registreerStatus(StatusWaarde.DELIVERED, oudereGebeurtenistijd);
 
