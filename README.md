@@ -214,10 +214,19 @@ begrensde batches, zodat één run niet vastloopt op een grote achterstand.
 Elke batch wordt geclaimd met `FOR UPDATE SKIP LOCKED`: bij meerdere replica's
 verdelen de pods de achterstand onder elkaar in plaats van allemaal dezelfde
 oudste rijen te selecteren en op elkaars rijlocks te wachten.
-Verlopen notificaties die nog geen definitieve status hadden
-(`StatusWaarde#isDefinitief`, bijv. nog `sending`) worden aan het begin van de
-run apart gelogd (WARN, begrensd op 100 regels): NotifyNL heeft daar dan nooit
-een eindstatus over teruggekoppeld.
+Een notificatie die verloopt zonder definitieve status (`StatusWaarde#isDefinitief`,
+bijv. nog `sending`) krijgt er ook geen meer: NotifyNL meldt niets meer terug en
+de NMC verwerkt hem niet verder. Dat wordt per notificatie gelogd op WARN, in
+dezelfde transactie als de verwijdering, zodat er een aanknopingspunt overblijft
+nadat de rij weg is. De regel gebruikt `key=value` zodat er een dashboard op te
+bouwen is:
+
+```
+Retentiejob: notificatie verlopen zonder eindstatus notificatieId=... notifyNlReferentie=... status=SENDING laatsteStatusUpdate=...
+```
+
+De detailregels zijn begrensd op 100 per run; het totaal in de afsluitende
+samenvatting is dat niet, zodat een dashboard dat daarop telt compleet blijft.
 
 Onderstaande entiteit is de **beoogde eindsituatie** voor latere stories en
 nog niet geïmplementeerd:

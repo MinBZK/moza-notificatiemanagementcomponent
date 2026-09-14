@@ -8,8 +8,6 @@ import io.quarkus.scheduler.Scheduled;
 import io.quarkus.scheduler.SkippedExecution;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus_;
-import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -18,16 +16,17 @@ import org.hibernate.query.NativeQuery;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
 /**
  * Verwijdert notificaties waarvan de laatste statusregistratie ouder is dan
  * {@code notificatie.retentie.bewaartermijn}, in begrensde batches met een eigen transactie per
- * batch. De bewaartermijn geldt gelijk voor elke status; verlopen notificaties zonder definitieve
- * status worden apart gemeld (zie {@link #meldNietDefinitieveKandidaten}).
+ * batch. De bewaartermijn geldt gelijk voor elke status.
+ * <p>
+ * Een notificatie die verloopt zonder definitieve status krijgt er ook geen meer: NotifyNL meldt
+ * niets meer terug en de NMC verwerkt hem niet verder. Dat wordt per notificatie gelogd, in dezelfde
+ * transactie als de verwijdering, zodat er een aanknopingspunt overblijft nadat de rij weg is.
  * <p>
  * {@code @Startup} omdat {@code @ApplicationScoped} lazy is: zonder dit valt een ongeldige
  * bewaartermijn pas bij de eerste vuring midden in de nacht op in plaats van bij het opstarten.
@@ -52,35 +51,24 @@ public class NotificatieRetentieScheduler {
 
     // Bovengrens op het aantal notificaties dat per run afzonderlijk wordt gemeld. Bij een storing
     // aan de kant van NotifyNL kan de hele achterstand niet-definitief zijn; zonder deze grens zou
-    // dat de logs vullen met een regel per notificatie.
+    // dat de logs vullen met een regel per notificatie. Het totaal in de samenvatting is niet
+    // begrensd, dus een dashboard dat op dat getal telt blijft compleet.
     private static final int MAX_MELDINGEN = 100;
-
-    private static final List<StatusWaarde> NIET_DEFINITIEVE_STATUSSEN = Arrays.stream(StatusWaarde.values())
-            .filter(status -> !status.isDefinitief())
-            .toList();
 
     // Zowel de @Scheduled-identity als het trigger-id waarop de observers hieronder filteren.
     private static final String TRIGGER_ID = "notificatie-retentie";
 
     // Zie verwijderBatch. Native SQL omdat JPQL geen lock-clausule met SKIP LOCKED kent.
+    // Haalt meteen de velden op die de melding nodig heeft, zodat melden en verwijderen over exact
+    // dezelfde rijen gaan.
     private static final String CLAIM_BATCH_SQL = """
-            SELECT id
+            SELECT id, external_reference, laatste_status, laatste_status_update
               FROM notificatie
              WHERE laatste_status_update <= ?1
              ORDER BY laatste_status_update
              FETCH FIRST ?2 ROWS ONLY
                FOR UPDATE SKIP LOCKED
             """;
-
-    // JPQL-pad naar de registratietijd van de laatste status: een @Embedded NotificatieStatus op
-    // Notificatie (kolom laatste_status_update). Het Notificatie_-metamodel geeft alleen het
-    // embeddable zelf, niet zijn velden.
-    private static final String LAATSTE_STATUS_GEREGISTREERD =
-            Notificatie_.LAATSTE_STATUS + "." + NotificatieStatus_.GEREGISTREERD;
-
-    // Idem voor de StatusWaarde zelf.
-    private static final String LAATSTE_STATUS_WAARDE =
-            Notificatie_.LAATSTE_STATUS + "." + NotificatieStatus_.STATUS;
 
     private final NotificatieRepository notificatieRepository;
     private final Duration bewaartermijn;
@@ -111,10 +99,10 @@ public class NotificatieRetentieScheduler {
     public void verwijderVerlopenNotificaties() {
         OffsetDateTime grens = OffsetDateTime.now(ZoneOffset.UTC).minus(bewaartermijn);
 
-        meldNietDefinitieveKandidaten(grens);
-
         int batches = 0;
         int totaalVerwijderd = 0;
+        int totaalZonderEindstatus = 0;
+        int gemeldeRegels = 0;
         boolean klaar = false;
         // try/finally zodat de samenvatting ook wordt gelogd als een batch een exceptie gooit: de
         // batches daarvóór zijn dan al gecommit, en zonder deze finally zou die (deels geslaagde)
@@ -123,15 +111,20 @@ public class NotificatieRetentieScheduler {
         try {
             while (!klaar && batches < MAX_BATCHES) {
                 batches++;
-                int verwijderd = QuarkusTransaction.requiringNew().call(() -> verwijderBatch(grens));
-                totaalVerwijderd += verwijderd;
-                Log.debugf("Retentiejob: batch %d verwijderde %d notificatie(s)", batches, verwijderd);
+                int budget = Math.max(0, MAX_MELDINGEN - gemeldeRegels);
+                BatchResultaat resultaat = QuarkusTransaction.requiringNew()
+                        .call(() -> verwijderBatch(grens, budget));
+
+                totaalVerwijderd += resultaat.verwijderd();
+                totaalZonderEindstatus += resultaat.zonderEindstatus();
+                gemeldeRegels += resultaat.gemeld();
+                Log.debugf("Retentiejob: batch %d verwijderde %d notificatie(s)", batches, resultaat.verwijderd());
 
                 // Een batch die niet vol is, is de laatste: er waren geen BATCH_GROOTTE rijen meer
-                // die deze pod kon claimen. Nog een ronde zou een query kosten die per definitie
+                // die deze pod kon claimen. Nog een ronde zou een query kosten die vrijwel zeker
                 // niets oplevert. Wat een andere pod op dat moment vasthoudt (SKIP LOCKED) is diens
                 // werk; die verwijdert het in dezelfde nacht.
-                klaar = verwijderd < BATCH_GROOTTE;
+                klaar = resultaat.geclaimd() < BATCH_GROOTTE;
             }
 
             if (!klaar) {
@@ -140,86 +133,17 @@ public class NotificatieRetentieScheduler {
                         + "verwijderd kan worden", MAX_BATCHES, grens);
             }
         } finally {
-            Log.infof("Retentiejob: %d verlopen notificatie(s) verwijderd in %d batch(es) (grens=%s)",
-                    totaalVerwijderd, batches, grens);
-        }
-    }
-
-    // Meldt de verlopen notificaties die nooit een eindstatus van NotifyNL hebben gekregen, vóór de
-    // verwijdering: de melding gaat over het feit dat ze verlopen zijn zonder uitkomst, niet over de
-    // verwijdering zelf. Draait één keer per run in plaats van per batch, en selecteert alleen de
-    // niet-definitieve statussen, zodat er nooit een kandidatenlijst van de hele achterstand in het
-    // geheugen komt. Eerst tellen, dan pas de detailregels ophalen: in de normale situatie (niets
-    // niet-definitief) kost dat één query, en het totaal blijft ook zichtbaar als de detailregels
-    // worden afgekapt.
-    //
-    // Alles in een eigen try/catch: dit is signalering, geen opruiming. Zou een storing hier de
-    // exceptie laten ontsnappen, dan werd er die nacht geen enkele batch verwijderd terwijl de
-    // achterstand doorgroeit, precies de koppeling die deze job juist wil vermijden.
-    private void meldNietDefinitieveKandidaten(OffsetDateTime grens) {
-        long[] totaalHouder = {0};
-        try {
-            // Beide reads in één transactie: ze horen bij elkaar, en twee keer requiringNew() kost
-            // twee keer een connectie plus BEGIN/COMMIT voor hetzelfde antwoord.
-            List<Kandidaat> kandidaten = QuarkusTransaction.requiringNew().call(() -> {
-                long aantal = telNietDefinitieveKandidaten(grens);
-
-                if (aantal == 0) {
-                    return List.<Kandidaat>of();
-                }
-                Log.warnf("Retentiejob: %d verlopen notificatie(s) zonder definitieve status (grens=%s), "
-                        + "nooit een eindstatus van NotifyNL ontvangen", aantal, grens);
-                totaalHouder[0] = aantal;
-
-                return zoekNietDefinitieveKandidaten(grens);
-            });
-            long totaal = totaalHouder[0];
-            kandidaten.forEach(kandidaat -> Log.warnf("Retentiejob: notificatie %s (NotifyNL-referentie "
-                    + "%s) is verlopen met niet-definitieve status %s", kandidaat.id(),
-                    kandidaat.externalReference(), kandidaat.status()));
-
-            if (totaal > kandidaten.size()) {
-                Log.warnf("Retentiejob: alleen de %d oudste van %d zijn hierboven per notificatie gemeld",
-                        kandidaten.size(), totaal);
+            if (totaalZonderEindstatus > gemeldeRegels) {
+                Log.warnf("Retentiejob: alleen de eerste %d van %d notificaties zonder eindstatus zijn "
+                        + "hierboven afzonderlijk gemeld", gemeldeRegels, totaalZonderEindstatus);
             }
-        } catch (RuntimeException e) {
-            Log.error("Retentiejob: melden van niet-definitieve kandidaten mislukt, de opruiming "
-                    + "gaat door", e);
+            Log.infof("Retentiejob: %d verlopen notificatie(s) verwijderd in %d batch(es), waarvan %d "
+                    + "zonder eindstatus (grens=%s)", totaalVerwijderd, batches, totaalZonderEindstatus, grens);
         }
     }
 
-    private long telNietDefinitieveKandidaten(OffsetDateTime grens) {
-        return notificatieRepository.getEntityManager()
-                .createQuery("SELECT COUNT(n) FROM Notificatie n WHERE n."
-                        + LAATSTE_STATUS_GEREGISTREERD + " <= :grens AND n."
-                        + LAATSTE_STATUS_WAARDE + " IN :statussen", Long.class)
-                .setParameter("grens", grens)
-                .setParameter("statussen", NIET_DEFINITIEVE_STATUSSEN)
-                .getSingleResult();
-    }
-
-    // Oudste eerst, zodat de afgekapte lijst een reproduceerbare en bruikbare selectie is (de langst
-    // vastzittende notificaties) in plaats van een willekeurige greep. externalReference wordt
-    // meegelezen omdat een melding met alleen het id niet te herleiden is tot een NotifyNL-notificatie
-    // om te debuggen.
-    private List<Kandidaat> zoekNietDefinitieveKandidaten(OffsetDateTime grens) {
-        List<Object[]> rijen = notificatieRepository.getEntityManager()
-                .createQuery("SELECT n.id, n." + Notificatie_.EXTERNAL_REFERENCE + ", n."
-                        + LAATSTE_STATUS_WAARDE + " FROM Notificatie n WHERE n."
-                        + LAATSTE_STATUS_GEREGISTREERD + " <= :grens AND n."
-                        + LAATSTE_STATUS_WAARDE + " IN :statussen ORDER BY n."
-                        + LAATSTE_STATUS_GEREGISTREERD, Object[].class)
-                .setParameter("grens", grens)
-                .setParameter("statussen", NIET_DEFINITIEVE_STATUSSEN)
-                .setMaxResults(MAX_MELDINGEN)
-                .getResultList();
-
-        return rijen.stream()
-                .map(rij -> new Kandidaat((UUID) rij[0], (UUID) rij[1], (StatusWaarde) rij[2]))
-                .toList();
-    }
-
-    // Claimt een batch met FOR UPDATE SKIP LOCKED en verwijdert daarna precies die rijen.
+    // Claimt een batch met FOR UPDATE SKIP LOCKED, meldt de notificaties zonder eindstatus en
+    // verwijdert daarna precies die rijen.
     //
     // Waarom SKIP LOCKED: in productie draaien minimaal drie pods. Zonder deze clausule selecteren
     // ze allemaal dezelfde oudste rijen en blokkeren ze op elkaars rijlocks, zodat uiteindelijk één
@@ -233,33 +157,83 @@ public class NotificatieRetentieScheduler {
     // meer van status veranderen. Het retentiepredicaat hoeft daarom niet herhaald te worden in de
     // DELETE: de lock is de garantie, niet het predicaat.
     //
+    // De melding staat bewust hier en niet in een aparte fase vóór de batchlus. Zou ze apart draaien,
+    // dan verwijdert deze lus alsnog de rijen waar de melding over ging als die melding faalt, en
+    // dan is het feit dat ze zonder eindstatus verliepen nergens meer te achterhalen. Nu gaan melden
+    // en verwijderen over precies dezelfde geclaimde rijen. Loggen vóór de DELETE, want tussen een
+    // logregel en een commit bestaat geen exact-once: een dubbele melding na een teruggerolde batch
+    // is ruis, een ontbrekende melding is verlies.
+    //
     // ORDER BY zodat de oudste rijen eerst weggaan: past een achterstand niet in één run, dan is dat
     // de volgorde die de tabel het snelst weer normaal maakt.
     //
     // De DELETE is JPQL, zodat Hibernate de notificatie_status-rijen zelf opruimt; de ON DELETE
     // CASCADE op de foreignkey (V2) blijft het vangnet voor verwijderingen buiten Hibernate om.
-    private int verwijderBatch(OffsetDateTime grens) {
-        // addScalar en niet blind casten: een native query levert het id per dialect anders op
-        // (PostgreSQL een UUID, H2 een byte[]), addScalar laat Hibernate de conversie doen.
-        List<UUID> ids = notificatieRepository.getEntityManager()
+    private BatchResultaat verwijderBatch(OffsetDateTime grens, int meldbudget) {
+        List<Kandidaat> kandidaten = claimBatch(grens);
+
+        if (kandidaten.isEmpty()) {
+            return new BatchResultaat(0, 0, 0, 0);
+        }
+
+        List<Kandidaat> zonderEindstatus = kandidaten.stream()
+                .filter(kandidaat -> !kandidaat.status().isDefinitief())
+                .toList();
+        int gemeld = Math.min(zonderEindstatus.size(), meldbudget);
+        zonderEindstatus.subList(0, gemeld).forEach(this::meld);
+
+        int verwijderd = notificatieRepository.getEntityManager()
+                .createQuery("DELETE FROM Notificatie n WHERE n.id IN :ids")
+                .setParameter("ids", kandidaten.stream().map(Kandidaat::id).toList())
+                .executeUpdate();
+
+        return new BatchResultaat(kandidaten.size(), verwijderd, zonderEindstatus.size(), gemeld);
+    }
+
+    // addScalar en niet blind casten: een native query levert de kolommen per dialect anders op
+    // (PostgreSQL een UUID, H2 een byte[]), addScalar laat Hibernate de conversie doen.
+    @SuppressWarnings("unchecked")
+    private List<Kandidaat> claimBatch(OffsetDateTime grens) {
+        List<Object[]> rijen = notificatieRepository.getEntityManager()
                 .createNativeQuery(CLAIM_BATCH_SQL)
                 .unwrap(NativeQuery.class)
                 .addScalar("id", UUID.class)
+                .addScalar("external_reference", UUID.class)
+                .addScalar("laatste_status", String.class)
+                .addScalar("laatste_status_update", OffsetDateTime.class)
                 .setParameter(1, grens)
                 .setParameter(2, BATCH_GROOTTE)
                 .getResultList();
 
-        if (ids.isEmpty()) {
-            return 0;
-        }
-
-        return notificatieRepository.getEntityManager()
-                .createQuery("DELETE FROM Notificatie n WHERE n.id IN :ids")
-                .setParameter("ids", ids)
-                .executeUpdate();
+        return rijen.stream()
+                .map(rij -> new Kandidaat((UUID) rij[0], (UUID) rij[1],
+                        StatusWaarde.valueOf((String) rij[2]), (OffsetDateTime) rij[3]))
+                .toList();
     }
 
-    record Kandidaat(UUID id, UUID externalReference, StatusWaarde status) {
+    record BatchResultaat(int geclaimd, int verwijderd, int zonderEindstatus, int gemeld) {
+    }
+
+    // Key=value in de melding zodat er een dashboard op te bouwen is zonder de regel als vrije tekst
+    // te hoeven parsen; er is geen JSON-logging geconfigureerd.
+    //
+    // WARN en geen ERROR: dat een notificatie zonder eindstatus verloopt, is informatie en geen
+    // storing in de NMC. NotifyNL meldt er niets meer over terug en de opvolging ligt buiten dit
+    // component; de melding bestaat zodat het zichtbaar is in plaats van stilzwijgend te verdwijnen.
+    //
+    // Deze methode staat bewust op de scheduler en niet op Kandidaat: Quarkus' Log kiest de
+    // logcategorie op de declarerende klasse, dus vanuit de geneste record zou de regel onder
+    // NotificatieRetentieScheduler$Kandidaat verschijnen en niet onder de rest van de job.
+    private void meld(Kandidaat kandidaat) {
+        // Een lege externalReference is een andere diagnose dan een gevulde: dan is de notificatie
+        // nooit bij NotifyNL aangeboden, in plaats van wel aangeboden zonder uitkomst.
+        Log.warnf("Retentiejob: notificatie verlopen zonder eindstatus notificatieId=%s "
+                + "notifyNlReferentie=%s status=%s laatsteStatusUpdate=%s", kandidaat.id(),
+                kandidaat.externalReference() != null ? kandidaat.externalReference() : "geen",
+                kandidaat.status(), kandidaat.laatsteStatusUpdate());
+    }
+
+    record Kandidaat(UUID id, UUID externalReference, StatusWaarde status, OffsetDateTime laatsteStatusUpdate) {
     }
 
     // Vuurt voor élke @Scheduled-methode in de applicatie, dus de filtering op trigger-id is nodig:
