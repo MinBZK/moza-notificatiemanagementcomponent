@@ -37,12 +37,8 @@ public class ConsumentCallbackAdapter {
         this.initieleWachtMs = initieleWachtMs;
     }
 
-    // Alles wat aan de Dienstverlener ligt (geen of een ongeldige callback-URL, een onbereikbaar
-    // endpoint) wordt hier afgevangen en gelogd: de statusupdate is dan niet af te leveren, maar de
-    // status zelf is al vastgelegd en gecommit, dus er valt niets te redden door te gooien. Een fout
-    // in de NMC-configuratie zelf ontsnapt bewust wél (zie de catch hieronder). Geeft bewust niets
-    // terug: het resultaat van de callback wordt nergens vastgelegd of opnieuw aangeboden, dus een
-    // returnwaarde zou een opvolging suggereren die er niet is (zie TODO #732).
+    // Alles wat aan de Dienstverlener ligt wordt hier gelogd en niet gegooid; een fout in de
+    // NMC-configuratie zelf ontsnapt wél (zie de catch hieronder).
     public void stuurStatusUpdate(StatusUpdateOpdracht opdracht) {
         if (opdracht.callbackUrl() == null) {
             Log.infof("Geen callback-URL geconfigureerd voor notificatie %s — statusupdate niet verstuurd", opdracht.notificatieId());
@@ -75,7 +71,7 @@ public class ConsumentCallbackAdapter {
                 "notificatie/" + opdracht.notificatieId(),
                 OffsetDateTime.now(ZoneOffset.UTC),
                 "application/json",
-                new NotificatieData(opdracht.notificatieId(), opdracht.status()));
+                new NotificatieData(opdracht.notificatieId(), opdracht.status().toApiValue()));
 
         verstuurMetHerpogingen(client, event, callbackUrl);
     }
@@ -89,7 +85,7 @@ public class ConsumentCallbackAdapter {
                 return;
             } catch (Exception e) {
                 if (poging == MAX_POGINGEN) {
-                    Log.errorf(e, "Consument-callback naar %s mislukt na %d pogingen — statusupdate niet "
+                    Log.warnf(e, "Consument-callback naar %s mislukt na %d pogingen — statusupdate niet "
                             + "afgeleverd aan de Dienstverlener; er volgt geen automatische herpoging",
                             callbackUrl, MAX_POGINGEN);
                 } else {

@@ -439,19 +439,12 @@ class NotificatieRetentieSchedulerTest {
         });
     }
 
-    // De constructor registreert altijd zelf CREATED@now(), wat na @OrderBy("tijdstip ASC") ná een
-    // bewust terug- of vooruitgedateerde teststatus zou sorteren en zo deze fixture stilletjes zou
-    // breken. Vervangt de hele geschiedenis daarom door precies de gewenste record(s), inclusief de
-    // projectie (laatsteStatus/laatsteStatusUpdate) die registreerStatus normaal bijwerkt.
+    // De constructor registreert altijd zelf CREATED@now(); deze fixtures willen een bewust
+    // terug- of vooruitgedateerde geschiedenis. Vervangt daarom de hele lijst door precies de
+    // gewenste record(s), inclusief de projectie die registreerStatus normaal bijwerkt.
     private static void vervangGeschiedenisDoor(Notificatie notificatie, List<NotificatieStatus> geschiedenis) {
-        NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
-
         zetVeld(notificatie, "statusGeschiedenis", new ArrayList<>(geschiedenis));
-        zetVeld(notificatie, "laatsteStatus", laatste.status());
-        zetVeld(notificatie, "laatsteStatusTijdstip", laatste.tijdstip());
-        // De retentiejob selecteert op laatsteStatusUpdate (registratietijd). Deze fixtures gebruiken
-        // NotificatieStatus#opEigenKlok, dus gebeurtenis- en registratietijd vallen hier samen.
-        zetVeld(notificatie, "laatsteStatusUpdate", laatste.geregistreerd());
+        zetVeld(notificatie, "laatsteStatus", geschiedenis.get(geschiedenis.size() - 1));
     }
 
     private static void zetVeld(Notificatie notificatie, String naam, Object waarde) {

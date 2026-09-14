@@ -1,8 +1,10 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
-import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
-
 import java.util.UUID;
 
-public record NotificatieData(UUID notificatieId, StatusWaarde status) {
+/**
+ * De payload van het CloudEvent naar de Dienstverlener. status is een String en geen StatusWaarde:
+ * dit is een extern contract, dus de waarde staat hier los van de interne enum.
+ */
+public record NotificatieData(UUID notificatieId, String status) {
 }

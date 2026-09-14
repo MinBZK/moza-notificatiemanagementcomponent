@@ -80,7 +80,9 @@ class ConsumentCallbackAdapterTest {
         assertNotNull(event.subject());
         assertNotNull(event.time());
         assertEquals(opdracht.notificatieId(), event.data().notificatieId());
-        assertEquals(StatusWaarde.DELIVERED, event.data().status());
+        // NotificatieData#status is een String: het CloudEvent is een extern contract en staat los
+        // van de interne enum.
+        assertEquals(StatusWaarde.DELIVERED.toApiValue(), event.data().status());
     }
 
     @Test

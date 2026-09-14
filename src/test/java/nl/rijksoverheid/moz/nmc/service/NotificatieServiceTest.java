@@ -61,7 +61,7 @@ class NotificatieServiceTest {
 
         Notificatie resultaat = service.versturen(opdracht("https://omc.example.nl/callback"));
 
-        assertEquals(StatusWaarde.SENDING, resultaat.getStatus());
+        assertEquals(StatusWaarde.SENDING, resultaat.getStatus().status());
         assertEquals(notifyNlId, resultaat.getExternalReference());
         assertEquals("https://omc.example.nl/callback", resultaat.getCallbackUrl());
     }
@@ -97,7 +97,7 @@ class NotificatieServiceTest {
         Notificatie resultaat = service.verstuurDecentraal(
                 new DecentraleNotificatieVersturenOpdracht("burger@example.nl", TEST_TEMPLATE_ID, Map.of("naam", "Voorbeeld BV"), "https://omc.example.nl/callback"));
 
-        assertEquals(StatusWaarde.SENDING, resultaat.getStatus());
+        assertEquals(StatusWaarde.SENDING, resultaat.getStatus().status());
         assertEquals(notifyNlId, resultaat.getExternalReference());
         assertEquals("https://omc.example.nl/callback", resultaat.getCallbackUrl());
         verifyNoInteractions(profielServiceAdapter);
@@ -120,7 +120,7 @@ class NotificatieServiceTest {
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "permanent-failure", null);
 
-        assertEquals(StatusWaarde.PERMANENT_FAILURE, notificatie.getStatus());
+        assertEquals(StatusWaarde.PERMANENT_FAILURE, notificatie.getStatus().status());
     }
 
     @Test
@@ -130,7 +130,7 @@ class NotificatieServiceTest {
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "een-rare-status", null);
 
-        assertEquals(StatusWaarde.ONBEKEND, notificatie.getStatus());
+        assertEquals(StatusWaarde.ONBEKEND, notificatie.getStatus().status());
     }
 
     // Een status die geen vooruitgang is op de vastgelegde status is geen nieuwe uitkomst maar een
@@ -145,7 +145,7 @@ class NotificatieServiceTest {
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "sending", null);
 
-        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
         // Niet alleen de afgeleide status, ook de geschiedenis zelf moet onaangeroerd blijven: een
         // extra (genegeerde) record zou het laatste tijdstip verzetten en daarmee de retentieklok
         // resetten, ook al bleef getStatus() dan toevallig DELIVERED.
@@ -164,7 +164,7 @@ class NotificatieServiceTest {
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "temporary-failure", null);
 
-        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
         assertEquals(aantalStatussenNaDelivered, notificatie.getStatusGeschiedenis().size());
     }
 
