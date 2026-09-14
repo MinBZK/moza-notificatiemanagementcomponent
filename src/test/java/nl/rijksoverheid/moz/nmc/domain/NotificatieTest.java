@@ -36,10 +36,10 @@ class NotificatieTest {
         assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(2).status());
     }
 
-    // getStatus()/getLaatsteStatusTijdstip() lezen de projectiekolommen, niet de geschiedenis:
+    // getStatus() leest de projectiekolommen, niet de geschiedenis:
     // bewaakt dat die het láátste record volgen, niet per ongeluk het eerste.
     @Test
-    void getStatusEnGetLaatsteStatusTijdstip_retourneertLaatsteGeschiedenisRecordNietHetEerste() {
+    void getStatus_retourneertLaatsteGeschiedenisRecordNietHetEerste() {
         Notificatie notificatie = new Notificatie(null);
 
         notificatie.registreerStatus(StatusWaarde.SENDING);
@@ -66,7 +66,7 @@ class NotificatieTest {
         assertTrue(laatste.geregistreerd().isAfter(opgetreden));
     }
 
-    // De bewaartermijn vaart op laatsteStatusUpdate en dat is de eigen klok, niet die van NotifyNL.
+    // De bewaartermijn vaart op de registratietijd en dat is de eigen klok, niet die van NotifyNL.
     // Een receipt met een oude completed_at — bijvoorbeeld een herhaling, NotifyNL probeert tot 5x
     // met 5 minuten ertussen — mag een notificatie niet meteen opruimbaar maken: er is zojuist nog
     // iets over binnengekomen, dus ze is niet inactief.
@@ -98,7 +98,7 @@ class NotificatieTest {
         assertEquals(3, notificatie.getStatusGeschiedenis().size());
     }
 
-    // laatsteStatus/laatsteStatusUpdate zijn een projectie van de statusgeschiedenis, geen tweede
+    // De projectie op Notificatie is een kopie van het laatste geschiedenisrecord, geen tweede
     // bron van waarheid: na elke registratie moeten ze exact het chronologisch laatste record
     // teruggeven. Zonder deze test zou een registratiepad dat de projectie vergeet bij te werken
     // (of ernaast gaat zitten) pas in de retentiejob opvallen, die er als enige op selecteert.
@@ -118,7 +118,7 @@ class NotificatieTest {
     }
 
     // getAangemaakt() is afgeleid van het eerste geschiedenisrecord: bewaakt dat dat echt het eerste
-    // (index 0) record is, niet per ongeluk het laatste (waar getLaatsteStatusUpdate() op leunt).
+    // (index 0) record is, niet per ongeluk het laatste (waar de projectie op leunt).
     @Test
     void getAangemaakt_retourneertEersteGeschiedenisRecordNietHetLaatste() {
         Notificatie notificatie = new Notificatie(null);

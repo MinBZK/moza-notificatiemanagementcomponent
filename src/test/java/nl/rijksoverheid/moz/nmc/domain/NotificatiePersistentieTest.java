@@ -23,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Persisteert en herlaadt een Notificatie in twee losse transacties: bewijst dat NotificatieStatus-
- * hydratatie, @OrderBy-volgorde (op geregistreerd, de eigen klok) en de projectie in
- * getStatus()/getLaatsteStatusTijdstip() ook standhouden na een echte round-trip door de database,
+ * hydratatie, @OrderColumn-volgorde (registratievolgorde, kolom volgnummer) en de projectie in
+ * getStatus() ook standhouden na een echte round-trip door de database,
  * niet alleen in-memory (zie NotificatieTest).
  */
 @QuarkusTest
@@ -42,10 +42,10 @@ class NotificatiePersistentieTest {
     void notificatie_naHerladen_behoudtStatusGeschiedenisInVolgordeEnBlijftInvariantKloppen() {
         // Expliciet, ver uiteenliggend tijdstip voor de laatste overgang i.p.v. terugvallen op
         // opeenvolgende now()-aanroepen: die kunnen in dezelfde kloktik vallen, waardoor de
-        // laatsteStatusUpdate-assertie verderop ook zou slagen als het veld niet meer bijwerkte.
+        // assertie op de projectie verderop ook zou slagen als die niet meer bijgewerkt werd.
         // Afgerond op microseconden: de kolom is timestamp(6), anders faalt de vergelijking met de
         // herladen (afgeronde) waarde op de nanoseconden die de database toch niet bewaart. Het
-        // tijdstip wordt via reflectie meegegeven aan de private overload: die blijft private omdat
+        // tijdstip wordt meegegeven aan de publieke overload die NotificatieService gebruikt om de
         // er geen productiereden is om hem breder te openen, alleen een testbehoefte.
         OffsetDateTime laatsteTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(1).truncatedTo(ChronoUnit.MICROS);
 
@@ -76,9 +76,9 @@ class NotificatiePersistentieTest {
 
     // De gebeurtenistijden lopen hier bewust tegen de registratievolgorde in: SENDING krijgt een
     // latere completed_at dan DELIVERED, terwijl DELIVERED als eerste geregistreerd wordt. Na
-    // herladen moet de geschiedenis nog steeds op registratievolgorde staan (@OrderBy op
-    // "geregistreerd", de eigen klok) en moet de projectie de laatste registratie volgen, hier
-    // SENDING. Zou @OrderBy op tijdstip ordenen, dan zou een receipt met een scheve of oude
+    // herladen moet de geschiedenis nog steeds op registratievolgorde staan (@OrderColumn op
+    // volgnummer) en moet de projectie de laatste registratie volgen, hier
+    // SENDING. Zou er op tijdstip geordend worden, dan zou een receipt met een scheve of oude
     // completed_at de volgorde omgooien en getAangemaakt() (dat getFirst() leest) de verkeerde rij
     // teruggeven.
     @Test
@@ -123,7 +123,8 @@ class NotificatiePersistentieTest {
         });
     }
 
-    // statusGeschiedenis is een Hibernate-bag: elke toevoeging herschrijft alle statusregels van de
+    // Twee gelijktijdige callbacks werken allebei vanaf dezelfde toestand en willen allebei
+    // hetzelfde volgnummer schrijven in
     // notificatie. Zonder @Version op Notificatie zouden twee gelijktijdige callbacks die allebei
     // dezelfde geschiedenis inlezen en er ieder een regel aan toevoegen, elkaars regel geruisloos
     // overschrijven — de laatste commit wint volledig. Deze test bootst dat na: de buitenste
@@ -140,7 +141,7 @@ class NotificatiePersistentieTest {
 
         Throwable fout = assertThrows(Throwable.class, () -> QuarkusTransaction.requiringNew().run(() -> {
             Notificatie eerste = notificatieRepository.findById(id);
-            // Dwingt de lazy @ElementCollection af binnen deze transactie, zodat de bag écht
+            // Dwingt de lazy @ElementCollection af binnen deze transactie, zodat de collectie écht
             // ingelezen is vóór de concurrent gecommitte wijziging hieronder.
             assertEquals(1, eerste.getStatusGeschiedenis().size());
 

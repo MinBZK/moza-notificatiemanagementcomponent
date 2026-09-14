@@ -181,9 +181,10 @@ Elk record houdt **twee** tijdstippen uit elkaar:
 - `geregistreerd` — wanneer de NMC de status vastlegde, op de eigen klok.
 
 Die twee lopen uiteen omdat NotifyNL een mislukte callback tot 5x met 5 minuten
-ertussen herhaalt. De geschiedenis wordt geordend op `geregistreerd`: die klok
-is monotoon, dus `getAangemaakt()` (het eerste record) blijft betrouwbaar ook
-als een receipt met een scheve of oude `completed_at` binnenkomt.
+ertussen herhaalt. De geschiedenis wordt geordend op registratievolgorde
+(`@OrderColumn` op de kolom `volgnummer`), niet op een van beide tijdstippen:
+daardoor blijft `getAangemaakt()` (het eerste record) betrouwbaar, ook als een
+receipt met een scheve of oude `completed_at` binnenkomt.
 
 De huidige status staat als projectie van het laatste record op `Notificatie`
 zelf, bijgewerkt door `registreerStatus`: `laatste_status`,
@@ -198,8 +199,14 @@ tijdcontrole in `Notificatie`: een externe klok kan scheef zijn en is daarmee
 ongeschikt om over correctheid te beslissen.
 De entiteit heeft optimistic locking (`@Version`): twee gelijktijdig verwerkte
 delivery receipts voor dezelfde notificatie zouden elkaars statusregel anders
-geruisloos overschrijven. De tweede transactie faalt nu zichtbaar, waarna
-NotifyNL de callback opnieuw aanbiedt.
+geruisloos overschrijven. De tweede transactie faalt dan op een
+`OptimisticLockException`. `NotifyNLCallbackController` vangt die af en probeert
+het tot drie keer opnieuw in een verse transactie; pas daarna gaat er een 5xx
+naar NotifyNL. Dat is bewust, want NotifyNL herhaalt een mislukte callback maar
+vijf keer met vijf minuten ertussen en gooit de receipt daarna weg — dat budget
+is voor echte storingen, niet voor interne contentie. De primary key
+`(notificatie_id, volgnummer)` op `notificatie_status` is het vangnet daaronder
+en geldt ook voor schrijvers die Hibernate omzeilen.
 
 Een retentiejob (`NotificatieRetentieScheduler`) verwijdert een `Notificatie`
 — inclusief zijn statusgeschiedenis — zodra die laatste statuswijziging ouder

@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.notifynlcallback.controller;
 
 import jakarta.persistence.OptimisticLockException;
 import jakarta.transaction.RollbackException;
+import org.hibernate.StaleObjectStateException;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,6 +47,22 @@ class NotifyNLCallbackControllerHerpogingTest {
     @Test
     void verwerkAfleverstatus_botsingDieDaarnaSlaagt_probeertOpnieuwEnGooitNiet() {
         doThrow(ingepakteOptimisticLock())
+                .doNothing()
+                .when(notificatieService).verwerkAfleverstatus(any(), any(), any());
+
+        assertDoesNotThrow(() -> controller.verwerkAfleverstatus(receipt()));
+
+        verify(notificatieService, times(2)).verwerkAfleverstatus(any(), any(), any());
+    }
+
+    // Hibernate gooit bij een versiebotsing op een @ElementCollection typisch een
+    // StaleObjectStateException, die niet altijd naar OptimisticLockException wordt vertaald. Zonder
+    // deze test dekt de suite alleen het andere type, terwijl dit mogelijk juist het productiepad is.
+    @Test
+    void verwerkAfleverstatus_staleStateException_wordtOokAlsBotsingHerkend() {
+        RuntimeException ingepakt = new RuntimeException("transactie teruggerold",
+                new StaleObjectStateException("Notificatie", UUID.randomUUID()));
+        doThrow(ingepakt)
                 .doNothing()
                 .when(notificatieService).verwerkAfleverstatus(any(), any(), any());
 

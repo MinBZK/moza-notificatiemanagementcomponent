@@ -108,8 +108,10 @@ public class Notificatie {
         this.laatsteStatus = record;
     }
 
-    // Afgeleid van het eerste statusGeschiedenis-record (altijd CREATED, zie de constructor),
-    // vereist een actieve persistence context.
+    // Afgeleid van het eerste statusGeschiedenis-record. Voor notificaties die door deze code zijn
+    // aangemaakt is dat de CREATED uit de constructor; voor rijen uit de V2-backfill is het hun
+    // status van dat moment, want V1 legde geen geschiedenis vast. Vereist een actieve
+    // persistence context.
     public OffsetDateTime getAangemaakt() {
         return eersteStatus().tijdstip();
     }

@@ -105,16 +105,17 @@ through only a bare identifier and let NMC lead.
   `sent_at`, then `created_at`; none is required in their schema, so the NMC
   falls back to its own clock). `NotificatieStatus#geregistreerd` is when the
   NMC recorded it, on its own clock. They diverge because NotifyNL retries a
-  failed callback 5x at 5-minute intervals. Order and retention run on
-  `geregistreerd` (monotonic); `tijdstip` is the one for the afleverbewijs and
-  is never selected or sorted on.
+  failed callback 5x at 5-minute intervals. Ordering runs on insertion order
+  (`@OrderColumn` on `volgnummer`) and retention on `geregistreerd`; `tijdstip`
+  is the one for the afleverbewijs and is never selected or sorted on.
 - **`StatusWaarde`** models exactly what NotifyNL's *email* delivery-receipt
   callback actually sends today — `delivered`, `permanent-failure`,
   `temporary-failure`, `technical-failure` (see `notifynl_api.yaml`'s email
-  callback schema, ~line 212) — plus `created`/`sending`, which are NMC's own
-  internal registrations (`Notificatie`'s constructor,
-  `NotificatieService#verstuurNaarEmail`) and never values `parseStatus` parses
-  *from* NotifyNL. Deliberately **not** modeled: NotifyNL's SMS vocabulary
+  callback schema, `EmailCallbackRequest`) — plus `created`/`sending`, which are
+  NMC's own internal registrations (`Notificatie`'s constructor,
+  `NotificatieService#verstuurNaarEmail`). NotifyNL is not expected to send
+  those two, but nothing enforces it: `parseStatus` is a plain `valueOf` over
+  every constant. Deliberately **not** modeled: NotifyNL's SMS vocabulary
   (adds `pending`/`sent`) and its Letter vocabulary (`accepted`/`received`/
   `cancelled` instead of `created`/`sending`/`delivered` at all) — NMC only
   ever sends email through NotifyNL today. `onbekend` is `parseStatus`'s
@@ -125,8 +126,8 @@ through only a bare identifier and let NMC lead.
   path with a vocabulary `StatusWaarde` doesn't cover yet. `onbekend` is
   deliberately non-definitief (see `StatusWaarde#isDefinitief`), so an
   unrecognized status can't silently masquerade as a final outcome, and it
-  ranks below every known outcome in `StatusWaarde#volgtOp`, so it can't
-  overwrite one either.
+  ranks below every known *final* outcome in `StatusWaarde#volgtOp` (though
+  above `created`/`sending`), so it can't overwrite a delivery or a failure.
 - **Delivery receipts are at-least-once and unordered.** NotifyNL re-offers a
   callback on every non-2xx, so the arrival order says nothing about the order
   of events. `StatusWaarde#volgtOp` — not `isDefinitief` — decides whether an
