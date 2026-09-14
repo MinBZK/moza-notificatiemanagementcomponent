@@ -69,8 +69,8 @@ class NotificatiePersistentieTest {
             assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(3).status());
             assertEquals(laatsteTijdstip, geschiedenis.get(3).tijdstip());
 
-            assertEquals(StatusWaarde.DELIVERED, herladen.getStatus());
-            assertEquals(laatsteTijdstip, herladen.getLaatsteStatusTijdstip());
+            assertEquals(StatusWaarde.DELIVERED, herladen.getStatus().status());
+            assertEquals(laatsteTijdstip, herladen.getStatus().tijdstip());
         });
     }
 
@@ -103,8 +103,8 @@ class NotificatiePersistentieTest {
             assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(1).status());
             assertEquals(StatusWaarde.SENDING, geschiedenis.get(2).status());
 
-            assertEquals(StatusWaarde.SENDING, herladen.getStatus());
-            assertEquals(sendingTijdstip, herladen.getLaatsteStatusTijdstip());
+            assertEquals(StatusWaarde.SENDING, herladen.getStatus().status());
+            assertEquals(sendingTijdstip, herladen.getStatus().tijdstip());
         });
     }
 

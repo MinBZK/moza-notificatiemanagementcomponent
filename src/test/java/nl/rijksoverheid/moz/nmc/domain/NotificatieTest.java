@@ -16,7 +16,7 @@ class NotificatieTest {
     void constructor_zetStatusCreatedEnEersteGeschiedenisRecord() {
         Notificatie notificatie = new Notificatie(null);
 
-        assertEquals(StatusWaarde.CREATED, notificatie.getStatus());
+        assertEquals(StatusWaarde.CREATED, notificatie.getStatus().status());
         assertEquals(1, notificatie.getStatusGeschiedenis().size());
         assertEquals(StatusWaarde.CREATED, notificatie.getStatusGeschiedenis().get(0).status());
     }
@@ -46,8 +46,8 @@ class NotificatieTest {
 
         List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
         NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
-        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
-        assertEquals(laatste.tijdstip(), notificatie.getLaatsteStatusTijdstip());
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
+        assertEquals(laatste.tijdstip(), notificatie.getStatus().tijdstip());
     }
 
     // De gebeurtenistijd komt van de bron (NotifyNL), de registratietijd van de eigen klok. Voor een
@@ -76,7 +76,7 @@ class NotificatieTest {
 
         notificatie.registreerStatus(StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(40));
 
-        assertFalse(notificatie.getLaatsteStatusUpdate().isBefore(voorRegistratie));
+        assertFalse(notificatie.getStatus().geregistreerd().isBefore(voorRegistratie));
     }
 
     // De projectie volgt het laatst geregistreerde record, ook als de gebeurtenistijd ouder is dan
@@ -92,8 +92,8 @@ class NotificatieTest {
 
         notificatie.registreerStatus(StatusWaarde.DELIVERED, oudereGebeurtenistijd);
 
-        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
-        assertEquals(oudereGebeurtenistijd, notificatie.getLaatsteStatusTijdstip());
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
+        assertEquals(oudereGebeurtenistijd, notificatie.getStatus().tijdstip());
         assertEquals(3, notificatie.getStatusGeschiedenis().size());
     }
 
@@ -135,8 +135,8 @@ class NotificatieTest {
         List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
         NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
 
-        assertEquals(laatste.status(), notificatie.getStatus());
-        assertEquals(laatste.tijdstip(), notificatie.getLaatsteStatusTijdstip());
-        assertEquals(laatste.geregistreerd(), notificatie.getLaatsteStatusUpdate());
+        assertEquals(laatste.status(), notificatie.getStatus().status());
+        assertEquals(laatste.tijdstip(), notificatie.getStatus().tijdstip());
+        assertEquals(laatste.geregistreerd(), notificatie.getStatus().geregistreerd());
     }
 }

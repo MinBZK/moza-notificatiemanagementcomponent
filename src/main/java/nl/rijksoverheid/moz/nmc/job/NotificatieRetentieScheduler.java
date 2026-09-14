@@ -8,6 +8,7 @@ import io.quarkus.scheduler.Scheduled;
 import io.quarkus.scheduler.SkippedExecution;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus_;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
@@ -22,19 +23,14 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Ruimt Notificatie-rijen op waarvan de status langer dan de bewaartermijn niet is bijgewerkt.
- * Losgekoppeld van het afleveren van statussen aan de Dienstverlener (zowel via callback als een
- * eventuele toekomstige GET): die voegen geen statusregel toe en verzetten de bewaartermijn dus
- * niet. Elke registratie in de statusgeschiedenis doet dat wél, ook de NMC-eigen registraties
- * (CREATED in de constructor van Notificatie, SENDING in NotificatieService#verstuurNaarEmail), niet
- * alleen een binnenkomende NotifyNL-statusupdate. Een notificatie waarover NotifyNL nooit iets
- * terugmeldt verloopt dus de bewaartermijn na zijn eigen SENDING-registratie. De bewaartermijn geldt
- * gelijk voor elke status; StatusWaarde#isDefinitief bepaalt hier alleen welke verlopen notificaties
- * apart gemeld worden (zie meldNietDefinitieveKandidaten).
+ * Verwijdert notificaties waarvan de laatste statusregistratie ouder is dan
+ * {@code notificatie.retentie.bewaartermijn}, in begrensde batches met een eigen transactie per
+ * batch. De bewaartermijn geldt gelijk voor elke status; verlopen notificaties zonder definitieve
+ * status worden apart gemeld (zie {@link #meldNietDefinitieveKandidaten}).
+ * <p>
+ * {@code @Startup} omdat {@code @ApplicationScoped} lazy is: zonder dit valt een ongeldige
+ * bewaartermijn pas bij de eerste vuring midden in de nacht op in plaats van bij het opstarten.
  */
-// @Startup: @ApplicationScoped beans zijn standaard lazy, zonder dit forceert Quarkus de
-// constructor pas bij de eerste @Scheduled-vuring, dus een ongeldige bewaartermijn zou pas midden in
-// de nacht aan het licht komen (zie de constructor) in plaats van bij het opstarten.
 @Startup
 @ApplicationScoped
 public class NotificatieRetentieScheduler {
@@ -65,11 +61,21 @@ public class NotificatieRetentieScheduler {
     // Zowel de @Scheduled-identity als het trigger-id waarop de observers hieronder filteren.
     private static final String TRIGGER_ID = "notificatie-retentie";
 
+    // JPQL-pad naar de registratietijd van de laatste status: een @Embedded NotificatieStatus op
+    // Notificatie (kolom laatste_status_update). Het Notificatie_-metamodel geeft alleen het
+    // embeddable zelf, niet zijn velden.
+    private static final String LAATSTE_STATUS_GEREGISTREERD =
+            Notificatie_.LAATSTE_STATUS + "." + NotificatieStatus_.GEREGISTREERD;
+
+    // Idem voor de StatusWaarde zelf.
+    private static final String LAATSTE_STATUS_WAARDE =
+            Notificatie_.LAATSTE_STATUS + "." + NotificatieStatus_.STATUS;
+
     private final NotificatieRepository notificatieRepository;
     private final Duration bewaartermijn;
 
     public NotificatieRetentieScheduler(NotificatieRepository notificatieRepository,
-            @ConfigProperty(name = "notificatie.retentie.bewaartermijn", defaultValue = "30d") Duration bewaartermijn) {
+            @ConfigProperty(name = "notificatie.retentie.bewaartermijn") Duration bewaartermijn) {
         // Een niet-positieve termijn is één configuratie-typefout verwijderd van "verwijder de hele
         // tabel bij de volgende run", dat hoort bij het opstarten te falen, niet stilletjes midden
         // in de nacht.
@@ -168,8 +174,8 @@ public class NotificatieRetentieScheduler {
     private long telNietDefinitieveKandidaten(OffsetDateTime grens) {
         return notificatieRepository.getEntityManager()
                 .createQuery("SELECT COUNT(n) FROM Notificatie n WHERE n."
-                        + Notificatie_.LAATSTE_STATUS_UPDATE + " <= :grens AND n."
-                        + Notificatie_.LAATSTE_STATUS + " IN :statussen", Long.class)
+                        + LAATSTE_STATUS_GEREGISTREERD + " <= :grens AND n."
+                        + LAATSTE_STATUS_WAARDE + " IN :statussen", Long.class)
                 .setParameter("grens", grens)
                 .setParameter("statussen", NIET_DEFINITIEVE_STATUSSEN)
                 .getSingleResult();
@@ -182,10 +188,10 @@ public class NotificatieRetentieScheduler {
     private List<Kandidaat> zoekNietDefinitieveKandidaten(OffsetDateTime grens) {
         List<Object[]> rijen = notificatieRepository.getEntityManager()
                 .createQuery("SELECT n.id, n." + Notificatie_.EXTERNAL_REFERENCE + ", n."
-                        + Notificatie_.LAATSTE_STATUS + " FROM Notificatie n WHERE n."
-                        + Notificatie_.LAATSTE_STATUS_UPDATE + " <= :grens AND n."
-                        + Notificatie_.LAATSTE_STATUS + " IN :statussen ORDER BY n."
-                        + Notificatie_.LAATSTE_STATUS_UPDATE, Object[].class)
+                        + LAATSTE_STATUS_WAARDE + " FROM Notificatie n WHERE n."
+                        + LAATSTE_STATUS_GEREGISTREERD + " <= :grens AND n."
+                        + LAATSTE_STATUS_WAARDE + " IN :statussen ORDER BY n."
+                        + LAATSTE_STATUS_GEREGISTREERD, Object[].class)
                 .setParameter("grens", grens)
                 .setParameter("statussen", NIET_DEFINITIEVE_STATUSSEN)
                 .setMaxResults(MAX_MELDINGEN)
@@ -205,7 +211,7 @@ public class NotificatieRetentieScheduler {
     private int verwijderBatch(OffsetDateTime grens) {
         List<UUID> ids = notificatieRepository.getEntityManager()
                 .createQuery("SELECT n.id FROM Notificatie n WHERE n."
-                        + Notificatie_.LAATSTE_STATUS_UPDATE + " <= :grens", UUID.class)
+                        + LAATSTE_STATUS_GEREGISTREERD + " <= :grens", UUID.class)
                 .setParameter("grens", grens)
                 .setMaxResults(BATCH_GROOTTE)
                 .getResultList();
@@ -231,13 +237,13 @@ public class NotificatieRetentieScheduler {
 
     // De DELETE herhaalt het retentiepredicaat uit de kandidatenquery in plaats van blind op id te
     // verwijderen: tussen beide statements door kan een gelijktijdige verwerkAfleverstatus een verse
-    // statusregel gecommit hebben, waardoor de notificatie niet meer verlopen is. Een bulk-delete
-    // gaat volledig buiten de persistence context om en toetst dus géén @Version, de optimistic
-    // locking op Notificatie beschermt hier niets, alleen het predicaat in dit statement doet dat.
+    // statusregel gecommit hebben, waardoor de notificatie niet meer verlopen is. Dat predicaat is
+    // hier de enige bescherming: een JPQL bulk-delete werkt per definitie rechtstreeks op de
+    // database en toetst dus geen @Version.
     private int verwijder(Collection<UUID> ids, OffsetDateTime grens) {
         return notificatieRepository.getEntityManager()
                 .createQuery("DELETE FROM Notificatie n WHERE n.id IN :ids AND n."
-                        + Notificatie_.LAATSTE_STATUS_UPDATE + " <= :grens")
+                        + LAATSTE_STATUS_GEREGISTREERD + " <= :grens")
                 .setParameter("ids", ids)
                 .setParameter("grens", grens)
                 .executeUpdate();

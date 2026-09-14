@@ -204,7 +204,10 @@ NotifyNL de callback opnieuw aanbiedt.
 Een retentiejob (`NotificatieRetentieScheduler`) verwijdert een `Notificatie`
 — inclusief zijn statusgeschiedenis — zodra die laatste statuswijziging ouder
 is dan de geconfigureerde `notificatie.retentie.bewaartermijn` (zie
-`application.properties`). Dit staat los van
+`application.properties`). Die staat op **7 dagen**, conform de afspraak met de
+Belastingdienst. De property heeft geen default in de code: is hij niet gezet,
+dan faalt de applicatie bij het opstarten in plaats van stilzwijgend een
+termijn te kiezen. Dit staat los van
 het slagen van de consument-callback. De job draait dagelijks om 03:00
 Europese/Amsterdamse tijd (`notificatie.retentie.cron`) en verwijdert in
 begrensde batches, zodat één run niet vastloopt op een grote achterstand.

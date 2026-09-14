@@ -1,11 +1,12 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
 import jakarta.persistence.CollectionTable;
+import jakarta.persistence.AttributeOverride;
+import jakarta.persistence.AttributeOverrides;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -25,13 +26,6 @@ public class Notificatie {
     @GeneratedValue
     private UUID id;
 
-    // Twee gelijktijdige NotifyNL-callbacks werken allebei de projectiekolommen hieronder bij;
-    // zonder versiecontrole overschrijft de laatste commit de eerste zonder enig signaal. Met
-    // @Version faalt die tweede commit op een OptimisticLockException. NotifyNLCallbackController
-    // vangt die af en probeert het in een verse transactie opnieuw, zodat zo'n botsing geen 5xx
-    // oplevert: NotifyNL herhaalt een mislukte callback maar 5x, en dat budget is voor echte
-    // storingen. De primary key op notificatie_status (notificatie_id, volgnummer) is het vangnet
-    // daaronder en geldt ook voor schrijvers die Hibernate omzeilen.
     @Version
     private long versie;
 
@@ -41,40 +35,22 @@ public class Notificatie {
     @Column(name = "callback_url", length = 2048)
     private String callbackUrl;
 
-    // Projectie van het chronologisch laatste record in statusGeschiedenis, bijgewerkt door
-    // registreerStatus (het enige mutatiepunt). De geschiedenis blijft de bron van waarheid; deze
-    // kolommen staan op notificatie zodat de retentiejob op één geïndexeerde kolom kan
-    // selecteren in plaats van per notificatie een MAX over notificatie_status te berekenen.
-    // NotificatieTest en NotificatiePersistentieTest bewaken dat ze de geschiedenis blijven volgen.
-    @Enumerated(EnumType.STRING)
-    @Column(name = "laatste_status", nullable = false, length = 32)
-    private StatusWaarde laatsteStatus;
+    // Kopie van het laatste record in statusGeschiedenis, bijgewerkt door registreerStatus. Staat op
+    // notificatie zodat de retentiejob op een geïndexeerde kolom kan selecteren in plaats van per
+    // notificatie een MAX over notificatie_status te berekenen. De geschiedenis blijft de bron van
+    // waarheid.
+    @Embedded
+    @AttributeOverrides({
+            @AttributeOverride(name = "status", column = @Column(name = "laatste_status", nullable = false, length = 32)),
+            @AttributeOverride(name = "tijdstip", column = @Column(name = "laatste_status_tijdstip", nullable = false)),
+            @AttributeOverride(name = "geregistreerd", column = @Column(name = "laatste_status_update", nullable = false))
+    })
+    private NotificatieStatus laatsteStatus;
 
-    // De gebeurtenistijd van laatsteStatus (NotificatieStatus#tijdstip), op de klok van de bron die
-    // de status meldde. Voor het afleverbewijs; nergens om op te selecteren of te sturen, want een
-    // externe klok kan scheef of oud zijn.
-    @Column(name = "laatste_status_tijdstip", nullable = false)
-    private OffsetDateTime laatsteStatusTijdstip;
-
-    // De registratietijd van de laatste statusregistratie, op de eigen klok van de NMC
-    // (NotificatieStatus#geregistreerd). De retentiejob selecteert hierop. Bewust niet de
-    // gebeurtenistijd: een receipt met een scheve of oude completed_at zou een notificatie anders
-    // meteen opruimbaar maken, en een notificatie waar zojuist nog iets over binnenkwam is niet
-    // inactief. Loopt daarom altijd vooruit, ook bij een terug gedateerde registratie.
-    @Column(name = "laatste_status_update", nullable = false)
-    private OffsetDateTime laatsteStatusUpdate;
-
-    // @OrderColumn, bewust geen @OrderBy. Zonder ordeningskolom is dit voor Hibernate een bag, en
-    // dan wordt elke toevoeging uitgevoerd als "verwijder alle rijen van deze notificatie en voeg de
-    // hele lijst opnieuw toe" — bij vier overgangen tien schrijfacties in plaats van vier, elke keer
-    // nieuwe dead tuples in een tabel die alleen maar hoort te groeien. Met volgnummer is een
-    // toevoeging aan het eind één INSERT, wat bij een append-only geschiedenis het enige is dat er
-    // ooit gebeurt.
-    //
-    // De volgorde is daarmee registratievolgorde. Dat is de bedoeling: ordenen op tijdstip zou een
-    // receipt met een scheve of oude completed_at vóór de aanmaak laten sorteren, waarna
-    // getAangemaakt() de verkeerde rij teruggeeft. NotificatieStatus#geregistreerd legt hetzelfde
-    // moment vast als gegeven, maar wordt nergens om te sorteren gebruikt.
+    // @OrderColumn en geen @OrderBy: zonder ordeningskolom is dit voor Hibernate een bag, en dan is
+    // elke toevoeging een delete-all plus reinsert in plaats van één INSERT. De volgorde is daarmee
+    // registratievolgorde; ordenen op tijdstip zou een receipt met een oude completed_at vóór de
+    // aanmaakstatus laten sorteren, waarna getAangemaakt() de verkeerde rij teruggeeft.
     @ElementCollection
     @CollectionTable(name = "notificatie_status", joinColumns = @JoinColumn(name = "notificatie_id"))
     @OrderColumn(name = "volgnummer")
@@ -97,18 +73,9 @@ public class Notificatie {
         return callbackUrl;
     }
 
-    public StatusWaarde getStatus() {
+    /** De huidige status met zijn gebeurtenis- en registratietijd. */
+    public NotificatieStatus getStatus() {
         return laatsteStatus;
-    }
-
-    /** Registratietijd van de laatste statusregistratie; waar de bewaartermijn op vaart. */
-    public OffsetDateTime getLaatsteStatusUpdate() {
-        return laatsteStatusUpdate;
-    }
-
-    /** Gebeurtenistijd van de huidige status, op de klok van de bron die hem meldde. */
-    public OffsetDateTime getLaatsteStatusTijdstip() {
-        return laatsteStatusTijdstip;
     }
 
     public UUID getExternalReference() {
@@ -121,8 +88,7 @@ public class Notificatie {
 
     /** Registreert een status die de NMC zelf vaststelt; gebeurtenis- en registratietijd vallen samen. */
     public void registreerStatus(StatusWaarde status) {
-        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
-        registreerStatus(NotificatieStatus.opEigenKlok(status, nu), nu);
+        registreerStatus(NotificatieStatus.opEigenKlok(status, OffsetDateTime.now(ZoneOffset.UTC)));
     }
 
     /**
@@ -130,25 +96,16 @@ public class Notificatie {
      * delivery receipt van NotifyNL hun completed_at/sent_at/created_at.
      */
     public void registreerStatus(StatusWaarde status, OffsetDateTime opgetreden) {
-        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
-        registreerStatus(new NotificatieStatus(status, opgetreden, nu), nu);
+        registreerStatus(new NotificatieStatus(status, opgetreden, OffsetDateTime.now(ZoneOffset.UTC)));
     }
 
-    // Enige mutatiepunt voor status: legt het record in de geschiedenis vast en werkt de projectie
-    // bij. De projectie volgt altijd het laatst geregistreerde record, zonder de gebeurtenistijd
-    // ertegen af te wegen.
-    //
-    // Bewust géén tweede controle op tijdstip hier. Welke overgangen zijn toegestaan wordt bepaald
-    // door de rangorde in StatusWaarde#volgtOp, die NotificatieService toepast vóór hij hierheen
-    // gaat. Zou deze methode een registratie alsnog weigeren te projecteren omdat de gebeurtenistijd
-    // ouder is, dan zou de geschiedenis DELIVERED bevatten terwijl laatsteStatus op SENDING blijft
-    // staan: twee bronnen die elkaar tegenspreken. De gebeurtenistijd komt van een externe klok en
-    // is daarmee ongeschikt om over correctheid te beslissen; de rangorde niet.
-    private void registreerStatus(NotificatieStatus record, OffsetDateTime nu) {
+    // Enige mutatiepunt voor status. Bewust geen controle op tijdstip hier: welke overgangen mogen
+    // wordt bepaald door StatusWaarde#volgtOp in NotificatieService. Zou deze methode een registratie
+    // alsnog weigeren te projecteren omdat de gebeurtenistijd ouder is, dan bevat de geschiedenis een
+    // status die laatsteStatus tegenspreekt.
+    private void registreerStatus(NotificatieStatus record) {
         this.statusGeschiedenis.add(record);
-        this.laatsteStatus = record.status();
-        this.laatsteStatusTijdstip = record.tijdstip();
-        this.laatsteStatusUpdate = nu;
+        this.laatsteStatus = record;
     }
 
     // Afgeleid van het eerste statusGeschiedenis-record (altijd CREATED, zie de constructor),
