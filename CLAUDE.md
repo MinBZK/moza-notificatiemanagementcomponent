@@ -115,7 +115,23 @@ through only a bare identifier and let NMC lead.
   contactherstel via Printstraat) starts feeding a status through this same
   path with a vocabulary `StatusWaarde` doesn't cover yet. `onbekend` is
   deliberately non-definitief (see `StatusWaarde#isDefinitief`), so an
-  unrecognized status can't silently masquerade as a final outcome.
+  unrecognized status can't silently masquerade as a final outcome, and it
+  ranks below every known outcome in `StatusWaarde#volgtOp`, so it can't
+  overwrite one either.
+- **Delivery receipts are at-least-once and unordered.** NotifyNL re-offers a
+  callback on every non-2xx, so the arrival order says nothing about the order
+  of events. `StatusWaarde#volgtOp` — not `isDefinitief` — decides whether an
+  incoming status is registered: only a status that ranks *above* the recorded
+  one is. `delivered` deliberately outranks every failure status, so a late
+  `temporary-failure` can't undo a delivery. `isDefinitief` remains, but only
+  for the retention job's "expired without a final outcome" WARN.
+- **The consument-callback fires after commit, never inside the transaction.**
+  `NotificatieService` fires a `StatusUpdateOpdracht`; `StatusUpdateVerzender`
+  observes it at `AFTER_SUCCESS` and calls `ConsumentCallbackAdapter`. Sending
+  before the commit would let a Dienstverlener see a status the NMC then rolls
+  back, and would hold a DB connection for the duration of the HTTP retries.
+  The observer is a separate bean on purpose: tests replace the adapter with
+  `@InjectMock`, and an observer method on a mock is never invoked.
 
 ## Reference repos (siblings, same level as this repo)
 - `../moza-omc` — OMC, .NET (Moza.Omc.Api)

@@ -1,13 +1,11 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
-import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
-import java.lang.reflect.Field;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -30,52 +28,46 @@ class ConsumentCallbackAdapterTest {
 
     @Test
     void stuurStatusUpdate_geenCallbackUrl_doetGeenHttpAanroep() {
-        Notificatie notificatie = notificatie(null);
-
-        adapter.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED);
+        adapter.stuurStatusUpdate(opdracht(null));
 
         verifyNoInteractions(callbackClient);
     }
 
     @Test
     void stuurStatusUpdate_eerstePogingSuccesvol_doetGeenHerpoging() {
-        Notificatie notificatie = notificatie("https://omc.example.nl/callback");
-
-        adapter.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED);
+        adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback"));
 
         verify(callbackClient, times(1)).stuurStatusUpdate(any());
     }
 
     @Test
     void stuurStatusUpdate_eerstePogingMislukt_stoptNaEenGeslaagdeHerpoging() {
-        Notificatie notificatie = notificatie("https://omc.example.nl/callback");
         doThrow(new RuntimeException("tijdelijk onbereikbaar"))
                 .doNothing()
                 .when(callbackClient).stuurStatusUpdate(any());
 
-        adapter.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED);
+        adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback"));
 
         verify(callbackClient, times(2)).stuurStatusUpdate(any());
     }
 
-    // Na MAX_POGINGEN mislukte pogingen geeft de adapter het op zonder te gooien: de aanroeper zit in
-    // een actieve transactie waarvan een net verwerkte NotifyNL-statusupdate anders verloren gaat.
+    // Na MAX_POGINGEN mislukte pogingen geeft de adapter het op zonder te gooien: de status is al
+    // vastgelegd en gecommit, dus gooien redt niets en zou alleen de observer-aanroep laten falen.
     @Test
     void stuurStatusUpdate_allePogingenMislukt_gooitNietMaarStoptNaMaxPogingen() {
-        Notificatie notificatie = notificatie("https://omc.example.nl/callback");
         doThrow(new RuntimeException("onbereikbaar"))
                 .when(callbackClient).stuurStatusUpdate(any());
 
-        assertDoesNotThrow(() -> adapter.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED));
+        assertDoesNotThrow(() -> adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback")));
 
         verify(callbackClient, times(3)).stuurStatusUpdate(any());
     }
 
     @Test
     void stuurStatusUpdate_event_bevat_correcteData() {
-        Notificatie notificatie = notificatie("https://omc.example.nl/callback");
+        StatusUpdateOpdracht opdracht = opdracht("https://omc.example.nl/callback");
 
-        adapter.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED);
+        adapter.stuurStatusUpdate(opdracht);
 
         ArgumentCaptor<NotificatieStatusEvent> captor = ArgumentCaptor.forClass(NotificatieStatusEvent.class);
         verify(callbackClient).stuurStatusUpdate(captor.capture());
@@ -87,26 +79,23 @@ class ConsumentCallbackAdapterTest {
         assertNotNull(event.source());
         assertNotNull(event.subject());
         assertNotNull(event.time());
-        assertEquals(notificatie.getId(), event.data().notificatieId());
+        assertEquals(opdracht.notificatieId(), event.data().notificatieId());
         assertEquals(StatusWaarde.DELIVERED, event.data().status());
     }
 
     @Test
     void stuurStatusUpdate_ongeldigeCallbackUrl_gooitNietEnHerhaaltNiet() {
         // Regressietest: clientFactory.maakClient(...) zit buiten de retry-try/catch — een
-        // ongeldige URL mag daarom niet uit stuurStatusUpdate ontsnappen, want dat zou de
-        // aanroepende @Transactional-methode in NotificatieService laten rollbacken (zie de TODO
-        // #732-toelichting daar). Telt de aanroepen: een permanente fout (ongeldige URL) hoort niet
-        // 3x herhaald te worden zoals een tijdelijke.
+        // ongeldige URL mag daarom niet uit stuurStatusUpdate ontsnappen. Telt de aanroepen: een
+        // permanente fout (ongeldige URL) hoort niet 3x herhaald te worden zoals een tijdelijke.
         int[] aanroepen = {0};
         ConsumentCallbackAdapter adapterMetOngeldigeUrl = new ConsumentCallbackAdapter(
                 url -> {
                     aanroepen[0]++;
                     throw new IllegalArgumentException("ongeldige callback-URL: " + url);
                 }, 0L);
-        Notificatie notificatie = notificatie("niet-een-geldige-url");
 
-        assertDoesNotThrow(() -> adapterMetOngeldigeUrl.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED));
+        assertDoesNotThrow(() -> adapterMetOngeldigeUrl.stuurStatusUpdate(opdracht("niet-een-geldige-url")));
 
         assertEquals(1, aanroepen[0]);
     }
@@ -121,29 +110,12 @@ class ConsumentCallbackAdapterTest {
                 url -> {
                     throw new IllegalStateException("truststore niet leesbaar");
                 }, 0L);
-        Notificatie notificatie = notificatie("https://omc.example.nl/callback");
 
         assertThrows(IllegalStateException.class,
-                () -> adapterMetKapotteFabriek.stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED));
+                () -> adapterMetKapotteFabriek.stuurStatusUpdate(opdracht("https://omc.example.nl/callback")));
     }
 
-    private Notificatie notificatie(String callbackUrl) {
-        Notificatie notificatie = new Notificatie(callbackUrl);
-        stelIdIn(notificatie, UUID.randomUUID());
-        notificatie.registreerStatus(StatusWaarde.DELIVERED);
-        return notificatie;
-    }
-
-    // id is @GeneratedValue/getter-only (door JPA gezet bij persist) — in deze pure unit test
-    // (geen echte database) wordt het via reflectie gezet zodat we kunnen verifiëren dat het
-    // wordt doorgegeven aan de callback-event.
-    private static void stelIdIn(Notificatie notificatie, UUID id) {
-        try {
-            Field idField = Notificatie.class.getDeclaredField("id");
-            idField.setAccessible(true);
-            idField.set(notificatie, id);
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
+    private static StatusUpdateOpdracht opdracht(String callbackUrl) {
+        return new StatusUpdateOpdracht(UUID.randomUUID(), callbackUrl, StatusWaarde.DELIVERED);
     }
 }
