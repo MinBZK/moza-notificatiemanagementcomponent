@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
+import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.event.TransactionPhase;
@@ -25,6 +26,21 @@ public class StatusUpdateVerzender {
     }
 
     void verstuurNaCommit(@Observes(during = TransactionPhase.AFTER_SUCCESS) StatusUpdateOpdracht opdracht) {
-        consumentCallbackAdapter.stuurStatusUpdate(opdracht);
+        try {
+            consumentCallbackAdapter.stuurStatusUpdate(opdracht);
+        } catch (RuntimeException e) {
+            // ConsumentCallbackAdapter laat bewust elke fout ontsnappen die niet aan de
+            // Dienstverlener ligt: een kapotte truststore, een verkeerd geconfigureerde proxy, een
+            // ontbrekende MessageBodyWriter. Vóór de verplaatsing naar deze observer had dat een
+            // ontvanger — de aanroeper in NotificatieService, en daarboven de controller. Nu niet
+            // meer: deze methode draait vanuit Synchronization#afterCompletion, waar de
+            // transactiemanager elke Throwable zelf vangt en hooguit onder com.arjuna.* logt. Wie
+            // op nl.rijksoverheid.moz.* filtert ziet dan niets, terwijl zo'n fout élke statusupdate
+            // naar élke Dienstverlener treft. Vandaar hier een ERROR in het eigen namespace; gooien
+            // heeft geen zin, de transactie is al gecommit.
+            Log.errorf(e, "Statusupdate voor notificatie %s (status %s) kon niet verstuurd worden door "
+                    + "een fout in de NMC zelf — dit treft waarschijnlijk alle consument-callbacks",
+                    opdracht.notificatieId(), opdracht.status());
+        }
     }
 }

@@ -16,6 +16,7 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -132,7 +133,9 @@ public class NotificatieService {
     // bepalen of StatusWaarde uitgebreid moet worden.
     private StatusWaarde parseStatus(String notifyStatus, UUID notifyNlNotificatieId, UUID notificatieId) {
         try {
-            return StatusWaarde.valueOf(notifyStatus.replace("-", "_").toUpperCase());
+            // Locale.ROOT: in een Turkse locale maakt toUpperCase() van de i een I met punt, waardoor
+            // technical-failure buiten valueOf valt en als ONBEKEND zou landen.
+            return StatusWaarde.valueOf(notifyStatus.replace("-", "_").toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             Log.errorf("Onbekende NotifyNL-status '%s' ontvangen voor notificatie %s "
                     + "(NotifyNL-referentie %s) — vastgelegd als %s; StatusWaarde kent deze waarde "

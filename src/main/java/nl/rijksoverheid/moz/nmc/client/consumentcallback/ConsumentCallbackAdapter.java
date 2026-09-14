@@ -37,8 +37,9 @@ public class ConsumentCallbackAdapter {
         this.initieleWachtMs = initieleWachtMs;
     }
 
-    // Alles wat aan de Dienstverlener ligt wordt hier gelogd en niet gegooid; een fout in de
-    // NMC-configuratie zelf ontsnapt wél (zie de catch hieronder).
+    // Alles wat aan de Dienstverlener ligt wordt hier gelogd en niet gegooid. Een fout in de NMC
+    // zelf ontsnapt wél (zie de catch hieronder) en wordt door StatusUpdateVerzender op ERROR
+    // gelogd; verder dan die observer komt hij niet, want de transactie is dan al gecommit.
     public void stuurStatusUpdate(StatusUpdateOpdracht opdracht) {
         if (opdracht.callbackUrl() == null) {
             Log.infof("Geen callback-URL geconfigureerd voor notificatie %s — statusupdate niet verstuurd", opdracht.notificatieId());
