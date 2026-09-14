@@ -2,8 +2,9 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Event;
 import jakarta.transaction.Transactional;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
+import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLConfiguratieException;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendException;
@@ -22,16 +23,16 @@ public class NotificatieService {
     private final ProfielServiceAdapter profielServiceAdapter;
     private final NotifyNLVerzendAdapter verzendAdapter;
     private final NotificatieRepository notificatieRepository;
-    private final ConsumentCallbackAdapter consumentCallbackAdapter;
+    private final Event<StatusUpdateOpdracht> statusUpdateEvent;
 
     public NotificatieService(ProfielServiceAdapter profielServiceAdapter,
                                NotifyNLVerzendAdapter verzendAdapter,
                                NotificatieRepository notificatieRepository,
-                               ConsumentCallbackAdapter consumentCallbackAdapter) {
+                               Event<StatusUpdateOpdracht> statusUpdateEvent) {
         this.profielServiceAdapter = profielServiceAdapter;
         this.verzendAdapter = verzendAdapter;
         this.notificatieRepository = notificatieRepository;
-        this.consumentCallbackAdapter = consumentCallbackAdapter;
+        this.statusUpdateEvent = statusUpdateEvent;
     }
 
     // TODO #732 (zie https://github.com/MinBZK/MijnOverheidZakelijk/issues/732): zelfde probleem
@@ -82,29 +83,30 @@ public class NotificatieService {
 
         StatusWaarde huidigeStatus = notificatie.getStatus();
         StatusWaarde nieuweStatus = parseStatus(status);
-        // Een niet-definitieve status ná een definitieve is geen nieuwe uitkomst maar een dubbele of
-        // laat aangekomen callback (NotifyNL herhaalt een callback bij elke niet-2xx). Zo'n update
-        // registreren zou de laatst bekende uitkomst overschrijven, de Dienstverlener een
-        // teruggedraaide bezorgstatus melden én — omdat de retentiejob op het laatste tijdstip in de
-        // statusgeschiedenis vaart — de bewaartermijn opnieuw laten beginnen. Daarom wordt hij
-        // genegeerd; de eerder vastgelegde eindstatus blijft staan.
-        if (huidigeStatus.isDefinitief() && !nieuweStatus.isDefinitief()) {
-            Log.warnf("Notificatie %s heeft al definitieve status %s; niet-definitieve status %s "
-                    + "(NotifyNL-referentie %s) wordt genegeerd", notificatie.getId(), huidigeStatus,
+        // NotifyNL herhaalt een callback bij elke niet-2xx, dus dezelfde delivery receipt kan
+        // meerdere keren binnenkomen en twee receipts voor een verzending kunnen elkaar in
+        // omgekeerde volgorde bereiken. Alleen een status die een vooruitgang is ten opzichte van de
+        // vastgelegde status wordt geregistreerd; al het andere is een herhaling of een laat
+        // aangekomen callback. Die toch registreren zou de laatst bekende uitkomst overschrijven —
+        // een al bezorgde notificatie zou alsnog als mislukt bij de Dienstverlener landen — én,
+        // omdat de retentiejob op het laatste tijdstip in de statusgeschiedenis vaart, de
+        // bewaartermijn opnieuw laten beginnen. Zie StatusWaarde#volgtOp voor de rangorde.
+        if (!nieuweStatus.volgtOp(huidigeStatus)) {
+            Log.warnf("Notificatie %s heeft al status %s; status %s (NotifyNL-referentie %s) is daar "
+                    + "geen vooruitgang op en wordt genegeerd", notificatie.getId(), huidigeStatus,
                     nieuweStatus, notifyNlNotificatieId);
 
             return;
         }
         notificatie.registreerStatus(nieuweStatus);
 
-        // TODO #732: stuurStatusUpdate() doet tot 3 synchrone HTTP-pogingen binnen deze transactie.
-        // Een JTA-timeout hier rolt de registreerStatus()-aanroep hierboven terug: de net verwerkte
-        // NotifyNL-uitkomst gaat dan verloren. Niet stil richting de aanroeper — de RollbackException
-        // ontsnapt uit deze methode en NotifyNLCallbackController vangt hem niet, dus NotifyNL krijgt
-        // een 5xx en biedt de callback opnieuw aan (het herhaalt bij elke niet-2xx). Het verlies is
-        // dus echt, maar wordt gemeld; die 5xx is tegelijk precies wat de dubbele callback uitlokt
-        // die hierboven wordt afgevangen.
-        consumentCallbackAdapter.stuurStatusUpdate(notificatie, nieuweStatus);
+        // Afvuren, niet zelf versturen: StatusUpdateVerzender pakt dit pas op ná de commit van deze
+        // transactie. Zou de statusupdate hier direct verstuurd worden, dan kan de Dienstverlener een
+        // status krijgen die de NMC vervolgens terugrolt — de commit hierna kan alsnog falen op een
+        // OptimisticLockException (een gelijktijdige tweede receipt) of op een JTA-timeout. Het houdt
+        // bovendien de DB-connectie van deze transactie niet bezet zolang de callback duurt.
+        statusUpdateEvent.fire(new StatusUpdateOpdracht(
+                notificatie.getId(), notificatie.getCallbackUrl(), nieuweStatus));
     }
 
     private StatusWaarde parseStatus(String notifyStatus) {

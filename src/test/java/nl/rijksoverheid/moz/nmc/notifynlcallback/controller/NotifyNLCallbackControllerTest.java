@@ -6,6 +6,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
+import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
@@ -139,9 +140,9 @@ class NotifyNLCallbackControllerTest {
                 .then()
                 .statusCode(204);
 
-        ArgumentCaptor<Notificatie> captor = ArgumentCaptor.forClass(Notificatie.class);
-        Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(captor.capture(), any());
-        assertEquals(StatusWaarde.ONBEKEND, captor.getValue().getStatus());
+        ArgumentCaptor<StatusUpdateOpdracht> captor = ArgumentCaptor.forClass(StatusUpdateOpdracht.class);
+        Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(captor.capture());
+        assertEquals(StatusWaarde.ONBEKEND, captor.getValue().status());
     }
 
     @Test
@@ -163,7 +164,7 @@ class NotifyNLCallbackControllerTest {
                 .then()
                 .statusCode(204);
 
-        Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(any(), any());
+        Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(any());
     }
 
     @Test

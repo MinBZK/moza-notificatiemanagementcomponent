@@ -33,4 +33,36 @@ public enum StatusWaarde {
             case CREATED, SENDING, ONBEKEND -> false;
         };
     }
+
+    // Rangorde van de statussen binnen een verzending, gebruikt door #volgtOp. NotifyNL biedt een
+    // callback opnieuw aan bij elke niet-2xx, dus dezelfde delivery receipt kan meerdere keren
+    // binnenkomen en twee receipts voor een verzending kunnen elkaar in omgekeerde volgorde
+    // bereiken; de volgorde van binnenkomst zegt dus niets over de volgorde van de gebeurtenissen.
+    // DELIVERED staat bewust boven de faalstatussen: is er eenmaal bezorgd, dan is dat de uitkomst
+    // en mag geen enkele later binnenkomende faalstatus die terugdraaien. ONBEKEND staat tussen
+    // SENDING en de eindstatussen in: er is wel iets teruggemeld, maar van een status die de NMC
+    // niet kent is niet vast te stellen of hij een bekende uitkomst mag overschrijven.
+    // Switch i.p.v. Map dwingt, net als in isDefinitief, dat elke toekomstige status hier expliciet
+    // wordt ingedeeld (geen default-tak).
+    private int rang() {
+        return switch (this) {
+            case CREATED -> 0;
+            case SENDING -> 1;
+            case ONBEKEND -> 2;
+            case TEMPORARY_FAILURE, TECHNICAL_FAILURE, PERMANENT_FAILURE -> 3;
+            case DELIVERED -> 4;
+        };
+    }
+
+    /**
+     * Of deze status een vooruitgang is ten opzichte van de al vastgelegde status, en dus als nieuw
+     * record in de statusgeschiedenis hoort.
+     * <p>
+     * Een gelijke rang telt niet als vooruitgang: dat is een herhaling van dezelfde receipt, of een
+     * tweede en afwijkende eindstatus voor dezelfde verzending. In beide gevallen blijft de eerst
+     * vastgelegde uitkomst staan.
+     */
+    public boolean volgtOp(StatusWaarde vastgelegdeStatus) {
+        return rang() > vastgelegdeStatus.rang();
+    }
 }

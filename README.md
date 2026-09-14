@@ -225,16 +225,26 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   token dat geconfigureerd wordt in NotifyNL's dashboard en via
   `notify.callback.bearer-token` in de NMC. De NMC werkt de status bij en
   stuurt — indien een `callbackUrl` aanwezig is — een **CloudEvents NL GOV**
-  statusupdate naar die URL. Retourneert `204` op succes, `401` bij een
+  statusupdate naar die URL. Die statusupdate gaat pas ná de commit de deur uit:
+  `NotificatieService` vuurt een `StatusUpdateOpdracht` af die
+  `StatusUpdateVerzender` bij `AFTER_SUCCESS` oppakt. Zou de update vóór de
+  commit verstuurd worden, dan kan de Dienstverlener een status krijgen die de
+  NMC vervolgens terugrolt (de commit kan alsnog falen op een
+  `OptimisticLockException` door een gelijktijdige tweede receipt, of op een
+  JTA-timeout). Retourneert `204` op succes, `401` bij een
   ontbrekend of ongeldig bearer token, en `404` als de NotifyNL-referentie
-  onbekend is. Een niet-definitieve status die binnenkomt nadat er al een
-  definitieve status is vastgelegd (`StatusWaarde#isDefinitief`, bijv. een laat
-  aangekomen of herhaalde `sending` na `delivered`) wordt geweigerd: hij wordt
-  gelogd (WARN) maar niet geregistreerd, en er gaat geen statusupdate over naar
-  de Dienstverlener. De eerder vastgelegde eindstatus blijft zo staan en de
-  bewaartermijn (zie hieronder) begint niet opnieuw te lopen. Het endpoint
-  antwoordt in dat geval alsnog `204`, zodat NotifyNL de callback niet blijft
-  herhalen. Dit endpoint heeft een eigen, losse OpenAPI-specificatie (zie
+  onbekend is. Een status die geen vooruitgang is op de al vastgelegde status
+  (`StatusWaarde#volgtOp`) wordt geweigerd: hij wordt gelogd (WARN) maar niet
+  geregistreerd, en er gaat geen statusupdate over naar de Dienstverlener.
+  NotifyNL biedt een callback opnieuw aan bij elke niet-2xx, dus receipts komen
+  at-least-once en niet gegarandeerd op volgorde binnen; geweigerd worden dus
+  zowel een herhaling van dezelfde receipt, als een teruggang naar een
+  niet-definitieve status (`sending` na `delivered`), als een laat aangekomen
+  faalstatus ná `delivered` — bezorgd is de uitkomst en geen enkele later
+  binnenkomende status draait die terug. De eerder vastgelegde uitkomst blijft
+  zo staan en de bewaartermijn (zie hieronder) begint niet opnieuw te lopen. Het
+  endpoint antwoordt in dat geval alsnog `204`, zodat NotifyNL de callback niet
+  blijft herhalen. Dit endpoint heeft een eigen, losse OpenAPI-specificatie (zie
   hieronder), zodat het makkelijk te verwijderen is zodra de NMC publiek
   bereikbaar is en NotifyNL een echte callback-URL kan benaderen.
 

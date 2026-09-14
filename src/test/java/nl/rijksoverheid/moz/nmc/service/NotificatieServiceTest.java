@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.service;
 
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
+import jakarta.enterprise.event.Event;
+import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLConfiguratieException;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendException;
@@ -12,6 +13,7 @@ import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 import java.lang.reflect.Field;
@@ -38,7 +40,8 @@ class NotificatieServiceTest {
     private ProfielServiceAdapter profielServiceAdapter;
     private NotifyNLVerzendAdapter verzendAdapter;
     private NotificatieRepository notificatieRepository;
-    private ConsumentCallbackAdapter consumentCallbackAdapter;
+    @SuppressWarnings("unchecked")
+    private Event<StatusUpdateOpdracht> statusUpdateEvent;
     private NotificatieService service;
 
     @BeforeEach
@@ -46,8 +49,8 @@ class NotificatieServiceTest {
         profielServiceAdapter = mock(ProfielServiceAdapter.class);
         verzendAdapter = mock(NotifyNLVerzendAdapter.class);
         notificatieRepository = mock(NotificatieRepository.class);
-        consumentCallbackAdapter = mock(ConsumentCallbackAdapter.class);
-        service = new NotificatieService(profielServiceAdapter, verzendAdapter, notificatieRepository, consumentCallbackAdapter);
+        statusUpdateEvent = mock(Event.class);
+        service = new NotificatieService(profielServiceAdapter, verzendAdapter, notificatieRepository, statusUpdateEvent);
     }
 
     @Test
@@ -107,7 +110,7 @@ class NotificatieServiceTest {
         assertThrows(NotificatieNietGevondenException.class,
                 () -> service.verwerkAfleverstatus(UUID.randomUUID(), "delivered"));
 
-        verifyNoInteractions(consumentCallbackAdapter);
+        verifyNoInteractions(statusUpdateEvent);
     }
 
     @Test
@@ -130,9 +133,9 @@ class NotificatieServiceTest {
         assertEquals(StatusWaarde.ONBEKEND, notificatie.getStatus());
     }
 
-    // Een niet-definitieve status ná een definitieve is geen nieuwe uitkomst maar een dubbele of laat
-    // aangekomen callback; die wordt geweigerd zodat de vastgelegde eindstatus blijft staan (en de
-    // bewaartermijn niet opnieuw begint te lopen). Zie NotificatieService#verwerkAfleverstatus.
+    // Een status die geen vooruitgang is op de vastgelegde status is geen nieuwe uitkomst maar een
+    // dubbele of laat aangekomen callback; die wordt geweigerd zodat de vastgelegde eindstatus blijft
+    // staan (en de bewaartermijn niet opnieuw begint te lopen). Zie StatusWaarde#volgtOp.
     @Test
     void verwerkAfleverstatus_vanDefinitieveNaarNietDefinitieveStatus_negeertDeNieuweStatus() {
         Notificatie notificatie = notificatie(null);
@@ -149,6 +152,37 @@ class NotificatieServiceTest {
         assertEquals(aantalStatussenNaDelivered, notificatie.getStatusGeschiedenis().size());
     }
 
+    // Regressietest. Een late faalstatus ná DELIVERED zijn twee definitieve statussen, en werd door
+    // de oude isDefinitief-controle dus doorgelaten: de bezorgde notificatie kwam daarmee alsnog als
+    // mislukt in de geschiedenis, ging zo naar de Dienstverlener, en de retentieklok begon opnieuw.
+    @Test
+    void verwerkAfleverstatus_lateFaalstatusNaDelivered_negeertDeNieuweStatus() {
+        Notificatie notificatie = notificatie(null);
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
+        int aantalStatussenNaDelivered = notificatie.getStatusGeschiedenis().size();
+
+        service.verwerkAfleverstatus(UUID.randomUUID(), "temporary-failure");
+
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
+        assertEquals(aantalStatussenNaDelivered, notificatie.getStatusGeschiedenis().size());
+    }
+
+    // NotifyNL herhaalt een callback bij elke niet-2xx, dus precies dezelfde receipt komt in de
+    // praktijk meerdere keren binnen. Die hoort geen tweede record op te leveren: dat zou het laatste
+    // tijdstip verzetten en de retentieklok resetten zonder dat er iets veranderd is.
+    @Test
+    void verwerkAfleverstatus_zelfdeStatusTweeKeer_negeertDeHerhaling() {
+        Notificatie notificatie = notificatie(null);
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
+        int aantalStatussenNaDelivered = notificatie.getStatusGeschiedenis().size();
+
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
+
+        assertEquals(aantalStatussenNaDelivered, notificatie.getStatusGeschiedenis().size());
+    }
+
     // De statusupdate naar de Dienstverlener hoort bij een geweigerde status óók achterwege te
     // blijven: er is niets nieuws te melden, en een CloudEvent met SENDING zou de Dienstverlener een
     // teruggedraaide bezorgstatus voorspiegelen.
@@ -160,13 +194,32 @@ class NotificatieServiceTest {
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "sending");
 
-        verify(consumentCallbackAdapter, times(1)).stuurStatusUpdate(any(), any());
-        verify(consumentCallbackAdapter, never()).stuurStatusUpdate(any(), eq(StatusWaarde.SENDING));
+        ArgumentCaptor<StatusUpdateOpdracht> captor = ArgumentCaptor.forClass(StatusUpdateOpdracht.class);
+        verify(statusUpdateEvent, times(1)).fire(captor.capture());
+        assertEquals(StatusWaarde.DELIVERED, captor.getValue().status());
+    }
+
+    // De statusupdate gaat als event de deur uit en wordt pas ná de commit verstuurd
+    // (StatusUpdateVerzender, AFTER_SUCCESS). Verstuurde de service hem hier zelf, dan zou een
+    // mislukte commit — een OptimisticLockException door een gelijktijdige tweede receipt, of een
+    // JTA-timeout — de Dienstverlener achterlaten met een status die de NMC heeft teruggerold.
+    @Test
+    void verwerkAfleverstatus_nieuweStatus_vuurtStatusUpdateOpdrachtAf() {
+        Notificatie notificatie = notificatie("https://omc.example.nl/callback");
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
+
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
+
+        ArgumentCaptor<StatusUpdateOpdracht> captor = ArgumentCaptor.forClass(StatusUpdateOpdracht.class);
+        verify(statusUpdateEvent).fire(captor.capture());
+        assertEquals(StatusWaarde.DELIVERED, captor.getValue().status());
+        assertEquals("https://omc.example.nl/callback", captor.getValue().callbackUrl());
+        assertEquals(notificatie.getId(), captor.getValue().notificatieId());
     }
 
     // Verwijderen is losgekoppeld van het afleveren van de callback (zie NotificatieRetentieScheduler).
-    // stuurStatusUpdate() geeft niets terug, dus er valt hier niets te variëren op de uitkomst van de
-    // callback: de notificatie blijft hoe dan ook staan.
+    // De service verstuurt de callback niet eens zelf meer, dus er valt hier niets te variëren op de
+    // uitkomst ervan: de notificatie blijft hoe dan ook staan.
     @Test
     void verwerkAfleverstatus_verwijdertNotificatieNiet() {
         Notificatie notificatie = notificatie("https://omc.example.nl/callback");
@@ -174,7 +227,7 @@ class NotificatieServiceTest {
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "delivered");
 
-        verify(consumentCallbackAdapter).stuurStatusUpdate(notificatie, StatusWaarde.DELIVERED);
+        verify(statusUpdateEvent).fire(any());
         verify(notificatieRepository, never()).deleteById(any());
     }
 
