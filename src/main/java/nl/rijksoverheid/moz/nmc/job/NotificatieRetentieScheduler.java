@@ -66,7 +66,7 @@ public class NotificatieRetentieScheduler {
     // Haalt meteen de velden op die de melding nodig heeft, zodat melden en verwijderen over exact
     // dezelfde rijen gaan.
     private static final String CLAIM_BATCH_SQL = """
-            SELECT id, external_reference, laatste_status, laatste_status_update
+            SELECT id
               FROM notificatie
              WHERE laatste_status_update <= ?1
              ORDER BY laatste_status_update
@@ -76,7 +76,7 @@ public class NotificatieRetentieScheduler {
 
     // Variant die eerder mislukte rijen overslaat; zie de lus in verwijderVerlopenNotificaties.
     private static final String CLAIM_BATCH_MET_UITSLUITING_SQL = """
-            SELECT id, external_reference, laatste_status, laatste_status_update
+            SELECT id
               FROM notificatie
              WHERE laatste_status_update <= ?1
                AND id NOT IN (?3)
@@ -213,14 +213,14 @@ public class NotificatieRetentieScheduler {
     // CASCADE op de foreignkey (V2) blijft het vangnet voor verwijderingen buiten Hibernate om.
     private BatchResultaat verwijderBatch(OffsetDateTime grens, int meldbudget, List<UUID> uitgesloten,
             List<UUID> geclaimd) {
-        List<Kandidaat> kandidaten = claimBatch(grens, uitgesloten);
-        kandidaten.forEach(kandidaat -> geclaimd.add(kandidaat.id()));
+        List<UUID> ids = claimBatch(grens, uitgesloten);
+        geclaimd.addAll(ids);
 
-        if (kandidaten.isEmpty()) {
+        if (ids.isEmpty()) {
             return new BatchResultaat(0, 0, 0, 0);
         }
 
-        List<Kandidaat> zonderEindstatus = kandidaten.stream()
+        List<Kandidaat> zonderEindstatus = zoekKandidaten(ids).stream()
                 .filter(kandidaat -> !kandidaat.status().isDefinitief())
                 .toList();
         int gemeld = Math.min(zonderEindstatus.size(), meldbudget);
@@ -228,42 +228,50 @@ public class NotificatieRetentieScheduler {
 
         int verwijderd = notificatieRepository.getEntityManager()
                 .createQuery("DELETE FROM Notificatie n WHERE n.id IN :ids")
-                .setParameter("ids", kandidaten.stream().map(Kandidaat::id).toList())
+                .setParameter("ids", ids)
                 .executeUpdate();
 
-        return new BatchResultaat(kandidaten.size(), verwijderd, zonderEindstatus.size(), gemeld);
+        return new BatchResultaat(ids.size(), verwijderd, zonderEindstatus.size(), gemeld);
     }
 
-    // addScalar en niet blind casten: een native query levert de kolommen per dialect anders op
-    // (PostgreSQL een UUID, H2 een byte[]), addScalar laat Hibernate de conversie doen. Geen
-    // JPQL-constructorexpressie, want die bestaat niet voor native queries — en native is nodig voor
-    // de lock-clausule.
-    //
-    // De volgorde van de addScalar-aanroepen, van de SELECT-kolommen en van de Kandidaat-componenten
-    // moet gelijk blijven; de compiler bewaakt dat niet. Wat het wél bewaakt is
-    // verwijderVerlopenNotificaties_meldtAlleenDeNotificatiesZonderEindstatus: die test asserteert
-    // alle vier de velden afzonderlijk in de logregel, dus een herordening laat hem vallen.
+    // Alleen het id komt uit de native query. Native is nodig voor de lock-clausule, en native
+    // betekent positionele casts die de compiler niet bewaakt — hoe minder kolommen daar doorheen
+    // gaan, hoe kleiner dat oppervlak. addScalar blijft wél nodig: een uuid-kolom komt per dialect
+    // anders terug (PostgreSQL een UUID, H2 een byte[]).
     @SuppressWarnings("unchecked")
-    private List<Kandidaat> claimBatch(OffsetDateTime grens, List<UUID> uitgesloten) {
-        NativeQuery<Object[]> query = notificatieRepository.getEntityManager()
+    private List<UUID> claimBatch(OffsetDateTime grens, List<UUID> uitgesloten) {
+        NativeQuery<UUID> query = notificatieRepository.getEntityManager()
                 .createNativeQuery(uitgesloten.isEmpty() ? CLAIM_BATCH_SQL : CLAIM_BATCH_MET_UITSLUITING_SQL)
                 .unwrap(NativeQuery.class)
                 .addScalar("id", UUID.class)
-                .addScalar("external_reference", UUID.class)
-                .addScalar("laatste_status", String.class)
-                .addScalar("laatste_status_update", OffsetDateTime.class)
                 .setParameter(1, grens)
                 .setParameter(2, BATCH_GROOTTE);
 
         if (!uitgesloten.isEmpty()) {
             query.setParameter(3, uitgesloten);
         }
-        List<Object[]> rijen = query.getResultList();
 
-        return rijen.stream()
-                .map(rij -> new Kandidaat((UUID) rij[0], (UUID) rij[1],
-                        StatusWaarde.valueOf((String) rij[2]), (OffsetDateTime) rij[3]))
-                .toList();
+        return query.getResultList();
+    }
+
+    // De gegevens voor de melding via een JPQL-constructorexpressie in plaats van uit de native
+    // query. Hibernate valideert die expressie bij het opstarten: een verkeerde ariteit of een type
+    // dat niet op de recordcomponent past is dan een opstartfout, in plaats van een
+    // ClassCastException in een nachtelijke job. Dat is sterker dan een test, want het is niet uit
+    // te zetten.
+    //
+    // Kost een extra query per niet-lege batch: een IN op de primary key van rijen die net gelockt
+    // zijn en dus in de buffer cache staan. Bij de batchaantallen hier valt dat weg.
+    //
+    // ORDER BY omdat IN geen volgorde garandeert, terwijl de afgekapte melding de oudste rijen hoort
+    // te tonen en niet een willekeurige greep.
+    private List<Kandidaat> zoekKandidaten(List<UUID> ids) {
+        return notificatieRepository.getEntityManager()
+                .createQuery("SELECT new nl.rijksoverheid.moz.nmc.job.Kandidaat(n.id, n.externalReference, "
+                        + "n.laatsteStatus.status, n.laatsteStatus.geregistreerd) FROM Notificatie n "
+                        + "WHERE n.id IN :ids ORDER BY n.laatsteStatus.geregistreerd", Kandidaat.class)
+                .setParameter("ids", ids)
+                .getResultList();
     }
 
     record BatchResultaat(int geclaimd, int verwijderd, int zonderEindstatus, int gemeld) {
@@ -286,9 +294,6 @@ public class NotificatieRetentieScheduler {
                 + "notifyNlReferentie=%s status=%s laatsteStatusUpdate=%s", kandidaat.id(),
                 kandidaat.externalReference() != null ? kandidaat.externalReference() : "geen",
                 kandidaat.status(), kandidaat.laatsteStatusUpdate());
-    }
-
-    record Kandidaat(UUID id, UUID externalReference, StatusWaarde status, OffsetDateTime laatsteStatusUpdate) {
     }
 
     // Vuurt voor élke @Scheduled-methode in de applicatie, dus de filtering op trigger-id is nodig:
