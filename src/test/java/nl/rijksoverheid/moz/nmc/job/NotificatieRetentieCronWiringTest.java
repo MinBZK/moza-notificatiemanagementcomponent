@@ -4,8 +4,10 @@ import io.quarkus.scheduler.Scheduler;
 import io.quarkus.scheduler.Trigger;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
@@ -25,6 +27,19 @@ class NotificatieRetentieCronWiringTest {
 
     @Inject
     Scheduler scheduler;
+
+    @ConfigProperty(name = "notificatie.retentie.bewaartermijn")
+    Duration bewaartermijn;
+
+    // Pint de waarde zelf vast, niet alleen dat hij er is. De overige schedulertests gebruiken marges
+    // van 31 dagen tegen 1 dag en slagen daarom bij vrijwel elke termijn; een typefout als 7h of 70d
+    // zou dus groen door de suite komen, terwijl dit de waarde is die bepaalt wanneer een notificatie
+    // onherroepelijk verdwijnt. Dat de property het gedrag daadwerkelijk stuurt staat in
+    // BewaartermijnConfiguratieTest, die op een afwijkende termijn draait.
+    @Test
+    void bewaartermijn_staatOpDeAfgesprokenZevenDagen() {
+        assertEquals(Duration.ofDays(7), bewaartermijn);
+    }
 
     // Toetst niet alleen dát er een volgende vuring gepland staat, maar ook wélke: alleen "niet null"
     // zou elke syntactisch geldige cron accepteren, dus ook een typefout als "0 3 * * * ?" (elk uur op
