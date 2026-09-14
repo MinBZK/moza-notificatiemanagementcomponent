@@ -99,6 +99,15 @@ through only a bare identifier and let NMC lead.
   history (`statusGeschiedenis`, a `NotificatieStatus` per transition), not
   just a current status, so an audit trail per notification can be
   exposed later without a redesign.
+- **Event time and registration time are separate columns.**
+  `NotificatieStatus#tijdstip` is when the status arose, on the *source's*
+  clock — for a delivery receipt, NotifyNL's `completed_at` (falling back to
+  `sent_at`, then `created_at`; none is required in their schema, so the NMC
+  falls back to its own clock). `NotificatieStatus#geregistreerd` is when the
+  NMC recorded it, on its own clock. They diverge because NotifyNL retries a
+  failed callback 5x at 5-minute intervals. Order and retention run on
+  `geregistreerd` (monotonic); `tijdstip` is the one for the afleverbewijs and
+  is never selected or sorted on.
 - **`StatusWaarde`** models exactly what NotifyNL's *email* delivery-receipt
   callback actually sends today — `delivered`, `permanent-failure`,
   `temporary-failure`, `technical-failure` (see `notifynl_api.yaml`'s email
@@ -178,9 +187,14 @@ through only a bare identifier and let NMC lead.
   real `@RestClient`-backed adapters (mocked only in tests)
 - Every status transition is appended to an ordered `statusGeschiedenis` (see
   "Observability koppelvlak" above), which is the source of truth.
-  `laatste_status`/`laatste_status_update` on `notificatie` are a projection of
-  its last record, maintained by `registreerStatus`, so the retention job can
-  select on one indexed column. A `NotificatieRetentieScheduler`
+  `laatste_status`/`laatste_status_tijdstip`/`laatste_status_update` on
+  `notificatie` are a projection of its last record, maintained by
+  `registreerStatus`, so the retention job can select on one indexed column
+  (`laatste_status_update`, the registration time). `registreerStatus`
+  deliberately has *no* timestamp guard of its own — `StatusWaarde#volgtOp` in
+  `NotificatieService` is the single authority on which transitions are
+  allowed. A second, time-based guard would let the history hold a status that
+  `laatste_status` contradicts. A `NotificatieRetentieScheduler`
   deletes a `Notificatie` (and its history) once that history is older than
   `notificatie.retentie.bewaartermijn`, independent of whether the consumer
   callback succeeded — see `README.md` for the full behavior

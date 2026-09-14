@@ -14,6 +14,8 @@ import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.UUID;
 
@@ -74,8 +76,14 @@ public class NotificatieService {
         return notificatie;
     }
 
+    /**
+     * @param opgetreden wanneer de status bij NotifyNL ontstond (hun completed_at/sent_at/created_at).
+     *        Mag null zijn: geen van die velden is verplicht in NotifyNL's eigen callbackschema
+     *        (EmailCallbackRequest in notifynl_api.yaml kent geen required), en dan valt de NMC terug
+     *        op de eigen klok.
+     */
     @Transactional
-    public void verwerkAfleverstatus(UUID notifyNlNotificatieId, String status) {
+    public void verwerkAfleverstatus(UUID notifyNlNotificatieId, String status, OffsetDateTime opgetreden) {
         Notificatie notificatie = notificatieRepository
                 .findByExternalReference(notifyNlNotificatieId)
                 .orElseThrow(() -> new NotificatieNietGevondenException(
@@ -98,7 +106,12 @@ public class NotificatieService {
 
             return;
         }
-        notificatie.registreerStatus(nieuweStatus);
+        // De gebeurtenistijd van NotifyNL, niet het moment van verwerken: NotifyNL herhaalt een
+        // callback tot 5x met 5 minuten ertussen, dus die twee lopen bij een herhaling tientallen
+        // minuten uiteen. Alleen deze kolom komt van een externe klok; de bewaartermijn vaart op
+        // Notificatie#laatsteStatusUpdate, dat de eigen klok houdt.
+        notificatie.registreerStatus(nieuweStatus,
+                opgetreden != null ? opgetreden : OffsetDateTime.now(ZoneOffset.UTC));
 
         // Afvuren, niet zelf versturen: StatusUpdateVerzender pakt dit pas op ná de commit van deze
         // transactie. Zou de statusupdate hier direct verstuurd worden, dan kan de Dienstverlener een

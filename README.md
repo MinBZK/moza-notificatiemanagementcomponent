@@ -170,14 +170,32 @@ De externe systemen die de NMC aanroept of van ontvangt:
 De `Notificatie`-entiteit bevat een NMC-interne `id` (UUID), de
 `externalReference` (het notificatie-id van NotifyNL, voor correlatie met
 delivery receipts) en de optionele `callbackUrl`. Elke statusovergang wordt
-vastgelegd in een geordende geschiedenis van `NotificatieStatus`-waarden
-(status + tijdstip) — dit is ook de basis voor een toekomstig
-observability-koppelvlak. Het aanmaaktijdstip is afgeleid van het eerste record
-in die geschiedenis (`getAangemaakt()`). De huidige status en het tijdstip van
-de laatste statuswijziging staan als projectie van het laatste record op
-`Notificatie` zelf (`laatste_status` / `laatste_status_update`), bijgewerkt door
-`registreerStatus`, zodat de retentiejob op een geindexeerde kolom kan
-selecteren in plaats van per notificatie een MAX over de geschiedenis.
+vastgelegd in een geordende geschiedenis van `NotificatieStatus`-waarden — dit
+is ook de basis voor een toekomstig observability-koppelvlak.
+
+Elk record houdt **twee** tijdstippen uit elkaar:
+
+- `tijdstip` — wanneer de status ontstond, op de klok van de bron. Voor een
+  delivery receipt is dat NotifyNL's `completed_at`, met `sent_at` en
+  `created_at` als terugval. Dit is het tijdstip voor het afleverbewijs.
+- `geregistreerd` — wanneer de NMC de status vastlegde, op de eigen klok.
+
+Die twee lopen uiteen omdat NotifyNL een mislukte callback tot 5x met 5 minuten
+ertussen herhaalt. De geschiedenis wordt geordend op `geregistreerd`: die klok
+is monotoon, dus `getAangemaakt()` (het eerste record) blijft betrouwbaar ook
+als een receipt met een scheve of oude `completed_at` binnenkomt.
+
+De huidige status staat als projectie van het laatste record op `Notificatie`
+zelf, bijgewerkt door `registreerStatus`: `laatste_status`,
+`laatste_status_tijdstip` (de gebeurtenistijd) en `laatste_status_update` (de
+registratietijd). De retentiejob selecteert op `laatste_status_update` — een
+geïndexeerde kolom op de eigen klok, zodat een receipt met een oude
+`completed_at` een notificatie niet meteen opruimbaar maakt.
+
+Welke overgangen zijn toegestaan wordt uitsluitend bepaald door
+`StatusWaarde#volgtOp` in `NotificatieService`, niet door een tweede
+tijdcontrole in `Notificatie`: een externe klok kan scheef zijn en is daarmee
+ongeschikt om over correctheid te beslissen.
 De entiteit heeft optimistic locking (`@Version`): twee gelijktijdig verwerkte
 delivery receipts voor dezelfde notificatie zouden elkaars statusregel anders
 geruisloos overschrijven. De tweede transactie faalt nu zichtbaar, waarna
