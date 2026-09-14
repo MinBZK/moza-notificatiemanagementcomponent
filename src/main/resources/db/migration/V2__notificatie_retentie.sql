@@ -12,11 +12,28 @@ ALTER TABLE notificatie ADD COLUMN versie bigint NOT NULL DEFAULT 0;
 
 -- Geschiedenis van statusovergangen per notificatie (Notificatie#registreerStatus legt hier
 -- telkens een rij in vast). Een @ElementCollection-tabel: geen eigen id, de rij heeft geen
--- identiteit los van zijn Notificatie. Geordend op tijdstip (zie @OrderBy op Notificatie). Bewust
--- geen PK op (notificatie_id, tijdstip): niets garandeert dat tijdstip uniek is per notificatie
--- (timestamp(6) heeft een eindige resolutie), dus een unieke constraint hierop zou een insert hard
--- laten falen op een randgeval dat verder nergens iets breekt. De index dekt het enige
--- toegangspatroon op deze tabel: de statusgeschiedenis van één notificatie op tijdstip inlezen.
+-- identiteit los van zijn Notificatie.
+--
+-- Twee tijdstippen, bewust uit elkaar gehouden:
+--   tijdstip      wanneer de status ontstond, op de klok van de bron. Voor een delivery receipt is
+--                 dat NotifyNL's completed_at ("the last time the status was updated"), met sent_at
+--                 en created_at als terugval — zie EmailCallbackRequest in
+--                 src/main/resources/openapi/notifynl_api.yaml. Dit is het tijdstip voor het
+--                 afleverbewijs. Er wordt nergens op geselecteerd of gesorteerd: het is een externe
+--                 klok en die kan scheef of oud zijn.
+--   geregistreerd wanneer de NMC de status vastlegde, op de eigen klok. Monotoon.
+-- Die twee lopen uiteen omdat NotifyNL een mislukte callback tot 5x met 5 minuten ertussen herhaalt.
+--
+-- Bewust geen PK op (notificatie_id, tijdstip) of (notificatie_id, geregistreerd): niets garandeert
+-- dat een tijdstip uniek is per notificatie (timestamp(6) heeft een eindige resolutie), dus een
+-- unieke constraint hierop zou een insert hard laten falen op een randgeval dat verder nergens iets
+-- breekt. De index dekt het enige toegangspatroon op deze tabel: de statusgeschiedenis van één
+-- notificatie op volgorde inlezen. Die volgorde is geregistreerd, niet tijdstip (zie @OrderBy op
+-- Notificatie#statusGeschiedenis): op de eigen klok staat de geschiedenis altijd in de volgorde
+-- waarin de NMC de statussen vastlegde, en blijft het eerste record de CREATED uit de constructor
+-- waar Notificatie#getAangemaakt op leunt. Ordenen op tijdstip zou een receipt met een oude
+-- completed_at vóór die aanmaakstatus laten sorteren.
+--
 -- ON DELETE CASCADE is verdediging in de diepte: Hibernate ruimt deze rijen bij een bulk-delete
 -- (zoals de retentiejob) al zelf op; de FK dekt verwijdering buiten Hibernate om.
 CREATE TABLE notificatie_status (
@@ -24,32 +41,44 @@ CREATE TABLE notificatie_status (
     status varchar(32) NOT NULL CHECK (status IN (
         'SENDING', 'DELIVERED', 'PERMANENT_FAILURE', 'TEMPORARY_FAILURE', 'TECHNICAL_FAILURE', 'CREATED', 'ONBEKEND'
     )),
-    tijdstip timestamp(6) with time zone NOT NULL
+    tijdstip timestamp(6) with time zone NOT NULL,
+    geregistreerd timestamp(6) with time zone NOT NULL
 );
-CREATE INDEX idx_notificatie_status_notificatie_id_tijdstip ON notificatie_status (notificatie_id, tijdstip);
+CREATE INDEX idx_notificatie_status_notificatie_id_geregistreerd
+    ON notificatie_status (notificatie_id, geregistreerd);
 
 -- Backfill vóór de DROP COLUMNs hieronder: dit component draait weliswaar nog niet live in het
 -- release-cluster, maar ZAD-PR-previewclusters, %dev en lokale Podman-instanties hebben persistente
 -- volumes waar wél al rijen kunnen staan. Elke bestaande notificatie krijgt zo alsnog exact één
 -- geschiedenisrecord (zijn huidige status op zijn aanmaaktijdstip) i.p.v. stilzwijgend zonder
 -- geschiedenis te blijven zitten, zie Notificatie#eersteStatus voor wat dat anders oplevert.
+-- Gebeurtenis- en registratietijd krijgen dezelfde waarde: die rijen zijn met de klok van de NMC
+-- geschreven, er was geen andere bron.
 -- Kanttekening: aangemaakt is het enige tijdstip dat V1 vastlegde, dus voor bestaande rijen loopt de
 -- bewaartermijn vanaf de aanmaak en niet vanaf hun laatste statuswijziging. Een rij van 45 dagen oud
 -- die gisteren nog DELIVERED werd, is daarmee direct opruimbaar. Aanvaardbaar omdat het alleen om
 -- wegwerpomgevingen gaat (zie hierboven); in het release-cluster staat nog niets.
-INSERT INTO notificatie_status (notificatie_id, status, tijdstip)
-SELECT id, status, aangemaakt FROM notificatie;
+INSERT INTO notificatie_status (notificatie_id, status, tijdstip, geregistreerd)
+SELECT id, status, aangemaakt, aangemaakt FROM notificatie;
 
--- Projectie van het laatste geschiedenisrecord (Notificatie#laatsteStatus / #laatsteStatusUpdate).
--- De retentiejob selecteert hierop: één geïndexeerde bereikscan over notificatie, i.p.v. een scan
--- over notificatie_status met per notificatie een MAX-subquery. Eerst nullable toegevoegd zodat
--- bestaande rijen gevuld kunnen worden, daarna pas NOT NULL.
+-- Projectie van het laatste geschiedenisrecord, bijgewerkt door Notificatie#registreerStatus:
+--   laatste_status          de status zelf
+--   laatste_status_tijdstip zijn gebeurtenistijd, voor het afleverbewijs
+--   laatste_status_update   zijn registratietijd, waar de retentiejob op selecteert
+-- De retentiejob vaart bewust op de registratietijd: één geïndexeerde bereikscan over notificatie
+-- i.p.v. een scan over notificatie_status met per notificatie een MAX-subquery, én op de eigen klok.
+-- Zou hij op de gebeurtenistijd varen, dan maakt een receipt met een scheve of oude completed_at een
+-- notificatie meteen opruimbaar terwijl er zojuist nog iets over binnenkwam.
+-- Eerst nullable toegevoegd zodat bestaande rijen gevuld kunnen worden, daarna pas NOT NULL.
 ALTER TABLE notificatie ADD COLUMN laatste_status varchar(32);
+ALTER TABLE notificatie ADD COLUMN laatste_status_tijdstip timestamp(6) with time zone;
 ALTER TABLE notificatie ADD COLUMN laatste_status_update timestamp(6) with time zone;
 
-UPDATE notificatie SET laatste_status = status, laatste_status_update = aangemaakt;
+UPDATE notificatie SET laatste_status = status, laatste_status_tijdstip = aangemaakt,
+    laatste_status_update = aangemaakt;
 
 ALTER TABLE notificatie ALTER COLUMN laatste_status SET NOT NULL;
+ALTER TABLE notificatie ALTER COLUMN laatste_status_tijdstip SET NOT NULL;
 ALTER TABLE notificatie ALTER COLUMN laatste_status_update SET NOT NULL;
 ALTER TABLE notificatie ADD CONSTRAINT chk_notificatie_laatste_status CHECK (laatste_status IN (
     'SENDING', 'DELIVERED', 'PERMANENT_FAILURE', 'TEMPORARY_FAILURE', 'TECHNICAL_FAILURE', 'CREATED', 'ONBEKEND'
