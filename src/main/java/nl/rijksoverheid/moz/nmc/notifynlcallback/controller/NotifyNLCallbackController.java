@@ -23,6 +23,10 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
     // voor zo'n botsing en klein genoeg om geen verkapte wachtrij te worden.
     private static final int MAX_POGINGEN = 3;
 
+    // Ruim boven elke realistische inpakdiepte (transactiemanager, interceptor, JPA-provider) en
+    // klein genoeg om een kringvormige oorzakenketen te begrenzen.
+    private static final int MAX_OORZAAKDIEPTE = 20;
+
     private final NotificatieService notificatieService;
 
     public NotifyNLCallbackController(NotificatieService notificatieService) {
@@ -35,7 +39,7 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
             verwerkMetHerpogingBijBotsing(afleverstatusRequest);
         } catch (NotificatieNietGevondenException e) {
             // Kan een late/vertraagde callback zijn voor een notificatie die de retentiejob
-            // inmiddels al heeft opgeruimd (laatsteStatusUpdate ouder dan de bewaartermijn, ook als
+            // inmiddels al heeft opgeruimd (registratietijd ouder dan de bewaartermijn, ook als
             // er nog geen NotifyNL-uitkomst was) — zonder deze log is dat niet te onderscheiden van
             // een onbekende/foutieve referentie.
             Log.warnf("NotifyNL-callback voor onbekende of reeds verwijderde notificatie (notifyNlNotificatieId=%s)",
@@ -62,7 +66,21 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
 
                 return;
             } catch (RuntimeException e) {
-                if (poging == MAX_POGINGEN || !isGelijktijdigeSchrijfactie(e)) {
+                // Beide takken leveren een 5xx op en kosten daarmee een van de vijf herpogingen die
+                // NotifyNL doet; na de vijfde is de afleverstatus daar weg. Dat is het enige moment
+                // in dit pad met blijvend verlies, dus het hoort niet ongelogd te gebeuren — en de
+                // twee oorzaken vragen om verschillend onderzoek.
+                if (!isGelijktijdigeSchrijfactie(e)) {
+                    Log.errorf(e, "Verwerken van de delivery receipt voor NotifyNL-referentie %s mislukt "
+                            + "op een fout die herhalen niet oplost", afleverstatusRequest.getId());
+
+                    throw e;
+                }
+                if (poging == MAX_POGINGEN) {
+                    Log.errorf(e, "Verwerken van de delivery receipt voor NotifyNL-referentie %s opgegeven "
+                            + "na %d botsingen met een gelijktijdige verwerking",
+                            afleverstatusRequest.getId(), MAX_POGINGEN);
+
                     throw e;
                 }
                 Log.infof("Gelijktijdige statuswijziging voor NotifyNL-referentie %s (poging %d/%d) — opnieuw proberen",
@@ -80,13 +98,16 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
     // een ConstraintViolationException zou ook een CHECK op status kunnen zijn, en die drie keer
     // herhalen levert alleen vertraging op.
     private static boolean isGelijktijdigeSchrijfactie(Throwable e) {
-        for (Throwable oorzaak = e; oorzaak != null; oorzaak = oorzaak.getCause()) {
+        // Begrensde diepte in plaats van een controle op zelfverwijzing: getCause() levert nooit de
+        // exception zelf op (initCause weigert dat), dus die controle deed niets, terwijl een keten
+        // die via een omweg naar zichzelf terugwijst wél oneindig doorliep — op de request-thread van
+        // de NotifyNL-callback.
+        Throwable oorzaak = e;
+        for (int diepte = 0; oorzaak != null && diepte < MAX_OORZAAKDIEPTE; diepte++) {
             if (oorzaak instanceof OptimisticLockException || oorzaak instanceof StaleStateException) {
                 return true;
             }
-            if (oorzaak.getCause() == oorzaak) {
-                return false;
-            }
+            oorzaak = oorzaak.getCause();
         }
 
         return false;

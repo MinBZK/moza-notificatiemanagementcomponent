@@ -84,7 +84,7 @@ class NotificatieRetentieSchedulerTest {
     }
 
     // Alle andere tests werken met uitersten (31 dagen oud versus 1 dag oud) rond de standaard
-    // bewaartermijn van 30 dagen en zouden daarom net zo goed slagen met een hardgecodeerde grens.
+    // geconfigureerde bewaartermijn en zouden daarom net zo goed slagen met een hardgecodeerde grens.
     // Deze test draait een scheduler met een bewaartermijn van 2 dagen op een populatie waarvan
     // beide rijen ruim bínnen de standaardtermijn vallen: alleen als de geconfigureerde waarde de
     // grens écht bepaalt, verdwijnt de rij van 3 dagen oud en blijft die van 1 dag oud staan.
@@ -275,7 +275,7 @@ class NotificatieRetentieSchedulerTest {
 
     // Bewaakt dat de retentie op het láátste geschiedenisrecord vaart en niet op een willekeurig
     // record: een oude aanmaakstatus mag een notificatie niet laten verwijderen als er nadien een
-    // recentere status is bijgekomen. Zou laatsteStatusUpdate per ongeluk het eerste record volgen,
+    // recentere status is bijgekomen. Zou de projectie per ongeluk het eerste record volgen,
     // dan zou deze notificatie ten onrechte op zijn verlopen CREATED-datum verwijderd worden.
     @Test
     void verwijderVerlopenNotificaties_notificatieMetOudeCreatedMaarRecenteStatus_wordtNietVerwijderd() {
@@ -358,7 +358,7 @@ class NotificatieRetentieSchedulerTest {
     // status aan de Dienstverlener verzet de bewaartermijn níet), deze de positieve helft: een
     // binnenkomende NotifyNL-statusupdate registreert een nieuw statusgeschiedenisrecord en zet de
     // teller daarmee terug op nu. De notificatie start bewust ruim verlopen (31 dagen, bij de
-    // standaardtermijn van 30): zou de statusupdate de bewaartermijn niet verzetten, dan haalt de
+    // geconfigureerde termijn): zou de statusupdate de bewaartermijn niet verzetten, dan haalt de
     // retentiejob hem hier alsnog weg. SENDING naar DELIVERED is een realistische opeenvolging die
     // niet door de afwijzing van een niet-definitieve status ná een definitieve wordt tegengehouden
     // (zie NotificatieService#verwerkAfleverstatus).
@@ -503,7 +503,7 @@ class NotificatieRetentieSchedulerTest {
     private Object roepPrivateMethodeAan(String naam, Class<?>[] parameterTypes, Object... argumenten) {
         try {
             NotificatieRetentieScheduler kaleScheduler =
-                    new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(30));
+                    new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(7));
             Method methode = NotificatieRetentieScheduler.class.getDeclaredMethod(naam, parameterTypes);
             methode.setAccessible(true);
             return methode.invoke(kaleScheduler, argumenten);

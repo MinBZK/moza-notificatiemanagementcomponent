@@ -20,7 +20,7 @@ import java.util.Objects;
  *        twee kunnen tientallen minuten uiteenlopen. Dit is het tijdstip voor het afleverbewijs, en
  *        het staat op de klok van NotifyNL.
  * @param geregistreerd wanneer de NMC de status vastlegde, op de eigen klok. Monotoon, en daarom de
- *        basis voor de bewaartermijn (zie Notificatie#laatsteStatusUpdate).
+ *        basis voor de bewaartermijn (kolom laatste_status_update).
  */
 @Embeddable
 public record NotificatieStatus(

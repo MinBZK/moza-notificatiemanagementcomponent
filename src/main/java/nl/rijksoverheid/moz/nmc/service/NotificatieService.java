@@ -38,10 +38,11 @@ public class NotificatieService {
         this.statusUpdateEvent = statusUpdateEvent;
     }
 
-    // TODO #732 (zie https://github.com/MinBZK/MijnOverheidZakelijk/issues/732): zelfde probleem
-    // als in ConsumentCallbackAdapter — deze @Transactional methode houdt een DB-connectie open
-    // over de synchrone Profielservice- en NotifyNL-aanroepen heen. Onder belasting kan dit de
-    // connection pool uitputten — los van de callback-retries.
+    // TODO #732 (zie https://github.com/MinBZK/MijnOverheidZakelijk/issues/732): deze
+    // @Transactional methode houdt een DB-connectie open over de synchrone Profielservice- en
+    // NotifyNL-aanroepen heen. Onder belasting kan dat de connection pool uitputten. Voor de
+    // consument-callback is dit inmiddels opgelost (die draait na de commit, zie
+    // StatusUpdateVerzender); voor deze twee aanroepen niet.
     @Transactional
     public Notificatie versturen(NotificatieVersturenOpdracht opdracht) {
         String emailAdres = profielServiceAdapter.zoekEmailAdres(new PartijIdentificatie(
@@ -110,7 +111,7 @@ public class NotificatieService {
         // De gebeurtenistijd van NotifyNL, niet het moment van verwerken: NotifyNL herhaalt een
         // callback tot 5x met 5 minuten ertussen, dus die twee lopen bij een herhaling tientallen
         // minuten uiteen. Alleen deze kolom komt van een externe klok; de bewaartermijn vaart op
-        // Notificatie#laatsteStatusUpdate, dat de eigen klok houdt.
+        // de registratietijd (kolom laatste_status_update), die de eigen klok houdt.
         notificatie.registreerStatus(nieuweStatus,
                 opgetreden != null ? opgetreden : OffsetDateTime.now(ZoneOffset.UTC));
 
