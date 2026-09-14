@@ -8,11 +8,20 @@ import nl.rijksoverheid.moz.nmc.notifynlcallback.filter.NotifyNLCallbackBeveilig
 import nl.rijksoverheid.moz.nmc.service.NotificatieNietGevondenException;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 
+import jakarta.persistence.OptimisticLockException;
+import org.hibernate.StaleStateException;
+
 import java.time.OffsetDateTime;
 import java.util.stream.Stream;
 
 @NotifyNLCallbackBeveiligd
 public class NotifyNLCallbackController implements NotifyNlCallbackApi {
+
+    // Alleen bedoeld voor een botsing tussen twee gelijktijdige receipts voor dezelfde notificatie.
+    // Die is per definitie kort: de verliezer herleest en ziet dan de status van de winnaar staan,
+    // waarna StatusWaarde#volgtOp meestal beslist dat er niets meer te doen is. Drie is ruim genoeg
+    // voor zo'n botsing en klein genoeg om geen verkapte wachtrij te worden.
+    private static final int MAX_POGINGEN = 3;
 
     private final NotificatieService notificatieService;
 
@@ -23,8 +32,7 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
     @Override
     public void verwerkAfleverstatus(AfleverstatusRequest afleverstatusRequest) {
         try {
-            notificatieService.verwerkAfleverstatus(afleverstatusRequest.getId(), afleverstatusRequest.getStatus(),
-                    gebeurtenisTijdstip(afleverstatusRequest));
+            verwerkMetHerpogingBijBotsing(afleverstatusRequest);
         } catch (NotificatieNietGevondenException e) {
             // Kan een late/vertraagde callback zijn voor een notificatie die de retentiejob
             // inmiddels al heeft opgeruimd (laatsteStatusUpdate ouder dan de bewaartermijn, ook als
@@ -34,6 +42,54 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
                     afleverstatusRequest.getId());
             throw Problems.notFound("Notificatie niet gevonden", e.getMessage());
         }
+    }
+
+    // Twee receipts voor dezelfde notificatie die elkaar overlappen laten de verliezer stuklopen op
+    // de optimistic lock (Notificatie#versie). Zonder deze herpoging ontsnapt die exception en krijgt
+    // NotifyNL een 5xx. Dat werkt — NotifyNL biedt de callback dan opnieuw aan — maar het kost een
+    // van de 5 herpogingen die NotifyNL doet, met 5 minuten ertussen: vijf minuten vertraging op een
+    // statusupdate, en een verbruikt herpogingsbudget voor iets wat puur intern is. Na de vijfde
+    // mislukte poging is de receipt bij NotifyNL weg.
+    //
+    // De herpoging zit hier en niet in NotificatieService, omdat de optimistic lock pas afgaat bij de
+    // commit van die @Transactional-methode en dus buiten haar eigen try/catch valt. Elke poging is
+    // een verse transactie die de notificatie opnieuw inleest.
+    private void verwerkMetHerpogingBijBotsing(AfleverstatusRequest afleverstatusRequest) {
+        for (int poging = 1; ; poging++) {
+            try {
+                notificatieService.verwerkAfleverstatus(afleverstatusRequest.getId(), afleverstatusRequest.getStatus(),
+                        gebeurtenisTijdstip(afleverstatusRequest));
+
+                return;
+            } catch (RuntimeException e) {
+                if (poging == MAX_POGINGEN || !isGelijktijdigeSchrijfactie(e)) {
+                    throw e;
+                }
+                Log.infof("Gelijktijdige statuswijziging voor NotifyNL-referentie %s (poging %d/%d) — opnieuw proberen",
+                        afleverstatusRequest.getId(), poging, MAX_POGINGEN);
+            }
+        }
+    }
+
+    // De optimistic lock slaat toe tijdens flush of commit, en die zitten achter de
+    // @Transactional-interceptor en de JTA-transactiemanager: de oorspronkelijke exception komt hier
+    // ingepakt aan (RollbackException, ArcTransactionRuntimeException). Vandaar dat de oorzakenketen
+    // wordt afgelopen in plaats van op het exceptiontype van buiten te matchen.
+    //
+    // Bewust smal. Alleen deze twee betekenen "iemand anders was eerder, herlees en probeer opnieuw";
+    // een ConstraintViolationException zou ook een CHECK op status kunnen zijn, en die drie keer
+    // herhalen levert alleen vertraging op.
+    private static boolean isGelijktijdigeSchrijfactie(Throwable e) {
+        for (Throwable oorzaak = e; oorzaak != null; oorzaak = oorzaak.getCause()) {
+            if (oorzaak instanceof OptimisticLockException || oorzaak instanceof StaleStateException) {
+                return true;
+            }
+            if (oorzaak.getCause() == oorzaak) {
+                return false;
+            }
+        }
+
+        return false;
     }
 
     // Wanneer de gemelde status bij NotifyNL ontstond. completed_at is "the last time the status was

@@ -474,6 +474,9 @@ class NotificatieRetentieSchedulerTest {
     private void plantVerlopenNotificaties(int aantalRijen, OffsetDateTime tijdstip, String... statussen) {
         String idExpressie = "CAST(('00000000-0000-0000-0000-' || LPAD(CAST(X AS VARCHAR), 12, '0')) AS UUID)";
         String laatsteStatus = statussen[statussen.length - 1];
+        // volgnummer is de @OrderColumn van Notificatie#statusGeschiedenis en nul-gebaseerd; deze
+        // fixture schrijft rechtstreeks SQL en moet hem dus zelf meetellen.
+        int[] volgnummerHouder = {0};
         QuarkusTransaction.requiringNew().run(() -> {
             notificatieRepository.getEntityManager()
                     .createNativeQuery("INSERT INTO notificatie (id, laatste_status, laatste_status_tijdstip, "
@@ -484,10 +487,12 @@ class NotificatieRetentieSchedulerTest {
                     .executeUpdate();
             for (String status : statussen) {
                 notificatieRepository.getEntityManager()
-                        .createNativeQuery("INSERT INTO notificatie_status (notificatie_id, status, tijdstip, geregistreerd) "
-                                + "SELECT " + idExpressie + ", '" + status + "', ?1, ?1 FROM SYSTEM_RANGE(1, ?2)")
+                        .createNativeQuery("INSERT INTO notificatie_status (notificatie_id, volgnummer, status, tijdstip, "
+                                + "geregistreerd) SELECT " + idExpressie + ", ?3, '" + status + "', ?1, ?1 "
+                                + "FROM SYSTEM_RANGE(1, ?2)")
                         .setParameter(1, tijdstip)
                         .setParameter(2, aantalRijen)
+                        .setParameter(3, volgnummerHouder[0]++)
                         .executeUpdate();
             }
         });
