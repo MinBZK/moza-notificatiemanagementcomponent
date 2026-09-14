@@ -163,8 +163,9 @@ class NotificatieRetentieSchedulerTest {
         EntityManager echteEntityManager = notificatieRepository.getEntityManager();
         AtomicInteger aanroepen = new AtomicInteger();
         doAnswer(invocation -> {
-            // Alleen de DELETE van batch 1 (aanroep 2) faalt; de claim ervoor en alles daarna werkt.
-            if (aanroepen.incrementAndGet() == 2) {
+            // Alleen de DELETE van batch 1 faalt. Een batch doet drie aanroepen: de claim met FOR
+            // UPDATE SKIP LOCKED, de constructorexpressie die de meldgegevens ophaalt, en de DELETE.
+            if (aanroepen.incrementAndGet() == 3) {
                 throw new RuntimeException("gesimuleerde storing in batch 1");
             }
 
@@ -183,11 +184,16 @@ class NotificatieRetentieSchedulerTest {
     // met de volgende. Deze test laat daarom álles vanaf de derde aanroep falen, zodat ook de
     // vervolgbatches stuklopen en de run uiteindelijk opgeeft op MAX_MISLUKTE_BATCHES.
     //
-    // De storing wordt afgedwongen door getEntityManager() vanaf de derde aanroep te laten falen:
-    // een run roept hem twee keer per batch aan (de claim met FOR UPDATE SKIP LOCKED en de DELETE)
-    // en verder nergens — de melding zit sinds de herziening in de batchtransactie en gebruikt de
-    // rijen die de claim al heeft opgehaald. Aanroep 1 en 2 zijn dus batch 1, aanroep 3 is de claim
-    // van batch 2. De echte EntityManager wordt vooraf opgehaald zodat de eerste twee werken.
+    // De storing wordt afgedwongen door getEntityManager() vanaf de vierde aanroep te laten falen:
+    // een run roept hem drie keer per batch aan (de claim met FOR UPDATE SKIP LOCKED, de
+    // constructorexpressie die de meldgegevens ophaalt, en de DELETE) en verder nergens. Aanroep 1
+    // tot en met 3 zijn dus batch 1, aanroep 4 is de claim van batch 2. De echte EntityManager wordt
+    // vooraf opgehaald zodat de eerste drie werken.
+    //
+    // Deze koppeling aan het aantal aanroepen is bros: een extra query in de batch laat deze test
+    // vallen om een reden die niets met zijn onderwerp te maken heeft. Hij blijft omdat dit de enige
+    // plek is die de transactie-per-batch vastpint, en die eigenschap is het fundament onder de hele
+    // veiligheidsredenering van de job.
     @Test
     void verwijderVerlopenNotificaties_alsEenLatereBatchFaalt_blijftDeEerdereBatchVerwijderd() {
         plantVerlopenNotificaties(1500, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
@@ -195,7 +201,7 @@ class NotificatieRetentieSchedulerTest {
         EntityManager echteEntityManager = notificatieRepository.getEntityManager();
         AtomicInteger aanroepen = new AtomicInteger();
         doAnswer(invocation -> {
-            if (aanroepen.incrementAndGet() > 2) {
+            if (aanroepen.incrementAndGet() > 3) {
                 throw new RuntimeException("gesimuleerde storing in batch 2");
             }
 
@@ -240,8 +246,10 @@ class NotificatieRetentieSchedulerTest {
                 .filter(regel -> regel.contains("verlopen zonder eindstatus notificatieId="))
                 .toList();
         assertEquals(1, perNotificatie.size(), "alleen de niet-definitieve notificatie hoort gemeld");
-        // Alle vier de velden afzonderlijk: dit is tegelijk de bewaking op de kolomvolgorde van de
-        // claim-query, die met positionele casts op Kandidaat wordt afgebeeld (zie claimBatch).
+        // Alle vier de velden afzonderlijk. De afbeelding op Kandidaat gebeurt sinds de splitsing
+        // door een JPQL-constructorexpressie die Hibernate bij het opstarten valideert, dus een
+        // verkeerde ariteit of type komt niet meer tot hier; deze asserties dekken dat de júiste
+        // kolommen gekozen zijn.
         assertTrue(perNotificatie.getFirst().contains("notificatieId=" + sendingId));
         assertTrue(perNotificatie.getFirst().contains("notifyNlReferentie=" + notifyNlReferentie));
         assertTrue(perNotificatie.getFirst().contains("status=SENDING"));
