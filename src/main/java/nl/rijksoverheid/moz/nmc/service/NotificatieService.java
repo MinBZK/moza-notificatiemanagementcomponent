@@ -90,7 +90,7 @@ public class NotificatieService {
                         "Geen notificatie gevonden voor NotifyNL-referentie " + notifyNlNotificatieId));
 
         StatusWaarde huidigeStatus = notificatie.getStatus().status();
-        StatusWaarde nieuweStatus = parseStatus(status);
+        StatusWaarde nieuweStatus = parseStatus(status, notifyNlNotificatieId, notificatie.getId());
         // NotifyNL herhaalt een callback bij elke niet-2xx, dus dezelfde delivery receipt kan
         // meerdere keren binnenkomen en twee receipts voor een verzending kunnen elkaar in
         // omgekeerde volgorde bereiken. Alleen een status die een vooruitgang is ten opzichte van de
@@ -122,12 +122,23 @@ public class NotificatieService {
                 notificatie.getId(), notificatie.getCallbackUrl(), nieuweStatus));
     }
 
-    private StatusWaarde parseStatus(String notifyStatus) {
+    // ERROR en niet WARN: een status die de NMC niet kent betekent dat NotifyNL iets terugmeldt
+    // waar dit component geen afhandeling voor heeft, en dat hoort meteen op te vallen. Wachten tot
+    // de retentiejob de notificatie opruimt en hem dan pas als "verlopen zonder definitieve status"
+    // meldt, is dagen te laat en wijst bovendien naar het verkeerde probleem.
+    //
+    // Met beide identificatoren erbij, anders is de melding niet te herleiden tot een notificatie om
+    // te onderzoeken. De onbekende waarde staat er letterlijk in, want dat is wat je nodig hebt om te
+    // bepalen of StatusWaarde uitgebreid moet worden.
+    private StatusWaarde parseStatus(String notifyStatus, UUID notifyNlNotificatieId, UUID notificatieId) {
         try {
             return StatusWaarde.valueOf(notifyStatus.replace("-", "_").toUpperCase());
         } catch (IllegalArgumentException e) {
-            Log.errorf("Onbekende NotifyNL-status ontvangen: %s — opgeslagen als %s", notifyStatus,
-                    StatusWaarde.ONBEKEND.toApiValue());
+            Log.errorf("Onbekende NotifyNL-status '%s' ontvangen voor notificatie %s "
+                    + "(NotifyNL-referentie %s) — vastgelegd als %s; StatusWaarde kent deze waarde "
+                    + "niet, controleer of NotifyNL nieuwe statussen is gaan sturen",
+                    notifyStatus, notificatieId, notifyNlNotificatieId, StatusWaarde.ONBEKEND.toApiValue());
+
             return StatusWaarde.ONBEKEND;
         }
     }
