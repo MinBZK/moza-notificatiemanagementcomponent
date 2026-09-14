@@ -4,10 +4,11 @@
 -- een projectie van het laatste record in die geschiedenis, los van of/hoe een callback naar de
 -- Dienstverlener verliep.
 
--- Optimistic-locking-kolom (Notificatie#versie, @Version). De statusgeschiedenis is een Hibernate-
--- bag: elke toevoeging herschrijft alle statusregels van de notificatie, dus zonder versiecontrole
--- overschrijft de laatste van twee gelijktijdige callbacks de statusregel van de eerste zonder
--- signaal. DEFAULT 0 zodat bestaande rijen (previewclusters, %dev, lokale volumes) blijven werken.
+-- Optimistic-locking-kolom (Notificatie#versie, @Version). Twee gelijktijdige delivery receipts voor
+-- dezelfde notificatie werken allebei de projectiekolommen hieronder bij; zonder versiecontrole
+-- overschrijft de laatste commit de eerste zonder signaal. De primary key op notificatie_status is
+-- het vangnet daaronder (zie daar). DEFAULT 0 zodat bestaande rijen (previewclusters, %dev, lokale
+-- volumes) blijven werken.
 ALTER TABLE notificatie ADD COLUMN versie bigint NOT NULL DEFAULT 0;
 
 -- Geschiedenis van statusovergangen per notificatie (Notificatie#registreerStatus legt hier
@@ -24,28 +25,39 @@ ALTER TABLE notificatie ADD COLUMN versie bigint NOT NULL DEFAULT 0;
 --   geregistreerd wanneer de NMC de status vastlegde, op de eigen klok. Monotoon.
 -- Die twee lopen uiteen omdat NotifyNL een mislukte callback tot 5x met 5 minuten ertussen herhaalt.
 --
--- Bewust geen PK op (notificatie_id, tijdstip) of (notificatie_id, geregistreerd): niets garandeert
--- dat een tijdstip uniek is per notificatie (timestamp(6) heeft een eindige resolutie), dus een
--- unieke constraint hierop zou een insert hard laten falen op een randgeval dat verder nergens iets
--- breekt. De index dekt het enige toegangspatroon op deze tabel: de statusgeschiedenis van één
--- notificatie op volgorde inlezen. Die volgorde is geregistreerd, niet tijdstip (zie @OrderBy op
--- Notificatie#statusGeschiedenis): op de eigen klok staat de geschiedenis altijd in de volgorde
--- waarin de NMC de statussen vastlegde, en blijft het eerste record de CREATED uit de constructor
--- waar Notificatie#getAangemaakt op leunt. Ordenen op tijdstip zou een receipt met een oude
--- completed_at vóór die aanmaakstatus laten sorteren.
+-- volgnummer is de @OrderColumn van Notificatie#statusGeschiedenis en bepaalt de volgorde. Zonder
+-- die kolom is de collectie voor Hibernate een bag, en dan wordt elke toevoeging uitgevoerd als
+-- "verwijder alle statusregels van deze notificatie en voeg de hele lijst opnieuw toe": bij vier
+-- overgangen tien schrijfacties in plaats van vier, elke keer nieuwe dead tuples in een tabel die
+-- alleen maar hoort te groeien. Met de kolom is een toevoeging aan het eind één INSERT.
+--
+-- (notificatie_id, volgnummer) is meteen de primary key. Dat geeft elke statusregel een identiteit
+-- — nodig zodra er ergens naar verwezen moet worden — en het is het vangnet onder notificatie.versie:
+-- twee gelijktijdige callbacks die allebei vanaf dezelfde toestand werken, willen allebei hetzelfde
+-- volgnummer schrijven en de tweede loopt op deze constraint stuk in plaats van de eerste stil te
+-- overschrijven. Die constraint geldt ook voor schrijvers die Hibernate omzeilen.
+--
+-- Een PK op (notificatie_id, tijdstip) zou dat niet doen: niets garandeert dat een tijdstip uniek is
+-- per notificatie (timestamp(6) heeft een eindige resolutie), dus die zou falen op een randgeval dat
+-- verder nergens iets breekt.
+--
+-- De volgorde is daarmee registratievolgorde, niet tijdstip. Dat is de bedoeling: tijdstip staat op
+-- de klok van NotifyNL en een receipt met een scheve of oude completed_at zou anders vóór de
+-- aanmaakstatus sorteren, waarna Notificatie#getAangemaakt (dat het eerste record leest) de
+-- verkeerde rij teruggeeft.
 --
 -- ON DELETE CASCADE is verdediging in de diepte: Hibernate ruimt deze rijen bij een bulk-delete
 -- (zoals de retentiejob) al zelf op; de FK dekt verwijdering buiten Hibernate om.
 CREATE TABLE notificatie_status (
     notificatie_id uuid NOT NULL REFERENCES notificatie(id) ON DELETE CASCADE,
+    volgnummer integer NOT NULL,
     status varchar(32) NOT NULL CHECK (status IN (
         'SENDING', 'DELIVERED', 'PERMANENT_FAILURE', 'TEMPORARY_FAILURE', 'TECHNICAL_FAILURE', 'CREATED', 'ONBEKEND'
     )),
     tijdstip timestamp(6) with time zone NOT NULL,
-    geregistreerd timestamp(6) with time zone NOT NULL
+    geregistreerd timestamp(6) with time zone NOT NULL,
+    PRIMARY KEY (notificatie_id, volgnummer)
 );
-CREATE INDEX idx_notificatie_status_notificatie_id_geregistreerd
-    ON notificatie_status (notificatie_id, geregistreerd);
 
 -- Backfill vóór de DROP COLUMNs hieronder: dit component draait weliswaar nog niet live in het
 -- release-cluster, maar ZAD-PR-previewclusters, %dev en lokale Podman-instanties hebben persistente
@@ -58,8 +70,10 @@ CREATE INDEX idx_notificatie_status_notificatie_id_geregistreerd
 -- bewaartermijn vanaf de aanmaak en niet vanaf hun laatste statuswijziging. Een rij van 45 dagen oud
 -- die gisteren nog DELIVERED werd, is daarmee direct opruimbaar. Aanvaardbaar omdat het alleen om
 -- wegwerpomgevingen gaat (zie hierboven); in het release-cluster staat nog niets.
-INSERT INTO notificatie_status (notificatie_id, status, tijdstip, geregistreerd)
-SELECT id, status, aangemaakt, aangemaakt FROM notificatie;
+-- volgnummer 0: @OrderColumn is nul-gebaseerd, en elke bestaande notificatie krijgt precies één
+-- record.
+INSERT INTO notificatie_status (notificatie_id, volgnummer, status, tijdstip, geregistreerd)
+SELECT id, 0, status, aangemaakt, aangemaakt FROM notificatie;
 
 -- Projectie van het laatste geschiedenisrecord, bijgewerkt door Notificatie#registreerStatus:
 --   laatste_status          de status zelf

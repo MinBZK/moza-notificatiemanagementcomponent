@@ -9,7 +9,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.OrderBy;
+import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Version;
 
 import java.time.OffsetDateTime;
@@ -25,12 +25,13 @@ public class Notificatie {
     @GeneratedValue
     private UUID id;
 
-    // statusGeschiedenis is een Hibernate-bag (List + @OrderBy, geen @OrderColumn): elke mutatie
-    // wordt uitgevoerd als "verwijder alle rijen van deze notificatie en voeg de hele lijst opnieuw
-    // toe". Zonder versiecontrole overschrijft van twee gelijktijdige NotifyNL-callbacks de
-    // laatste commit de statusregel van de eerste zonder enig signaal. Met @Version faalt die
-    // tweede commit op een OptimisticLockException; die ontsnapt uit verwerkAfleverstatus, zodat
-    // NotifyNL een 5xx krijgt en dezelfde callback opnieuw aanbiedt, dan zonder concurrentie.
+    // Twee gelijktijdige NotifyNL-callbacks werken allebei de projectiekolommen hieronder bij;
+    // zonder versiecontrole overschrijft de laatste commit de eerste zonder enig signaal. Met
+    // @Version faalt die tweede commit op een OptimisticLockException. NotifyNLCallbackController
+    // vangt die af en probeert het in een verse transactie opnieuw, zodat zo'n botsing geen 5xx
+    // oplevert: NotifyNL herhaalt een mislukte callback maar 5x, en dat budget is voor echte
+    // storingen. De primary key op notificatie_status (notificatie_id, volgnummer) is het vangnet
+    // daaronder en geldt ook voor schrijvers die Hibernate omzeilen.
     @Version
     private long versie;
 
@@ -63,14 +64,20 @@ public class Notificatie {
     @Column(name = "laatste_status_update", nullable = false)
     private OffsetDateTime laatsteStatusUpdate;
 
-    // Geordend op geregistreerd (de eigen klok), niet op tijdstip (de klok van de bron). Die eigen
-    // klok is monotoon, dus de geschiedenis staat altijd in de volgorde waarin de NMC de statussen
-    // vastlegde en getFirst() is altijd de CREATED uit de constructor. Ordenen op tijdstip zou een
+    // @OrderColumn, bewust geen @OrderBy. Zonder ordeningskolom is dit voor Hibernate een bag, en
+    // dan wordt elke toevoeging uitgevoerd als "verwijder alle rijen van deze notificatie en voeg de
+    // hele lijst opnieuw toe" — bij vier overgangen tien schrijfacties in plaats van vier, elke keer
+    // nieuwe dead tuples in een tabel die alleen maar hoort te groeien. Met volgnummer is een
+    // toevoeging aan het eind één INSERT, wat bij een append-only geschiedenis het enige is dat er
+    // ooit gebeurt.
+    //
+    // De volgorde is daarmee registratievolgorde. Dat is de bedoeling: ordenen op tijdstip zou een
     // receipt met een scheve of oude completed_at vóór de aanmaak laten sorteren, waarna
-    // getAangemaakt() de verkeerde rij teruggeeft.
+    // getAangemaakt() de verkeerde rij teruggeeft. NotificatieStatus#geregistreerd legt hetzelfde
+    // moment vast als gegeven, maar wordt nergens om te sorteren gebruikt.
     @ElementCollection
     @CollectionTable(name = "notificatie_status", joinColumns = @JoinColumn(name = "notificatie_id"))
-    @OrderBy("geregistreerd ASC")
+    @OrderColumn(name = "volgnummer")
     private List<NotificatieStatus> statusGeschiedenis = new ArrayList<>();
 
     protected Notificatie() {
