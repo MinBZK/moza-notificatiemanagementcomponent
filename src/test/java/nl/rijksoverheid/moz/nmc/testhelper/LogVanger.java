@@ -1,4 +1,4 @@
-package nl.rijksoverheid.moz.nmc.job;
+package nl.rijksoverheid.moz.nmc.testhelper;
 
 import org.jboss.logmanager.ExtLogRecord;
 
@@ -19,7 +19,7 @@ import java.util.logging.Logger;
  * <p>
  * Quarkus 3.38 heeft geen LogCollectingTestResource, vandaar deze handmatige handler.
  */
-final class LogVanger implements AutoCloseable {
+public final class LogVanger implements AutoCloseable {
 
     private final Logger logger;
     private final Handler handler;
@@ -47,12 +47,12 @@ final class LogVanger implements AutoCloseable {
         this.logger.addHandler(handler);
     }
 
-    static LogVanger van(Class<?> categorie) {
+    public static LogVanger van(Class<?> categorie) {
         return new LogVanger(categorie.getName());
     }
 
     /** Alle opgevangen regels van precies dit niveau, als tekst. */
-    List<String> regelsOpNiveau(Level niveau) {
+    public List<String> regelsOpNiveau(Level niveau) {
         synchronized (regels) {
             return regels.stream()
                     .filter(regel -> regel.getLevel().intValue() == niveau.intValue())
