@@ -11,18 +11,22 @@ import nl.rijksoverheid.moz.nmc.controller.IdentificatieType;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -229,6 +233,29 @@ class NotificatieServiceTest {
 
         verify(statusUpdateEvent).fire(any());
         verify(notificatieRepository, never()).deleteById(any());
+    }
+
+    // Het niveau is hier functionaliteit: een status die de NMC niet kent betekent dat NotifyNL iets
+    // terugmeldt waar dit component geen afhandeling voor heeft, en dat hoort meteen op te vallen.
+    // Zonder deze assertie kan iemand ERROR naar DEBUG verlagen zonder dat een test valt, waarna het
+    // pas opvalt als de retentiejob de notificatie dagen later opruimt — te laat, en wijzend naar het
+    // verkeerde probleem.
+    @Test
+    void verwerkAfleverstatus_onbekendeStatus_logtOpErrorMetDeIdentificatoren() {
+        Notificatie notificatie = notificatie(null);
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
+        UUID notifyNlReferentie = UUID.randomUUID();
+
+        List<String> fouten;
+        try (LogVanger vanger = LogVanger.van(NotificatieService.class)) {
+            service.verwerkAfleverstatus(notifyNlReferentie, "een-rare-status", null);
+            fouten = vanger.regelsOpNiveau(Level.SEVERE);
+        }
+
+        assertEquals(1, fouten.size());
+        assertTrue(fouten.getFirst().contains("een-rare-status"), "de ruwe waarde hoort erin te staan");
+        assertTrue(fouten.getFirst().contains(notificatie.getId().toString()));
+        assertTrue(fouten.getFirst().contains(notifyNlReferentie.toString()));
     }
 
     private NotificatieVersturenOpdracht opdracht(String callbackUrl) {

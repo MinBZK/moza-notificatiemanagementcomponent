@@ -25,6 +25,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
+
 import java.util.logging.Level;
 import java.util.concurrent.atomic.AtomicInteger;
 

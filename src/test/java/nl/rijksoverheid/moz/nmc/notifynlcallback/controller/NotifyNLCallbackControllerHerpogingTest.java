@@ -9,10 +9,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
+
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
+import java.util.logging.Level;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
@@ -119,6 +125,33 @@ class NotifyNLCallbackControllerHerpogingTest {
         verify(notificatieService).verwerkAfleverstatus(request.getId(), "delivered", completedAt);
     }
 
+    // De tussensporten van de terugvalladder. Alleen de twee uitersten testen laat toe dat sent_at
+    // of created_at uit de keten verdwijnt zonder dat er iets faalt, waarna zo'n receipt stilzwijgend
+    // de eigen klok van de NMC als gebeurtenistijd krijgt — precies de kolom die het afleverbewijs
+    // voedt, en een verkeerde waarde daar is niet te detecteren en niet te herstellen.
+    @Test
+    void verwerkAfleverstatus_zonderCompletedAt_valtTerugOpSentAt() {
+        OffsetDateTime sentAt = OffsetDateTime.parse("2025-03-03T09:30:00Z");
+        AfleverstatusRequest request = receipt();
+        request.setCreatedAt(OffsetDateTime.parse("2025-03-03T09:00:00Z"));
+        request.setSentAt(sentAt);
+
+        controller.verwerkAfleverstatus(request);
+
+        verify(notificatieService).verwerkAfleverstatus(request.getId(), "delivered", sentAt);
+    }
+
+    @Test
+    void verwerkAfleverstatus_alleenCreatedAt_valtTerugOpCreatedAt() {
+        OffsetDateTime createdAt = OffsetDateTime.parse("2025-03-03T09:00:00Z");
+        AfleverstatusRequest request = receipt();
+        request.setCreatedAt(createdAt);
+
+        controller.verwerkAfleverstatus(request);
+
+        verify(notificatieService).verwerkAfleverstatus(request.getId(), "delivered", createdAt);
+    }
+
     // Geen van de tijdstipvelden is verplicht in NotifyNL's callbackschema; dan gaat er null door en
     // valt NotificatieService terug op de eigen klok.
     @Test
@@ -128,6 +161,43 @@ class NotifyNLCallbackControllerHerpogingTest {
         controller.verwerkAfleverstatus(request);
 
         verify(notificatieService).verwerkAfleverstatus(request.getId(), "delivered", null);
+    }
+
+    // Opgeven is het enige moment in dit pad met blijvend verlies: er gaat een 5xx naar NotifyNL en
+    // dat kost een van hun vijf herpogingen, waarna de afleverstatus daar weg is. Zonder deze
+    // assertie kan de melding verdwijnen en ziet een operator alleen twee INFO-regels en daarna een
+    // generieke 500 uit RESTEasy's eigen logcategorie.
+    @Test
+    void verwerkAfleverstatus_opgevenNaMaxPogingen_logtOpError() {
+        doThrow(ingepakteOptimisticLock())
+                .when(notificatieService).verwerkAfleverstatus(any(), any(), any());
+        AfleverstatusRequest request = receipt();
+
+        List<String> fouten;
+        try (LogVanger vanger = LogVanger.van(NotifyNLCallbackController.class)) {
+            assertThrows(RuntimeException.class, () -> controller.verwerkAfleverstatus(request));
+            fouten = vanger.regelsOpNiveau(Level.SEVERE);
+        }
+
+        assertEquals(1, fouten.size());
+        assertTrue(fouten.getFirst().contains(request.getId().toString()));
+    }
+
+    // Een fout die herhalen niet oplost gaat meteen door, en hoort een andere melding te geven: die
+    // twee vragen om verschillend onderzoek.
+    @Test
+    void verwerkAfleverstatus_nietHerhaalbareFout_logtOpErrorZonderTeHerhalen() {
+        doThrow(new IllegalStateException("iets anders kapot"))
+                .when(notificatieService).verwerkAfleverstatus(any(), any(), any());
+
+        List<String> fouten;
+        try (LogVanger vanger = LogVanger.van(NotifyNLCallbackController.class)) {
+            assertThrows(IllegalStateException.class, () -> controller.verwerkAfleverstatus(receipt()));
+            fouten = vanger.regelsOpNiveau(Level.SEVERE);
+        }
+
+        assertEquals(1, fouten.size());
+        verify(notificatieService, times(1)).verwerkAfleverstatus(any(), any(), any());
     }
 
     private static RuntimeException ingepakteOptimisticLock() {

@@ -108,6 +108,30 @@ class NotificatiePersistentieTest {
         });
     }
 
+    // V2 beschrijft de primary key (notificatie_id, volgnummer) als het vangnet onder
+    // notificatie.versie: twee gelijktijdige callbacks die vanaf dezelfde toestand werken willen
+    // allebei hetzelfde volgnummer schrijven, en de tweede hoort daarop stuk te lopen. Dat vangnet
+    // gaat pas af als @Version ooit sneuvelt bij een refactor, dus geen enkele gewone test raakt het.
+    // Hier wordt het rechtstreeks met SQL afgedwongen, zoals een schrijver die Hibernate omzeilt.
+    @Test
+    void notificatieStatus_metEenDubbelVolgnummer_wordtDoorDePrimaryKeyGeweigerd() {
+        UUID id = QuarkusTransaction.requiringNew().call(() -> {
+            Notificatie notificatie = new Notificatie(null);
+            notificatieRepository.persist(notificatie);
+
+            return notificatie.getId();
+        });
+
+        assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() ->
+                notificatieRepository.getEntityManager()
+                        .createNativeQuery("INSERT INTO notificatie_status "
+                                + "(notificatie_id, volgnummer, status, tijdstip, geregistreerd) "
+                                + "VALUES (?1, 0, 'SENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+                        .setParameter(1, id)
+                        .executeUpdate()),
+                "volgnummer 0 is al bezet door de CREATED uit de constructor");
+    }
+
     // Bewaakt dat de CHECK-constraint op notificatie_status.status (V2__notificatie_retentie.sql)
     // elke StatusWaarde-constante toestaat. Zonder deze test zou een nieuwe of hernoemde constante
     // compileren en alle Java-tests laten slagen, maar pas bij de eerste echte INSERT in productie
