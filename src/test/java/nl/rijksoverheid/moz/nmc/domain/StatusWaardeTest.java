@@ -139,6 +139,19 @@ class StatusWaardeTest {
                 RANGORDE.stream().mapToLong(List::size).sum());
     }
 
+    // De relatie tussen de twee predicaten, die nergens uit de code blijkt maar wel geldt: op een
+    // definitieve status volgt alleen nog DELIVERED. Zonder deze test is het een toevallige
+    // eigenschap van de rangordegetallen; ermee is het een contract dat valt zodra iemand een status
+    // boven de faalstatussen zet.
+    @ParameterizedTest
+    @MethodSource("alleParen")
+    void volgtOp_naEenDefinitieveStatus_alleenDelivered(StatusWaarde nieuwe, StatusWaarde vastgelegd) {
+        if (vastgelegd.isDefinitief() && nieuwe.volgtOp(vastgelegd)) {
+            assertEquals(StatusWaarde.DELIVERED, nieuwe,
+                    nieuwe + " volgt op de definitieve status " + vastgelegd + "; alleen DELIVERED mag dat");
+        }
+    }
+
     static Stream<Arguments> alleParen() {
         return Arrays.stream(StatusWaarde.values())
                 .flatMap(nieuwe -> Arrays.stream(StatusWaarde.values())

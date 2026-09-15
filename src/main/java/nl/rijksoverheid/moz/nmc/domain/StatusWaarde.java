@@ -29,12 +29,23 @@ public enum StatusWaarde {
         return name().toLowerCase(Locale.ROOT).replace('_', '-');
     }
 
-    // Hardcoded (niet configureerbaar) — een keuze van de NMC zelf. Switch i.p.v. Set dwingt dat
-    // elke toekomstige status hier expliciet wordt geclassificeerd (geen default-tak). CREATED/
-    // SENDING zijn statussen waarna NotifyNL nog een vervolgcallback stuurt; de overige (bekende)
-    // statussen zijn een eindstatus in NotifyNL's eigen delivery-receipt-model (zie
-    // notifynl_api.yaml). ONBEKEND is voorzichtigheidshalve ook niet-definitief: van een status die
-    // de NMC niet herkent, is niet vast te stellen of NotifyNL er nog een vervolgcallback over stuurt.
+    /**
+     * Of NotifyNL deze status als uitkomst van de verzending beschouwt: de notificatie is bezorgd,
+     * of het is vastgesteld dat hij dat niet wordt.
+     * <p>
+     * Let op wat dit <em>niet</em> zegt: niet dat er geen status meer overheen kan komen. Een
+     * {@code DELIVERED} volgt in {@link #volgtOp} wel degelijk op een faalstatus, ook al is die
+     * faalstatus definitief — bezorgd is bezorgd, en een eerder gemelde mislukking hoort dat niet
+     * tegen te houden. Wie deze methode leest als "hier komt niets meer overheen" bouwt daarmee een
+     * fout; {@code volgtOp} is de enige plek die bepaalt welke overgangen zijn toegestaan.
+     * <p>
+     * {@code ONBEKEND} is voorzichtigheidshalve niet-definitief: van een status die de NMC niet
+     * herkent is niet vast te stellen of NotifyNL er nog iets over terugmeldt.
+     * <p>
+     * De enige lezer is de retentiejob, die verlopen notificaties zonder uitkomst apart meldt.
+     */
+    // Hardcoded (niet configureerbaar) — een keuze van de NMC zelf. Switch i.p.v. Set dwingt dat elke
+    // toekomstige status hier expliciet wordt geclassificeerd (geen default-tak).
     public boolean isDefinitief() {
         return switch (this) {
             case DELIVERED, PERMANENT_FAILURE, TEMPORARY_FAILURE, TECHNICAL_FAILURE -> true;
