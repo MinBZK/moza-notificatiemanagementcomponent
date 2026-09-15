@@ -2,10 +2,15 @@ package nl.rijksoverheid.moz.nmc.domain;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -102,5 +107,49 @@ class StatusWaardeTest {
     })
     void volgtOp_gelijkeOfLagereRang_retourneertFalse(StatusWaarde nieuwe, StatusWaarde vastgelegd) {
         assertFalse(nieuwe.volgtOp(vastgelegd));
+    }
+
+    // De rangorde zoals hij hoort te zijn, expliciet opgeschreven in plaats van afgeleid uit de
+    // productiecode. rang() is een switch zonder default, dus de compiler dwingt af dát een nieuwe
+    // status een rang krijgt — niet wélke. Een status die per ongeluk in de DELIVERED-tak belandt kan
+    // een bezorging overschrijven zonder dat er iets valt; deze lijst plus de matrix hieronder vangen
+    // dat, en blijven kloppen als er een status bijkomt (de matrix dekt dan automatisch mee).
+    private static final List<List<StatusWaarde>> RANGORDE = List.of(
+            List.of(StatusWaarde.CREATED),
+            List.of(StatusWaarde.SENDING),
+            List.of(StatusWaarde.ONBEKEND),
+            List.of(StatusWaarde.TEMPORARY_FAILURE, StatusWaarde.TECHNICAL_FAILURE, StatusWaarde.PERMANENT_FAILURE),
+            List.of(StatusWaarde.DELIVERED));
+
+    // Het volledige cartesisch product: alle 49 paren, niet de 21 die los waren opgeschreven.
+    @ParameterizedTest
+    @MethodSource("alleParen")
+    void volgtOp_overDeHeleMatrix_volgtDeVastgelegdeRangorde(StatusWaarde nieuwe, StatusWaarde vastgelegd) {
+        boolean verwacht = rang(nieuwe) > rang(vastgelegd);
+
+        assertEquals(verwacht, nieuwe.volgtOp(vastgelegd),
+                nieuwe + ".volgtOp(" + vastgelegd + ") hoort " + verwacht + " te zijn");
+    }
+
+    // Bewaakt dat RANGORDE hierboven elke constante noemt: een nieuwe StatusWaarde die niemand in de
+    // lijst zet zou de matrixtest anders stilzwijgend overslaan.
+    @Test
+    void rangorde_noemtElkeStatusWaarde() {
+        assertEquals(StatusWaarde.values().length,
+                RANGORDE.stream().mapToLong(List::size).sum());
+    }
+
+    static Stream<Arguments> alleParen() {
+        return Arrays.stream(StatusWaarde.values())
+                .flatMap(nieuwe -> Arrays.stream(StatusWaarde.values())
+                        .map(vastgelegd -> Arguments.of(nieuwe, vastgelegd)));
+    }
+
+    private static int rang(StatusWaarde status) {
+        return RANGORDE.stream()
+                .filter(groep -> groep.contains(status))
+                .mapToInt(RANGORDE::indexOf)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Status " + status + " ontbreekt in RANGORDE"));
     }
 }

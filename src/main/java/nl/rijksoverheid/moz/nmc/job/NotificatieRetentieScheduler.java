@@ -9,9 +9,9 @@ import io.quarkus.scheduler.SkippedExecution;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+import nl.rijksoverheid.moz.nmc.repository.Kandidaat;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.hibernate.query.NativeQuery;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -43,9 +43,7 @@ public class NotificatieRetentieScheduler {
     // binnen de timeout, ongeacht hoe groot de achterstand is.
     private static final int BATCH_GROOTTE = 1000;
 
-    // Bovengrens op het aantal batches per run, tegen een onverwacht grote achterstand. Ruim boven
-    // elk realistisch volume: 10.000 batches is 10 miljoen notificaties in één run.
-    private static final int MAX_BATCHES = 10_000;
+
 
     // Bovengrens op het aantal batches dat mag mislukken voordat de run alsnog opgeeft. Een batch
     // die gooit is niet vanzelf fataal — bijvoorbeeld een rij die door een toekomstige foreignkey
@@ -62,34 +60,23 @@ public class NotificatieRetentieScheduler {
     // Zowel de @Scheduled-identity als het trigger-id waarop de observers hieronder filteren.
     private static final String TRIGGER_ID = "notificatie-retentie";
 
-    // Zie verwijderBatch. Native SQL omdat JPQL geen lock-clausule met SKIP LOCKED kent.
-    // Haalt meteen de velden op die de melding nodig heeft, zodat melden en verwijderen over exact
-    // dezelfde rijen gaan.
-    private static final String CLAIM_BATCH_SQL = """
-            SELECT id
-              FROM notificatie
-             WHERE laatste_status_update <= ?1
-             ORDER BY laatste_status_update
-             FETCH FIRST ?2 ROWS ONLY
-               FOR UPDATE SKIP LOCKED
-            """;
-
-    // Variant die eerder mislukte rijen overslaat; zie de lus in verwijderVerlopenNotificaties.
-    private static final String CLAIM_BATCH_MET_UITSLUITING_SQL = """
-            SELECT id
-              FROM notificatie
-             WHERE laatste_status_update <= ?1
-               AND id NOT IN (?3)
-             ORDER BY laatste_status_update
-             FETCH FIRST ?2 ROWS ONLY
-               FOR UPDATE SKIP LOCKED
-            """;
-
     private final NotificatieRepository notificatieRepository;
     private final Duration bewaartermijn;
 
+    // Bovengrens op het aantal batches per run, tegen een onverwacht grote achterstand. De default
+    // ligt ruim boven elk realistisch volume: 10.000 batches is 10 miljoen notificaties in één run.
+    // Configureerbaar zodat een beheerder de run kan begrenzen zonder release, en zodat een test hem
+    // kan bereiken zonder tien miljoen rijen te planten.
+    private final int maxBatches;
+
     public NotificatieRetentieScheduler(NotificatieRepository notificatieRepository,
-            @ConfigProperty(name = "notificatie.retentie.bewaartermijn") Duration bewaartermijn) {
+            @ConfigProperty(name = "notificatie.retentie.bewaartermijn") Duration bewaartermijn,
+            @ConfigProperty(name = "notificatie.retentie.max-batches", defaultValue = "10000") int maxBatches) {
+        if (maxBatches < 1) {
+            throw new IllegalArgumentException(
+                    "notificatie.retentie.max-batches moet minstens 1 zijn, maar was " + maxBatches);
+        }
+        this.maxBatches = maxBatches;
         // Een niet-positieve termijn is één configuratie-typefout verwijderd van "verwijder de hele
         // tabel bij de volgende run", dat hoort bij het opstarten te falen, niet stilletjes midden
         // in de nacht.
@@ -129,7 +116,7 @@ public class NotificatieRetentieScheduler {
         // voortgang nergens uit blijken. De exceptie ontsnapt daarna gewoon, zodat FailedExecution
         // blijft vuren (zie opMislukteUitvoering).
         try {
-            while (!klaar && batches < MAX_BATCHES) {
+            while (!klaar && batches < maxBatches) {
                 batches++;
                 int budget = Math.max(0, MAX_MELDINGEN - gemeldeRegels);
                 // Gevuld door verwijderBatch vóór de DELETE, zodat de ids ook na een rollback bekend
@@ -171,8 +158,8 @@ public class NotificatieRetentieScheduler {
 
             if (!klaar) {
                 Log.errorf("Retentiejob: gestopt na de bovengrens van %d batches terwijl er nog "
-                        + "verlopen notificaties waren (grens=%s), mogelijk een rij die niet "
-                        + "verwijderd kan worden", MAX_BATCHES, grens);
+                        + "verlopen notificaties waren (grens=%s), de rest blijft staan tot de "
+                        + "volgende run", maxBatches, grens);
             }
         } finally {
             if (totaalZonderEindstatus > gemeldeRegels) {
@@ -213,65 +200,22 @@ public class NotificatieRetentieScheduler {
     // CASCADE op de foreignkey (V2) blijft het vangnet voor verwijderingen buiten Hibernate om.
     private BatchResultaat verwijderBatch(OffsetDateTime grens, int meldbudget, List<UUID> uitgesloten,
             List<UUID> geclaimd) {
-        List<UUID> ids = claimBatch(grens, uitgesloten);
+        List<UUID> ids = notificatieRepository.claimVerlopen(grens, BATCH_GROOTTE, uitgesloten);
         geclaimd.addAll(ids);
 
         if (ids.isEmpty()) {
             return new BatchResultaat(0, 0, 0, 0);
         }
 
-        List<Kandidaat> zonderEindstatus = zoekKandidaten(ids).stream()
+        List<Kandidaat> zonderEindstatus = notificatieRepository.zoekKandidaten(ids).stream()
                 .filter(kandidaat -> !kandidaat.status().isDefinitief())
                 .toList();
         int gemeld = Math.min(zonderEindstatus.size(), meldbudget);
         zonderEindstatus.subList(0, gemeld).forEach(this::meld);
 
-        int verwijderd = notificatieRepository.getEntityManager()
-                .createQuery("DELETE FROM Notificatie n WHERE n.id IN :ids")
-                .setParameter("ids", ids)
-                .executeUpdate();
+        int verwijderd = notificatieRepository.verwijderOpId(ids);
 
         return new BatchResultaat(ids.size(), verwijderd, zonderEindstatus.size(), gemeld);
-    }
-
-    // Alleen het id komt uit de native query. Native is nodig voor de lock-clausule, en native
-    // betekent positionele casts die de compiler niet bewaakt — hoe minder kolommen daar doorheen
-    // gaan, hoe kleiner dat oppervlak. addScalar blijft wél nodig: een uuid-kolom komt per dialect
-    // anders terug (PostgreSQL een UUID, H2 een byte[]).
-    @SuppressWarnings("unchecked")
-    private List<UUID> claimBatch(OffsetDateTime grens, List<UUID> uitgesloten) {
-        NativeQuery<UUID> query = notificatieRepository.getEntityManager()
-                .createNativeQuery(uitgesloten.isEmpty() ? CLAIM_BATCH_SQL : CLAIM_BATCH_MET_UITSLUITING_SQL)
-                .unwrap(NativeQuery.class)
-                .addScalar("id", UUID.class)
-                .setParameter(1, grens)
-                .setParameter(2, BATCH_GROOTTE);
-
-        if (!uitgesloten.isEmpty()) {
-            query.setParameter(3, uitgesloten);
-        }
-
-        return query.getResultList();
-    }
-
-    // De gegevens voor de melding via een JPQL-constructorexpressie in plaats van uit de native
-    // query. Hibernate valideert die expressie bij het opstarten: een verkeerde ariteit of een type
-    // dat niet op de recordcomponent past is dan een opstartfout, in plaats van een
-    // ClassCastException in een nachtelijke job. Dat is sterker dan een test, want het is niet uit
-    // te zetten.
-    //
-    // Kost een extra query per niet-lege batch: een IN op de primary key van rijen die net gelockt
-    // zijn en dus in de buffer cache staan. Bij de batchaantallen hier valt dat weg.
-    //
-    // ORDER BY omdat IN geen volgorde garandeert, terwijl de afgekapte melding de oudste rijen hoort
-    // te tonen en niet een willekeurige greep.
-    private List<Kandidaat> zoekKandidaten(List<UUID> ids) {
-        return notificatieRepository.getEntityManager()
-                .createQuery("SELECT new nl.rijksoverheid.moz.nmc.job.Kandidaat(n.id, n.externalReference, "
-                        + "n.laatsteStatus.status, n.laatsteStatus.geregistreerd) FROM Notificatie n "
-                        + "WHERE n.id IN :ids ORDER BY n.laatsteStatus.geregistreerd", Kandidaat.class)
-                .setParameter("ids", ids)
-                .getResultList();
     }
 
     record BatchResultaat(int geclaimd, int verwijderd, int zonderEindstatus, int gemeld) {

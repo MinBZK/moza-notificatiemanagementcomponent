@@ -27,18 +27,18 @@ class NotificatieRetentieSchedulerUnitTest {
     private final NotificatieRepository notificatieRepository = mock(NotificatieRepository.class);
 
     private final NotificatieRetentieScheduler scheduler =
-            new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(30));
+            new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(30), 10_000);
 
     @Test
     void constructor_negatieveBewaartermijn_gooitIllegalArgumentException() {
         assertThrows(IllegalArgumentException.class,
-                () -> new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(-1)));
+                () -> new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(-1), 10_000));
     }
 
     @Test
     void constructor_nulBewaartermijn_gooitIllegalArgumentException() {
         assertThrows(IllegalArgumentException.class,
-                () -> new NotificatieRetentieScheduler(notificatieRepository, Duration.ZERO));
+                () -> new NotificatieRetentieScheduler(notificatieRepository, Duration.ZERO, 10_000));
     }
 
     // De observers vuren voor élke @Scheduled-methode in de applicatie; zonder de filtering op
@@ -111,5 +111,12 @@ class NotificatieRetentieSchedulerUnitTest {
         when(uitvoering.getTrigger()).thenReturn(trigger);
 
         return uitvoering;
+    }
+
+    // Een bovengrens van 0 zou betekenen dat de lus nooit draait en de tabel stilzwijgend doorgroeit.
+    @Test
+    void constructor_metEenNietPositieveBovengrens_weigert() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(7), 0));
     }
 }

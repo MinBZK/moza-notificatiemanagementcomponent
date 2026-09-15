@@ -108,6 +108,37 @@ class NotificatiePersistentieTest {
         });
     }
 
+    // NotificatieStatusTest dekt de normalisatie in het geheugen, maar de claim die de code maakt is
+    // "gelijk aan de waarde die uit de database terugkomt". De overige persistentietests kappen hun
+    // fixtures zélf al af op microseconden en gebruiken UTC, dus die slagen ook zónder de
+    // normalisatie. Hier gaat een waarde mét nanoseconden én een niet-UTC-offset door de database
+    // heen en terug.
+    //
+    // Let op: dit draait op H2, dat de offset wél bewaart. De precisiekant wordt hier dus volledig
+    // getoetst, de offsetkant pas echt op PostgreSQL — daar normaliseert de kolom zelf naar UTC en
+    // zou een niet-genormaliseerde waarde anders terugkomen dan hij werd weggeschreven.
+    @Test
+    void notificatieStatus_metNanosecondenEnEenAndereOffset_komtGenormaliseerdTerug() {
+        OffsetDateTime ruw = OffsetDateTime.parse("2026-03-01T14:00:00.123456789+02:00");
+        OffsetDateTime verwacht = OffsetDateTime.parse("2026-03-01T12:00:00.123456Z");
+
+        UUID id = QuarkusTransaction.requiringNew().call(() -> {
+            Notificatie notificatie = new Notificatie(null);
+            notificatie.registreerStatus(StatusWaarde.DELIVERED, ruw);
+            notificatieRepository.persist(notificatie);
+
+            return notificatie.getId();
+        });
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            Notificatie herladen = notificatieRepository.findById(id);
+
+            assertEquals(verwacht, herladen.getStatus().tijdstip());
+            assertEquals(ZoneOffset.UTC, herladen.getStatus().tijdstip().getOffset());
+            assertEquals(ZoneOffset.UTC, herladen.getStatus().geregistreerd().getOffset());
+        });
+    }
+
     // V2 beschrijft de primary key (notificatie_id, volgnummer) als het vangnet onder
     // notificatie.versie: twee gelijktijdige callbacks die vanaf dezelfde toestand werken willen
     // allebei hetzelfde volgnummer schrijven, en de tweede hoort daarop stuk te lopen. Dat vangnet

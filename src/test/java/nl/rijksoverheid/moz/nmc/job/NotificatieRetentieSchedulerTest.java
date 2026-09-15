@@ -8,6 +8,7 @@ import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+import nl.rijksoverheid.moz.nmc.repository.Kandidaat;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 
 @QuarkusTest
@@ -98,7 +100,7 @@ class NotificatieRetentieSchedulerTest {
         UUID verlopenId = maakNotificatie(null, StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(3));
         UUID nietVerlopenId = maakNotificatie(null, StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
 
-        new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(2)).verwijderVerlopenNotificaties();
+        new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(2), 10_000).verwijderVerlopenNotificaties();
 
         QuarkusTransaction.requiringNew().run(() -> {
             assertTrue(notificatieRepository.findByIdOptional(verlopenId).isEmpty());
@@ -154,6 +156,34 @@ class NotificatieRetentieSchedulerTest {
     // verwijderde 1000 rijen van batch 1 terugdraaien, en zou elke andere test in deze suite gewoon
     // groen blijven.
     //
+    // De storing zit op verwijderOpId en niet meer op getEntityManager(): sinds de queries in
+    // NotificatieRepository staan is er een methode per stap, dus de test hoeft geen aanroepen meer
+    // te tellen om de tweede batch te raken.
+    //
+    // De run gooit niet: sinds de poison-row-afhandeling vangt de lus een mislukte batch af en gaat
+    // door. Wat hier wordt bewezen is dus niet de exceptie maar de isolatie — de 1000 rijen van batch
+    // 1 blijven weg, ook al faalde batch 2 daarna.
+    @Test
+    void verwijderVerlopenNotificaties_alsEenLatereBatchFaalt_blijftDeEerdereBatchVerwijderd() {
+        plantVerlopenNotificaties(1500, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
+
+        AtomicInteger batches = new AtomicInteger();
+        doAnswer(invocation -> {
+            if (batches.incrementAndGet() > 1) {
+                throw new RuntimeException("gesimuleerde storing vanaf batch 2");
+            }
+
+            return invocation.callRealMethod();
+        }).when(notificatieRepository).verwijderOpId(any());
+
+        scheduler.verwijderVerlopenNotificaties();
+
+        Mockito.reset(notificatieRepository);
+        long overgebleven = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count());
+        assertEquals(500L, overgebleven, "Batch 1 was al gecommit en mag niet zijn teruggedraaid door "
+                + "de fout in batch 2");
+    }
+
     // Een batch die gooit mag de rest van de achterstand niet gijzelen. Voorheen ontsnapte de
     // exceptie uit de lus en stopte de hele run; omdat de claim op laatste_status_update ordent kwam
     // dezelfde rij de volgende nacht weer als eerste terug, en lag de opruiming permanent stil. De
@@ -162,17 +192,14 @@ class NotificatieRetentieSchedulerTest {
     void verwijderVerlopenNotificaties_alsEenBatchFaalt_gaatDoorMetDeVolgende() {
         plantVerlopenNotificaties(1005, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
 
-        EntityManager echteEntityManager = notificatieRepository.getEntityManager();
-        AtomicInteger aanroepen = new AtomicInteger();
+        AtomicInteger batches = new AtomicInteger();
         doAnswer(invocation -> {
-            // Alleen de DELETE van batch 1 faalt. Een batch doet drie aanroepen: de claim met FOR
-            // UPDATE SKIP LOCKED, de constructorexpressie die de meldgegevens ophaalt, en de DELETE.
-            if (aanroepen.incrementAndGet() == 3) {
+            if (batches.incrementAndGet() == 1) {
                 throw new RuntimeException("gesimuleerde storing in batch 1");
             }
 
-            return echteEntityManager;
-        }).when(notificatieRepository).getEntityManager();
+            return invocation.callRealMethod();
+        }).when(notificatieRepository).verwijderOpId(any());
 
         scheduler.verwijderVerlopenNotificaties();
 
@@ -182,46 +209,22 @@ class NotificatieRetentieSchedulerTest {
                 + "van de achterstand wordt alsnog opgeruimd");
     }
 
-    // Let op: de lus vangt een mislukte batch sinds de poison-row-afhandeling zelf af en gaat door
-    // met de volgende. Deze test laat daarom álles vanaf de derde aanroep falen, zodat ook de
-    // vervolgbatches stuklopen en de run uiteindelijk opgeeft op MAX_MISLUKTE_BATCHES.
-    //
-    // De storing wordt afgedwongen door getEntityManager() vanaf de vierde aanroep te laten falen:
-    // een run roept hem drie keer per batch aan (de claim met FOR UPDATE SKIP LOCKED, de
-    // constructorexpressie die de meldgegevens ophaalt, en de DELETE) en verder nergens. Aanroep 1
-    // tot en met 3 zijn dus batch 1, aanroep 4 is de claim van batch 2. De echte EntityManager wordt
-    // vooraf opgehaald zodat de eerste drie werken.
-    //
-    // Deze koppeling aan het aantal aanroepen is bros: een extra query in de batch laat deze test
-    // vallen om een reden die niets met zijn onderwerp te maken heeft. Hij blijft omdat dit de enige
-    // plek is die de transactie-per-batch vastpint, en die eigenschap is het fundament onder de hele
-    // veiligheidsredenering van de job.
+    // De bovengrens op het aantal batches was nooit bereikbaar in een test: 10.000 batches van 1000
+    // betekent tien miljoen rijen planten. Nu de grens configureerbaar is, kan hij met een lage
+    // waarde wél geraakt worden. Bewijst twee dingen: de run stopt bij de grens in plaats van door te
+    // gaan tot alles weg is, en wat blijft staan blijft staan.
     @Test
-    void verwijderVerlopenNotificaties_alsEenLatereBatchFaalt_blijftDeEerdereBatchVerwijderd() {
-        plantVerlopenNotificaties(1500, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
+    void verwijderVerlopenNotificaties_bovengrensBereikt_stoptEnLaatDeRestStaan() {
+        plantVerlopenNotificaties(2500, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
 
-        EntityManager echteEntityManager = notificatieRepository.getEntityManager();
-        AtomicInteger aanroepen = new AtomicInteger();
-        doAnswer(invocation -> {
-            if (aanroepen.incrementAndGet() > 3) {
-                throw new RuntimeException("gesimuleerde storing in batch 2");
-            }
+        new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(7), 2)
+                .verwijderVerlopenNotificaties();
 
-            return echteEntityManager;
-        }).when(notificatieRepository).getEntityManager();
-
-        assertThrows(RuntimeException.class, scheduler::verwijderVerlopenNotificaties);
-
-        // Stubbing weg vóór de telling, anders zou die zelf op de gesimuleerde storing stuklopen.
-        Mockito.reset(notificatieRepository);
         long overgebleven = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count());
-        assertEquals(500L, overgebleven, "Batch 1 was al gecommit en mag niet zijn teruggedraaid door "
-                + "de fout in batch 2");
+        assertEquals(500L, overgebleven, "twee batches van 1000 verwijderd, de rest blijft tot de "
+                + "volgende run");
     }
 
-    // De melding van niet-definitieve kandidaten is signalering en draait vóór de batchlus; een
-    // storing daarin mag de opruiming van die nacht niet tegenhouden. De eerste getEntityManager()-
-    // aanroep is de telquery van die melding, dus alleen die faalt hier; alles daarna werkt gewoon.
     // De melding zit sinds de herziening ín de batchtransactie en gaat over exact de geclaimde rijen.
     // Daarmee is de oude test "als de melding faalt, verwijdert de job alsnog" vervallen: melding en
     // verwijdering kunnen niet meer los van elkaar slagen. Dat een falende batch zijn eigen rijen
@@ -551,7 +554,7 @@ class NotificatieRetentieSchedulerTest {
     private Object roepPrivateMethodeAan(String naam, Class<?>[] parameterTypes, Object... argumenten) {
         try {
             NotificatieRetentieScheduler kaleScheduler =
-                    new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(7));
+                    new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(7), 10_000);
             Method methode = NotificatieRetentieScheduler.class.getDeclaredMethod(naam, parameterTypes);
             methode.setAccessible(true);
             return methode.invoke(kaleScheduler, argumenten);
