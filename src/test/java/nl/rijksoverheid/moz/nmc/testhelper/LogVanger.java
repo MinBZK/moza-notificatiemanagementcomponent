@@ -1,0 +1,74 @@
+package nl.rijksoverheid.moz.nmc.testhelper;
+
+import org.jboss.logmanager.ExtLogRecord;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
+
+/**
+ * Vangt logregels van één categorie op, zodat een test kan asserteren dát er gelogd is en op welk
+ * niveau. Nodig omdat een logregel hier functionaliteit is en geen bijvangst: de melding van
+ * notificaties die zonder eindstatus verlopen, is het enige signaal dat daarvan overblijft nadat de
+ * retentiejob de rij heeft verwijderd, en er worden dashboards op gebouwd. Zonder deze assertie
+ * kan iemand het niveau verlagen of de regel schrappen zonder dat een test valt.
+ * <p>
+ * Quarkus 3.38 heeft geen LogCollectingTestResource, vandaar deze handmatige handler.
+ */
+public final class LogVanger implements AutoCloseable {
+
+    private final Logger logger;
+    private final Handler handler;
+    private final List<LogRecord> regels = Collections.synchronizedList(new ArrayList<>());
+
+    private LogVanger(String categorie) {
+        this.logger = Logger.getLogger(categorie);
+        this.handler = new Handler() {
+            @Override
+            public void publish(LogRecord regel) {
+                regels.add(regel);
+            }
+
+            @Override
+            public void flush() {
+                // Niets te legen: de regels staan al in de lijst.
+            }
+
+            @Override
+            public void close() {
+                // De handler houdt geen bronnen vast.
+            }
+        };
+        this.handler.setLevel(Level.ALL);
+        this.logger.addHandler(handler);
+    }
+
+    public static LogVanger van(Class<?> categorie) {
+        return new LogVanger(categorie.getName());
+    }
+
+    /** Alle opgevangen regels van precies dit niveau, als tekst. */
+    public List<String> regelsOpNiveau(Level niveau) {
+        synchronized (regels) {
+            return regels.stream()
+                    .filter(regel -> regel.getLevel().intValue() == niveau.intValue())
+                    .map(LogVanger::tekst)
+                    .toList();
+        }
+    }
+
+    // jboss-logging formatteert pas bij het schrijven, dus getMessage() levert bij Log.warnf nog de
+    // formatstring op; ExtLogRecord kent de ingevulde variant.
+    private static String tekst(LogRecord regel) {
+        return regel instanceof ExtLogRecord ext ? ext.getFormattedMessage() : regel.getMessage();
+    }
+
+    @Override
+    public void close() {
+        logger.removeHandler(handler);
+    }
+}
