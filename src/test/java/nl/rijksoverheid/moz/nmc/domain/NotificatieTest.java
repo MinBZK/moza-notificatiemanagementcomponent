@@ -100,10 +100,11 @@ class NotificatieTest {
         assertEquals(3, notificatie.getStatusGeschiedenis().size());
     }
 
-    // De projectie op Notificatie is een kopie van het laatste geschiedenisrecord, geen tweede
-    // bron van waarheid: na elke registratie moeten ze exact het chronologisch laatste record
-    // teruggeven. Zonder deze test zou een registratiepad dat de projectie vergeet bij te werken
-    // (of ernaast gaat zitten) pas in de retentiejob opvallen, die er als enige op selecteert.
+    // De projectie op Notificatie is een kopie van het laatste geschiedenisrecord: na elke
+    // registratie moeten ze hetzelfde record teruggeven. Dat is hier binnen Java de enige bewaking —
+    // in de database koppelt niets laatste_status aan de rij met het hoogste volgnummer. Zonder deze
+    // test zou een registratiepad dat de projectie vergeet bij te werken (of ernaast gaat zitten) pas
+    // opvallen in de retentiejob, die volledig op de projectie stuurt.
     @Test
     void registreerStatus_naElkeWijziging_blijftDeProjectieGelijkAanDeGeschiedenis() {
         Notificatie notificatie = new Notificatie(null);

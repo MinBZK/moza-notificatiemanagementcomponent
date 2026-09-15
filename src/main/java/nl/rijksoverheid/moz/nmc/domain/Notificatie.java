@@ -38,8 +38,17 @@ public class Notificatie {
 
     // Kopie van het laatste record in statusGeschiedenis, bijgewerkt door registreerStatus. Staat op
     // notificatie zodat de retentiejob op een geïndexeerde kolom kan selecteren in plaats van per
-    // notificatie een MAX over notificatie_status te berekenen. De geschiedenis blijft de bron van
-    // waarheid.
+    // notificatie een MAX over notificatie_status te berekenen.
+    //
+    // Deze kolommen zijn waar de code op stuurt, niet de geschiedenis: NotificatieService toetst
+    // volgtOp tegen laatsteStatus, en de retentiejob selecteert en meldt volledig op deze projectie.
+    // De geschiedenis is het audittrail en wordt in productiecode alleen door getAangemaakt gelezen,
+    // en dan nog alleen het eerste record. Bij divergentie wint dus de projectie.
+    //
+    // Binnen Java kán die divergentie niet ontstaan: registreerStatus is het enige pad naar beide
+    // velden en schrijft er hetzelfde object naartoe. Daarbuiten wel — geen constraint koppelt
+    // laatste_status aan de rij met het hoogste volgnummer — dus een schrijver die Hibernate omzeilt
+    // moet ze zelf in pas houden.
     @Embedded
     @AttributeOverrides({
             @AttributeOverride(name = "status", column = @Column(name = "laatste_status", nullable = false, length = 32)),
