@@ -10,12 +10,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Bewaakt dat de statuswaarden die een Dienstverlener in de callback kan krijgen ook echt in het
  * gepubliceerde document staan.
  * <p>
- * Niet vanzelfsprekend: SmallRye laat het {@code callbacks}-blok uit {@code META-INF/openapi.yaml}
- * vallen bij het bouwen van de applicatie en snoeit de schema's waar het naar verwijst daarna weg
- * als ongebruikt. Gecontroleerd op het previewcluster: {@code NotificatieStatusEvent} en de
- * statusenum stonden daar niet in {@code /q/openapi}. De waarden staan daarom óók in de
- * beschrijving van {@code callbackUrl}, die wél overleeft — en deze test bewaakt dat, want de
- * bronspec alleen bekijken geeft een vals positief.
+ * Toetst tegen {@code /q/openapi} en niet tegen {@code META-INF/openapi.yaml}: dat de waarden in
+ * het bronbestand staan zegt niets over wat een afnemer krijgt. SmallRye bouwt het gepubliceerde
+ * document op uit die bron, en een filter of een herschikking daar kan onderdelen laten vervallen
+ * zonder dat het bestand verandert.
  */
 @QuarkusTest
 class GepubliceerdeSpecTest {

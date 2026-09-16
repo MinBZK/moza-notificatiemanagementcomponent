@@ -41,11 +41,10 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/NotificatieAanvraagRequest'
-      # Let op: SmallRye laat dit callbacks-blok vallen bij het bouwen van de applicatie en
-      # snoeit de schema's waar het naar verwijst daarna weg als ongebruikt; ze staan dus
-      # niet in /q/openapi. Het blok blijft hier omdat het de vorm van de callback
-      # vastlegt voor wie de bronspec leest, maar de statuswaarden staan daarom óók in de
-      # beschrijving van callbackUrl hierboven — die haalt de gepubliceerde spec wél.
+      # De statuswaarden staan ook in de beschrijving van callbackUrl hierboven. Dat is geen
+      # dubbeling om niets: een afnemer die de spec in Swagger UI opent ziet de beschrijving
+      # bij het veld dat hij invult, terwijl dit blok pas zichtbaar is als hij doorklikt naar
+      # de callback. Beide halen /q/openapi (geverifieerd op het previewcluster).
       callbacks:
         statusupdate:
           '{$request.body#/callbackUrl}':
@@ -120,11 +119,10 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DecentraleNotificatieAanvraagRequest'
-      # Let op: SmallRye laat dit callbacks-blok vallen bij het bouwen van de applicatie en
-      # snoeit de schema's waar het naar verwijst daarna weg als ongebruikt; ze staan dus
-      # niet in /q/openapi. Het blok blijft hier omdat het de vorm van de callback
-      # vastlegt voor wie de bronspec leest, maar de statuswaarden staan daarom óók in de
-      # beschrijving van callbackUrl hierboven — die haalt de gepubliceerde spec wél.
+      # De statuswaarden staan ook in de beschrijving van callbackUrl hierboven. Dat is geen
+      # dubbeling om niets: een afnemer die de spec in Swagger UI opent ziet de beschrijving
+      # bij het veld dat hij invult, terwijl dit blok pas zichtbaar is als hij doorklikt naar
+      # de callback. Beide halen /q/openapi (geverifieerd op het previewcluster).
       callbacks:
         statusupdate:
           '{$request.body#/callbackUrl}':
