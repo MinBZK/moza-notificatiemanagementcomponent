@@ -235,6 +235,44 @@ class NotificatieServiceTest {
         verify(notificatieRepository, never()).deleteById(any());
     }
 
+    // Twee verschillende eindstatussen voor één verzending hoort niet te kunnen: NotifyNL stuurt per
+    // notificatie één uitkomst. Gebeurt het toch, dan is er iets mis bij NotifyNL of klopt de
+    // koppeling op external_reference niet. De geweigerde status gaat niet de geschiedenis in, dus
+    // deze regel is het enige spoor — vandaar WARN en niet DEBUG.
+    @Test
+    void verwerkAfleverstatus_tweeVerschillendeEindstatussen_meldtOpWarn() {
+        Notificatie notificatie = notificatie(null);
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null);
+
+        List<String> waarschuwingen;
+        try (LogVanger vanger = LogVanger.van(NotificatieService.class)) {
+            service.verwerkAfleverstatus(UUID.randomUUID(), "permanent-failure", null);
+            waarschuwingen = vanger.regelsOpNiveau(Level.WARNING);
+        }
+
+        assertEquals(1, waarschuwingen.size());
+        assertTrue(waarschuwingen.getFirst().contains("tegenstrijdige uitkomsten"));
+    }
+
+    // Het verwachte geval: NotifyNL herhaalt bij elke niet-2xx, dus dezelfde receipt komt vaker
+    // binnen. Dat op WARN loggen leert een operator WARNs negeren, waarna de tegenstrijdigheid
+    // hierboven in de ruis verdwijnt.
+    @Test
+    void verwerkAfleverstatus_herhaaldeReceipt_meldtNietOpWarn() {
+        Notificatie notificatie = notificatie(null);
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null);
+
+        List<String> waarschuwingen;
+        try (LogVanger vanger = LogVanger.van(NotificatieService.class)) {
+            service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null);
+            waarschuwingen = vanger.regelsOpNiveau(Level.WARNING);
+        }
+
+        assertTrue(waarschuwingen.isEmpty(), "een herhaling is het verwachte geval, geen waarschuwing");
+    }
+
     // Het niveau is hier functionaliteit: een status die de NMC niet kent betekent dat NotifyNL iets
     // terugmeldt waar dit component geen afhandeling voor heeft, en dat hoort meteen op te vallen.
     // Zonder deze assertie kan iemand ERROR naar DEBUG verlagen zonder dat een test valt, waarna het

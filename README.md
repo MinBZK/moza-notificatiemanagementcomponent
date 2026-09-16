@@ -276,6 +276,9 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   onbekend is. Een status die geen vooruitgang is op de al vastgelegde status
   (`StatusWaarde#volgtOp`) wordt geweigerd: hij wordt gelogd (WARN) maar niet
   geregistreerd, en er gaat geen statusupdate over naar de Dienstverlener.
+  Een herhaalde of laat aangekomen receipt is het verwachte geval en wordt op
+  DEBUG gelogd; meldt NotifyNL twee verschillende eindstatussen voor dezelfde
+  verzending, dan is dat een anomalie en volgt een WARN.
   NotifyNL biedt een callback opnieuw aan bij elke niet-2xx, dus receipts komen
   at-least-once en niet gegarandeerd op volgorde binnen; geweigerd worden dus
   zowel een herhaling van dezelfde receipt, als een teruggang naar een

@@ -101,9 +101,7 @@ public class NotificatieService {
         // omdat de retentiejob op het laatste tijdstip in de statusgeschiedenis vaart, de
         // bewaartermijn opnieuw laten beginnen. Zie StatusWaarde#volgtOp voor de rangorde.
         if (!nieuweStatus.volgtOp(huidigeStatus)) {
-            Log.warnf("Notificatie %s heeft al status %s; status %s (NotifyNL-referentie %s) is daar "
-                    + "geen vooruitgang op en wordt genegeerd", notificatie.getId(), huidigeStatus,
-                    nieuweStatus, notifyNlNotificatieId);
+            meldGenegeerdeStatus(notificatie.getId(), huidigeStatus, nieuweStatus, notifyNlNotificatieId);
 
             return;
         }
@@ -121,6 +119,31 @@ public class NotificatieService {
         // bovendien de DB-connectie van deze transactie niet bezet zolang de callback duurt.
         statusUpdateEvent.fire(new StatusUpdateOpdracht(
                 notificatie.getId(), notificatie.getCallbackUrl(), nieuweStatus));
+    }
+
+    // Twee niveaus, want hier komen twee wezenlijk verschillende dingen samen.
+    //
+    // Het verwachte geval is een herhaling of een laat aangekomen receipt: NotifyNL herhaalt bij elke
+    // niet-2xx, dus bij één trage consument-callback komen er zo vier voor dezelfde notificatie. Dat
+    // op WARN loggen leert een operator WARNs negeren, en dan verdwijnt het geval hieronder in de ruis.
+    //
+    // Het afwijkende geval is dat NotifyNL twee verschillende eindstatussen meldt voor dezelfde
+    // verzending. Dat hoort niet te kunnen: per notificatie stuurt NotifyNL één uitkomst. Gebeurt het
+    // toch, dan is er iets mis bij NotifyNL of klopt de koppeling op external_reference niet, en dat
+    // verdient onderzoek. Let op dat dit feit verder nergens wordt vastgelegd — de geweigerde status
+    // gaat niet de geschiedenis in, dus deze regel is het enige spoor.
+    private static void meldGenegeerdeStatus(UUID notificatieId, StatusWaarde huidigeStatus,
+            StatusWaarde nieuweStatus, UUID notifyNlNotificatieId) {
+        if (huidigeStatus.isDefinitief() && nieuweStatus.isDefinitief() && huidigeStatus != nieuweStatus) {
+            Log.warnf("Notificatie %s staat op %s en NotifyNL meldt daarna %s (referentie %s): "
+                    + "tegenstrijdige uitkomsten voor één verzending — de vastgelegde uitkomst blijft staan",
+                    notificatieId, huidigeStatus, nieuweStatus, notifyNlNotificatieId);
+
+            return;
+        }
+        Log.debugf("Notificatie %s heeft al status %s; status %s (NotifyNL-referentie %s) is daar geen "
+                + "vooruitgang op en wordt genegeerd", notificatieId, huidigeStatus, nieuweStatus,
+                notifyNlNotificatieId);
     }
 
     // ERROR en niet WARN: een status die de NMC niet kent betekent dat NotifyNL iets terugmeldt
