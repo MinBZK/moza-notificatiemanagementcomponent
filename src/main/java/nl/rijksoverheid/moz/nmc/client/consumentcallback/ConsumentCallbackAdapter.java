@@ -53,11 +53,18 @@ public class ConsumentCallbackAdapter {
             client = clientFactory.maakClient(callbackUrl);
         } catch (IllegalArgumentException | RestClientDefinitionException e) {
             // Buiten de retry-lus: het bouwen van de client faalt permanent, dus elke poging zou
-            // identiek falen. Bewust alleen deze twee: een
-            // ongeldige URL (URI.create) en een fout in onze eigen client-interface. Elke andere
-            // RuntimeException uit de rest-client-extensie (kapotte truststore, proxyconfiguratie,
-            // ontbrekende MessageBodyWriter) is geen probleem van de meegegeven URL en mag hier niet
-            // als zodanig weggelogd worden.
+            // identiek falen.
+            //
+            // De IllegalArgumentException-tak is sinds CallbackUrlValidator grotendeels dicht: een
+            // callbackUrl wordt aan de deur gevalideerd en genormaliseerd voordat hij wordt
+            // opgeslagen, dus een vormfout haalt deze code niet meer. Wat overblijft is een rij die
+            // van vóór die validatie stamt. De tak blijft staan omdat hij goedkoop is en de enige
+            // die dit geval afvangt, niet omdat hij vaak zal vuren.
+            //
+            // Bewust alleen deze twee typen. Elke andere RuntimeException uit de
+            // rest-client-extensie (kapotte truststore, proxyconfiguratie, ontbrekende
+            // MessageBodyWriter) is geen probleem van de meegegeven URL en mag hier niet als zodanig
+            // weggelogd worden; die ontsnapt naar StatusUpdateVerzender, die hem op ERROR meldt.
             Log.errorf(e, "Callback-client kon niet worden gebouwd voor notificatie %s (url=%s) — "
                     + "statusupdate niet verstuurd", opdracht.notificatieId(), callbackUrl);
 
