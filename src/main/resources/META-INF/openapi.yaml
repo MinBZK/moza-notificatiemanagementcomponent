@@ -41,6 +41,11 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/NotificatieAanvraagRequest'
+      # Let op: SmallRye laat dit callbacks-blok vallen bij het bouwen van de applicatie en
+      # snoeit de schema's waar het naar verwijst daarna weg als ongebruikt; ze staan dus
+      # niet in /q/openapi. Het blok blijft hier omdat het de vorm van de callback
+      # vastlegt voor wie de bronspec leest, maar de statuswaarden staan daarom óók in de
+      # beschrijving van callbackUrl hierboven — die haalt de gepubliceerde spec wél.
       callbacks:
         statusupdate:
           '{$request.body#/callbackUrl}':
@@ -115,6 +120,11 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DecentraleNotificatieAanvraagRequest'
+      # Let op: SmallRye laat dit callbacks-blok vallen bij het bouwen van de applicatie en
+      # snoeit de schema's waar het naar verwijst daarna weg als ongebruikt; ze staan dus
+      # niet in /q/openapi. Het blok blijft hier omdat het de vorm van de callback
+      # vastlegt voor wie de bronspec leest, maar de statuswaarden staan daarom óók in de
+      # beschrijving van callbackUrl hierboven — die haalt de gepubliceerde spec wél.
       callbacks:
         statusupdate:
           '{$request.body#/callbackUrl}':
@@ -221,8 +231,56 @@ components:
           x-field-extra-annotation: "@nl.rijksoverheid.moz.nmc.validation.ValidCallbackUrl"
           description: >-
             Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
-            terugstuurt zodra de bezorgstatus bekend is. Weglaten als de
-            Dienstverlener de status zelf opvraagt via GET /notificaties/{id}.
+            terugstuurt zodra de bezorgstatus bekend is.
+
+            De statusupdate is een CloudEvent met in `data` het `notificatieId` en een
+            `status`. Mogelijke waarden, met hun betekenis:
+
+            | Waarde | Betekenis |
+            |---|---|
+            | `created` | Vastgelegd, nog niet aangeboden bij NotifyNL |
+            | `sending` | Aangeboden bij NotifyNL, nog geen uitkomst |
+            | `delivered` | Bezorgd |
+            | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
+            | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
+            | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
+            | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
+
+            `onbekend` zegt niets over de notificatie zelf: er is wél een terugmelding
+            ontvangen, maar die viel buiten de statussen die dit component kent.
+            Behandel hem niet als eindstatus, er kan later alsnog een bekende uitkomst
+            binnenkomen.
+
+            Een status komt hooguit één keer voorbij; een herhaalde of laat aangekomen
+            melding die geen vooruitgang is op de al vastgelegde status levert geen
+            statusupdate op. De NMC doet maximaal drie pogingen en biedt daarna niet
+            opnieuw aan.
+
+            De statusupdate is een CloudEvent met in `data` het `notificatieId` en een
+            `status`. Mogelijke waarden, met hun betekenis:
+
+            | Waarde | Betekenis |
+            |---|---|
+            | `created` | Vastgelegd, nog niet aangeboden bij NotifyNL |
+            | `sending` | Aangeboden bij NotifyNL, nog geen uitkomst |
+            | `delivered` | Bezorgd |
+            | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
+            | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
+            | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
+            | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
+
+            `onbekend` zegt niets over de notificatie zelf: er is wél een terugmelding
+            ontvangen, maar die viel buiten de statussen die dit component kent.
+            Behandel hem niet als eindstatus, er kan later alsnog een bekende uitkomst
+            binnenkomen.
+
+            Een status komt hooguit één keer voorbij; een herhaalde of laat aangekomen
+            melding die geen vooruitgang is op de al vastgelegde status levert geen
+            statusupdate op. De NMC doet maximaal drie pogingen en biedt daarna niet
+            opnieuw aan.
+
+            Weglaten als de Dienstverlener de status zelf opvraagt via
+            GET /notificaties/{id}.
             Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
             tekens, zonder gebruikersinfo) wordt geaccepteerd; IP-adressen en interne
             hostnamen worden geweigerd (400).
@@ -260,6 +318,29 @@ components:
           description: >-
             Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
             terugstuurt zodra de bezorgstatus bekend is.
+
+            De statusupdate is een CloudEvent met in `data` het `notificatieId` en een
+            `status`. Mogelijke waarden, met hun betekenis:
+
+            | Waarde | Betekenis |
+            |---|---|
+            | `created` | Vastgelegd, nog niet aangeboden bij NotifyNL |
+            | `sending` | Aangeboden bij NotifyNL, nog geen uitkomst |
+            | `delivered` | Bezorgd |
+            | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
+            | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
+            | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
+            | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
+
+            `onbekend` zegt niets over de notificatie zelf: er is wél een terugmelding
+            ontvangen, maar die viel buiten de statussen die dit component kent.
+            Behandel hem niet als eindstatus, er kan later alsnog een bekende uitkomst
+            binnenkomen.
+
+            Een status komt hooguit één keer voorbij; een herhaalde of laat aangekomen
+            melding die geen vooruitgang is op de al vastgelegde status levert geen
+            statusupdate op. De NMC doet maximaal drie pogingen en biedt daarna niet
+            opnieuw aan.
             Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
             tekens, zonder gebruikersinfo) wordt geaccepteerd; IP-adressen en interne
             hostnamen worden geweigerd (400).
