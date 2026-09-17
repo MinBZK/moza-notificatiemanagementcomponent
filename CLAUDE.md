@@ -58,9 +58,8 @@ die Dienstverleners anders ieder zelf zouden moeten bouwen.
 - **Contactherstel**: terugvallen op een ander contactkanaal (meestal een fysieke
   brief) wanneer digitale bezorging mislukt.
 - **Herverzending**: hetzelfde kanaal opnieuw proberen na een fout.
-- **wMEBV**: vermoedelijk de *Wet modernisering elektronisch bestuurlijk verkeer*,
-  de wet achter de bewijslast van bezorging en de plicht tot contactherstel. Nog
-  niet bevestigd.
+- **wMEBV**: de *Wet modernisering elektronisch bestuurlijk verkeer*, de wet achter
+  de bewijslast van bezorging en de plicht tot contactherstel.
 - **BSN / KVK / RSIN**: identificatienummers van burger, onderneming en
   rechtspersoon.
 
