@@ -38,7 +38,7 @@ die Dienstverleners anders ieder zelf zouden moeten bouwen.
 - **Dienstverlener**: de overheidsorganisatie die de notificatie verstuurt.
 - **Procesapplicatie**: de backend van de Dienstverlener die besluit dat er een
   notificatie nodig is.
-- **OMC (Output Management Component)**: `../moza-omc` (.NET). Een component per
+- **OMC (Output Management Component)**: een component per
   Dienstverlener, vergelijkbaar met de NMC maar beperkt tot één Dienstverlener.
   Veel Dienstverleners draaien er al een; de NMC standaardiseert wat anders per
   OMC gedupliceerd wordt. De OMC is de gebruikelijke aanroeper van de NMC, maar een
@@ -508,8 +508,7 @@ Details en debugroutes: `docs/zad-deploy.md`.
 
 ## Referentierepo's (naast deze repo)
 
-- `../moza-omc`: OMC, .NET (`Moza.Omc.Api`)
 - `../moza-profiel-service`: Profielservice, Quarkus (`src/main/resources/META-INF/openapi.yaml`)
 - `../moza-verificatie-service`: Quarkus; voorbeeld van de NotifyNL-integratie
-- `../moza-portaal`: Next.js-portaal met `dependencies/omc/swagger.json`; de relatie
-  met `../moza-omc` is onbevestigd, zie de kanttekening bij `NotificatieStatus`.
+- `../moza-portaal`: Next.js-portaal met `dependencies/omc/swagger.json`; zie de
+  kanttekening bij `NotificatieStatus`.
