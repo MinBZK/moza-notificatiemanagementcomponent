@@ -275,8 +275,10 @@ Twee dingen die hier vaak misgaan:
 
 - **De gate hangt aan fase `verify`, niet `package`.** `maven.yml` draait daarom
   `mvn -B verify`. `./mvnw package` of `./mvnw test` controleert de dekking niet;
-  draai lokaal `./mvnw verify` om te zien of CI groen wordt. De CI-check is geen
-  verplichte status check op `main`, dus een rode build blokkeert een merge niet.
+  draai lokaal `./mvnw verify` om te zien of CI groen wordt. De job heet
+  `Maven verify` en is een verplichte status check op `main`: een rode build
+  blokkeert de merge. Hernoem die job niet zonder de branch protection mee aan te
+  passen, anders wacht elke PR op een check die nooit komt.
 - **De excludelijst staat op twee plekken**: in de `jacoco-maven-plugin`-configuratie
   in `pom.xml` en als `%test.quarkus.jacoco.excludes` in `application.properties`.
   Houd ze letterlijk gelijk. De gate leest de lijst uit `pom.xml`, dus lopen ze
@@ -457,8 +459,8 @@ een verwijzing wel, maar alleen naar werk dat nog loopt.
   conventional-commit-prefix (`fix:`, `test:`, `ci:`, `docs:`).
 - Gebruik de PR-template in `.github/PULL_REQUEST_TEMPLATE.md`.
 - Voeg bij het aanmaken van een PR **geen** reviewer toe.
-- Draai `./mvnw verify` vóór je een PR opent; CI draait dezelfde gate, maar een rode
-  build blokkeert de merge niet.
+- Draai `./mvnw verify` vóór je een PR opent; CI draait dezelfde gate als verplichte
+  check (`Maven verify`), en een rode build blokkeert de merge.
 
 ### Issues en PR's koppelen
 
