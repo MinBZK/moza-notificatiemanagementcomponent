@@ -55,6 +55,7 @@ class NotificatiePersistentieTest {
             notificatie.registreerStatus(StatusWaarde.TEMPORARY_FAILURE);
             registreerStatusOp(notificatie, StatusWaarde.DELIVERED, laatsteTijdstip);
             notificatieRepository.persist(notificatie);
+
             return notificatie.getId();
         });
 
@@ -91,6 +92,7 @@ class NotificatiePersistentieTest {
             registreerStatusOp(notificatie, StatusWaarde.DELIVERED, deliveredTijdstip);
             registreerStatusOp(notificatie, StatusWaarde.SENDING, sendingTijdstip);
             notificatieRepository.persist(notificatie);
+
             return notificatie.getId();
         });
 
@@ -108,15 +110,10 @@ class NotificatiePersistentieTest {
         });
     }
 
-    // NotificatieStatusTest dekt de normalisatie in het geheugen, maar de claim die de code maakt is
-    // "gelijk aan de waarde die uit de database terugkomt". De overige persistentietests kappen hun
-    // fixtures zélf al af op microseconden en gebruiken UTC, dus die slagen ook zónder de
-    // normalisatie. Hier gaat een waarde mét nanoseconden én een niet-UTC-offset door de database
-    // heen en terug.
-    //
-    // Let op: dit draait op H2, dat de offset wél bewaart. De precisiekant wordt hier dus volledig
-    // getoetst, de offsetkant pas echt op PostgreSQL — daar normaliseert de kolom zelf naar UTC en
-    // zou een niet-genormaliseerde waarde anders terugkomen dan hij werd weggeschreven.
+    // De andere persistentietests kappen hun fixtures zelf al af op microseconden en gebruiken UTC;
+    // hier gaat een waarde mét nanoseconden én een niet-UTC-offset door de database heen en terug.
+    // Dit draait op H2, dat de offset bewaart: de precisiekant wordt volledig getoetst, de offsetkant
+    // pas echt op PostgreSQL.
     @Test
     void notificatieStatus_metNanosecondenEnEenAndereOffset_komtGenormaliseerdTerug() {
         OffsetDateTime ruw = OffsetDateTime.parse("2026-03-01T14:00:00.123456789+02:00");
@@ -178,19 +175,15 @@ class NotificatiePersistentieTest {
         });
     }
 
-    // Twee gelijktijdige callbacks werken allebei vanaf dezelfde toestand en willen allebei
-    // hetzelfde volgnummer schrijven in
-    // notificatie. Zonder @Version op Notificatie zouden twee gelijktijdige callbacks die allebei
-    // dezelfde geschiedenis inlezen en er ieder een regel aan toevoegen, elkaars regel geruisloos
-    // overschrijven — de laatste commit wint volledig. Deze test bootst dat na: de buitenste
-    // transactie leest de notificatie in, een geneste requiringNew()-transactie (die de buitenste
-    // schorst en dus een eigen persistence context krijgt) commit ondertussen een eigen statusregel,
-    // waarna de buitenste alsnog zijn eigen wijziging probeert te committen.
+    // Zonder @Version zouden twee gelijktijdige callbacks die dezelfde geschiedenis inlezen elkaars
+    // statusregel geruisloos overschrijven. De test bootst dat na: een geneste requiringNew()-
+    // transactie commit een eigen statusregel terwijl de buitenste de notificatie al had ingelezen.
     @Test
     void notificatie_tweeTransactiesWijzigenDezelfdeStatusGeschiedenis_laatDeTweedeCommitFalen() {
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(null);
             notificatieRepository.persist(notificatie);
+
             return notificatie.getId();
         });
 

@@ -87,14 +87,9 @@ class NotificatieRetentieSchedulerTest {
         });
     }
 
-    // Alle andere tests werken met uitersten (31 dagen oud versus 1 dag oud) rond de standaard
-    // geconfigureerde bewaartermijn en zouden daarom net zo goed slagen met een hardgecodeerde grens.
-    // Deze test draait een scheduler met een bewaartermijn van 2 dagen op een populatie waarvan
-    // beide rijen ruim bínnen de standaardtermijn vallen: alleen als de geconfigureerde waarde de
-    // grens écht bepaalt, verdwijnt de rij van 3 dagen oud en blijft die van 1 dag oud staan.
-    // Een kale scheduler i.p.v. een @TestProfile: dat scheelt een tweede Quarkus-context, en de
-    // constructorparameter is precies wat hier bewezen moet worden (zie verwijderBatchOp voor waarom
-    // rechtstreeks construeren hier veilig is).
+    // De andere tests werken met uitersten rond de standaardtermijn en zouden ook met een
+    // hardgecodeerde grens slagen. Hier vallen beide rijen bínnen die standaardtermijn, dus alleen een
+    // scheduler die de geconfigureerde 2 dagen gebruikt laat de rij van 3 dagen oud verdwijnen.
     @Test
     void verwijderVerlopenNotificaties_metEenAfwijkendeBewaartermijn_gebruiktDieAlsGrens() {
         UUID verlopenId = maakNotificatie(null, StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(3));
@@ -150,19 +145,10 @@ class NotificatieRetentieSchedulerTest {
         assertEquals(5L, overgebleven);
     }
 
-    // Bewijst de transactie-per-batch waar de hele veiligheidsredenering van de job op rust: zonder
-    // QuarkusTransaction.requiringNew() per batch (bijv. als verwijderVerlopenNotificaties() ooit
-    // "vereenvoudigd" wordt tot één @Transactional-methode) zou een fout in batch 2 ook de al
-    // verwijderde 1000 rijen van batch 1 terugdraaien, en zou elke andere test in deze suite gewoon
-    // groen blijven.
-    //
-    // De storing zit op verwijderOpId en niet meer op getEntityManager(): sinds de queries in
-    // NotificatieRepository staan is er een methode per stap, dus de test hoeft geen aanroepen meer
-    // te tellen om de tweede batch te raken.
-    //
-    // De run gooit niet: sinds de poison-row-afhandeling vangt de lus een mislukte batch af en gaat
-    // door. Wat hier wordt bewezen is dus niet de exceptie maar de isolatie — de 1000 rijen van batch
-    // 1 blijven weg, ook al faalde batch 2 daarna.
+    // Bewijst de transactie-per-batch: zou verwijderVerlopenNotificaties() ooit één @Transactional
+    // methode worden, dan draait een fout in batch 2 ook de 1000 al verwijderde rijen van batch 1
+    // terug, terwijl elke andere test in deze suite groen blijft. De run zelf gooit niet — de lus
+    // vangt een mislukte batch af — dus wat hier valt is de isolatie, niet de exceptie.
     @Test
     void verwijderVerlopenNotificaties_alsEenLatereBatchFaalt_blijftDeEerdereBatchVerwijderd() {
         plantVerlopenNotificaties(1500, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
@@ -432,6 +418,7 @@ class NotificatieRetentieSchedulerTest {
                     NotificatieStatus.opEigenKlok(StatusWaarde.CREATED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(40)),
                     NotificatieStatus.opEigenKlok(StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1))));
             notificatieRepository.persist(notificatie);
+
             return notificatie.getId();
         });
 
@@ -501,14 +488,9 @@ class NotificatieRetentieSchedulerTest {
                 assertTrue(notificatieRepository.findByIdOptional(verlopenIdMetCallbackUrl).isEmpty()));
     }
 
-    // De tegenhanger van de test hierboven: die bewijst de negatieve helft (het afleveren van een
-    // status aan de Dienstverlener verzet de bewaartermijn níet), deze de positieve helft: een
-    // binnenkomende NotifyNL-statusupdate registreert een nieuw statusgeschiedenisrecord en zet de
-    // teller daarmee terug op nu. De notificatie start bewust ruim verlopen (31 dagen, bij de
-    // geconfigureerde termijn): zou de statusupdate de bewaartermijn niet verzetten, dan haalt de
-    // retentiejob hem hier alsnog weg. SENDING naar DELIVERED is een realistische opeenvolging die
-    // niet door de afwijzing van een niet-definitieve status ná een definitieve wordt tegengehouden
-    // (zie NotificatieService#verwerkAfleverstatus).
+    // De positieve helft naast de test hierboven: een binnenkomende statusupdate registreert een
+    // nieuw geschiedenisrecord en zet de bewaartermijn terug op nu. De notificatie start ruim verlopen
+    // (31 dagen), dus zonder dat effect zou de retentiejob hem hier weghalen.
     @Test
     void verwerkAfleverstatus_voorEenVerlopenNotificatie_verzetDeBewaartermijnZodatDeRetentiejobHemLaatStaan() {
         UUID notifyNlReferentie = UUID.randomUUID();
@@ -518,6 +500,7 @@ class NotificatieRetentieSchedulerTest {
             vervangGeschiedenisDoor(notificatie, List.of(NotificatieStatus.opEigenKlok(StatusWaarde.SENDING,
                     OffsetDateTime.now(ZoneOffset.UTC).minusDays(31))));
             notificatieRepository.persist(notificatie);
+
             return notificatie.getId();
         });
 
@@ -575,11 +558,14 @@ class NotificatieRetentieSchedulerTest {
             UUID externalReference) {
         return QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(callbackUrl);
+
             if (externalReference != null) {
                 notificatie.markeerVerzonden(externalReference);
             }
+
             vervangGeschiedenisDoor(notificatie, List.of(NotificatieStatus.opEigenKlok(status, laatsteStatusUpdate)));
             notificatieRepository.persist(notificatie);
+
             return notificatie.getId();
         });
     }

@@ -36,19 +36,13 @@ public class Notificatie {
     @Column(name = "callback_url", length = 2048)
     private String callbackUrl;
 
-    // Kopie van het laatste record in statusGeschiedenis, bijgewerkt door registreerStatus. Staat op
-    // notificatie zodat de retentiejob op een geïndexeerde kolom kan selecteren in plaats van per
-    // notificatie een MAX over notificatie_status te berekenen.
+    // Kopie van het laatste record in statusGeschiedenis, zodat de retentiejob op een geïndexeerde
+    // kolom kan selecteren in plaats van per notificatie een MAX over notificatie_status te
+    // berekenen. Hier stuurt de code op, niet op de geschiedenis.
     //
-    // Deze kolommen zijn waar de code op stuurt, niet de geschiedenis: NotificatieService toetst
-    // volgtOp tegen laatsteStatus, en de retentiejob selecteert en meldt volledig op deze projectie.
-    // De geschiedenis is het audittrail en wordt in productiecode alleen door getAangemaakt gelezen,
-    // en dan nog alleen het eerste record. Bij divergentie wint dus de projectie.
-    //
-    // Binnen Java kán die divergentie niet ontstaan: registreerStatus is het enige pad naar beide
-    // velden en schrijft er hetzelfde object naartoe. Daarbuiten wel — geen constraint koppelt
-    // laatste_status aan de rij met het hoogste volgnummer — dus een schrijver die Hibernate omzeilt
-    // moet ze zelf in pas houden.
+    // registreerStatus is binnen Java het enige pad naar beide velden, dus ze kunnen niet uiteen
+    // lopen. In de database koppelt geen constraint laatste_status aan de rij met het hoogste
+    // volgnummer, dus een schrijver die Hibernate omzeilt moet ze zelf in pas houden.
     @Embedded
     @AttributeOverrides({
             @AttributeOverride(name = "status", column = @Column(name = "laatste_status", nullable = false, length = 32)),
@@ -57,10 +51,9 @@ public class Notificatie {
     })
     private NotificatieStatus laatsteStatus;
 
-    // @OrderColumn en geen @OrderBy: zonder ordeningskolom is dit voor Hibernate een bag, en dan is
-    // elke toevoeging een delete-all plus reinsert in plaats van één INSERT. De volgorde is daarmee
-    // registratievolgorde; ordenen op tijdstip zou een receipt met een oude completed_at vóór de
-    // aanmaakstatus laten sorteren, waarna getAangemaakt() de verkeerde rij teruggeeft.
+    // @OrderColumn en geen @OrderBy: zonder ordeningskolom is dit voor Hibernate een bag, en wordt
+    // elke toevoeging een delete-all plus reinsert. De volgorde is daarmee registratievolgorde, niet
+    // die van tijdstip — dat laatste zou een oude completed_at vóór de aanmaakstatus sorteren.
     @ElementCollection
     @CollectionTable(name = "notificatie_status", joinColumns = @JoinColumn(name = "notificatie_id"))
     @OrderColumn(name = "volgnummer")
@@ -95,10 +88,9 @@ public class Notificatie {
     /**
      * Koppelt de notificatie aan de verzending bij NotifyNL en legt {@code SENDING} vast.
      * <p>
-     * Die twee horen altijd samen. Een {@code SENDING} zonder referentie is onbereikbaar voor elke
-     * delivery receipt — {@code findByExternalReference} vindt hem nooit meer — en een referentie
-     * zonder {@code SENDING} laat de notificatie op {@code CREATED} staan terwijl de e-mail al weg
-     * is. Als losse setter was het aan de aanroeper om ze allebei te doen, in de goede volgorde.
+     * Die twee horen altijd samen: zonder referentie vindt {@code findByExternalReference} de
+     * notificatie nooit meer, en zonder {@code SENDING} blijft hij op {@code CREATED} staan terwijl
+     * de e-mail al weg is.
      *
      * @throws IllegalStateException als er al een referentie gekoppeld is; twee verzendingen onder
      *         één notificatie zou de tweede de eerste laten overschrijven, waarna de receipts van de

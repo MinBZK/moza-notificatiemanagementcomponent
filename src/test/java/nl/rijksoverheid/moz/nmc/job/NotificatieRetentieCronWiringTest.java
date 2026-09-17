@@ -15,12 +15,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Bewijst dat de retentiejob écht bij de Quarkus-scheduler geregistreerd staat onder de
- * geconfigureerde cron ({@code notificatie.retentie.cron}) — de rest van de suite roept
- * verwijderVerlopenNotificaties() rechtstreeks aan en omzeilt daarmee de @Scheduled/cron-koppeling
- * zelf. Laat de job bewust nooit echt vuren (draait in de gedeelde testcontext, met de
- * productie-cron van 03:00 's nachts): een kort-cyclische testcron die de job wél laat vuren, kan
- * bij het afsluiten van de testklasse een transactie laten weglekken naar andere @QuarkusTest's.
+ * Bewijst dat de retentiejob bij de Quarkus-scheduler geregistreerd staat onder de geconfigureerde
+ * cron; de rest van de suite roept verwijderVerlopenNotificaties() rechtstreeks aan en omzeilt die
+ * koppeling. De job vuurt hier bewust nooit: een kort-cyclische testcron kan bij het afsluiten van de
+ * klasse een transactie laten weglekken naar andere @QuarkusTest's.
  */
 @QuarkusTest
 class NotificatieRetentieCronWiringTest {

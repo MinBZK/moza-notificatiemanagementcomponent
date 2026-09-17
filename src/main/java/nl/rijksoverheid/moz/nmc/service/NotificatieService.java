@@ -107,23 +107,16 @@ public class NotificatieService {
         notificatie.registreerStatus(nieuweStatus,
                 opgetreden != null ? opgetreden : OffsetDateTime.now(ZoneOffset.UTC));
 
-        // Afvuren, niet zelf versturen: StatusUpdateVerzender pakt dit pas op ná de commit van deze
-        // transactie. Zou de statusupdate hier direct verstuurd worden, dan kan de Dienstverlener een
-        // status krijgen die de NMC vervolgens terugrolt — de commit hierna kan alsnog falen op een
-        // OptimisticLockException (een gelijktijdige tweede receipt) of op een JTA-timeout. Het houdt
-        // bovendien de DB-connectie van deze transactie niet bezet zolang de callback duurt.
+        // Afvuren en niet zelf versturen: StatusUpdateVerzender pakt dit pas op ná de commit, die
+        // alsnog kan falen. Zo krijgt de Dienstverlener geen status die de NMC daarna terugrolt, en
+        // blijft de DB-connectie niet bezet zolang de callback duurt.
         statusUpdateEvent.fire(new StatusUpdateOpdracht(
                 notificatie.getId(), notificatie.getCallbackUrl(), nieuweStatus));
     }
 
-    // ERROR en niet WARN: een status die de NMC niet kent betekent dat NotifyNL iets terugmeldt
-    // waar dit component geen afhandeling voor heeft, en dat hoort meteen op te vallen. Wachten tot
-    // de retentiejob de notificatie opruimt en hem dan pas als "verlopen zonder definitieve status"
-    // meldt, is dagen te laat en wijst bovendien naar het verkeerde probleem.
-    //
-    // Met beide identificatoren erbij, anders is de melding niet te herleiden tot een notificatie om
-    // te onderzoeken. De onbekende waarde staat er letterlijk in, want dat is wat je nodig hebt om te
-    // bepalen of StatusWaarde uitgebreid moet worden.
+    // ERROR en niet WARN: NotifyNL meldt dan iets terug waar dit component geen afhandeling voor
+    // heeft, en dat hoort meteen op te vallen. Met beide identificatoren en de ruwe waarde erbij,
+    // want dat is wat nodig is om te bepalen of StatusWaarde uitgebreid moet worden.
     private StatusWaarde parseStatus(String notifyStatus, UUID notifyNlNotificatieId, UUID notificatieId) {
         try {
             // Locale.ROOT: in een Turkse locale maakt toUpperCase() van de i een I met punt, waardoor

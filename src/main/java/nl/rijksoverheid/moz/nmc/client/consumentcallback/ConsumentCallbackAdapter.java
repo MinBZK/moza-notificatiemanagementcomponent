@@ -17,11 +17,9 @@ import java.util.UUID;
  * StatusUpdateOpdracht af die StatusUpdateVerzender bij AFTER_SUCCESS oppakt. Er blijft dus geen
  * DB-connectie openstaan zolang de callback duurt.
  * <p>
- * TODO #732 (zie https://github.com/MinBZK/MijnOverheidZakelijk/issues/732): wat nog wél open staat,
- * is dat deze aanroepen synchroon zijn en de request-thread van de NotifyNL-callback blokkeren, en
- * dat de uitkomst nergens wordt vastgelegd — mislukken alle MAX_POGINGEN, dan is de statusupdate
- * voor de Dienstverlener verloren zonder dat iets hem opnieuw aanbiedt. Beide vragen om een
- * takentabel met eigen herpogingen in plaats van een herpoging-lus in het verzoek.
+ * TODO (buiten scope): de aanroep is synchroon en blokkeert de request-thread van de
+ * NotifyNL-callback, en de uitkomst wordt nergens vastgelegd — mislukken alle MAX_POGINGEN, dan is
+ * de statusupdate verloren. Beide vragen om een takentabel met eigen herpogingen.
  */
 @ApplicationScoped
 public class ConsumentCallbackAdapter {
@@ -52,19 +50,10 @@ public class ConsumentCallbackAdapter {
         try {
             client = clientFactory.maakClient(callbackUrl);
         } catch (IllegalArgumentException | RestClientDefinitionException e) {
-            // Buiten de retry-lus: het bouwen van de client faalt permanent, dus elke poging zou
-            // identiek falen.
-            //
-            // De IllegalArgumentException-tak is sinds CallbackUrlValidator grotendeels dicht: een
-            // callbackUrl wordt aan de deur gevalideerd en genormaliseerd voordat hij wordt
-            // opgeslagen, dus een vormfout haalt deze code niet meer. Wat overblijft is een rij die
-            // van vóór die validatie stamt. De tak blijft staan omdat hij goedkoop is en de enige
-            // die dit geval afvangt, niet omdat hij vaak zal vuren.
-            //
-            // Bewust alleen deze twee typen. Elke andere RuntimeException uit de
-            // rest-client-extensie (kapotte truststore, proxyconfiguratie, ontbrekende
-            // MessageBodyWriter) is geen probleem van de meegegeven URL en mag hier niet als zodanig
-            // weggelogd worden; die ontsnapt naar StatusUpdateVerzender, die hem op ERROR meldt.
+            // Buiten de retry-lus: het bouwen van de client faalt permanent. Bewust alleen deze twee
+            // typen: een andere RuntimeException uit de rest-client-extensie ligt niet aan de URL en
+            // hoort naar StatusUpdateVerzender te ontsnappen. De IllegalArgumentException-tak vangt
+            // alleen nog rijen van vóór CallbackUrlValidator af.
             Log.errorf(e, "Callback-client kon niet worden gebouwd voor notificatie %s (url=%s) — "
                     + "statusupdate niet verstuurd", opdracht.notificatieId(), callbackUrl);
 

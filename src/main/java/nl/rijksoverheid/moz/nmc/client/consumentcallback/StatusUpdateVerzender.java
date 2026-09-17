@@ -29,15 +29,10 @@ public class StatusUpdateVerzender {
         try {
             consumentCallbackAdapter.stuurStatusUpdate(opdracht);
         } catch (RuntimeException e) {
-            // ConsumentCallbackAdapter laat bewust elke fout ontsnappen die niet aan de
-            // Dienstverlener ligt: een kapotte truststore, een verkeerd geconfigureerde proxy, een
-            // ontbrekende MessageBodyWriter. Vóór de verplaatsing naar deze observer had dat een
-            // ontvanger — de aanroeper in NotificatieService, en daarboven de controller. Nu niet
-            // meer: deze methode draait vanuit Synchronization#afterCompletion, waar de
-            // transactiemanager elke Throwable zelf vangt en hooguit onder com.arjuna.* logt. Wie
-            // op nl.rijksoverheid.moz.* filtert ziet dan niets, terwijl zo'n fout élke statusupdate
-            // naar élke Dienstverlener treft. Vandaar hier een ERROR in het eigen namespace; gooien
-            // heeft geen zin, de transactie is al gecommit.
+            // Deze methode draait vanuit Synchronization#afterCompletion, waar de transactiemanager
+            // elke Throwable zelf vangt en hooguit onder com.arjuna.* logt. Zonder deze catch ziet
+            // wie op nl.rijksoverheid.moz.* filtert niets, terwijl een fout in de NMC zelf élke
+            // statusupdate treft. Gooien heeft geen zin: de transactie is al gecommit.
             Log.errorf(e, "Statusupdate voor notificatie %s (status %s) kon niet verstuurd worden door "
                     + "een fout in de NMC zelf — dit treft waarschijnlijk alle consument-callbacks",
                     opdracht.notificatieId(), opdracht.status());

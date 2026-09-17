@@ -36,30 +36,22 @@ import java.util.UUID;
 @ApplicationScoped
 public class NotificatieRetentieScheduler {
 
-    // Begrenst hoeveel rijen per transactie worden verwijderd: de standaard JTA-transactietimeout
-    // is 60s, en een enkele onbegrensde DELETE over een grote achterstand zou die overschrijden,
-    // met als gevolg een volledige rollback (dus 0 verwijderd) die de volgende nacht identiek
-    // herhaald wordt, zonder ooit vanzelf te herstellen. Batches van deze grootte blijven ruim
-    // binnen de timeout, ongeacht hoe groot de achterstand is.
+    // Begrenst hoeveel rijen per transactie worden verwijderd. Eén onbegrensde DELETE over een grote
+    // achterstand overschrijdt de JTA-transactietimeout van 60s en rolt dan alles terug.
     private static final int BATCH_GROOTTE = 1000;
 
 
 
-    // Bovengrens op het aantal batches dat mag mislukken voordat de run alsnog opgeeft. Een batch
-    // die gooit is niet vanzelf fataal — bijvoorbeeld een rij die door een toekomstige foreignkey
-    // zonder cascade niet te verwijderen is — maar zonder grens zou een structurele storing (DB weg,
-    // schema kapot) de job elke batch opnieuw laten proberen tot MAX_BATCHES.
+    // Een enkele mislukte batch is niet fataal, een structurele storing (DB weg, schema kapot) wel:
+    // zonder deze grens probeert de run het tot maxBatches toe opnieuw.
     private static final int MAX_MISLUKTE_BATCHES_OP_RIJ = 5;
 
-    // Absolute grens over de hele run, die de uitsluitingslijst begrenst: elke overgeslagen batch
-    // voegt tot BATCH_GROOTTE ids toe aan de NOT IN-lijst van elke volgende claim. Tien batches is
-    // 10.000 ids; komt een run daarboven, dan is het aantal onverwijderbare rijen zelf het signaal.
+    // Begrenst de uitsluitingslijst: elke overgeslagen batch voegt tot BATCH_GROOTTE ids toe aan de
+    // NOT IN-lijst van elke volgende claim.
     private static final int MAX_MISLUKTE_BATCHES_TOTAAL = 10;
 
-    // Bovengrens op het aantal notificaties dat per run afzonderlijk wordt gemeld. Bij een storing
-    // aan de kant van NotifyNL kan de hele achterstand niet-definitief zijn; zonder deze grens zou
-    // dat de logs vullen met een regel per notificatie. Het totaal in de samenvatting is niet
-    // begrensd, dus een dashboard dat op dat getal telt blijft compleet.
+    // Bij een storing bij NotifyNL kan de hele achterstand zonder eindstatus zijn; zonder deze grens
+    // levert dat een logregel per notificatie op. Het totaal in de samenvatting blijft onbegrensd.
     private static final int MAX_MELDINGEN = 100;
 
     // Zowel de @Scheduled-identity als het trigger-id waarop de observers hieronder filteren.
@@ -95,14 +87,10 @@ public class NotificatieRetentieScheduler {
         this.bewaartermijn = bewaartermijn;
     }
 
-    // concurrentExecution = SKIP: een langlopende run mag niet overlappen met de volgende vuring.
-    // Dat geldt alleen binnen één JVM/pod: bij N pods draaien er elke nacht N onafhankelijke,
-    // volledige scans, elk met hun eigen (niet bij elkaar opgetelde) tellingen in de logregels
-    // hieronder. Geen Quartz-clustering nodig: elke batch is een idempotente bulk-delete, dus
-    // gelijktijdige pods botsen niet fataal. Wat een pod laat liggen omdat een andere er eerder bij
-    // was, wordt in dezelfde nacht door die andere pod opgeruimd, of anders de eerstvolgende run.
-    // Geen @Transactional op deze methode zelf: elke batch draait in zijn eigen transactie, zodat al
-    // verwijderde batches niet worden teruggedraaid als een latere batch faalt.
+    // concurrentExecution = SKIP geldt per JVM: bij N pods draaien er elke nacht N volledige scans,
+    // elk met eigen tellingen in de logregels hieronder. Dat mag, want elke batch is een idempotente
+    // bulk-delete. Geen @Transactional op deze methode: elke batch heeft een eigen transactie, zodat
+    // een latere fout de al verwijderde batches niet terugdraait.
     @Scheduled(identity = TRIGGER_ID, cron = "{notificatie.retentie.cron}",
             timeZone = "Europe/Amsterdam", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     public void verwijderVerlopenNotificaties() {
@@ -115,20 +103,14 @@ public class NotificatieRetentieScheduler {
         int mislukteBatchesOpRij = 0;
         int mislukteBatchesTotaal = 0;
         boolean klaar = false;
-        // Ids die deze run zijn overgeslagen omdat hun batch gooide. Zonder deze uitsluiting claimt
-        // de volgende ronde exact dezelfde rijen — de transactie is teruggerold, dus de lock is weg
-        // en de ORDER BY levert ze opnieuw als oudste op — en blijft de job op dezelfde rij hangen.
+        // Ids die deze run zijn overgeslagen omdat hun batch gooide. Zonder deze uitsluiting claimt de
+        // volgende ronde exact dezelfde rijen: de rollback heeft de lock vrijgegeven.
         List<UUID> overgeslagen = new ArrayList<>();
-        // try/finally zodat de samenvatting ook wordt gelogd als een batch een exceptie gooit: de
-        // batches daarvóór zijn dan al gecommit, en zonder deze finally zou die (deels geslaagde)
-        // voortgang nergens uit blijken. De exceptie ontsnapt daarna gewoon, zodat FailedExecution
-        // blijft vuren (zie opMislukteUitvoering).
+        // try/finally zodat de samenvatting ook wordt gelogd als een batch gooit; de batches daarvóór
+        // zijn dan al gecommit. De exceptie ontsnapt daarna, zodat FailedExecution blijft vuren.
         try {
             while (!klaar && batches < maxBatches) {
                 batches++;
-                // Een meegegeven houder in plaats van alleen een retourwaarde: bij een rollback is er
-                // geen retourwaarde, en juist dan moeten de geclaimde ids en de al weggeschreven
-                // meldingen bekend zijn. Een gewone Java-lijst wordt niet teruggedraaid.
                 BatchVoortgang voortgang = new BatchVoortgang(Math.max(0, MAX_MELDINGEN - gemeldeRegels));
                 boolean geslaagd = true;
                 try {
@@ -144,10 +126,9 @@ public class NotificatieRetentieScheduler {
                             + "geclaimd) — deze rijen worden deze run overgeslagen en de job gaat door "
                             + "met de volgende batch", batches, grens, voortgang.geclaimd().size());
 
-                    // Op rij: dat wijst op een storing die de volgende batch net zo hard raakt, dus
-                    // doorgaan kost alleen tijd. De teller gaat na elke geslaagde batch terug op nul,
-                    // zodat losse onverwijderbare rijen de rest van de achterstand niet gijzelen —
-                    // die blijven anders elke nacht als oudste bovenkomen en de run afbreken.
+                    // Op rij mislukt wijst op een storing die de volgende batch net zo hard raakt.
+                    // De teller gaat na elke geslaagde batch terug op nul, zodat losse
+                    // onverwijderbare rijen de rest van de achterstand niet gijzelen.
                     if (mislukteBatchesOpRij >= MAX_MISLUKTE_BATCHES_OP_RIJ) {
                         Log.errorf("Retentiejob: %d batches op rij mislukt, run afgebroken; de rest van "
                                 + "de achterstand is deze run niet bekeken", mislukteBatchesOpRij);
@@ -155,9 +136,8 @@ public class NotificatieRetentieScheduler {
                         throw e;
                     }
 
-                    // Totaal: begrenst de uitsluitingslijst, die als NOT IN-lijst in elke volgende
-                    // claim meegaat. Zonder deze grens kan een run die om en om faalt en slaagt hem
-                    // tot maxBatches/2 batches laten groeien.
+                    // Begrenst de uitsluitingslijst, die als NOT IN-lijst in elke volgende claim
+                    // meegaat; een run die om en om faalt en slaagt laat hem anders doorgroeien.
                     if (mislukteBatchesTotaal >= MAX_MISLUKTE_BATCHES_TOTAAL) {
                         Log.errorf("Retentiejob: %d mislukte batches in deze run, run afgebroken; %d "
                                 + "rij(en) overgeslagen", mislukteBatchesTotaal, overgeslagen.size());
@@ -167,26 +147,22 @@ public class NotificatieRetentieScheduler {
                 }
 
                 // Buiten de try: ook een mislukte batch heeft zijn meldingen al weggeschreven, want
-                // verwijderBatch meldt vóór de DELETE. Zouden die niet meegeteld worden, dan kreeg de
-                // volgende batch het volle meldbudget opnieuw en zou de samenvatting minder tellen
-                // dan er detailregels onder staan.
+                // verwijderBatch meldt vóór de DELETE. Niet meetellen zou het meldbudget laten lekken.
                 totaalVerwijderd += voortgang.verwijderd();
                 totaalZonderEindstatus += voortgang.zonderEindstatus();
                 gemeldeRegels += voortgang.gemeld();
 
                 if (geslaagd) {
-                    // Teller terug op nul: alleen opeenvolgende mislukkingen wijzen op een storing.
-                    // Niet gedekt door een test — het verschil met een cumulatieve teller wordt pas
-                    // zichtbaar bij meer dan MAX_MISLUKTE_BATCHES_OP_RIJ verspreide mislukkingen, en
-                    // dat vraagt een populatie die deze testklasse onwerkbaar traag maakt.
+                    // Alleen opeenvolgende mislukkingen wijzen op een storing. Niet gedekt door een
+                    // test: het verschil met een cumulatieve teller vraagt meer dan
+                    // MAX_MISLUKTE_BATCHES_OP_RIJ verspreide mislukkingen, en dus een populatie die
+                    // deze testklasse onwerkbaar traag maakt.
                     mislukteBatchesOpRij = 0;
                     Log.debugf("Retentiejob: batch %d verwijderde %d notificatie(s)", batches,
                             voortgang.verwijderd());
 
-                    // Een batch die niet vol is, is de laatste: er waren geen BATCH_GROOTTE rijen meer
-                    // die deze pod kon claimen. Nog een ronde zou een query kosten die vrijwel zeker
-                    // niets oplevert. Wat een andere pod op dat moment vasthoudt (SKIP LOCKED) is
-                    // diens werk; die verwijdert het in dezelfde nacht.
+                    // Een batch die niet vol is, is de laatste. Wat een andere pod op dat moment
+                    // vasthoudt (SKIP LOCKED) is diens werk en gaat in dezelfde nacht weg.
                     klaar = voortgang.geclaimd().size() < BATCH_GROOTTE;
                 }
             }
@@ -217,33 +193,17 @@ public class NotificatieRetentieScheduler {
     // Claimt een batch met FOR UPDATE SKIP LOCKED, meldt de notificaties zonder eindstatus en
     // verwijdert daarna precies die rijen.
     //
-    // Waarom SKIP LOCKED: in productie draaien minimaal drie pods. Zonder deze clausule selecteren
-    // ze allemaal dezelfde oudste rijen en blokkeren ze op elkaars rijlocks, zodat uiteindelijk één
-    // pod het werk doet terwijl de rest wacht; bij miljoenen rijen is dat elke nacht N keer dezelfde
-    // scan. Met SKIP LOCKED slaat een pod over wat een ander vasthoudt en pakt hij het volgende blok,
-    // zodat de pods de achterstand verdelen in plaats van erom te vechten.
+    // SKIP LOCKED omdat er in productie minimaal drie pods draaien: zonder die clausule blokkeren ze
+    // op elkaars rijlocks in plaats van de achterstand te verdelen. De lock sluit tegelijk het gat
+    // tussen claim en DELETE, want een gelijktijdige verwerkAfleverstatus wacht erop; de DELETE hoeft
+    // het retentiepredicaat daarom niet te herhalen.
     //
-    // De lock haalt tegelijk de TOCTOU weg die hier eerder zat. Een gelijktijdige
-    // verwerkAfleverstatus die een verse statusregel wil schrijven voor een van deze notificaties
-    // blokkeert tot deze transactie commit, dus tussen de claim en de DELETE kan een kandidaat niet
-    // meer van status veranderen. Het retentiepredicaat hoeft daarom niet herhaald te worden in de
-    // DELETE: de lock is de garantie, niet het predicaat.
+    // Melden gebeurt vóór de DELETE en over precies dezelfde geclaimde rijen, zodat een verwijderde
+    // rij nooit ongemeld blijft. Een dubbele melding na een teruggerolde batch is het alternatief.
     //
-    // De melding staat bewust hier en niet in een aparte fase vóór de batchlus. Zou ze apart draaien,
-    // dan verwijdert deze lus alsnog de rijen waar de melding over ging als die melding faalt, en
-    // dan is het feit dat ze zonder eindstatus verliepen nergens meer te achterhalen. Nu gaan melden
-    // en verwijderen over precies dezelfde geclaimde rijen. Loggen vóór de DELETE, want tussen een
-    // logregel en een commit bestaat geen exact-once: een dubbele melding na een teruggerolde batch
-    // is ruis, een ontbrekende melding is verlies.
-    //
-    // ORDER BY zodat de oudste rijen eerst weggaan: past een achterstand niet in één run, dan is dat
-    // de volgorde die de tabel het snelst weer normaal maakt.
-    //
-    // De DELETE is JPQL, zodat Hibernate de notificatie_status-rijen zelf opruimt; de ON DELETE
-    // CASCADE op de foreignkey (V2) blijft het vangnet voor verwijderingen buiten Hibernate om.
-    // Package-private en niet privé: NotificatieRetentieSchedulerTest roept hem rechtstreeks aan om
-    // te bewijzen dat één batch écht op BATCH_GROOTTE begrensd is. Via reflectie ging dat ook, maar
-    // dan breekt de test stil op elke handtekeningwijziging in plaats van bij het compileren.
+    // De DELETE is JPQL, zodat Hibernate de notificatie_status-rijen mee opruimt; de ON DELETE
+    // CASCADE uit V2 blijft het vangnet voor verwijderingen buiten Hibernate om. Package-private
+    // zodat de test de batchgrens rechtstreeks kan aanroepen, zonder reflectie.
     void verwijderBatch(OffsetDateTime grens, List<UUID> uitgesloten, BatchVoortgang voortgang) {
         List<UUID> ids = notificatieRepository.claimVerlopen(grens, BATCH_GROOTTE, uitgesloten);
         voortgang.noteerGeclaimd(ids);
@@ -261,13 +221,9 @@ public class NotificatieRetentieScheduler {
 
         int verwijderd = notificatieRepository.verwijderOpId(ids);
 
-        // De rijen staan onder rijlock en de DELETE gaat op precies die ids, dus dit hoort niet te
-        // kunnen. Gebeurt het toch, dan wijzigt er iets aan notificatie buiten Hibernate om, of
-        // lopen het claim- en het verwijderpredicaat uiteen. Zonder deze controle draait de lus
-        // door: klaar hangt aan het aantal geclaimde rijen, dus bij nul verwijderd claimt de
-        // volgende ronde exact dezelfde rijen, tot aan maxBatches. Als mislukte batch behandelen
-        // laat de bestaande afhandeling grijpen: de ids gaan op de uitsluitingslijst en de run stopt
-        // op tijd, met een melding die het echte probleem noemt.
+        // Hoort niet te kunnen: de rijen staan onder rijlock en de DELETE gaat op precies die ids.
+        // Zonder deze controle blijft de lus draaien, want klaar hangt aan het aantal geclaimde rijen;
+        // als mislukte batch behandelen laat de bestaande afhandeling grijpen.
         if (verwijderd != ids.size()) {
             throw new IllegalStateException("Retentiejob: " + ids.size() + " rijen geclaimd onder "
                     + "rijlock maar " + verwijderd + " verwijderd (grens=" + grens + ")");
@@ -325,16 +281,10 @@ public class NotificatieRetentieScheduler {
         }
     }
 
-    // Key=value in de melding zodat er een dashboard op te bouwen is zonder de regel als vrije tekst
-    // te hoeven parsen; er is geen JSON-logging geconfigureerd.
-    //
-    // WARN en geen ERROR: dat een notificatie zonder eindstatus verloopt, is informatie en geen
-    // storing in de NMC. NotifyNL meldt er niets meer over terug en de opvolging ligt buiten dit
-    // component; de melding bestaat zodat het zichtbaar is in plaats van stilzwijgend te verdwijnen.
-    //
-    // Deze methode staat bewust op de scheduler en niet op Kandidaat: Quarkus' Log kiest de
-    // logcategorie op de declarerende klasse, dus vanuit de geneste record zou de regel onder
-    // NotificatieRetentieScheduler$Kandidaat verschijnen en niet onder de rest van de job.
+    // WARN en geen ERROR: verlopen zonder eindstatus is informatie, geen storing in de NMC. Key=value
+    // zodat er een dashboard op te bouwen is zonder vrije tekst te parsen; er is geen JSON-logging.
+    // Op de scheduler en niet op Kandidaat, omdat Quarkus' Log de logcategorie kiest op de klasse die
+    // de regel schrijft.
     private void meld(Kandidaat kandidaat) {
         // Een lege externalReference is een andere diagnose dan een gevulde: dan is de notificatie
         // nooit bij NotifyNL aangeboden, in plaats van wel aangeboden zonder uitkomst.
@@ -344,11 +294,9 @@ public class NotificatieRetentieScheduler {
                 kandidaat.status(), kandidaat.laatsteStatusUpdate());
     }
 
-    // Vuurt voor élke @Scheduled-methode in de applicatie, dus de filtering op trigger-id is nodig:
-    // zonder die guard zou een overgeslagen run van een toekomstige andere job hier als "Retentiejob
-    // overgeslagen" gelogd worden. Zonder deze observer wordt een overgeslagen run alleen op DEBUG
-    // gelogd (standaardniveau is INFO): een vastgelopen run (lock-wait, DB-failover) zou de opruiming
-    // dan stilletjes voor de rest van de levensduur van de pod stopzetten, zonder enig signaal.
+    // Vuurt voor élke @Scheduled-methode, vandaar de filtering op trigger-id. Zonder deze observer
+    // wordt een overgeslagen run alleen op DEBUG gelogd, en blijft een vastgelopen run (lock-wait,
+    // DB-failover) die de opruiming stopzet dus onzichtbaar.
     void opOvergeslagenUitvoering(@Observes SkippedExecution event) {
         if (!TRIGGER_ID.equals(event.getExecution().getTrigger().getId())) {
             return;
@@ -358,12 +306,9 @@ public class NotificatieRetentieScheduler {
                 event.getExecution().getTrigger().getId(), event.getDetail());
     }
 
-    // Wordt aangeroepen als verwijderVerlopenNotificaties() een exceptie laat ontsnappen (bijv. uit
-    // een van de batches). Zonder deze observer belandt zo'n fout alleen onder de eigen
-    // schedulerlogcategorie van Quarkus, niet onder dit package, en zou een operator die op
-    // nl.rijksoverheid.moz.* filtert een structureel mislukkende opruimrun nooit opmerken. Al vóór de
-    // fout gecommitte batches blijven verwijderd. Filtert op trigger-id om dezelfde reden als de
-    // observer hierboven.
+    // Zonder deze observer belandt een ontsnapte fout alleen onder de schedulerlogcategorie van
+    // Quarkus en niet onder dit package, waar een operator op filtert. Al gecommitte batches blijven
+    // verwijderd. Filtert op trigger-id om dezelfde reden als de observer hierboven.
     void opMislukteUitvoering(@Observes FailedExecution event) {
         if (!TRIGGER_ID.equals(event.getExecution().getTrigger().getId())) {
             return;

@@ -17,15 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Bewaakt dat de statuswaarden die een Dienstverlener in de callback kan krijgen als echte enum in
  * het gepubliceerde document staan.
  * <p>
- * Toetst tegen {@code /q/openapi} en niet tegen {@code META-INF/openapi.yaml}: dat de waarden in het
- * bronbestand staan zegt niets over wat een afnemer krijgt. SmallRye bouwt het gepubliceerde
- * document op uit die bron, en een filter of een herschikking daar kan onderdelen laten vervallen
- * zonder dat het bestand verandert.
- * <p>
- * Toetst bovendien op de <em>enum</em> en niet op losse woorden in het document. De statuswaarden
- * staan namelijk óók in de beschrijving van {@code callbackUrl}; een test die op tekst zoekt zou
- * daar treffers vinden en groen blijven terwijl het schema was verdwenen — precies wat hij hoort te
- * betrappen.
+ * Toetst tegen {@code /q/openapi} en niet tegen {@code META-INF/openapi.yaml}: wat in de bron staat
+ * zegt niets over wat een afnemer krijgt. En op de <em>enum</em> en niet op losse woorden, want de
+ * statuswaarden staan ook in de beschrijving van {@code callbackUrl} — een tekstzoektocht blijft daar
+ * groen terwijl het schema verdwenen is.
  */
 @QuarkusTest
 class GepubliceerdeSpecTest {

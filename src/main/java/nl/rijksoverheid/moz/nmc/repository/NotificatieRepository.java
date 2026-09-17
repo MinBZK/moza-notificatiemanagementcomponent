@@ -68,10 +68,11 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
     /**
      * De gegevens die de retentiejob per notificatie meldt, oudste eerst.
      * <p>
-     * Een JPQL-constructorexpressie en geen kolommen uit de native query hierboven: Hibernate
-     * valideert deze expressie bij het opstarten, dus een verkeerde ariteit of een type dat niet op
-     * de recordcomponent past is een opstartfout in plaats van een {@code ClassCastException} in een
-     * nachtelijke job. De {@code ORDER BY} staat er omdat {@code IN} geen volgorde garandeert.
+     * Een JPQL-constructorexpressie en geen kolommen uit de native query hierboven: de expressie
+     * noemt de recordcomponenten op type, zodat een verkeerde ariteit of een niet-passend type een
+     * fout op de query zelf geeft in plaats van een {@code ClassCastException} verderop. Dit is een
+     * gewone {@code createQuery}, dus die controle valt bij het uitvoeren, niet bij het opstarten.
+     * De {@code ORDER BY} staat er omdat {@code IN} geen volgorde garandeert.
      */
     public List<Kandidaat> zoekKandidaten(List<UUID> ids) {
         return getEntityManager()

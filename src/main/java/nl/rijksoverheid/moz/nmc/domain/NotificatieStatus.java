@@ -40,18 +40,9 @@ public record NotificatieStatus(
         Objects.requireNonNull(geregistreerd, "geregistreerd is verplicht");
 
         // Normaliseren naar UTC en afkappen op microseconden, zodat de waarde hier gelijk is aan de
-        // waarde die uit de database terugkomt.
-        //
-        // De offset: PostgreSQL bewaart in een timestamptz-kolom alleen het moment, niet de offset
-        // waarmee het geschreven is, en levert bij het lezen UTC terug. H2 (de teststack) bewaart de
-        // offset wel. Een tijdstip met een andere offset dan UTC — NotifyNL mag in completed_at een
-        // offset meesturen — zou daardoor op H2 anders terugkomen dan op PostgreSQL, en een
-        // vergelijking die op H2 slaagt zou op PostgreSQL falen. OffsetDateTime#equals eist immers
-        // dezelfde offset, niet alleen hetzelfde moment.
-        //
-        // De precisie: de kolommen zijn timestamp(6), dus de nanoseconden van OffsetDateTime#now
-        // overleven het schrijven niet. Zonder afkappen verschilt een net aangemaakt record van
-        // datzelfde record na herladen.
+        // waarde die uit de database terugkomt. PostgreSQL levert een timestamptz altijd als UTC
+        // terug terwijl H2 de offset bewaart, en OffsetDateTime#equals eist dezelfde offset; de
+        // kolommen zijn timestamp(6), dus de nanoseconden van OffsetDateTime#now overleven niet.
         tijdstip = tijdstip.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
         geregistreerd = geregistreerd.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
     }

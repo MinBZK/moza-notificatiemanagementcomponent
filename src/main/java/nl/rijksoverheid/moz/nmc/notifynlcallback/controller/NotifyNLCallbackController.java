@@ -48,16 +48,12 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
         }
     }
 
-    // Twee receipts voor dezelfde notificatie die elkaar overlappen laten de verliezer stuklopen op
-    // de optimistic lock (Notificatie#versie). Zonder deze herpoging ontsnapt die exception en krijgt
-    // NotifyNL een 5xx. Dat werkt — NotifyNL biedt de callback dan opnieuw aan — maar het kost een
-    // van de 5 herpogingen die NotifyNL doet, met 5 minuten ertussen: vijf minuten vertraging op een
-    // statusupdate, en een verbruikt herpogingsbudget voor iets wat puur intern is. Na de vijfde
-    // mislukte poging is de receipt bij NotifyNL weg.
+    // Twee overlappende receipts voor dezelfde notificatie laten de verliezer stuklopen op de
+    // optimistic lock. Zonder deze herpoging kost dat een van de 5 herpogingen van NotifyNL, met 5
+    // minuten ertussen; na de vijfde is de receipt daar weg.
     //
-    // De herpoging zit hier en niet in NotificatieService, omdat de optimistic lock pas afgaat bij de
-    // commit van die @Transactional-methode en dus buiten haar eigen try/catch valt. Elke poging is
-    // een verse transactie die de notificatie opnieuw inleest.
+    // De herpoging zit hier en niet in NotificatieService, omdat de optimistic lock pas bij de commit
+    // van die @Transactional-methode afgaat en dus buiten haar eigen try/catch valt.
     private void verwerkMetHerpogingBijBotsing(AfleverstatusRequest afleverstatusRequest) {
         for (int poging = 1; ; poging++) {
             try {
@@ -91,19 +87,12 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
         }
     }
 
-    // De optimistic lock slaat toe tijdens flush of commit, en die zitten achter de
-    // @Transactional-interceptor en de JTA-transactiemanager: de oorspronkelijke exception komt hier
-    // ingepakt aan (RollbackException, ArcTransactionRuntimeException). Vandaar dat de oorzakenketen
-    // wordt afgelopen in plaats van op het exceptiontype van buiten te matchen.
-    //
-    // Bewust smal. Alleen deze twee betekenen "iemand anders was eerder, herlees en probeer opnieuw";
-    // een ConstraintViolationException zou ook een CHECK op status kunnen zijn, en die drie keer
-    // herhalen levert alleen vertraging op.
+    // De oorspronkelijke exception komt ingepakt aan (RollbackException,
+    // ArcTransactionRuntimeException), vandaar dat de oorzakenketen wordt afgelopen. Bewust smal:
+    // alleen deze twee betekenen "iemand anders was eerder, herlees en probeer opnieuw".
     private static boolean isGelijktijdigeSchrijfactie(Throwable e) {
-        // Begrensde diepte in plaats van een controle op zelfverwijzing: getCause() levert nooit de
-        // exception zelf op (initCause weigert dat), dus die controle deed niets, terwijl een keten
-        // die via een omweg naar zichzelf terugwijst wél oneindig doorliep — op de request-thread van
-        // de NotifyNL-callback.
+        // Begrensde diepte: een controle op zelfverwijzing helpt niet, want getCause() levert nooit
+        // de exception zelf op, terwijl een keten die via een omweg terugwijst wél kan doorlopen.
         Throwable oorzaak = e;
         for (int diepte = 0; oorzaak != null && diepte < MAX_OORZAAKDIEPTE; diepte++) {
             if (oorzaak instanceof OptimisticLockException || oorzaak instanceof StaleStateException) {
@@ -116,13 +105,10 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
         return false;
     }
 
-    // Wanneer de gemelde status bij NotifyNL ontstond. completed_at is "the last time the status was
-    // updated" en dus het tijdstip van déze status; sent_at en created_at horen bij de verzending en
-    // zijn alleen terugval. Geen van drieën is verplicht in NotifyNL's eigen callbackschema
-    // (EmailCallbackRequest in notifynl_api.yaml kent geen required, en completed_at/sent_at mogen
-    // expliciet null zijn), vandaar de keten en een null als niets bruikbaar is: NotificatieService
-    // valt dan terug op de eigen klok. Bewust hier en niet in de service — welk veld van NotifyNL wat
-    // betekent, is kennis van dit koppelvlak.
+    // completed_at is "the last time the status was updated" en dus het tijdstip van déze status;
+    // sent_at en created_at horen bij de verzending en zijn terugval. Geen van drieën is verplicht in
+    // EmailCallbackRequest, vandaar de keten en een null als niets bruikbaar is. Hier en niet in de
+    // service, want welk veld van NotifyNL wat betekent is kennis van dit koppelvlak.
     private static OffsetDateTime gebeurtenisTijdstip(AfleverstatusRequest afleverstatusRequest) {
         return Stream.of(afleverstatusRequest.getCompletedAt(), afleverstatusRequest.getSentAt(),
                         afleverstatusRequest.getCreatedAt())
