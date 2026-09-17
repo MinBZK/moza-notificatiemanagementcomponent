@@ -156,11 +156,11 @@ class NotificatieServiceTest {
         assertEquals(aantalStatussenNaDelivered, notificatie.getStatusGeschiedenis().size());
     }
 
-    // Regressietest. Een late faalstatus ná DELIVERED zijn twee definitieve statussen, en werd door
-    // de oude isDefinitief-controle dus doorgelaten: de bezorgde notificatie kwam daarmee alsnog als
-    // mislukt in de geschiedenis, ging zo naar de Dienstverlener, en de retentieklok begon opnieuw.
+    // NotifyNL kan ná een bezorging alsnog een fout melden. Die hoort de geschiedenis in en naar de
+    // Dienstverlener te gaan; welke uitkomst dan telt, is de afhandeling van de statussen zelf en
+    // ligt nog niet vast.
     @Test
-    void verwerkAfleverstatus_lateFaalstatusNaDelivered_negeertDeNieuweStatus() {
+    void verwerkAfleverstatus_lateFaalstatusNaDelivered_registreertDeNieuweStatus() {
         Notificatie notificatie = notificatie(null);
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
         service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null);
@@ -168,8 +168,8 @@ class NotificatieServiceTest {
 
         service.verwerkAfleverstatus(UUID.randomUUID(), "temporary-failure", null);
 
-        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
-        assertEquals(aantalStatussenNaDelivered, notificatie.getStatusGeschiedenis().size());
+        assertEquals(StatusWaarde.TEMPORARY_FAILURE, notificatie.getStatus().status());
+        assertEquals(aantalStatussenNaDelivered + 1, notificatie.getStatusGeschiedenis().size());
     }
 
     // NotifyNL herhaalt een callback bij elke niet-2xx, dus precies dezelfde receipt komt in de
@@ -235,29 +235,24 @@ class NotificatieServiceTest {
         verify(notificatieRepository, never()).deleteById(any());
     }
 
-    // Twee verschillende eindstatussen voor één verzending hoort niet te kunnen: NotifyNL stuurt per
-    // notificatie één uitkomst. Gebeurt het toch, dan is er iets mis bij NotifyNL of klopt de
-    // koppeling op external_reference niet. De geweigerde status gaat niet de geschiedenis in, dus
-    // deze regel is het enige spoor — vandaar WARN en niet DEBUG.
+    // Een tweede, afwijkende eindstatus is een nieuwe melding en gaat dus ook naar de
+    // Dienstverlener: die moet kunnen zien dat NotifyNL op zijn bezorging is teruggekomen.
     @Test
-    void verwerkAfleverstatus_tweeVerschillendeEindstatussen_meldtOpWarn() {
-        Notificatie notificatie = notificatie(null);
+    void verwerkAfleverstatus_tweeVerschillendeEindstatussen_stuurtTweeStatusUpdates() {
+        Notificatie notificatie = notificatie("https://omc.example.nl/callback");
         when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
         service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null);
 
-        List<String> waarschuwingen;
-        try (LogVanger vanger = LogVanger.van(NotificatieService.class)) {
-            service.verwerkAfleverstatus(UUID.randomUUID(), "permanent-failure", null);
-            waarschuwingen = vanger.regelsOpNiveau(Level.WARNING);
-        }
+        service.verwerkAfleverstatus(UUID.randomUUID(), "permanent-failure", null);
 
-        assertEquals(1, waarschuwingen.size());
-        assertTrue(waarschuwingen.getFirst().contains("tegenstrijdige uitkomsten"));
+        ArgumentCaptor<StatusUpdateOpdracht> captor = ArgumentCaptor.forClass(StatusUpdateOpdracht.class);
+        verify(statusUpdateEvent, times(2)).fire(captor.capture());
+        assertEquals(List.of(StatusWaarde.DELIVERED, StatusWaarde.PERMANENT_FAILURE),
+                captor.getAllValues().stream().map(StatusUpdateOpdracht::status).toList());
     }
 
-    // Het verwachte geval: NotifyNL herhaalt bij elke niet-2xx, dus dezelfde receipt komt vaker
-    // binnen. Dat op WARN loggen leert een operator WARNs negeren, waarna de tegenstrijdigheid
-    // hierboven in de ruis verdwijnt.
+    // NotifyNL herhaalt bij elke niet-2xx, dus dezelfde receipt komt vaker binnen. Dat op WARN loggen
+    // leert een operator WARNs negeren.
     @Test
     void verwerkAfleverstatus_herhaaldeReceipt_meldtNietOpWarn() {
         Notificatie notificatie = notificatie(null);

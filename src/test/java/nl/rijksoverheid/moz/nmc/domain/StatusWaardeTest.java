@@ -53,14 +53,14 @@ class StatusWaardeTest {
 
     @ParameterizedTest
     @EnumSource(value = StatusWaarde.class,
-            names = {"DELIVERED", "PERMANENT_FAILURE", "TEMPORARY_FAILURE", "TECHNICAL_FAILURE"})
-    void isDefinitief_eindstatussenVanNotifyNl_retourneertTrue(StatusWaarde status) {
+            names = {"DELIVERED", "PERMANENT_FAILURE", "TEMPORARY_FAILURE", "TECHNICAL_FAILURE", "ONBEKEND"})
+    void isDefinitief_terugmeldingenVanNotifyNl_retourneertTrue(StatusWaarde status) {
         assertTrue(status.isDefinitief());
     }
 
     @ParameterizedTest
-    @EnumSource(value = StatusWaarde.class, names = {"CREATED", "SENDING", "ONBEKEND"})
-    void isDefinitief_statussenWaarNietZekerIsDatErGeenVervolgcallbackKomt_retourneertFalse(StatusWaarde status) {
+    @EnumSource(value = StatusWaarde.class, names = {"CREATED", "SENDING"})
+    void isDefinitief_verzendfase_retourneertFalse(StatusWaarde status) {
         assertFalse(status.isDefinitief());
     }
 
@@ -70,86 +70,74 @@ class StatusWaardeTest {
             "ONBEKEND, SENDING",
             "DELIVERED, SENDING",
             "PERMANENT_FAILURE, SENDING",
-            "TEMPORARY_FAILURE, ONBEKEND",
-            "DELIVERED, ONBEKEND",
-            // Een bezorging die alsnog wordt teruggemeld ná een faalstatus is wél nieuws: bezorgd is
-            // de uitkomst, ook als NotifyNL eerder iets anders meldde.
+            "TEMPORARY_FAILURE, CREATED",
+            // NotifyNL kan ná een bezorging alsnog een fout melden, en andersom. Elke definitieve
+            // status volgt daarom op elke andere definitieve status.
+            "PERMANENT_FAILURE, DELIVERED",
+            "TECHNICAL_FAILURE, DELIVERED",
             "DELIVERED, TEMPORARY_FAILURE",
-            "DELIVERED, PERMANENT_FAILURE",
-            "DELIVERED, TECHNICAL_FAILURE"
+            "DELIVERED, ONBEKEND",
+            "ONBEKEND, DELIVERED"
     })
-    void volgtOp_hogereRang_retourneertTrue(StatusWaarde nieuwe, StatusWaarde vastgelegd) {
+    void volgtOp_nieuweMelding_retourneertTrue(StatusWaarde nieuwe, StatusWaarde vastgelegd) {
         assertTrue(nieuwe.volgtOp(vastgelegd));
     }
 
-    // De kern van de regel: een dubbele of laat aangekomen receipt mag een vastgelegde uitkomst niet
-    // terugdraaien. NotifyNL herhaalt bij elke niet-2xx, dus dit is geen theoretisch geval.
+    // De twee gevallen die geen nieuws zijn: precies dezelfde receipt (NotifyNL herhaalt bij elke
+    // niet-2xx), en een melding die terugvalt naar de verzendfase.
     @ParameterizedTest
     @CsvSource({
-            // Een late faalstatus ná DELIVERED — dit is het geval dat de oude isDefinitief-controle
-            // doorliet, omdat beide statussen definitief zijn.
-            "TEMPORARY_FAILURE, DELIVERED",
-            "PERMANENT_FAILURE, DELIVERED",
-            "TECHNICAL_FAILURE, DELIVERED",
-            // Een herhaling van precies dezelfde receipt.
             "DELIVERED, DELIVERED",
             "PERMANENT_FAILURE, PERMANENT_FAILURE",
-            // Een tweede, afwijkende eindstatus voor dezelfde verzending: de eerste blijft staan.
-            "PERMANENT_FAILURE, TEMPORARY_FAILURE",
-            "TEMPORARY_FAILURE, TECHNICAL_FAILURE",
-            // Terug naar een niet-definitieve status.
+            "SENDING, SENDING",
+            "CREATED, CREATED",
             "SENDING, DELIVERED",
             "SENDING, PERMANENT_FAILURE",
             "CREATED, SENDING",
-            // Een status die de NMC niet kent mag een bekende uitkomst nooit overschrijven.
-            "ONBEKEND, DELIVERED",
-            "ONBEKEND, PERMANENT_FAILURE"
+            "CREATED, DELIVERED"
     })
-    void volgtOp_gelijkeOfLagereRang_retourneertFalse(StatusWaarde nieuwe, StatusWaarde vastgelegd) {
+    void volgtOp_herhalingOfTerugval_retourneertFalse(StatusWaarde nieuwe, StatusWaarde vastgelegd) {
         assertFalse(nieuwe.volgtOp(vastgelegd));
     }
 
-    // De rangorde zoals hij hoort te zijn, expliciet opgeschreven in plaats van afgeleid uit de
-    // productiecode. rang() is een switch zonder default, dus de compiler dwingt af dát een nieuwe
-    // status een rang krijgt — niet wélke. Een status die per ongeluk in de DELIVERED-tak belandt kan
-    // een bezorging overschrijven zonder dat er iets valt; deze lijst plus de matrix hieronder vangen
-    // dat, en blijven kloppen als er een status bijkomt (de matrix dekt dan automatisch mee).
-    private static final List<List<StatusWaarde>> RANGORDE = List.of(
-            List.of(StatusWaarde.CREATED),
-            List.of(StatusWaarde.SENDING),
-            List.of(StatusWaarde.ONBEKEND),
-            List.of(StatusWaarde.TEMPORARY_FAILURE, StatusWaarde.TECHNICAL_FAILURE, StatusWaarde.PERMANENT_FAILURE),
-            List.of(StatusWaarde.DELIVERED));
+    // De indeling zoals hij hoort te zijn, expliciet opgeschreven in plaats van afgeleid uit de
+    // productiecode. Binnen VERZENDFASE geldt de volgorde van de lijst; een TERUGMELDING volgt op
+    // alles behalve zichzelf.
+    private static final List<StatusWaarde> VERZENDFASE =
+            List.of(StatusWaarde.CREATED, StatusWaarde.SENDING);
+    private static final List<StatusWaarde> TERUGMELDINGEN = List.of(
+            StatusWaarde.DELIVERED, StatusWaarde.PERMANENT_FAILURE, StatusWaarde.TEMPORARY_FAILURE,
+            StatusWaarde.TECHNICAL_FAILURE, StatusWaarde.ONBEKEND);
 
-    // Het volledige cartesisch product: alle 49 paren, niet de 21 die los waren opgeschreven.
+    // Het volledige cartesisch product: alle 49 paren, niet de 18 die los zijn opgeschreven.
     @ParameterizedTest
     @MethodSource("alleParen")
-    void volgtOp_overDeHeleMatrix_volgtDeVastgelegdeRangorde(StatusWaarde nieuwe, StatusWaarde vastgelegd) {
-        boolean verwacht = rang(nieuwe) > rang(vastgelegd);
+    void volgtOp_overDeHeleMatrix_volgtDeVastgelegdeIndeling(StatusWaarde nieuwe, StatusWaarde vastgelegd) {
+        boolean verwacht = verwachtVolgtOp(nieuwe, vastgelegd);
 
         assertEquals(verwacht, nieuwe.volgtOp(vastgelegd),
                 nieuwe + ".volgtOp(" + vastgelegd + ") hoort " + verwacht + " te zijn");
     }
 
-    // Bewaakt dat RANGORDE hierboven elke constante noemt: een nieuwe StatusWaarde die niemand in de
-    // lijst zet zou de matrixtest anders stilzwijgend overslaan.
+    // Bewaakt dat de twee lijsten samen elke constante noemen: een nieuwe StatusWaarde die in geen
+    // van beide staat zou de matrixtest anders stilzwijgend overslaan.
     @Test
-    void rangorde_noemtElkeStatusWaarde() {
-        assertEquals(StatusWaarde.values().length,
-                RANGORDE.stream().mapToLong(List::size).sum());
+    void indeling_noemtElkeStatusWaarde() {
+        assertEquals(StatusWaarde.values().length, VERZENDFASE.size() + TERUGMELDINGEN.size());
     }
 
-    // De relatie tussen de twee predicaten, die nergens uit de code blijkt maar wel geldt: op een
-    // definitieve status volgt alleen nog DELIVERED. Zonder deze test is het een toevallige
-    // eigenschap van de rangordegetallen; ermee is het een contract dat valt zodra iemand een status
-    // boven de faalstatussen zet.
+    // De kern van de regel, apart vastgelegd omdat hij bewust afwijkt van wat "definitief" suggereert:
+    // op een definitieve status volgt elke andere definitieve status. Wie die uitkomst uiteindelijk
+    // laat winnen, is de afhandeling van de statussen zelf en hoort niet hier.
     @ParameterizedTest
     @MethodSource("alleParen")
-    void volgtOp_naEenDefinitieveStatus_alleenDelivered(StatusWaarde nieuwe, StatusWaarde vastgelegd) {
-        if (vastgelegd.isDefinitief() && nieuwe.volgtOp(vastgelegd)) {
-            assertEquals(StatusWaarde.DELIVERED, nieuwe,
-                    nieuwe + " volgt op de definitieve status " + vastgelegd + "; alleen DELIVERED mag dat");
+    void volgtOp_naEenDefinitieveStatus_elkeAndereDefinitieveStatus(StatusWaarde nieuwe, StatusWaarde vastgelegd) {
+        if (!vastgelegd.isDefinitief()) {
+            return;
         }
+
+        assertEquals(nieuwe.isDefinitief() && nieuwe != vastgelegd, nieuwe.volgtOp(vastgelegd),
+                nieuwe + " na de definitieve status " + vastgelegd);
     }
 
     static Stream<Arguments> alleParen() {
@@ -158,11 +146,16 @@ class StatusWaardeTest {
                         .map(vastgelegd -> Arguments.of(nieuwe, vastgelegd)));
     }
 
-    private static int rang(StatusWaarde status) {
-        return RANGORDE.stream()
-                .filter(groep -> groep.contains(status))
-                .mapToInt(RANGORDE::indexOf)
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("Status " + status + " ontbreekt in RANGORDE"));
+    private static boolean verwachtVolgtOp(StatusWaarde nieuwe, StatusWaarde vastgelegd) {
+        if (nieuwe == vastgelegd) {
+            return false;
+        }
+
+        if (TERUGMELDINGEN.contains(nieuwe)) {
+            return true;
+        }
+
+        return VERZENDFASE.contains(vastgelegd)
+                && VERZENDFASE.indexOf(nieuwe) > VERZENDFASE.indexOf(vastgelegd);
     }
 }

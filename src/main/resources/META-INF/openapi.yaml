@@ -59,10 +59,11 @@ paths:
                 die geen van alle, dan wordt de statusupdate niet opnieuw aangeboden;
                 de Dienstverlener kan de status dan alleen nog zelf opvragen.
 
-                Een status komt hooguit één keer voorbij. Een herhaalde of laat
-                aangekomen melding van NotifyNL die geen vooruitgang is op de al
-                vastgelegde status, levert geen callback op — een bezorging wordt dus
-                nooit teruggedraaid naar een foutstatus.
+                Dezelfde status komt hooguit één keer voorbij: een herhaalde melding
+                van NotifyNL levert geen callback op. Ná een uitkomst kan wél een andere
+                uitkomst volgen — NotifyNL kan na een bezorging alsnog een fout melden —
+                en die wordt dan ook doorgegeven. De laatst ontvangen status is de meest
+                recente melding, niet per definitie de eindtoestand.
               requestBody:
                 required: true
                 content:
@@ -137,10 +138,11 @@ paths:
                 die geen van alle, dan wordt de statusupdate niet opnieuw aangeboden;
                 de Dienstverlener kan de status dan alleen nog zelf opvragen.
 
-                Een status komt hooguit één keer voorbij. Een herhaalde of laat
-                aangekomen melding van NotifyNL die geen vooruitgang is op de al
-                vastgelegde status, levert geen callback op — een bezorging wordt dus
-                nooit teruggedraaid naar een foutstatus.
+                Dezelfde status komt hooguit één keer voorbij: een herhaalde melding
+                van NotifyNL levert geen callback op. Ná een uitkomst kan wél een andere
+                uitkomst volgen — NotifyNL kan na een bezorging alsnog een fout melden —
+                en die wordt dan ook doorgegeven. De laatst ontvangen status is de meest
+                recente melding, niet per definitie de eindtoestand.
               requestBody:
                 required: true
                 content:
@@ -253,10 +255,10 @@ components:
             Behandel hem niet als eindstatus, er kan later alsnog een bekende uitkomst
             binnenkomen.
 
-            Een status komt hooguit één keer voorbij; een herhaalde of laat aangekomen
-            melding die geen vooruitgang is op de al vastgelegde status levert geen
-            statusupdate op. De NMC doet maximaal drie pogingen en biedt daarna niet
-            opnieuw aan.
+            Dezelfde status komt hooguit één keer voorbij; een herhaalde melding levert
+            geen statusupdate op. Ná een uitkomst kan wél een andere uitkomst volgen,
+            bijvoorbeeld een fout na een bezorging. De NMC doet maximaal drie pogingen en
+            biedt daarna niet opnieuw aan.
 
             Weglaten als de Dienstverlener de status zelf opvraagt via
             GET /notificaties/{id}.
@@ -320,10 +322,10 @@ components:
             Behandel hem niet als eindstatus, er kan later alsnog een bekende uitkomst
             binnenkomen.
 
-            Een status komt hooguit één keer voorbij; een herhaalde of laat aangekomen
-            melding die geen vooruitgang is op de al vastgelegde status levert geen
-            statusupdate op. De NMC doet maximaal drie pogingen en biedt daarna niet
-            opnieuw aan.
+            Dezelfde status komt hooguit één keer voorbij; een herhaalde melding levert
+            geen statusupdate op. Ná een uitkomst kan wél een andere uitkomst volgen,
+            bijvoorbeeld een fout na een bezorging. De NMC doet maximaal drie pogingen en
+            biedt daarna niet opnieuw aan.
             Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
             tekens, zonder gebruikersinfo) wordt geaccepteerd; IP-adressen en interne
             hostnamen worden geweigerd (400).

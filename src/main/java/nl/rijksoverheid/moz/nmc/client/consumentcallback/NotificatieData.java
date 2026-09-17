@@ -11,10 +11,10 @@ import java.util.UUID;
  * de callback van de ene receipt nog aan het herproberen is, kan die van een volgende al geslaagd
  * zijn — de Dienstverlener krijgt dan bijvoorbeeld {@code delivered} vóór {@code sending}.
  * <p>
- * Intern verdedigt de NMC zich daar wél tegen (zie {@code StatusWaarde#volgtOp}), maar de
- * Dienstverlener heeft geen houvast: {@code NotificatieStatusEvent#time} is het verzendmoment en
- * niet het registratiemoment, en er is geen volgnummer. Hij kan een verouderde update dus niet
- * herkennen en laten vallen.
+ * Intern houdt {@code StatusWaarde#volgtOp} alleen een terugval naar de verzendfase tegen; tussen de
+ * terugmeldingen van NotifyNL onderling geldt geen volgorde. De Dienstverlener heeft evenmin
+ * houvast: {@code NotificatieStatusEvent#time} is het verzendmoment en niet het registratiemoment,
+ * en er is geen volgnummer. Hij kan een verouderde update dus niet herkennen en laten vallen.
  * <p>
  * Op te lossen door hier de registratietijd ({@code NotificatieStatus#geregistreerd}) of het
  * volgnummer uit {@code notificatie_status} mee te sturen. Dat laatste is robuuster, want monotoon

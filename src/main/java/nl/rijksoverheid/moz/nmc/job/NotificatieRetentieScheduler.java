@@ -81,6 +81,7 @@ public class NotificatieRetentieScheduler {
             throw new IllegalArgumentException(
                     "notificatie.retentie.max-batches moet minstens 1 zijn, maar was " + maxBatches);
         }
+
         this.maxBatches = maxBatches;
         // Een niet-positieve termijn is één configuratie-typefout verwijderd van "verwijder de hele
         // tabel bij de volgende run", dat hoort bij het opstarten te falen, niet stilletjes midden
@@ -89,6 +90,7 @@ public class NotificatieRetentieScheduler {
             throw new IllegalArgumentException(
                     "notificatie.retentie.bewaartermijn moet positief zijn, maar was " + bewaartermijn);
         }
+
         this.notificatieRepository = notificatieRepository;
         this.bewaartermijn = bewaartermijn;
     }
@@ -152,6 +154,7 @@ public class NotificatieRetentieScheduler {
 
                         throw e;
                     }
+
                     // Totaal: begrenst de uitsluitingslijst, die als NOT IN-lijst in elke volgende
                     // claim meegaat. Zonder deze grens kan een run die om en om faalt en slaagt hem
                     // tot maxBatches/2 batches laten groeien.
@@ -199,10 +202,12 @@ public class NotificatieRetentieScheduler {
                         + "(grens=%s) — die notificaties zijn niet verwijderd", mislukteBatchesTotaal,
                         batches, overgeslagen.size(), grens);
             }
+
             if (totaalZonderEindstatus > gemeldeRegels) {
                 Log.warnf("Retentiejob: alleen de eerste %d van %d notificaties zonder eindstatus zijn "
                         + "hierboven afzonderlijk gemeld", gemeldeRegels, totaalZonderEindstatus);
             }
+
             Log.infof("Retentiejob: %d verlopen notificatie(s) verwijderd in %d batch(es) (%d mislukt, "
                     + "%d overgeslagen), waarvan %d zonder eindstatus (grens=%s)", totaalVerwijderd,
                     batches, mislukteBatchesTotaal, overgeslagen.size(), totaalZonderEindstatus, grens);
@@ -267,6 +272,7 @@ public class NotificatieRetentieScheduler {
             throw new IllegalStateException("Retentiejob: " + ids.size() + " rijen geclaimd onder "
                     + "rijlock maar " + verwijderd + " verwijderd (grens=" + grens + ")");
         }
+
         voortgang.noteerVerwijderd(verwijderd);
     }
 

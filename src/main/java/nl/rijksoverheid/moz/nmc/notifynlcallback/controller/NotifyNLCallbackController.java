@@ -76,6 +76,7 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
 
                     throw e;
                 }
+
                 if (poging == MAX_POGINGEN) {
                     Log.errorf(e, "Verwerken van de delivery receipt voor NotifyNL-referentie %s opgegeven "
                             + "na %d botsingen met een gelijktijdige verwerking",
@@ -83,6 +84,7 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
 
                     throw e;
                 }
+
                 Log.infof("Gelijktijdige statuswijziging voor NotifyNL-referentie %s (poging %d/%d) — opnieuw proberen",
                         afleverstatusRequest.getId(), poging, MAX_POGINGEN);
             }
@@ -107,6 +109,7 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
             if (oorzaak instanceof OptimisticLockException || oorzaak instanceof StaleStateException) {
                 return true;
             }
+
             oorzaak = oorzaak.getCause();
         }
 

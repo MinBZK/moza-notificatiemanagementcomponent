@@ -111,6 +111,7 @@ public class Notificatie {
             throw new IllegalStateException("Notificatie " + id + " is al gekoppeld aan NotifyNL-referentie "
                     + this.externalReference);
         }
+
         this.externalReference = externalReference;
         registreerStatus(StatusWaarde.SENDING);
     }
