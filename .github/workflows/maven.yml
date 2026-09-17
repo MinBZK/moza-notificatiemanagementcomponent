@@ -18,6 +18,8 @@ on:
 
 jobs:
   build:
+    # Unieke naam: deze check is verplicht op main, en deploy.yml heeft ook een job 'build'.
+    name: Maven verify
     permissions:
       contents: write # required for maven-dependency-submission-action
     runs-on: ubuntu-latest
