@@ -17,7 +17,7 @@ Gebruik de [issue templates](.github/ISSUE_TEMPLATE/) voor het melden van bugs o
 
 ### Codestijl
 
-- Java 21, Quarkus 3.x
+- Java 25, Quarkus 3.x
 - Bestaande conventies in de codebase volgen
 - Nederlandstalige naamgeving voor domeinconcepten, Engels voor generieke technische concepten
 
