@@ -225,6 +225,105 @@ class NotificatieRetentieSchedulerTest {
                 + "volgende run");
     }
 
+    // Verwijdert de DELETE minder dan er geclaimd is, dan hoort dat als mislukte batch te gelden.
+    // Zonder die controle draait de lus door: klaar hangt aan het aantal geclaimde rijen, dus bij
+    // nul verwijderd claimt de volgende ronde exact dezelfde rijen tot aan maxBatches — 10.000
+    // rondes op dezelfde 1000 rijen, met een ERROR die naar het verkeerde probleem wijst.
+    @Test
+    void verwijderVerlopenNotificaties_alsDeDeleteMinderVerwijdertDanGeclaimd_slaatDieRijenOver() {
+        plantVerlopenNotificaties(1005, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
+
+        AtomicInteger aanroepen = new AtomicInteger();
+        doAnswer(invocation -> {
+            if (aanroepen.incrementAndGet() == 1) {
+                // Doet alsof de DELETE niets raakt, zonder te gooien: precies het geval dat de lus
+                // eerder liet doordraaien.
+                return 0;
+            }
+
+            return invocation.callRealMethod();
+        }).when(notificatieRepository).verwijderOpId(any());
+
+        scheduler.verwijderVerlopenNotificaties();
+
+        Mockito.reset(notificatieRepository);
+        long overgebleven = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count());
+        assertEquals(1000L, overgebleven, "de 1000 rijen van de mislukte batch blijven staan, de rest "
+                + "wordt alsnog opgeruimd — en de lus claimt ze niet eindeloos opnieuw");
+    }
+
+    // De meldingen worden vóór de DELETE weggeschreven, dus ze zijn er ook als de batch daarna
+    // faalt. Werden ze niet meegeteld, dan kreeg de volgende batch het volle meldbudget opnieuw en
+    // telde de samenvatting minder dan er detailregels onder staan.
+    @Test
+    void verwijderVerlopenNotificaties_alsEenBatchFaalt_teltDeAlGeschrevenMeldingenMee() {
+        plantVerlopenNotificaties(1005, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "SENDING");
+
+        AtomicInteger aanroepen = new AtomicInteger();
+        doAnswer(invocation -> {
+            if (aanroepen.incrementAndGet() == 1) {
+                throw new RuntimeException("gesimuleerde storing in batch 1");
+            }
+
+            return invocation.callRealMethod();
+        }).when(notificatieRepository).verwijderOpId(any());
+
+        List<String> meldingen;
+        try (LogVanger vanger = LogVanger.van(NotificatieRetentieScheduler.class)) {
+            scheduler.verwijderVerlopenNotificaties();
+            meldingen = vanger.regelsOpNiveau(Level.WARNING);
+        }
+
+        Mockito.reset(notificatieRepository);
+        assertEquals(100, meldingen.stream()
+                .filter(regel -> regel.contains("verlopen zonder eindstatus notificatieId="))
+                .count(), "het meldbudget is voor de hele run, niet per batch");
+    }
+
+    // Een run waarin batches mislukken mag qua samenvatting niet op een geslaagde run lijken.
+    @Test
+    void verwijderVerlopenNotificaties_alsEenBatchFaalt_meldtDatInDeSamenvatting() {
+        plantVerlopenNotificaties(1005, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
+
+        AtomicInteger aanroepen = new AtomicInteger();
+        doAnswer(invocation -> {
+            if (aanroepen.incrementAndGet() == 1) {
+                throw new RuntimeException("gesimuleerde storing in batch 1");
+            }
+
+            return invocation.callRealMethod();
+        }).when(notificatieRepository).verwijderOpId(any());
+
+        List<String> fouten;
+        try (LogVanger vanger = LogVanger.van(NotificatieRetentieScheduler.class)) {
+            scheduler.verwijderVerlopenNotificaties();
+            fouten = vanger.regelsOpNiveau(Level.SEVERE);
+        }
+
+        Mockito.reset(notificatieRepository);
+        assertTrue(fouten.stream().anyMatch(regel -> regel.contains("1000 rij(en) deze run overgeslagen")),
+                "de samenvatting hoort te melden hoeveel rijen zijn blijven staan");
+    }
+
+    // Blijven de batches falen, dan is er een storing en heeft doorgaan geen zin. De teller telt
+    // opeenvolgende mislukkingen, zodat losse onverwijderbare rijen de rest van de achterstand niet
+    // gijzelen.
+    @Test
+    void verwijderVerlopenNotificaties_alsBatchesBlijvenFalen_breektDeRunAf() {
+        plantVerlopenNotificaties(6000, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
+
+        doAnswer(invocation -> {
+            throw new RuntimeException("structurele storing");
+        }).when(notificatieRepository).verwijderOpId(any());
+
+        assertThrows(RuntimeException.class, scheduler::verwijderVerlopenNotificaties);
+
+        Mockito.reset(notificatieRepository);
+        long overgebleven = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count());
+        assertEquals(6000L, overgebleven, "er is niets verwijderd en de run stopt na vijf mislukkingen "
+                + "op rij in plaats van door te gaan tot de bovengrens");
+    }
+
     // De melding zit sinds de herziening ín de batchtransactie en gaat over exact de geclaimde rijen.
     // Daarmee is de oude test "als de melding faalt, verwijdert de job alsnog" vervallen: melding en
     // verwijdering kunnen niet meer los van elkaar slagen. Dat een falende batch zijn eigen rijen
@@ -537,30 +636,16 @@ class NotificatieRetentieSchedulerTest {
         });
     }
 
-    // Reflecteert op een rechtstreeks geconstrueerde instantie, niet op het @Inject-veld: dat laatste
-    // is een CDI-clientproxy waarvan de eigen velden (notificatieRepository) leeg zijn, een privé
-    // methode via reflectie op de proxy aanroepen omzeilt de CDI-delegatie en geeft een NPE. De
-    // meegegeven Duration doet er niet toe: verwijderBatch gebruikt alleen de grens-parameter.
+    // Een rechtstreeks geconstrueerde scheduler, niet het @Inject-veld: dat laatste is een
+    // CDI-clientproxy waarvan de eigen velden leeg zijn. De meegegeven Duration en bovengrens doen
+    // er niet toe; verwijderBatch gebruikt alleen de grens-parameter.
     private int verwijderBatchOp(OffsetDateTime grens) {
-        NotificatieRetentieScheduler.BatchResultaat resultaat =
-                (NotificatieRetentieScheduler.BatchResultaat) roepPrivateMethodeAan("verwijderBatch",
-                        new Class<?>[] {OffsetDateTime.class, int.class, List.class, List.class},
-                        grens, 0, List.of(), new ArrayList<UUID>());
+        NotificatieRetentieScheduler.BatchVoortgang voortgang =
+                new NotificatieRetentieScheduler.BatchVoortgang(0);
+        new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(7), 10_000)
+                .verwijderBatch(grens, List.of(), voortgang);
 
-        return resultaat.verwijderd();
-    }
-
-
-    private Object roepPrivateMethodeAan(String naam, Class<?>[] parameterTypes, Object... argumenten) {
-        try {
-            NotificatieRetentieScheduler kaleScheduler =
-                    new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(7), 10_000);
-            Method methode = NotificatieRetentieScheduler.class.getDeclaredMethod(naam, parameterTypes);
-            methode.setAccessible(true);
-            return methode.invoke(kaleScheduler, argumenten);
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
+        return voortgang.verwijderd();
     }
 
     // NotificatieStatus is een @Embeddable (@ElementCollection), dus niet zelfstandig bevraagbaar

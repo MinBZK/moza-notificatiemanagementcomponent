@@ -49,7 +49,12 @@ public class NotificatieRetentieScheduler {
     // die gooit is niet vanzelf fataal — bijvoorbeeld een rij die door een toekomstige foreignkey
     // zonder cascade niet te verwijderen is — maar zonder grens zou een structurele storing (DB weg,
     // schema kapot) de job elke batch opnieuw laten proberen tot MAX_BATCHES.
-    private static final int MAX_MISLUKTE_BATCHES = 5;
+    private static final int MAX_MISLUKTE_BATCHES_OP_RIJ = 5;
+
+    // Absolute grens over de hele run, die de uitsluitingslijst begrenst: elke overgeslagen batch
+    // voegt tot BATCH_GROOTTE ids toe aan de NOT IN-lijst van elke volgende claim. Tien batches is
+    // 10.000 ids; komt een run daarboven, dan is het aantal onverwijderbare rijen zelf het signaal.
+    private static final int MAX_MISLUKTE_BATCHES_TOTAAL = 10;
 
     // Bovengrens op het aantal notificaties dat per run afzonderlijk wordt gemeld. Bij een storing
     // aan de kant van NotifyNL kan de hele achterstand niet-definitief zijn; zonder deze grens zou
@@ -105,7 +110,8 @@ public class NotificatieRetentieScheduler {
         int totaalVerwijderd = 0;
         int totaalZonderEindstatus = 0;
         int gemeldeRegels = 0;
-        int mislukteBatches = 0;
+        int mislukteBatchesOpRij = 0;
+        int mislukteBatchesTotaal = 0;
         boolean klaar = false;
         // Ids die deze run zijn overgeslagen omdat hun batch gooide. Zonder deze uitsluiting claimt
         // de volgende ronde exact dezelfde rijen — de transactie is teruggerold, dus de lock is weg
@@ -118,42 +124,68 @@ public class NotificatieRetentieScheduler {
         try {
             while (!klaar && batches < maxBatches) {
                 batches++;
-                int budget = Math.max(0, MAX_MELDINGEN - gemeldeRegels);
-                // Gevuld door verwijderBatch vóór de DELETE, zodat de ids ook na een rollback bekend
-                // zijn: een gewone Java-lijst wordt niet teruggedraaid.
-                List<UUID> geclaimd = new ArrayList<>();
-                BatchResultaat resultaat;
+                // Een meegegeven houder in plaats van alleen een retourwaarde: bij een rollback is er
+                // geen retourwaarde, en juist dan moeten de geclaimde ids en de al weggeschreven
+                // meldingen bekend zijn. Een gewone Java-lijst wordt niet teruggedraaid.
+                BatchVoortgang voortgang = new BatchVoortgang(Math.max(0, MAX_MELDINGEN - gemeldeRegels));
+                boolean geslaagd = true;
                 try {
                     List<UUID> uitgesloten = List.copyOf(overgeslagen);
-                    resultaat = QuarkusTransaction.requiringNew()
-                            .call(() -> verwijderBatch(grens, budget, uitgesloten, geclaimd));
+                    QuarkusTransaction.requiringNew()
+                            .run(() -> verwijderBatch(grens, uitgesloten, voortgang));
                 } catch (RuntimeException e) {
-                    mislukteBatches++;
-                    overgeslagen.addAll(geclaimd);
+                    geslaagd = false;
+                    mislukteBatchesOpRij++;
+                    mislukteBatchesTotaal++;
+                    overgeslagen.addAll(voortgang.geclaimd());
                     Log.errorf(e, "Retentiejob: batch %d kon niet verwijderd worden (grens=%s, %d rijen "
                             + "geclaimd) — deze rijen worden deze run overgeslagen en de job gaat door "
-                            + "met de volgende batch", batches, grens, geclaimd.size());
+                            + "met de volgende batch", batches, grens, voortgang.geclaimd().size());
 
-                    if (mislukteBatches >= MAX_MISLUKTE_BATCHES) {
-                        Log.errorf("Retentiejob: %d batches op rij mislukt, run afgebroken",
-                                mislukteBatches);
+                    // Op rij: dat wijst op een storing die de volgende batch net zo hard raakt, dus
+                    // doorgaan kost alleen tijd. De teller gaat na elke geslaagde batch terug op nul,
+                    // zodat losse onverwijderbare rijen de rest van de achterstand niet gijzelen —
+                    // die blijven anders elke nacht als oudste bovenkomen en de run afbreken.
+                    if (mislukteBatchesOpRij >= MAX_MISLUKTE_BATCHES_OP_RIJ) {
+                        Log.errorf("Retentiejob: %d batches op rij mislukt, run afgebroken; de rest van "
+                                + "de achterstand is deze run niet bekeken", mislukteBatchesOpRij);
 
                         throw e;
                     }
+                    // Totaal: begrenst de uitsluitingslijst, die als NOT IN-lijst in elke volgende
+                    // claim meegaat. Zonder deze grens kan een run die om en om faalt en slaagt hem
+                    // tot maxBatches/2 batches laten groeien.
+                    if (mislukteBatchesTotaal >= MAX_MISLUKTE_BATCHES_TOTAAL) {
+                        Log.errorf("Retentiejob: %d mislukte batches in deze run, run afgebroken; %d "
+                                + "rij(en) overgeslagen", mislukteBatchesTotaal, overgeslagen.size());
 
-                    continue;
+                        throw e;
+                    }
                 }
 
-                totaalVerwijderd += resultaat.verwijderd();
-                totaalZonderEindstatus += resultaat.zonderEindstatus();
-                gemeldeRegels += resultaat.gemeld();
-                Log.debugf("Retentiejob: batch %d verwijderde %d notificatie(s)", batches, resultaat.verwijderd());
+                // Buiten de try: ook een mislukte batch heeft zijn meldingen al weggeschreven, want
+                // verwijderBatch meldt vóór de DELETE. Zouden die niet meegeteld worden, dan kreeg de
+                // volgende batch het volle meldbudget opnieuw en zou de samenvatting minder tellen
+                // dan er detailregels onder staan.
+                totaalVerwijderd += voortgang.verwijderd();
+                totaalZonderEindstatus += voortgang.zonderEindstatus();
+                gemeldeRegels += voortgang.gemeld();
 
-                // Een batch die niet vol is, is de laatste: er waren geen BATCH_GROOTTE rijen meer
-                // die deze pod kon claimen. Nog een ronde zou een query kosten die vrijwel zeker
-                // niets oplevert. Wat een andere pod op dat moment vasthoudt (SKIP LOCKED) is diens
-                // werk; die verwijdert het in dezelfde nacht.
-                klaar = resultaat.geclaimd() < BATCH_GROOTTE;
+                if (geslaagd) {
+                    // Teller terug op nul: alleen opeenvolgende mislukkingen wijzen op een storing.
+                    // Niet gedekt door een test — het verschil met een cumulatieve teller wordt pas
+                    // zichtbaar bij meer dan MAX_MISLUKTE_BATCHES_OP_RIJ verspreide mislukkingen, en
+                    // dat vraagt een populatie die deze testklasse onwerkbaar traag maakt.
+                    mislukteBatchesOpRij = 0;
+                    Log.debugf("Retentiejob: batch %d verwijderde %d notificatie(s)", batches,
+                            voortgang.verwijderd());
+
+                    // Een batch die niet vol is, is de laatste: er waren geen BATCH_GROOTTE rijen meer
+                    // die deze pod kon claimen. Nog een ronde zou een query kosten die vrijwel zeker
+                    // niets oplevert. Wat een andere pod op dat moment vasthoudt (SKIP LOCKED) is
+                    // diens werk; die verwijdert het in dezelfde nacht.
+                    klaar = voortgang.geclaimd().size() < BATCH_GROOTTE;
+                }
             }
 
             if (!klaar) {
@@ -162,12 +194,18 @@ public class NotificatieRetentieScheduler {
                         + "volgende run", maxBatches, grens);
             }
         } finally {
+            if (mislukteBatchesTotaal > 0) {
+                Log.errorf("Retentiejob: %d van de %d batches mislukt, %d rij(en) deze run overgeslagen "
+                        + "(grens=%s) — die notificaties zijn niet verwijderd", mislukteBatchesTotaal,
+                        batches, overgeslagen.size(), grens);
+            }
             if (totaalZonderEindstatus > gemeldeRegels) {
                 Log.warnf("Retentiejob: alleen de eerste %d van %d notificaties zonder eindstatus zijn "
                         + "hierboven afzonderlijk gemeld", gemeldeRegels, totaalZonderEindstatus);
             }
-            Log.infof("Retentiejob: %d verlopen notificatie(s) verwijderd in %d batch(es), waarvan %d "
-                    + "zonder eindstatus (grens=%s)", totaalVerwijderd, batches, totaalZonderEindstatus, grens);
+            Log.infof("Retentiejob: %d verlopen notificatie(s) verwijderd in %d batch(es) (%d mislukt, "
+                    + "%d overgeslagen), waarvan %d zonder eindstatus (grens=%s)", totaalVerwijderd,
+                    batches, mislukteBatchesTotaal, overgeslagen.size(), totaalZonderEindstatus, grens);
         }
     }
 
@@ -198,27 +236,87 @@ public class NotificatieRetentieScheduler {
     //
     // De DELETE is JPQL, zodat Hibernate de notificatie_status-rijen zelf opruimt; de ON DELETE
     // CASCADE op de foreignkey (V2) blijft het vangnet voor verwijderingen buiten Hibernate om.
-    private BatchResultaat verwijderBatch(OffsetDateTime grens, int meldbudget, List<UUID> uitgesloten,
-            List<UUID> geclaimd) {
+    // Package-private en niet privé: NotificatieRetentieSchedulerTest roept hem rechtstreeks aan om
+    // te bewijzen dat één batch écht op BATCH_GROOTTE begrensd is. Via reflectie ging dat ook, maar
+    // dan breekt de test stil op elke handtekeningwijziging in plaats van bij het compileren.
+    void verwijderBatch(OffsetDateTime grens, List<UUID> uitgesloten, BatchVoortgang voortgang) {
         List<UUID> ids = notificatieRepository.claimVerlopen(grens, BATCH_GROOTTE, uitgesloten);
-        geclaimd.addAll(ids);
+        voortgang.noteerGeclaimd(ids);
 
         if (ids.isEmpty()) {
-            return new BatchResultaat(0, 0, 0, 0);
+            return;
         }
 
         List<Kandidaat> zonderEindstatus = notificatieRepository.zoekKandidaten(ids).stream()
                 .filter(kandidaat -> !kandidaat.status().isDefinitief())
                 .toList();
-        int gemeld = Math.min(zonderEindstatus.size(), meldbudget);
+        int gemeld = Math.min(zonderEindstatus.size(), voortgang.meldbudget());
         zonderEindstatus.subList(0, gemeld).forEach(this::meld);
+        voortgang.noteerGemeld(zonderEindstatus.size(), gemeld);
 
         int verwijderd = notificatieRepository.verwijderOpId(ids);
 
-        return new BatchResultaat(ids.size(), verwijderd, zonderEindstatus.size(), gemeld);
+        // De rijen staan onder rijlock en de DELETE gaat op precies die ids, dus dit hoort niet te
+        // kunnen. Gebeurt het toch, dan wijzigt er iets aan notificatie buiten Hibernate om, of
+        // lopen het claim- en het verwijderpredicaat uiteen. Zonder deze controle draait de lus
+        // door: klaar hangt aan het aantal geclaimde rijen, dus bij nul verwijderd claimt de
+        // volgende ronde exact dezelfde rijen, tot aan maxBatches. Als mislukte batch behandelen
+        // laat de bestaande afhandeling grijpen: de ids gaan op de uitsluitingslijst en de run stopt
+        // op tijd, met een melding die het echte probleem noemt.
+        if (verwijderd != ids.size()) {
+            throw new IllegalStateException("Retentiejob: " + ids.size() + " rijen geclaimd onder "
+                    + "rijlock maar " + verwijderd + " verwijderd (grens=" + grens + ")");
+        }
+        voortgang.noteerVerwijderd(verwijderd);
     }
 
-    record BatchResultaat(int geclaimd, int verwijderd, int zonderEindstatus, int gemeld) {
+    // Houder die de voortgang van één batch vasthoudt, ook als de transactie terugrolt. Een
+    // retourwaarde werkt daar niet: bij een rollback is die er niet, terwijl juist dan de geclaimde
+    // ids en de al weggeschreven meldingen bekend moeten zijn.
+    static final class BatchVoortgang {
+
+        private final int meldbudget;
+        private final List<UUID> geclaimd = new ArrayList<>();
+        private int zonderEindstatus;
+        private int gemeld;
+        private int verwijderd;
+
+        BatchVoortgang(int meldbudget) {
+            this.meldbudget = meldbudget;
+        }
+
+        int meldbudget() {
+            return meldbudget;
+        }
+
+        List<UUID> geclaimd() {
+            return geclaimd;
+        }
+
+        int zonderEindstatus() {
+            return zonderEindstatus;
+        }
+
+        int gemeld() {
+            return gemeld;
+        }
+
+        int verwijderd() {
+            return verwijderd;
+        }
+
+        private void noteerGeclaimd(List<UUID> ids) {
+            geclaimd.addAll(ids);
+        }
+
+        private void noteerGemeld(int zonderEindstatus, int gemeld) {
+            this.zonderEindstatus = zonderEindstatus;
+            this.gemeld = gemeld;
+        }
+
+        private void noteerVerwijderd(int verwijderd) {
+            this.verwijderd = verwijderd;
+        }
     }
 
     // Key=value in de melding zodat er een dashboard op te bouwen is zonder de regel als vrije tekst
