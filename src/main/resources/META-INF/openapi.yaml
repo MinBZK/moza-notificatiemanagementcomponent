@@ -227,32 +227,13 @@ components:
           # @Size-validator voor heeft (HV000030). Vandaar een eigen constraint in plaats van
           # maxLength; die dekt meteen de scheme-, host- en poortregels uit de description.
           x-field-extra-annotation: "@nl.rijksoverheid.moz.nmc.validation.ValidCallbackUrl"
-          description: >-
+          # Literal block (|) en geen folded (>-): een folded scalar plakt gelijk-ingesprongen
+          # regels aan elkaar met spaties, waardoor de markdown-tabel hieronder als één
+          # doorlopende regel in het gepubliceerde document belandt en Swagger UI er geen tabel
+          # van maakt.
+          description: |
             Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
             terugstuurt zodra de bezorgstatus bekend is.
-
-            De statusupdate is een CloudEvent met in `data` het `notificatieId` en een
-            `status`. Mogelijke waarden, met hun betekenis:
-
-            | Waarde | Betekenis |
-            |---|---|
-            | `created` | Vastgelegd, nog niet aangeboden bij NotifyNL |
-            | `sending` | Aangeboden bij NotifyNL, nog geen uitkomst |
-            | `delivered` | Bezorgd |
-            | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
-            | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
-            | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
-            | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
-
-            `onbekend` zegt niets over de notificatie zelf: er is wél een terugmelding
-            ontvangen, maar die viel buiten de statussen die dit component kent.
-            Behandel hem niet als eindstatus, er kan later alsnog een bekende uitkomst
-            binnenkomen.
-
-            Een status komt hooguit één keer voorbij; een herhaalde of laat aangekomen
-            melding die geen vooruitgang is op de al vastgelegde status levert geen
-            statusupdate op. De NMC doet maximaal drie pogingen en biedt daarna niet
-            opnieuw aan.
 
             De statusupdate is een CloudEvent met in `data` het `notificatieId` en een
             `status`. Mogelijke waarden, met hun betekenis:
@@ -313,7 +294,11 @@ components:
           format: uri
           # Zie de toelichting bij NotificatieAanvraagRequest.callbackUrl.
           x-field-extra-annotation: "@nl.rijksoverheid.moz.nmc.validation.ValidCallbackUrl"
-          description: >-
+          # Literal block (|) en geen folded (>-): een folded scalar plakt gelijk-ingesprongen
+          # regels aan elkaar met spaties, waardoor de markdown-tabel hieronder als één
+          # doorlopende regel in het gepubliceerde document belandt en Swagger UI er geen tabel
+          # van maakt.
+          description: |
             Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
             terugstuurt zodra de bezorgstatus bekend is.
 

@@ -17,12 +17,13 @@ import java.util.logging.Logger;
  * retentiejob de rij heeft verwijderd, en er worden dashboards op gebouwd. Zonder deze assertie
  * kan iemand het niveau verlagen of de regel schrappen zonder dat een test valt.
  * <p>
- * Quarkus 3.38 heeft geen LogCollectingTestResource, vandaar deze handmatige handler.
+ * Quarkus biedt hier geen testfaciliteit voor, vandaar deze handmatige handler.
  */
 public final class LogVanger implements AutoCloseable {
 
     private final Logger logger;
     private final Handler handler;
+    private final Level oorspronkelijkNiveau;
     private final List<LogRecord> regels = Collections.synchronizedList(new ArrayList<>());
 
     private LogVanger(String categorie) {
@@ -44,6 +45,12 @@ public final class LogVanger implements AutoCloseable {
             }
         };
         this.handler.setLevel(Level.ALL);
+        // Ook op de logger, niet alleen op de handler. Zonder dit erft de categorie het
+        // rootniveau (INFO) en kort jboss-logging een Log.debugf af vóórdat enige handler hem
+        // ziet — de vanger zou dan stil niets opleveren en een test op een DEBUG-regel zou
+        // slagen omdat er niets te vinden was.
+        this.oorspronkelijkNiveau = logger.getLevel();
+        this.logger.setLevel(Level.ALL);
         this.logger.addHandler(handler);
     }
 
@@ -51,7 +58,12 @@ public final class LogVanger implements AutoCloseable {
         return new LogVanger(categorie.getName());
     }
 
-    /** Alle opgevangen regels van precies dit niveau, als tekst. */
+    /**
+     * Alle opgevangen regels van precies dit niveau, als tekst.
+     * <p>
+     * Exacte gelijkheid op het niveau, niet "minstens": een assertie dat er géén WARN is hoort
+     * niet stilzwijgend te slagen doordat de regel naar SEVERE is verschoven.
+     */
     public List<String> regelsOpNiveau(Level niveau) {
         synchronized (regels) {
             return regels.stream()
@@ -70,5 +82,6 @@ public final class LogVanger implements AutoCloseable {
     @Override
     public void close() {
         logger.removeHandler(handler);
+        logger.setLevel(oorspronkelijkNiveau);
     }
 }
