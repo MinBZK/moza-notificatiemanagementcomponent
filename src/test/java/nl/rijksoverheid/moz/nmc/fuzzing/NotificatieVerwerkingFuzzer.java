@@ -219,14 +219,11 @@ public class NotificatieVerwerkingFuzzer {
         // The callback adapter absorbs a failing callback; a 5xx on this route is always a finding.
         roepAan(() -> callbackController.verwerkAfleverstatus(melding), true);
 
-        // The service deletes the notificatie after a delivered callback and keeps it after a
-        // failed one.
-        if (notificatieIsBekend) {
-            boolean bewaard = repository.findByExternalReference(melding.getId()).isPresent();
-            if (bewaard == callbackLukt) {
-                throw new AssertionError("notificatie %s na %s consument-callback".formatted(
-                        bewaard ? "bewaard" : "verwijderd", callbackLukt ? "geslaagde" : "mislukte"));
-            }
+        // A delivery receipt never deletes the notificatie, whatever the outcome of the consumer
+        // callback: its status history has to stay.
+        if (notificatieIsBekend && repository.findByExternalReference(melding.getId()).isEmpty()) {
+            throw new AssertionError("notificatie verwijderd na %s consument-callback".formatted(
+                    callbackLukt ? "geslaagde" : "mislukte"));
         }
     }
 
