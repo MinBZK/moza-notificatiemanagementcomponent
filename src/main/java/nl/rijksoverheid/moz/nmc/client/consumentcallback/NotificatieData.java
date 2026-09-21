@@ -1,27 +1,25 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
+import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+
 import java.util.Objects;
 import java.util.UUID;
 
 /**
- * De payload van het CloudEvent naar de Dienstverlener. status is een String en geen StatusWaarde:
- * dit is een extern contract, dus de waarde staat hier los van de interne enum.
+ * Payload van het CloudEvent naar de Dienstverlener; status is de API-waarde, los van de interne enum.
  * <p>
- * TODO (buiten scope): er zit geen volgordeinformatie in, terwijl statusupdates elkaar kunnen
- * inhalen — ConsumentCallbackAdapter herprobeert synchroon, dus een latere receipt kan als eerste
- * aankomen. De Dienstverlener kan een verouderde update niet herkennen: {@code
- * NotificatieStatusEvent#time} is het verzendmoment en er is geen volgnummer.
- * <p>
- * Op te lossen door het volgnummer uit {@code notificatie_status} mee te sturen; dat is monotoon per
- * notificatie en niet klokafhankelijk. Dat verandert het CloudEvent-contract, dus ook het schema in
- * {@code META-INF/openapi.yaml}.
+ * TODO (buiten scope): zonder volgnummer kan de Dienstverlener een ingehaalde update niet herkennen.
+ * Het volgnummer uit {@code notificatie_status} meesturen lost dat op, maar verandert het contract.
  */
 public record NotificatieData(UUID notificatieId, String status) {
 
-    // Beide velden zijn verplicht in NotificatieStatusData in openapi.yaml; zonder deze controle gaat
-    // een null als ongeldig CloudEvent naar de Dienstverlener in plaats van hier op te vallen.
+    // Beide velden zijn verplicht in openapi.yaml; zo valt een null hier op en niet bij de Dienstverlener.
     public NotificatieData {
         Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
         Objects.requireNonNull(status, "status is verplicht");
+    }
+
+    public static NotificatieData van(UUID notificatieId, StatusWaarde status) {
+        return new NotificatieData(notificatieId, status.toApiValue());
     }
 }

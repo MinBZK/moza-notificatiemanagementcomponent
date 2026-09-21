@@ -14,13 +14,10 @@ import java.util.Objects;
  * De status van een Notificatie op een gegeven moment. Waarde-object, eigendom van één Notificatie.
  *
  * @param status de status zelf
- * @param tijdstip wanneer de status is ontstaan. Voor een delivery receipt van NotifyNL is dat hun
- *        completed_at (met sent_at en created_at als terugval), niet het moment waarop de NMC de
- *        callback ontving: NotifyNL herhaalt een callback tot 5x met 5 minuten ertussen, dus die
- *        twee kunnen tientallen minuten uiteenlopen. Dit is het tijdstip voor het afleverbewijs, en
- *        het staat op de klok van NotifyNL.
+ * @param tijdstip wanneer de status ontstond, op de klok van de bron; voor een delivery receipt de
+ *        completed_at van NotifyNL, niet het moment van ontvangst
  * @param geregistreerd wanneer de NMC de status vastlegde, op de eigen klok (kolom
- *        laatste_status_update). Monotoon, en daarom het tijdstip om op te selecteren.
+ *        {@code geregistreerd}; in de projectie {@code laatste_status_update})
  */
 @Embeddable
 public record NotificatieStatus(

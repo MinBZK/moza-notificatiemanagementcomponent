@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -74,6 +75,25 @@ class ConsumentCallbackAdapterTest {
 
         assertThrows(IllegalStateException.class,
                 () -> adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback")));
+
+        verify(callbackClient, times(1)).stuurStatusUpdate(any());
+    }
+
+    // Een onderbroken thread stopt met herhalen en houdt zijn interrupt-vlag, zodat de aanroeper
+    // die nog ziet.
+    @Test
+    void stuurStatusUpdate_onderbrokenTijdensWachten_stoptEnBehoudtDeInterruptVlag() {
+        ConsumentCallbackAdapter adapterMetWachttijd = new ConsumentCallbackAdapter(url -> callbackClient, 60_000L);
+        doThrow(new ProcessingException("onbereikbaar")).when(callbackClient).stuurStatusUpdate(any());
+
+        Thread.currentThread().interrupt();
+        try {
+            adapterMetWachttijd.stuurStatusUpdate(opdracht("https://omc.example.nl/callback"));
+
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
 
         verify(callbackClient, times(1)).stuurStatusUpdate(any());
     }

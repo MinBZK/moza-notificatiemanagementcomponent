@@ -36,13 +36,8 @@ public class Notificatie {
     @Column(name = "callback_url", length = 2048)
     private String callbackUrl;
 
-    // Kopie van het laatste record in statusGeschiedenis, zodat een vraag naar de huidige status niet
-    // per notificatie een MAX over notificatie_status hoeft te berekenen. Hier stuurt de code op,
-    // niet op de geschiedenis.
-    //
-    // registreerStatus(NotificatieStatus) is binnen Java het enige pad naar beide velden, dus ze
-    // kunnen niet uiteen lopen. In de database koppelt geen constraint laatste_status aan de rij met het hoogste
-    // volgnummer, dus een schrijver die Hibernate omzeilt moet ze zelf in pas houden.
+    // Kopie van het laatste geschiedenisrecord, zodat de huidige status geen MAX over
+    // notificatie_status vraagt. Alleen registreerStatus(NotificatieStatus) schrijft beide velden.
     @Embedded
     @AttributeOverrides({
             @AttributeOverride(name = "status", column = @Column(name = "laatste_status", nullable = false, length = 32)),
@@ -136,10 +131,8 @@ public class Notificatie {
         this.laatsteStatus = record;
     }
 
-    // Afgeleid van het eerste statusGeschiedenis-record. Voor notificaties die door deze code zijn
-    // aangemaakt is dat de CREATED uit de constructor; voor rijen uit de V2-backfill is het hun
-    // status van dat moment, want V1 legde geen geschiedenis vast. Vereist een actieve
-    // persistence context.
+    // Tijdstip van het eerste geschiedenisrecord: de CREATED uit de constructor, of voor een rij uit
+    // de V2-backfill zijn oude aanmaaktijdstip. Vereist een actieve persistence context.
     public OffsetDateTime getAangemaakt() {
         return eersteStatus().tijdstip();
     }
@@ -149,10 +142,8 @@ public class Notificatie {
         return List.copyOf(statusGeschiedenis);
     }
 
-    // Een Notificatie zonder statusgeschiedenis kan langs deze code niet ontstaan: de constructor
-    // legt altijd CREATED vast. Blijft toch als vangnet staan omdat niets buiten Java dat afdwingt
-    // (de tabel heeft geen constraint die minstens één statusregel eist), en een lege lijst hier
-    // anders een NoSuchElementException oplevert die niets over de oorzaak zegt.
+    // Vangnet voor rijen die buiten Java zijn ontstaan: de database eist geen statusregel, en een lege
+    // lijst gaf anders een NoSuchElementException zonder oorzaak.
     private NotificatieStatus eersteStatus() {
         if (statusGeschiedenis.isEmpty()) {
             throw new IllegalStateException(

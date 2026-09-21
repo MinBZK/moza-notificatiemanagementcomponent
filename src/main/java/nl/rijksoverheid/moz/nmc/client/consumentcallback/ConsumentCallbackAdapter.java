@@ -12,16 +12,11 @@ import java.time.ZoneOffset;
 import java.util.UUID;
 
 /**
- * Stuurt de afleverstatus van een Notificatie als CloudEvent naar de callback-URL van de
- * Dienstverlener.
+ * Stuurt de afleverstatus als CloudEvent naar de callback-URL van de Dienstverlener, ná de commit
+ * (via StatusUpdateVerzender).
  * <p>
- * De aanroep gebeurt ná de commit van NotificatieService.verwerkAfleverstatus(): die vuurt een
- * StatusUpdateOpdracht af die StatusUpdateVerzender bij AFTER_SUCCESS oppakt. Er blijft dus geen
- * DB-connectie openstaan zolang de callback duurt.
- * <p>
- * TODO (buiten scope): de aanroep is synchroon en blokkeert de request-thread van de
- * NotifyNL-callback, en de uitkomst wordt nergens vastgelegd — mislukken alle MAX_POGINGEN, dan is
- * de statusupdate verloren. Beide vragen om een takentabel met eigen herpogingen.
+ * TODO (buiten scope): de aanroep blokkeert de request-thread van de NotifyNL-callback en na
+ * MAX_POGINGEN is de statusupdate verloren; een takentabel met eigen herpogingen lost beide op.
  */
 @ApplicationScoped
 public class ConsumentCallbackAdapter {
@@ -69,7 +64,7 @@ public class ConsumentCallbackAdapter {
                 "notificatie/" + opdracht.notificatieId(),
                 OffsetDateTime.now(ZoneOffset.UTC),
                 "application/json",
-                new NotificatieData(opdracht.notificatieId(), opdracht.status().toApiValue()));
+                NotificatieData.van(opdracht.notificatieId(), opdracht.status()));
 
         verstuurMetHerpogingen(client, event, opdracht);
     }

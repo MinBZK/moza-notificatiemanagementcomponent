@@ -177,9 +177,9 @@ de logica die kiest tussen herverzending en contactherstel.
   binnengekomen status wordt vastgelegd, en onderscheidt alleen de verzendfase
   (`CREATED`, `SENDING`) van wat NotifyNL daarna terugmeldt. Tussen die terugmeldingen
   geldt geen rangorde: NotifyNL kan ná een bezorging alsnog een fout melden, dus elke
-  definitieve status volgt op elke andere. Alleen een herhaling van de huidige status
-  wordt geweigerd; een eerdere status die terugkomt (A, B, A) wordt wél vastgelegd en
-  doorgegeven.
+  definitieve status volgt op elke andere. Geweigerd worden alleen een herhaling van
+  de huidige status en een teruggang naar de verzendfase; een eerdere status die
+  terugkomt (A, B, A) wordt wél vastgelegd en doorgegeven.
   Welke uitkomst uiteindelijk telt is nog niet belegd — `isDefinitief` betekent
   "NotifyNL heeft iets teruggemeld", niet "hier komt niets meer overheen".
 - **Gebeurtenistijd en registratietijd zijn aparte kolommen.**

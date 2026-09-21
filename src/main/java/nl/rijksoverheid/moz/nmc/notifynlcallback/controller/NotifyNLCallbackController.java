@@ -17,10 +17,9 @@ import java.util.stream.Stream;
 @NotifyNLCallbackBeveiligd
 public class NotifyNLCallbackController implements NotifyNlCallbackApi {
 
-    // Alleen bedoeld voor een botsing tussen twee gelijktijdige receipts voor dezelfde notificatie.
-    // Die is per definitie kort: de verliezer herleest en ziet dan de status van de winnaar staan,
-    // waarna StatusWaarde#volgtOp meestal beslist dat er niets meer te doen is. Drie is ruim genoeg
-    // voor zo'n botsing en klein genoeg om geen verkapte wachtrij te worden.
+    // Alleen voor een botsing tussen twee gelijktijdige receipts: de verliezer herleest en
+    // StatusWaarde#volgtOp bepaalt opnieuw of zijn status nog nieuw is. Drie is genoeg zonder een
+    // verkapte wachtrij te worden.
     private static final int MAX_POGINGEN = 3;
 
     // Ruim boven elke realistische inpakdiepte (transactiemanager, interceptor, JPA-provider) en
@@ -61,10 +60,8 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
                 // Geen verwerkingsfout: verwerkAfleverstatus logt dit zelf op WARN.
                 throw e;
             } catch (RuntimeException e) {
-                // Beide takken leveren een 5xx op en kosten daarmee een van de vijf herpogingen die
-                // NotifyNL doet; na de vijfde is de afleverstatus daar weg. Dat is het enige moment
-                // in dit pad met blijvend verlies, dus het hoort niet ongelogd te gebeuren — en de
-                // twee oorzaken vragen om verschillend onderzoek.
+                // Beide takken kosten een van de vijf herpogingen van NotifyNL, dus mogelijk blijvend
+                // verlies; ze loggen apart omdat de oorzaken ander onderzoek vragen.
                 if (!isGelijktijdigeSchrijfactie(e)) {
                     Log.errorf(e, "Verwerken van de delivery receipt voor NotifyNL-referentie %s mislukt "
                             + "op een fout die herhalen niet oplost", afleverstatusRequest.getId());

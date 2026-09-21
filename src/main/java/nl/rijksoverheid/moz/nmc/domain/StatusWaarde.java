@@ -28,13 +28,8 @@ public enum StatusWaarde {
     }
 
     /**
-     * Of NotifyNL iets over de verzending heeft teruggemeld: alles behalve {@code CREATED} en
-     * {@code SENDING}.
-     * <p>
-     * Let op wat dit <em>niet</em> zegt: niet dat er geen status meer overheen komt. NotifyNL kan ná
-     * een {@code DELIVERED} alsnog een faalstatus melden, en {@link #volgtOp} laat die dan ook toe.
-     * Welke uitkomst uiteindelijk telt, is nog niet belegd; dat hoort bij de afhandeling van de
-     * statussen zelf.
+     * Alles behalve {@code CREATED} en {@code SENDING}. Een definitieve status kan nog door een andere
+     * definitieve status overschreven worden; welke uitkomst uiteindelijk telt is nog niet belegd.
      */
     // Switch i.p.v. Set dwingt dat elke toekomstige status hier expliciet wordt geclassificeerd.
     public boolean isDefinitief() {
@@ -45,13 +40,9 @@ public enum StatusWaarde {
     }
 
     /**
-     * Of deze status als nieuw record in de statusgeschiedenis hoort.
-     * <p>
-     * De NMC onderscheidt alleen de verzendfase ({@code CREATED}, {@code SENDING}) van wat NotifyNL
-     * daarna terugmeldt. Binnen die terugmeldingen geldt geen rangorde: een definitieve status volgt
-     * op elke andere definitieve status, want NotifyNL kan ná een bezorging alsnog een fout melden.
-     * Alleen precies dezelfde status is geen nieuws — NotifyNL herhaalt een callback bij elke
-     * niet-2xx, dus dat geval is de regel en niet de uitzondering.
+     * Of deze status als nieuw record in de statusgeschiedenis hoort. Geweigerd worden een herhaling
+     * van de vastgelegde status en een teruggang naar de verzendfase; elke definitieve status volgt
+     * op elke andere.
      */
     public boolean volgtOp(StatusWaarde vastgelegdeStatus) {
         if (this == vastgelegdeStatus) {

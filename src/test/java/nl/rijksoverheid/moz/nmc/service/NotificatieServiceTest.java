@@ -267,6 +267,26 @@ class NotificatieServiceTest {
         assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
     }
 
+    // Twee verschillende onbekende waarden worden allebei ONBEKEND, dus de tweede is een herhaling en
+    // gaat niet door. Beide ruwe waarden staan wel op ERROR in het log.
+    @Test
+    void verwerkAfleverstatus_tweeVerschillendeOnbekendeStatussen_legtDeTweedeNietVastMaarLogtBeide() {
+        Notificatie notificatie = notificatie("https://omc.example.nl/callback");
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
+
+        List<String> fouten;
+        try (LogVanger vanger = LogVanger.van(NotificatieService.class)) {
+            service.verwerkAfleverstatus(UUID.randomUUID(), "foo", null);
+            service.verwerkAfleverstatus(UUID.randomUUID(), "bar", null);
+            fouten = vanger.regelsOpNiveau(java.util.logging.Level.SEVERE);
+        }
+
+        assertEquals(StatusWaarde.ONBEKEND, notificatie.getStatus().status());
+        verify(statusUpdateEvent, times(1)).fire(any());
+        assertEquals(2, fouten.size());
+        assertTrue(fouten.get(0).contains("'foo'") && fouten.get(1).contains("'bar'"));
+    }
+
     // NotifyNL herhaalt bij elke niet-2xx, dus dezelfde receipt komt vaker binnen. Dat op WARN loggen
     // leert een operator WARNs negeren.
     @Test

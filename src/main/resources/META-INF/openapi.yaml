@@ -44,7 +44,7 @@ paths:
       # De statuswaarden staan ook in de beschrijving van callbackUrl hierboven. Dat is geen
       # dubbeling om niets: een afnemer die de spec in Swagger UI opent ziet de beschrijving
       # bij het veld dat hij invult, terwijl dit blok pas zichtbaar is als hij doorklikt naar
-      # de callback. Beide halen /q/openapi (geverifieerd op het previewcluster).
+      # de callback. Beide halen /q/openapi.
       callbacks:
         statusupdate:
           '{$request.body#/callbackUrl}':
@@ -57,7 +57,7 @@ paths:
 
                 De NMC doet maximaal drie pogingen met oplopende tussenpozen. Slagen
                 die geen van alle, dan wordt de statusupdate niet opnieuw aangeboden;
-                de Dienstverlener kan de status dan alleen nog zelf opvragen.
+                de Dienstverlener kan de status dan alleen nog zelf opvragen (nog niet beschikbaar).
 
                 Alleen een herhaling van de huidige status levert geen callback op. Ná een
                 uitkomst kan wél een andere uitkomst volgen — NotifyNL kan na een bezorging
@@ -124,7 +124,7 @@ paths:
       # De statuswaarden staan ook in de beschrijving van callbackUrl hierboven. Dat is geen
       # dubbeling om niets: een afnemer die de spec in Swagger UI opent ziet de beschrijving
       # bij het veld dat hij invult, terwijl dit blok pas zichtbaar is als hij doorklikt naar
-      # de callback. Beide halen /q/openapi (geverifieerd op het previewcluster).
+      # de callback. Beide halen /q/openapi.
       callbacks:
         statusupdate:
           '{$request.body#/callbackUrl}':
@@ -137,7 +137,7 @@ paths:
 
                 De NMC doet maximaal drie pogingen met oplopende tussenpozen. Slagen
                 die geen van alle, dan wordt de statusupdate niet opnieuw aangeboden;
-                de Dienstverlener kan de status dan alleen nog zelf opvragen.
+                de Dienstverlener kan de status dan alleen nog zelf opvragen (nog niet beschikbaar).
 
                 Alleen een herhaling van de huidige status levert geen callback op. Ná een
                 uitkomst kan wél een andere uitkomst volgen — NotifyNL kan na een bezorging
