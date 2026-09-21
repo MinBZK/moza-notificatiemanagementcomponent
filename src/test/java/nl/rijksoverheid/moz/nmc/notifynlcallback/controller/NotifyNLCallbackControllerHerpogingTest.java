@@ -4,6 +4,7 @@ import jakarta.persistence.OptimisticLockException;
 import jakarta.transaction.RollbackException;
 import org.hibernate.StaleObjectStateException;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
+import nl.rijksoverheid.moz.nmc.service.NotificatieNietGevondenException;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -197,6 +198,25 @@ class NotifyNLCallbackControllerHerpogingTest {
         }
 
         assertEquals(1, fouten.size());
+        verify(notificatieService, times(1)).verwerkAfleverstatus(any(), any(), any());
+    }
+
+    // Een onbekende referentie is geen verwerkingsfout: alleen een WARN, geen ERROR met stacktrace.
+    @Test
+    void verwerkAfleverstatus_onbekendeNotificatie_logtAlleenOpWarn() {
+        doThrow(new NotificatieNietGevondenException("onbekend"))
+                .when(notificatieService).verwerkAfleverstatus(any(), any(), any());
+
+        List<String> fouten;
+        List<String> waarschuwingen;
+        try (LogVanger vanger = LogVanger.van(NotifyNLCallbackController.class)) {
+            assertThrows(RuntimeException.class, () -> controller.verwerkAfleverstatus(receipt()));
+            fouten = vanger.regelsOpNiveau(Level.SEVERE);
+            waarschuwingen = vanger.regelsOpNiveau(Level.WARNING);
+        }
+
+        assertEquals(List.of(), fouten);
+        assertEquals(1, waarschuwingen.size());
         verify(notificatieService, times(1)).verwerkAfleverstatus(any(), any(), any());
     }
 

@@ -123,8 +123,8 @@ Geïmplementeerd:
   beveiligd met een bearer token (`NotifyNLCallbackAuthFilter`).
 - **Statusupdate naar de aanroeper.** Heeft het verzoek een `callbackUrl`, dan
   stuurt `ConsumentCallbackAdapter` bij elke afleverstatus een CloudEvent naar
-  die URL: maximaal drie pogingen met oplopende wachttijd. Lukt dat, dan wordt de
-  `Notificatie` uit de database verwijderd; zonder `callbackUrl` blijft hij staan.
+  die URL: maximaal drie pogingen met oplopende wachttijd. De `Notificatie` en
+  zijn statusgeschiedenis blijven daarna staan.
 - **Adresselectie in de Profielservice-respons** (`ProfielServiceAdapter`): eerst
   een e-mailadres met exact de scope Dienstverlener + dienst, dan een met alleen
   de Dienstverlener als scope, dan het default-adres, dan een adres zonder scopes.
@@ -177,7 +177,9 @@ de logica die kiest tussen herverzending en contactherstel.
   binnengekomen status wordt vastgelegd, en onderscheidt alleen de verzendfase
   (`CREATED`, `SENDING`) van wat NotifyNL daarna terugmeldt. Tussen die terugmeldingen
   geldt geen rangorde: NotifyNL kan ná een bezorging alsnog een fout melden, dus elke
-  definitieve status volgt op elke andere. Alleen een exacte herhaling wordt geweigerd.
+  definitieve status volgt op elke andere. Alleen een herhaling van de huidige status
+  wordt geweigerd; een eerdere status die terugkomt (A, B, A) wordt wél vastgelegd en
+  doorgegeven.
   Welke uitkomst uiteindelijk telt is nog niet belegd — `isDefinitief` betekent
   "NotifyNL heeft iets teruggemeld", niet "hier komt niets meer overheen".
 - **Gebeurtenistijd en registratietijd zijn aparte kolommen.**

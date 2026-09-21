@@ -59,11 +59,12 @@ paths:
                 die geen van alle, dan wordt de statusupdate niet opnieuw aangeboden;
                 de Dienstverlener kan de status dan alleen nog zelf opvragen.
 
-                Dezelfde status komt hooguit één keer voorbij: een herhaalde melding
-                van NotifyNL levert geen callback op. Ná een uitkomst kan wél een andere
-                uitkomst volgen — NotifyNL kan na een bezorging alsnog een fout melden —
-                en die wordt dan ook doorgegeven. De laatst ontvangen status is de meest
-                recente melding, niet per definitie de eindtoestand.
+                Alleen een herhaling van de huidige status levert geen callback op. Ná een
+                uitkomst kan wél een andere uitkomst volgen — NotifyNL kan na een bezorging
+                alsnog een fout melden — en die wordt dan ook doorgegeven, ook als die status
+                eerder al voorbijkwam (bijvoorbeeld `delivered`, `permanent-failure`, weer
+                `delivered`). De laatst ontvangen status is de meest recente melding, niet
+                per definitie de eindtoestand.
               requestBody:
                 required: true
                 content:
@@ -138,11 +139,12 @@ paths:
                 die geen van alle, dan wordt de statusupdate niet opnieuw aangeboden;
                 de Dienstverlener kan de status dan alleen nog zelf opvragen.
 
-                Dezelfde status komt hooguit één keer voorbij: een herhaalde melding
-                van NotifyNL levert geen callback op. Ná een uitkomst kan wél een andere
-                uitkomst volgen — NotifyNL kan na een bezorging alsnog een fout melden —
-                en die wordt dan ook doorgegeven. De laatst ontvangen status is de meest
-                recente melding, niet per definitie de eindtoestand.
+                Alleen een herhaling van de huidige status levert geen callback op. Ná een
+                uitkomst kan wél een andere uitkomst volgen — NotifyNL kan na een bezorging
+                alsnog een fout melden — en die wordt dan ook doorgegeven, ook als die status
+                eerder al voorbijkwam (bijvoorbeeld `delivered`, `permanent-failure`, weer
+                `delivered`). De laatst ontvangen status is de meest recente melding, niet
+                per definitie de eindtoestand.
               requestBody:
                 required: true
                 content:
@@ -242,23 +244,22 @@ components:
 
             | Waarde | Betekenis |
             |---|---|
-            | `created` | Vastgelegd, nog niet aangeboden bij NotifyNL |
-            | `sending` | Aangeboden bij NotifyNL, nog geen uitkomst |
             | `delivered` | Bezorgd |
             | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
             | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
             | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
             | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
 
+            `created` en `sending` komen in een statusupdate niet voor.
+
             `onbekend` zegt niets over de notificatie zelf: er is wél een terugmelding
             ontvangen, maar die viel buiten de statussen die dit component kent.
-            Behandel hem niet als eindstatus, er kan later alsnog een bekende uitkomst
-            binnenkomen.
 
-            Dezelfde status komt hooguit één keer voorbij; een herhaalde melding levert
-            geen statusupdate op. Ná een uitkomst kan wél een andere uitkomst volgen,
-            bijvoorbeeld een fout na een bezorging. De NMC doet maximaal drie pogingen en
-            biedt daarna niet opnieuw aan.
+            Alleen een herhaling van de huidige status levert geen statusupdate op. Ná een
+            uitkomst kan wél een andere uitkomst volgen, bijvoorbeeld een fout na een
+            bezorging, en ook een status die eerder al voorbijkwam. Dat geldt voor
+            `onbekend` net zo. De NMC doet maximaal drie pogingen en biedt daarna niet
+            opnieuw aan.
 
             Weglaten als de Dienstverlener de status zelf opvraagt via
             GET /notificaties/{id}.
@@ -309,23 +310,22 @@ components:
 
             | Waarde | Betekenis |
             |---|---|
-            | `created` | Vastgelegd, nog niet aangeboden bij NotifyNL |
-            | `sending` | Aangeboden bij NotifyNL, nog geen uitkomst |
             | `delivered` | Bezorgd |
             | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
             | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
             | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
             | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
 
+            `created` en `sending` komen in een statusupdate niet voor.
+
             `onbekend` zegt niets over de notificatie zelf: er is wél een terugmelding
             ontvangen, maar die viel buiten de statussen die dit component kent.
-            Behandel hem niet als eindstatus, er kan later alsnog een bekende uitkomst
-            binnenkomen.
 
-            Dezelfde status komt hooguit één keer voorbij; een herhaalde melding levert
-            geen statusupdate op. Ná een uitkomst kan wél een andere uitkomst volgen,
-            bijvoorbeeld een fout na een bezorging. De NMC doet maximaal drie pogingen en
-            biedt daarna niet opnieuw aan.
+            Alleen een herhaling van de huidige status levert geen statusupdate op. Ná een
+            uitkomst kan wél een andere uitkomst volgen, bijvoorbeeld een fout na een
+            bezorging, en ook een status die eerder al voorbijkwam. Dat geldt voor
+            `onbekend` net zo. De NMC doet maximaal drie pogingen en biedt daarna niet
+            opnieuw aan.
             Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
             tekens, zonder gebruikersinfo) wordt geaccepteerd; IP-adressen en interne
             hostnamen worden geweigerd (400).
@@ -417,8 +417,8 @@ components:
         dit component kent. Dat gebeurt bijvoorbeeld als NotifyNL zijn vocabulaire
         uitbreidt of als er een ander kanaal dan e-mail in het spel komt. De melding
         wordt vastgelegd en de NMC logt hem, zodat de waarde alsnog toegevoegd kan
-        worden. Behandel `onbekend` niet als eindstatus: er kan later alsnog een
-        bekende uitkomst binnenkomen.
+        worden. Net als elke andere uitkomst kan `onbekend` nog door een andere
+        uitkomst gevolgd worden.
       enum:
         - created
         - sending

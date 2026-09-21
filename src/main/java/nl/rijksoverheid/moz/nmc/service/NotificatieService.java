@@ -15,7 +15,6 @@ import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -88,24 +87,15 @@ public class NotificatieService {
         StatusWaarde huidigeStatus = notificatie.getStatus().status();
         StatusWaarde nieuweStatus = parseStatus(status, notifyNlNotificatieId, notificatie.getId());
 
-        // NotifyNL herhaalt een callback bij elke niet-2xx, dus precies dezelfde receipt komt vaker
-        // binnen. Die opnieuw registreren verzet het laatste tijdstip in de statusgeschiedenis,
-        // zonder dat er iets veranderd is. Welke meldingen wél nieuw zijn bepaalt
-        // StatusWaarde#volgtOp.
-        if (!nieuweStatus.volgtOp(huidigeStatus)) {
+        // NotifyNL herhaalt een callback bij elke niet-2xx, dus dezelfde receipt komt vaker binnen.
+        // Een status die eerder al voorbijkwam maar niet de huidige is, wordt wél doorgegeven.
+        if (!notificatie.verwerkTerugmelding(nieuweStatus, opgetreden)) {
             Log.debugf("Notificatie %s heeft al status %s; status %s (NotifyNL-referentie %s) is geen "
                     + "nieuwe melding en wordt genegeerd", notificatie.getId(), huidigeStatus,
                     nieuweStatus, notifyNlNotificatieId);
 
             return;
         }
-
-        // De gebeurtenistijd van NotifyNL, niet het moment van verwerken: NotifyNL herhaalt een
-        // callback tot 5x met 5 minuten ertussen, dus die twee lopen bij een herhaling tientallen
-        // minuten uiteen. Alleen deze kolom komt van een externe klok; de registratietijd (kolom
-        // laatste_status_update) houdt de eigen klok.
-        notificatie.registreerStatus(nieuweStatus,
-                opgetreden != null ? opgetreden : OffsetDateTime.now(ZoneOffset.UTC));
 
         // Afvuren en niet zelf versturen: StatusUpdateVerzender pakt dit pas op ná de commit, die
         // alsnog kan falen. Zo krijgt de Dienstverlener geen status die de NMC daarna terugrolt, en

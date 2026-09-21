@@ -56,7 +56,7 @@ class GepubliceerdeSpecTest {
                 .getString("components.schemas.NotificatieStatus.description");
 
         assertTrue(beschrijving.contains("onbekend"), "de beschrijving hoort onbekend te benoemen");
-        assertTrue(beschrijving.contains("niet als eindstatus"),
-                "de beschrijving hoort te zeggen dat onbekend geen eindstatus is");
+        assertTrue(beschrijving.replaceAll("\\s+", " ").contains("door een andere uitkomst gevolgd"),
+                "de beschrijving hoort te zeggen dat na onbekend nog een andere uitkomst kan volgen");
     }
 }

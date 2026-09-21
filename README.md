@@ -192,15 +192,15 @@ receipt met een oude `completed_at` het moment van de laatste registratie niet
 terugzet.
 
 Welke overgangen zijn toegestaan wordt uitsluitend bepaald door
-`StatusWaarde#volgtOp` in `NotificatieService`, niet door een tweede
-tijdcontrole in `Notificatie`: een externe klok kan scheef zijn en is daarmee
-ongeschikt om over correctheid te beslissen.
+`StatusWaarde#volgtOp`, dat `Notificatie#verwerkTerugmelding` toepast, niet door
+een tijdcontrole: een externe klok kan scheef zijn en is daarmee ongeschikt om
+over correctheid te beslissen.
 De entiteit heeft optimistic locking (`@Version`): twee gelijktijdig verwerkte
 delivery receipts voor dezelfde notificatie zouden elkaars statusregel anders
 geruisloos overschrijven. De tweede transactie faalt dan op een
-`OptimisticLockException`. `NotifyNLCallbackController` vangt die af en probeert
-het tot drie keer opnieuw in een verse transactie; pas daarna gaat er een 5xx
-naar NotifyNL. Dat is bewust, want NotifyNL herhaalt een mislukte callback maar
+`OptimisticLockException`. `NotifyNLCallbackController` vangt die af en doet
+maximaal drie pogingen (de eerste plus twee herhalingen), elk in een verse
+transactie; pas daarna gaat er een 5xx naar NotifyNL. Dat is bewust, want NotifyNL herhaalt een mislukte callback maar
 vijf keer met vijf minuten ertussen en gooit de receipt daarna weg — dat budget
 is voor echte storingen, niet voor interne contentie. De primary key
 `(notificatie_id, volgnummer)` op `notificatie_status` is het vangnet daaronder

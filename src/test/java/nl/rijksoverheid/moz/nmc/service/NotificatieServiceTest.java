@@ -137,9 +137,8 @@ class NotificatieServiceTest {
         assertEquals(StatusWaarde.ONBEKEND, notificatie.getStatus().status());
     }
 
-    // Een status die geen vooruitgang is op de vastgelegde status is geen nieuwe uitkomst maar een
-    // dubbele of laat aangekomen callback; die wordt geweigerd zodat de vastgelegde eindstatus blijft
-    // staan (en de bewaartermijn niet opnieuw begint te lopen). Zie StatusWaarde#volgtOp.
+    // Terugvallen naar de verzendfase na een uitkomst is een laat aangekomen callback; die wordt
+    // geweigerd zodat de vastgelegde uitkomst blijft staan. Zie StatusWaarde#volgtOp.
     @Test
     void verwerkAfleverstatus_vanDefinitieveNaarNietDefinitieveStatus_negeertDeNieuweStatus() {
         Notificatie notificatie = notificatie(null);
@@ -249,6 +248,23 @@ class NotificatieServiceTest {
         verify(statusUpdateEvent, times(2)).fire(captor.capture());
         assertEquals(List.of(StatusWaarde.DELIVERED, StatusWaarde.PERMANENT_FAILURE),
                 captor.getAllValues().stream().map(StatusUpdateOpdracht::status).toList());
+    }
+
+    // Elke nieuwe melding gaat door, ook een status die eerder al voorbijkwam (A, B, A).
+    @Test
+    void verwerkAfleverstatus_eerdereStatusDieTerugkomt_stuurtOpnieuwEenStatusUpdate() {
+        Notificatie notificatie = notificatie("https://omc.example.nl/callback");
+        when(notificatieRepository.findByExternalReference(any())).thenReturn(Optional.of(notificatie));
+
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null);
+        service.verwerkAfleverstatus(UUID.randomUUID(), "permanent-failure", null);
+        service.verwerkAfleverstatus(UUID.randomUUID(), "delivered", null);
+
+        ArgumentCaptor<StatusUpdateOpdracht> captor = ArgumentCaptor.forClass(StatusUpdateOpdracht.class);
+        verify(statusUpdateEvent, times(3)).fire(captor.capture());
+        assertEquals(List.of(StatusWaarde.DELIVERED, StatusWaarde.PERMANENT_FAILURE, StatusWaarde.DELIVERED),
+                captor.getAllValues().stream().map(StatusUpdateOpdracht::status).toList());
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
     }
 
     // NotifyNL herhaalt bij elke niet-2xx, dus dezelfde receipt komt vaker binnen. Dat op WARN loggen

@@ -25,11 +25,11 @@ class NotificatieTest {
     }
 
     @Test
-    void registreerStatus_meerdereWijzigingen_bouwtVolledigeGeschiedenisOp() {
+    void verwerkTerugmelding_meerdereWijzigingen_bouwtVolledigeGeschiedenisOp() {
         Notificatie notificatie = new Notificatie(null);
 
-        notificatie.registreerStatus(StatusWaarde.SENDING);
-        notificatie.registreerStatus(StatusWaarde.DELIVERED);
+        notificatie.markeerVerzonden(UUID.randomUUID());
+        notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
 
         List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
         assertEquals(3, geschiedenis.size());
@@ -44,8 +44,8 @@ class NotificatieTest {
     void getStatus_retourneertLaatsteGeschiedenisRecordNietHetEerste() {
         Notificatie notificatie = new Notificatie(null);
 
-        notificatie.registreerStatus(StatusWaarde.SENDING);
-        notificatie.registreerStatus(StatusWaarde.DELIVERED);
+        notificatie.markeerVerzonden(UUID.randomUUID());
+        notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
 
         List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
         NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
@@ -56,11 +56,11 @@ class NotificatieTest {
     // De gebeurtenistijd komt van de bron (NotifyNL), de registratietijd van de eigen klok. Voor een
     // status die de NMC zelf vaststelt vallen ze samen; voor een delivery receipt niet.
     @Test
-    void registreerStatus_metGebeurtenistijd_scheidtGebeurtenisVanRegistratie() {
+    void verwerkTerugmelding_metGebeurtenistijd_scheidtGebeurtenisVanRegistratie() {
         Notificatie notificatie = new Notificatie(null);
         OffsetDateTime opgetreden = OffsetDateTime.now(ZoneOffset.UTC).minusHours(2).truncatedTo(ChronoUnit.MICROS);
 
-        notificatie.registreerStatus(StatusWaarde.DELIVERED, opgetreden);
+        notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, opgetreden);
 
         List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
         NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
@@ -68,32 +68,27 @@ class NotificatieTest {
         assertTrue(laatste.geregistreerd().isAfter(opgetreden));
     }
 
-    // De bewaartermijn vaart op de registratietijd en dat is de eigen klok, niet die van NotifyNL.
-    // Een receipt met een oude completed_at — bijvoorbeeld een herhaling, NotifyNL probeert tot 5x
-    // met 5 minuten ertussen — mag een notificatie niet meteen opruimbaar maken: er is zojuist nog
-    // iets over binnengekomen, dus ze is niet inactief.
+    // De registratietijd komt van de eigen klok, niet van NotifyNL: een receipt met een oude
+    // completed_at zet het moment van de laatste registratie niet terug.
     @Test
-    void registreerStatus_metOudeGebeurtenistijd_zetDeBewaartermijnNietTerug() {
+    void verwerkTerugmelding_metOudeGebeurtenistijd_zetDeRegistratietijdNietTerug() {
         Notificatie notificatie = new Notificatie(null);
         OffsetDateTime voorRegistratie = OffsetDateTime.now(ZoneOffset.UTC);
 
-        notificatie.registreerStatus(StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(40));
+        notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(40));
 
         assertFalse(notificatie.getStatus().geregistreerd().isBefore(voorRegistratie));
     }
 
     // De projectie volgt het laatst geregistreerde record, ook als de gebeurtenistijd ouder is dan
-    // die van de vorige status. Welke overgangen mogen wordt bepaald door StatusWaarde#volgtOp in
-    // NotificatieService, niet door een tweede tijdcontrole hier: zou deze klasse een registratie
-    // alsnog weigeren te projecteren, dan bevat de geschiedenis een status die laatsteStatus
-    // tegenspreekt. De gebeurtenistijd komt van een externe klok en kan scheef zijn.
+    // die van de vorige status: de gebeurtenistijd komt van een externe klok en kan scheef zijn.
     @Test
-    void registreerStatus_metOudereGebeurtenistijdDanDeHuidige_volgtDeProjectieDeLaatsteRegistratie() {
+    void verwerkTerugmelding_metOudereGebeurtenistijdDanDeHuidige_volgtDeProjectieDeLaatsteRegistratie() {
         Notificatie notificatie = new Notificatie(null);
-        notificatie.registreerStatus(StatusWaarde.SENDING);
+        notificatie.markeerVerzonden(UUID.randomUUID());
         OffsetDateTime oudereGebeurtenistijd = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1).truncatedTo(ChronoUnit.MICROS);
 
-        notificatie.registreerStatus(StatusWaarde.DELIVERED, oudereGebeurtenistijd);
+        notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, oudereGebeurtenistijd);
 
         assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
         assertEquals(oudereGebeurtenistijd, notificatie.getStatus().tijdstip());
@@ -104,19 +99,19 @@ class NotificatieTest {
     // registratie moeten ze hetzelfde record teruggeven. Dat is hier binnen Java de enige bewaking —
     // in de database koppelt niets laatste_status aan de rij met het hoogste volgnummer. Zonder deze
     // test zou een registratiepad dat de projectie vergeet bij te werken pas opvallen in de code die
-    // op de projectie stuurt, zoals StatusWaarde#volgtOp in NotificatieService.
+    // op de projectie stuurt, zoals verwerkTerugmelding.
     @Test
-    void registreerStatus_naElkeWijziging_blijftDeProjectieGelijkAanDeGeschiedenis() {
+    void verwerkTerugmelding_naElkeWijziging_blijftDeProjectieGelijkAanDeGeschiedenis() {
         Notificatie notificatie = new Notificatie(null);
         bevestigProjectieVolgtGeschiedenis(notificatie);
 
-        notificatie.registreerStatus(StatusWaarde.SENDING);
+        notificatie.markeerVerzonden(UUID.randomUUID());
         bevestigProjectieVolgtGeschiedenis(notificatie);
 
-        notificatie.registreerStatus(StatusWaarde.TEMPORARY_FAILURE);
+        notificatie.verwerkTerugmelding(StatusWaarde.TEMPORARY_FAILURE, null);
         bevestigProjectieVolgtGeschiedenis(notificatie);
 
-        notificatie.registreerStatus(StatusWaarde.DELIVERED);
+        notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
         bevestigProjectieVolgtGeschiedenis(notificatie);
     }
 
@@ -127,8 +122,8 @@ class NotificatieTest {
         Notificatie notificatie = new Notificatie(null);
         OffsetDateTime aanmaakTijdstip = notificatie.getStatusGeschiedenis().get(0).tijdstip();
 
-        notificatie.registreerStatus(StatusWaarde.SENDING);
-        notificatie.registreerStatus(StatusWaarde.DELIVERED);
+        notificatie.markeerVerzonden(UUID.randomUUID());
+        notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
 
         assertEquals(aanmaakTijdstip, notificatie.getAangemaakt());
     }
@@ -154,6 +149,63 @@ class NotificatieTest {
         notificatie.markeerVerzonden(UUID.randomUUID());
 
         assertThrows(IllegalStateException.class, () -> notificatie.markeerVerzonden(UUID.randomUUID()));
+    }
+
+    // Na een terugmelding is de verzendfase voorbij; SENDING zou de uitkomst overschrijven.
+    @Test
+    void markeerVerzonden_naEenTerugmelding_weigert() {
+        Notificatie notificatie = new Notificatie(null);
+        notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
+
+        assertThrows(IllegalStateException.class, () -> notificatie.markeerVerzonden(UUID.randomUUID()));
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
+    }
+
+    @Test
+    void verwerkTerugmelding_herhalingVanDeHuidigeStatus_legtNietsVast() {
+        Notificatie notificatie = new Notificatie(null);
+        notificatie.markeerVerzonden(UUID.randomUUID());
+        assertTrue(notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null));
+
+        assertFalse(notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null));
+
+        assertEquals(3, notificatie.getStatusGeschiedenis().size());
+    }
+
+    @Test
+    void verwerkTerugmelding_teruggangNaarDeVerzendfase_legtNietsVast() {
+        Notificatie notificatie = new Notificatie(null);
+        notificatie.markeerVerzonden(UUID.randomUUID());
+        notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
+
+        assertFalse(notificatie.verwerkTerugmelding(StatusWaarde.SENDING, null));
+        assertFalse(notificatie.verwerkTerugmelding(StatusWaarde.CREATED, null));
+
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
+        assertEquals(3, notificatie.getStatusGeschiedenis().size());
+    }
+
+    // Elke nieuwe melding wordt doorgegeven, ook als die status eerder al voorbijkwam.
+    @Test
+    void verwerkTerugmelding_eerdereStatusDieTerugkomt_wordtVastgelegd() {
+        Notificatie notificatie = new Notificatie(null);
+        notificatie.markeerVerzonden(UUID.randomUUID());
+        notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
+        notificatie.verwerkTerugmelding(StatusWaarde.PERMANENT_FAILURE, null);
+
+        assertTrue(notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null));
+
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
+        assertEquals(5, notificatie.getStatusGeschiedenis().size());
+    }
+
+    @Test
+    void verwerkTerugmelding_zonderGebeurtenistijd_valtTerugOpDeEigenKlok() {
+        Notificatie notificatie = new Notificatie(null);
+
+        notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
+
+        assertEquals(notificatie.getStatus().geregistreerd(), notificatie.getStatus().tijdstip());
     }
 
     @Test

@@ -1,5 +1,7 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
+import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.WebApplicationException;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,7 +44,7 @@ class ConsumentCallbackAdapterTest {
 
     @Test
     void stuurStatusUpdate_eerstePogingMislukt_stoptNaEenGeslaagdeHerpoging() {
-        doThrow(new RuntimeException("tijdelijk onbereikbaar"))
+        doThrow(new ProcessingException("tijdelijk onbereikbaar"))
                 .doNothing()
                 .when(callbackClient).stuurStatusUpdate(any());
 
@@ -55,12 +57,25 @@ class ConsumentCallbackAdapterTest {
     // vastgelegd en gecommit, dus gooien redt niets en zou alleen de observer-aanroep laten falen.
     @Test
     void stuurStatusUpdate_allePogingenMislukt_gooitNietMaarStoptNaMaxPogingen() {
-        doThrow(new RuntimeException("onbereikbaar"))
+        doThrow(new WebApplicationException(503))
                 .when(callbackClient).stuurStatusUpdate(any());
 
         assertDoesNotThrow(() -> adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback")));
 
         verify(callbackClient, times(3)).stuurStatusUpdate(any());
+    }
+
+    // Alleen een fout aan de kant van de Dienstverlener wordt herhaald. Een fout in de NMC zelf
+    // ontsnapt meteen naar StatusUpdateVerzender, die hem op ERROR logt.
+    @Test
+    void stuurStatusUpdate_foutInDeNmcZelf_ontsnaptZonderHerpoging() {
+        doThrow(new IllegalStateException("serialisatie kapot"))
+                .when(callbackClient).stuurStatusUpdate(any());
+
+        assertThrows(IllegalStateException.class,
+                () -> adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback")));
+
+        verify(callbackClient, times(1)).stuurStatusUpdate(any());
     }
 
     @Test

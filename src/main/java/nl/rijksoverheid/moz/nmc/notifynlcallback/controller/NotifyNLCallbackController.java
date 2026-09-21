@@ -38,9 +38,7 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
         try {
             verwerkMetHerpogingBijBotsing(afleverstatusRequest);
         } catch (NotificatieNietGevondenException e) {
-            // Kan een late callback zijn voor een notificatie die inmiddels is verwijderd; zonder
-            // deze log is dat niet te onderscheiden van een onbekende of foutieve referentie.
-            Log.warnf("NotifyNL-callback voor onbekende of reeds verwijderde notificatie (notifyNlNotificatieId=%s)",
+            Log.warnf("NotifyNL-callback voor onbekende notificatie (notifyNlNotificatieId=%s)",
                     afleverstatusRequest.getId());
             throw Problems.notFound("Notificatie niet gevonden", e.getMessage());
         }
@@ -59,6 +57,9 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
                         gebeurtenisTijdstip(afleverstatusRequest));
 
                 return;
+            } catch (NotificatieNietGevondenException e) {
+                // Geen verwerkingsfout: verwerkAfleverstatus logt dit zelf op WARN.
+                throw e;
             } catch (RuntimeException e) {
                 // Beide takken leveren een 5xx op en kosten daarmee een van de vijf herpogingen die
                 // NotifyNL doet; na de vijfde is de afleverstatus daar weg. Dat is het enige moment

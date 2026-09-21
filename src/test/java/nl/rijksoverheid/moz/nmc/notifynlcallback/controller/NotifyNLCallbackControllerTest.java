@@ -182,8 +182,8 @@ class NotifyNLCallbackControllerTest {
 
             assertEquals(StatusWaarde.DELIVERED, laatste.status());
             assertEquals(OffsetDateTime.parse(COMPLETED_AT), laatste.tijdstip());
-            // De bewaartermijn vaart op de eigen klok, niet op die van NotifyNL: completed_at ligt in
-            // 2025, de registratie is van nu.
+            // De registratietijd komt van de eigen klok, niet van NotifyNL: completed_at ligt in 2025,
+            // de registratie is van nu.
             assertTrue(notificatie.getStatus().geregistreerd().isAfter(OffsetDateTime.parse(COMPLETED_AT)));
         });
     }

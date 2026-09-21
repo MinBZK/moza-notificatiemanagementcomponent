@@ -2,6 +2,8 @@ package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.WebApplicationException;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.RestClientDefinitionException;
 
@@ -35,9 +37,8 @@ public class ConsumentCallbackAdapter {
         this.initieleWachtMs = initieleWachtMs;
     }
 
-    // Alles wat aan de Dienstverlener ligt wordt hier gelogd en niet gegooid. Een fout in de NMC
-    // zelf ontsnapt wél (zie de catch hieronder) en wordt door StatusUpdateVerzender op ERROR
-    // gelogd; verder dan die observer komt hij niet, want de transactie is dan al gecommit.
+    // Een fout aan de kant van de Dienstverlener wordt hier gelogd en niet gegooid. Elke andere fout
+    // ontsnapt naar StatusUpdateVerzender, die hem op ERROR logt.
     public void stuurStatusUpdate(StatusUpdateOpdracht opdracht) {
         if (opdracht.callbackUrl() == null) {
             Log.infof("Geen callback-URL geconfigureerd voor notificatie %s — statusupdate niet verstuurd", opdracht.notificatieId());
@@ -70,29 +71,34 @@ public class ConsumentCallbackAdapter {
                 "application/json",
                 new NotificatieData(opdracht.notificatieId(), opdracht.status().toApiValue()));
 
-        verstuurMetHerpogingen(client, event, callbackUrl);
+        verstuurMetHerpogingen(client, event, opdracht);
     }
 
-    private void verstuurMetHerpogingen(ConsumentCallbackClient client, NotificatieStatusEvent event, String callbackUrl) {
+    private void verstuurMetHerpogingen(ConsumentCallbackClient client, NotificatieStatusEvent event,
+                                        StatusUpdateOpdracht opdracht) {
         long wachtMs = initieleWachtMs;
         for (int poging = 1; poging <= MAX_POGINGEN; poging++) {
             try {
                 client.stuurStatusUpdate(event);
 
                 return;
-            } catch (Exception e) {
+            } catch (WebApplicationException | ProcessingException e) {
+                // Alleen een niet-2xx-antwoord of een transportfout ligt aan de Dienstverlener.
                 if (poging == MAX_POGINGEN) {
-                    Log.warnf(e, "Consument-callback naar %s mislukt na %d pogingen — statusupdate niet "
-                            + "afgeleverd aan de Dienstverlener; er volgt geen automatische herpoging",
-                            callbackUrl, MAX_POGINGEN);
+                    Log.errorf(e, "Consument-callback naar %s mislukt na %d pogingen — statusupdate %s voor "
+                            + "notificatie %s niet afgeleverd aan de Dienstverlener; er volgt geen automatische "
+                            + "herpoging", opdracht.callbackUrl(), MAX_POGINGEN, opdracht.status(), opdracht.notificatieId());
                 } else {
-                    Log.warnf(e, "Consument-callback naar %s mislukt (poging %d/%d) — nieuwe poging na %dms",
-                            callbackUrl, poging, MAX_POGINGEN, wachtMs);
+                    Log.warnf(e, "Consument-callback naar %s voor notificatie %s (status %s) mislukt (poging %d/%d) "
+                            + "— nieuwe poging na %dms", opdracht.callbackUrl(), opdracht.notificatieId(),
+                            opdracht.status(), poging, MAX_POGINGEN, wachtMs);
                     try {
                         Thread.sleep(wachtMs);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        Log.warnf(ie, "Consument-callback naar %s onderbroken na poging %d", callbackUrl, poging);
+                        Log.warnf(ie, "Consument-callback naar %s onderbroken na poging %d — statusupdate %s voor "
+                                + "notificatie %s niet afgeleverd", opdracht.callbackUrl(), poging,
+                                opdracht.status(), opdracht.notificatieId());
 
                         return;
                     }

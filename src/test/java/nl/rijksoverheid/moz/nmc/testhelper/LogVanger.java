@@ -12,9 +12,7 @@ import java.util.logging.Logger;
 
 /**
  * Vangt logregels van één categorie op, zodat een test kan asserteren dát er gelogd is en op welk
- * niveau. Nodig omdat een logregel hier functionaliteit is: de melding van een notificatie die zonder
- * eindstatus verloopt, is het enige wat overblijft nadat de rij is verwijderd. Quarkus biedt hier geen
- * testfaciliteit voor, vandaar deze handmatige handler.
+ * niveau. Quarkus biedt hier geen testfaciliteit voor, vandaar deze handmatige handler.
  */
 public final class LogVanger implements AutoCloseable {
 

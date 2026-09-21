@@ -44,16 +44,14 @@ class NotificatiePersistentieTest {
         // opeenvolgende now()-aanroepen: die kunnen in dezelfde kloktik vallen, waardoor de
         // assertie op de projectie verderop ook zou slagen als die niet meer bijgewerkt werd.
         // Afgerond op microseconden: de kolom is timestamp(6), anders faalt de vergelijking met de
-        // herladen (afgeronde) waarde op de nanoseconden die de database toch niet bewaart. Het
-        // tijdstip wordt meegegeven aan de publieke overload die NotificatieService gebruikt om de
-        // er geen productiereden is om hem breder te openen, alleen een testbehoefte.
+        // herladen (afgeronde) waarde op de nanoseconden die de database toch niet bewaart.
         OffsetDateTime laatsteTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(1).truncatedTo(ChronoUnit.MICROS);
 
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(null);
-            notificatie.registreerStatus(StatusWaarde.SENDING);
-            notificatie.registreerStatus(StatusWaarde.TEMPORARY_FAILURE);
-            registreerStatusOp(notificatie, StatusWaarde.DELIVERED, laatsteTijdstip);
+            notificatie.markeerVerzonden(UUID.randomUUID());
+            notificatie.verwerkTerugmelding(StatusWaarde.TEMPORARY_FAILURE, null);
+            notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, laatsteTijdstip);
             notificatieRepository.persist(notificatie);
 
             return notificatie.getId();
@@ -75,22 +73,21 @@ class NotificatiePersistentieTest {
         });
     }
 
-    // De gebeurtenistijden lopen hier bewust tegen de registratievolgorde in: SENDING krijgt een
-    // latere completed_at dan DELIVERED, terwijl DELIVERED als eerste geregistreerd wordt. Na
-    // herladen moet de geschiedenis nog steeds op registratievolgorde staan (@OrderColumn op
-    // volgnummer) en moet de projectie de laatste registratie volgen, hier
-    // SENDING. Zou er op tijdstip geordend worden, dan zou een receipt met een scheve of oude
+    // De gebeurtenistijden lopen hier bewust tegen de registratievolgorde in: DELIVERED krijgt een
+    // latere completed_at dan PERMANENT_FAILURE, terwijl DELIVERED als eerste geregistreerd wordt.
+    // Na herladen moet de geschiedenis nog steeds op registratievolgorde staan (@OrderColumn op
+    // volgnummer) en moet de projectie de laatste registratie volgen, hier PERMANENT_FAILURE. Zou er op tijdstip geordend worden, dan zou een receipt met een scheve of oude
     // completed_at de volgorde omgooien en getAangemaakt() (dat getFirst() leest) de verkeerde rij
     // teruggeven.
     @Test
     void notificatie_metGebeurtenistijdenTegenDeRegistratievolgordeIn_herlaadtOpRegistratievolgorde() {
-        OffsetDateTime deliveredTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(1).truncatedTo(ChronoUnit.MICROS);
-        OffsetDateTime sendingTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(2).truncatedTo(ChronoUnit.MICROS);
+        OffsetDateTime deliveredTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(2).truncatedTo(ChronoUnit.MICROS);
+        OffsetDateTime faalTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(1).truncatedTo(ChronoUnit.MICROS);
 
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(null);
-            registreerStatusOp(notificatie, StatusWaarde.DELIVERED, deliveredTijdstip);
-            registreerStatusOp(notificatie, StatusWaarde.SENDING, sendingTijdstip);
+            notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, deliveredTijdstip);
+            notificatie.verwerkTerugmelding(StatusWaarde.PERMANENT_FAILURE, faalTijdstip);
             notificatieRepository.persist(notificatie);
 
             return notificatie.getId();
@@ -103,10 +100,10 @@ class NotificatiePersistentieTest {
             assertEquals(3, geschiedenis.size());
             assertEquals(StatusWaarde.CREATED, geschiedenis.get(0).status());
             assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(1).status());
-            assertEquals(StatusWaarde.SENDING, geschiedenis.get(2).status());
+            assertEquals(StatusWaarde.PERMANENT_FAILURE, geschiedenis.get(2).status());
 
-            assertEquals(StatusWaarde.SENDING, herladen.getStatus().status());
-            assertEquals(sendingTijdstip, herladen.getStatus().tijdstip());
+            assertEquals(StatusWaarde.PERMANENT_FAILURE, herladen.getStatus().status());
+            assertEquals(faalTijdstip, herladen.getStatus().tijdstip());
         });
     }
 
@@ -121,7 +118,7 @@ class NotificatiePersistentieTest {
 
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(null);
-            notificatie.registreerStatus(StatusWaarde.DELIVERED, ruw);
+            notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, ruw);
             notificatieRepository.persist(notificatie);
 
             return notificatie.getId();
@@ -163,13 +160,15 @@ class NotificatiePersistentieTest {
     // Bewaakt dat de CHECK-constraint op notificatie_status.status (V2__notificatie_statusgeschiedenis.sql)
     // elke StatusWaarde-constante toestaat. Zonder deze test zou een nieuwe of hernoemde constante
     // compileren en alle Java-tests laten slagen, maar pas bij de eerste echte INSERT in productie
-    // op een constraint-violation stuiten.
+    // op een constraint-violation stuiten. CREATED en SENDING staan er via constructor en
+    // markeerVerzonden al in; voor die twee legt verwerkTerugmelding niets extra vast.
     @ParameterizedTest
     @EnumSource(StatusWaarde.class)
-    void registreerStatus_elkeStatusWaarde_voldoetAanDatabaseCheckConstraint(StatusWaarde status) {
+    void notificatieStatus_elkeStatusWaarde_voldoetAanDatabaseCheckConstraint(StatusWaarde status) {
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie notificatie = new Notificatie(null);
-            notificatie.registreerStatus(status);
+            notificatie.markeerVerzonden(UUID.randomUUID());
+            notificatie.verwerkTerugmelding(status, null);
             notificatieRepository.persist(notificatie);
             notificatieRepository.flush();
         });
@@ -195,10 +194,10 @@ class NotificatiePersistentieTest {
 
             QuarkusTransaction.requiringNew().run(() -> {
                 Notificatie tweede = notificatieRepository.findById(id);
-                tweede.registreerStatus(StatusWaarde.DELIVERED);
+                tweede.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
             });
 
-            eerste.registreerStatus(StatusWaarde.PERMANENT_FAILURE);
+            eerste.verwerkTerugmelding(StatusWaarde.PERMANENT_FAILURE, null);
         }));
 
         assertTrue(bevatOptimisticLockException(fout),
@@ -225,12 +224,5 @@ class NotificatiePersistentieTest {
         }
 
         return false;
-    }
-
-    // registreerStatus(status, gebeurtenistijd) is publiek sinds NotificatieService hem gebruikt om
-    // de completed_at van een NotifyNL-receipt vast te leggen; deze helper blijft staan om te laten
-    // zien dat dit hier bewust een terug- of vooruitgedateerde registratie is.
-    private static void registreerStatusOp(Notificatie notificatie, StatusWaarde status, OffsetDateTime tijdstip) {
-        notificatie.registreerStatus(status, tijdstip);
     }
 }

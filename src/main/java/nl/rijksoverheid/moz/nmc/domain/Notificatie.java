@@ -40,8 +40,8 @@ public class Notificatie {
     // per notificatie een MAX over notificatie_status hoeft te berekenen. Hier stuurt de code op,
     // niet op de geschiedenis.
     //
-    // registreerStatus is binnen Java het enige pad naar beide velden, dus ze kunnen niet uiteen
-    // lopen. In de database koppelt geen constraint laatste_status aan de rij met het hoogste
+    // registreerStatus(NotificatieStatus) is binnen Java het enige pad naar beide velden, dus ze
+    // kunnen niet uiteen lopen. In de database koppelt geen constraint laatste_status aan de rij met het hoogste
     // volgnummer, dus een schrijver die Hibernate omzeilt moet ze zelf in pas houden.
     @Embedded
     @AttributeOverrides({
@@ -65,7 +65,7 @@ public class Notificatie {
 
     public Notificatie(String callbackUrl) {
         this.callbackUrl = callbackUrl;
-        registreerStatus(StatusWaarde.CREATED);
+        registreerStatus(NotificatieStatus.opEigenKlok(StatusWaarde.CREATED, OffsetDateTime.now(ZoneOffset.UTC)));
     }
 
     public UUID getId() {
@@ -92,9 +92,8 @@ public class Notificatie {
      * notificatie nooit meer, en zonder {@code SENDING} blijft hij op {@code CREATED} staan terwijl
      * de e-mail al weg is.
      *
-     * @throws IllegalStateException als er al een referentie gekoppeld is; twee verzendingen onder
-     *         één notificatie zou de tweede de eerste laten overschrijven, waarna de receipts van de
-     *         eerste nergens meer thuishoren
+     * @throws IllegalStateException als er al een referentie gekoppeld is, of als de notificatie
+     *         niet meer op {@code CREATED} staat
      */
     public void markeerVerzonden(UUID externalReference) {
         Objects.requireNonNull(externalReference, "externalReference is verplicht");
@@ -104,27 +103,34 @@ public class Notificatie {
                     + this.externalReference);
         }
 
-        this.externalReference = externalReference;
-        registreerStatus(StatusWaarde.SENDING);
-    }
+        if (!StatusWaarde.SENDING.volgtOp(laatsteStatus.status())) {
+            throw new IllegalStateException("Notificatie " + id + " kan niet verzonden worden vanuit status "
+                    + laatsteStatus.status());
+        }
 
-    /** Registreert een status die de NMC zelf vaststelt; gebeurtenis- en registratietijd vallen samen. */
-    public void registreerStatus(StatusWaarde status) {
-        registreerStatus(NotificatieStatus.opEigenKlok(status, OffsetDateTime.now(ZoneOffset.UTC)));
+        this.externalReference = externalReference;
+        registreerStatus(NotificatieStatus.opEigenKlok(StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC)));
     }
 
     /**
-     * Registreert een status die elders is ontstaan, met de gebeurtenistijd van die bron — voor een
-     * delivery receipt van NotifyNL hun completed_at/sent_at/created_at.
+     * Legt een terugmelding van NotifyNL vast als {@link StatusWaarde#volgtOp} hem als nieuw ziet.
+     *
+     * @param opgetreden gebeurtenistijd van de bron; bij null valt de NMC terug op de eigen klok
+     * @return false als de melding niets nieuws is en dus niet is vastgelegd
      */
-    public void registreerStatus(StatusWaarde status, OffsetDateTime opgetreden) {
-        registreerStatus(new NotificatieStatus(status, opgetreden, OffsetDateTime.now(ZoneOffset.UTC)));
+    public boolean verwerkTerugmelding(StatusWaarde status, OffsetDateTime opgetreden) {
+        if (!status.volgtOp(laatsteStatus.status())) {
+            return false;
+        }
+
+        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
+        registreerStatus(new NotificatieStatus(status, opgetreden != null ? opgetreden : nu, nu));
+
+        return true;
     }
 
-    // Enige mutatiepunt voor status. Bewust geen controle op tijdstip hier: welke overgangen mogen
-    // wordt bepaald door StatusWaarde#volgtOp in NotificatieService. Zou deze methode een registratie
-    // alsnog weigeren te projecteren omdat de gebeurtenistijd ouder is, dan bevat de geschiedenis een
-    // status die laatsteStatus tegenspreekt.
+    // Enige mutatiepunt voor status. Bewust geen controle op tijdstip: een scheve of oude
+    // gebeurtenistijd weigeren zou een geschiedenis opleveren die laatsteStatus tegenspreekt.
     private void registreerStatus(NotificatieStatus record) {
         this.statusGeschiedenis.add(record);
         this.laatsteStatus = record;
