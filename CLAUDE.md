@@ -202,8 +202,9 @@ de logica die kiest tussen herverzending en contactherstel.
   als terugval. Geen van die drie is verplicht in hun callbackschema; dan valt de NMC
   terug op de eigen klok. `NotificatieStatus#geregistreerd` is wanneer de NMC de status
   vastlegde, op de eigen klok. Ze lopen uiteen omdat NotifyNL een mislukte callback tot
-  5x met 5 minuten ertussen herhaalt. Wat op de eigen klok moet, gebruikt `geregistreerd`
-  (kolom `geregistreerd`, gekopieerd naar `laatste_status_update`); `tijdstip` is het tijdstip voor het afleverbewijs en wordt
+  5x met 5 minuten ertussen herhaalt. De bewaartermijn vaart op `geregistreerd` (kolom
+  `geregistreerd`, gekopieerd naar `laatste_status_update`); `tijdstip` is het tijdstip
+  voor het afleverbewijs en wordt
   nergens op gefilterd of gesorteerd. De volgorde van de geschiedenis komt uit
   `@OrderColumn` op `volgnummer`, niet uit een van beide tijdstippen.
 - **De statusupdate naar de Dienstverlener gaat pas ná de commit.**
@@ -213,6 +214,12 @@ de logica die kiest tussen herverzending en contactherstel.
   terugrolt, en zou een DB-connectie bezet houden zolang de HTTP-pogingen duren. De
   observer is bewust een eigen bean: in tests wordt de adapter met `@InjectMock`
   vervangen, en een observer-methode op een mock wordt nooit aangeroepen.
+- **`NotificatieRetentieScheduler` ruimt verlopen notificaties op**, in batches met een
+  eigen transactie per batch, `notificatie.retentie.bewaartermijn` na de laatste
+  statusregistratie en los van of de callback naar de Dienstverlener slaagde. De batch
+  claimt met `FOR UPDATE SKIP LOCKED`, omdat er in productie minimaal drie pods draaien.
+  Een notificatie die verloopt terwijl hij nog op `CREATED` of `SENDING` staat, wordt
+  apart op WARN gemeld voordat de rij weggaat; dat is het enige spoor dat overblijft.
 
 ## Technische stack
 
