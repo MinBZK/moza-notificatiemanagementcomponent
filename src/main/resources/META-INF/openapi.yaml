@@ -41,10 +41,8 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/NotificatieAanvraagRequest'
-      # De statuswaarden staan ook in de beschrijving van callbackUrl hierboven. Dat is geen
-      # dubbeling om niets: een afnemer die de spec in Swagger UI opent ziet de beschrijving
-      # bij het veld dat hij invult, terwijl dit blok pas zichtbaar is als hij doorklikt naar
-      # de callback. Beide halen /q/openapi.
+      # Bewust dubbel met de callbackUrl-beschrijving: die ziet een afnemer in Swagger UI direct
+      # bij het veld, dit blok pas na doorklikken.
       callbacks:
         statusupdate:
           '{$request.body#/callbackUrl}':
@@ -121,10 +119,8 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DecentraleNotificatieAanvraagRequest'
-      # De statuswaarden staan ook in de beschrijving van callbackUrl hierboven. Dat is geen
-      # dubbeling om niets: een afnemer die de spec in Swagger UI opent ziet de beschrijving
-      # bij het veld dat hij invult, terwijl dit blok pas zichtbaar is als hij doorklikt naar
-      # de callback. Beide halen /q/openapi.
+      # Bewust dubbel met de callbackUrl-beschrijving: die ziet een afnemer in Swagger UI direct
+      # bij het veld, dit blok pas na doorklikken.
       callbacks:
         statusupdate:
           '{$request.body#/callbackUrl}':
@@ -261,8 +257,7 @@ components:
             `onbekend` net zo. De NMC doet maximaal drie pogingen en biedt daarna niet
             opnieuw aan.
 
-            Weglaten als de Dienstverlener de status zelf opvraagt via
-            GET /notificaties/{id}.
+            Weglaten als de Dienstverlener geen statusupdates wil ontvangen.
             Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
             tekens, zonder gebruikersinfo) wordt geaccepteerd; IP-adressen en interne
             hostnamen worden geweigerd (400).

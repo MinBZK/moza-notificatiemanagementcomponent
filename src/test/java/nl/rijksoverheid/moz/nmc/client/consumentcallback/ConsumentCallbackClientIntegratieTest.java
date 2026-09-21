@@ -47,7 +47,9 @@ class ConsumentCallbackClientIntegratieTest {
 
     @Test
     void antwoord2xx_teltAlsAfgeleverd() {
-        assertDoesNotThrow(() -> clientFactory.maakClient(ontvanger + "/204").stuurStatusUpdate(event()));
+        try (ConsumentCallbackClient client = clientFactory.maakClient(ontvanger + "/204")) {
+            assertDoesNotThrow(() -> client.stuurStatusUpdate(event()));
+        }
     }
 
     // Een redirect wordt niet gevolgd (dat zou CallbackUrlValidator omzeilen) en mag dus ook niet
@@ -55,17 +57,19 @@ class ConsumentCallbackClientIntegratieTest {
     @ParameterizedTest
     @ValueSource(ints = {301, 302, 307, 400, 500})
     void antwoordBuiten2xx_gooitWebApplicationException(int status) {
-        ConsumentCallbackClient client = clientFactory.maakClient(ontvanger + "/" + status);
+        try (ConsumentCallbackClient client = clientFactory.maakClient(ontvanger + "/" + status)) {
+            WebApplicationException fout = assertThrows(WebApplicationException.class,
+                    () -> client.stuurStatusUpdate(event()));
 
-        WebApplicationException fout = assertThrows(WebApplicationException.class,
-                () -> client.stuurStatusUpdate(event()));
-
-        assertEquals(status, fout.getResponse().getStatus());
+            assertEquals(status, fout.getResponse().getStatus());
+        }
     }
 
     @Test
     void contentType_isWatDeGepubliceerdeSpecBelooft() throws Exception {
-        clientFactory.maakClient(ontvanger + "/204").stuurStatusUpdate(event());
+        try (ConsumentCallbackClient client = clientFactory.maakClient(ontvanger + "/204")) {
+            client.stuurStatusUpdate(event());
+        }
 
         String verzonden = ConsumentCallbackTestEndpoint.ONTVANGEN_CONTENT_TYPES.getFirst();
         for (String beloofd : beloofdeContentTypes()) {
@@ -103,6 +107,6 @@ class ConsumentCallbackClientIntegratieTest {
 
         return new NotificatieStatusEvent("1.0", UUID.randomUUID(), "nl.rijksoverheid.moz.nmc.notificatie.status",
                 "/api/nmc/v1/notificaties/" + id, "notificatie/" + id, OffsetDateTime.now(ZoneOffset.UTC),
-                "application/json", NotificatieData.van(id, StatusWaarde.DELIVERED));
+                "application/json", new NotificatieData(id, StatusWaarde.DELIVERED));
     }
 }

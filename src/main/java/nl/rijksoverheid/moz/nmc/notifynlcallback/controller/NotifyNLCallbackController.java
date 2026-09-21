@@ -43,12 +43,8 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
         }
     }
 
-    // Twee overlappende receipts voor dezelfde notificatie laten de verliezer stuklopen op de
-    // optimistic lock. Zonder deze herpoging kost dat een van de 5 herpogingen van NotifyNL, met 5
-    // minuten ertussen; na de vijfde is de receipt daar weg.
-    //
-    // De herpoging zit hier en niet in NotificatieService, omdat de optimistic lock pas bij de commit
-    // van die @Transactional-methode afgaat en dus buiten haar eigen try/catch valt.
+    // Een botsing op de optimistic lock zou anders een van de vijf herpogingen van NotifyNL kosten.
+    // Hier en niet in NotificatieService, want de lock gaat pas af bij de commit van die methode.
     private void verwerkMetHerpogingBijBotsing(AfleverstatusRequest afleverstatusRequest) {
         for (int poging = 1; ; poging++) {
             try {
@@ -57,7 +53,7 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
 
                 return;
             } catch (NotificatieNietGevondenException e) {
-                // Geen verwerkingsfout: verwerkAfleverstatus logt dit zelf op WARN.
+                // Geen verwerkingsfout: de publieke verwerkAfleverstatus hierboven logt dit op WARN.
                 throw e;
             } catch (RuntimeException e) {
                 // Beide takken kosten een van de vijf herpogingen van NotifyNL, dus mogelijk blijvend
@@ -101,10 +97,8 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
         return false;
     }
 
-    // completed_at is "the last time the status was updated" en dus het tijdstip van déze status;
-    // sent_at en created_at horen bij de verzending en zijn terugval. Geen van drieën is verplicht in
-    // EmailCallbackRequest, vandaar de keten en een null als niets bruikbaar is. Hier en niet in de
-    // service, want welk veld van NotifyNL wat betekent is kennis van dit koppelvlak.
+    // completed_at is het tijdstip van déze status; sent_at en created_at zijn terugval, en geen van
+    // drieën is verplicht, dus null als niets bruikbaar is.
     private static OffsetDateTime gebeurtenisTijdstip(AfleverstatusRequest afleverstatusRequest) {
         return Stream.of(afleverstatusRequest.getCompletedAt(), afleverstatusRequest.getSentAt(),
                         afleverstatusRequest.getCreatedAt())

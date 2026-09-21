@@ -25,10 +25,8 @@ public class StatusUpdateVerzender {
         try {
             consumentCallbackAdapter.stuurStatusUpdate(opdracht);
         } catch (RuntimeException e) {
-            // Deze methode draait vanuit Synchronization#afterCompletion, waar de transactiemanager
-            // elke Throwable zelf vangt en hooguit onder com.arjuna.* logt. Zonder deze catch ziet
-            // wie op nl.rijksoverheid.moz.* filtert niets, terwijl een fout in de NMC zelf élke
-            // statusupdate treft. Gooien heeft geen zin: de transactie is al gecommit.
+            // De transactiemanager slikt fouten uit afterCompletion en logt ze hooguit onder
+            // com.arjuna.*, dus hier zelf op ERROR. Gooien heeft geen zin: de transactie is al gecommit.
             Log.errorf(e, "Statusupdate voor notificatie %s (status %s) kon niet verstuurd worden door "
                     + "een fout in de NMC zelf — dit treft waarschijnlijk alle consument-callbacks",
                     opdracht.notificatieId(), opdracht.status());

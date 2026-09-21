@@ -20,7 +20,6 @@ public record StatusUpdateOpdracht(UUID notificatieId, String callbackUrl, Statu
         // de commit afgaan, waar de transactiemanager hem opslokt.
         Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
         Objects.requireNonNull(status, "status is verplicht");
-        // callbackUrl mag bewust null zijn: dat betekent dat de Dienstverlener geen callback heeft
-        // geconfigureerd en de status zelf opvraagt.
+        // callbackUrl mag bewust null zijn: de Dienstverlener heeft dan geen callback geconfigureerd.
     }
 }

@@ -146,6 +146,19 @@ class ConsumentCallbackAdapterTest {
         verify(callbackClient, times(1)).stuurStatusUpdate(any());
     }
 
+    // Elke statusupdate bouwt een eigen client; zonder close() lekken zijn HTTP-verbindingen, ook
+    // als er een fout doorgaat naar StatusUpdateVerzender.
+    @Test
+    void stuurStatusUpdate_sluitDeClient_ookBijEenFoutDieOntsnapt() {
+        adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback"));
+        verify(callbackClient, times(1)).close();
+
+        doThrow(new IllegalStateException("serialisatie kapot")).when(callbackClient).stuurStatusUpdate(any());
+        assertThrows(IllegalStateException.class,
+                () -> adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback")));
+        verify(callbackClient, times(2)).close();
+    }
+
     @Test
     void stuurStatusUpdate_event_bevat_correcteData() {
         StatusUpdateOpdracht opdracht = opdracht("https://omc.example.nl/callback");
@@ -163,9 +176,7 @@ class ConsumentCallbackAdapterTest {
         assertNotNull(event.subject());
         assertNotNull(event.time());
         assertEquals(opdracht.notificatieId(), event.data().notificatieId());
-        // NotificatieData#status is een String: het CloudEvent is een extern contract en staat los
-        // van de interne enum.
-        assertEquals(StatusWaarde.DELIVERED.toApiValue(), event.data().status());
+        assertEquals(StatusWaarde.DELIVERED, event.data().status());
     }
 
     @Test

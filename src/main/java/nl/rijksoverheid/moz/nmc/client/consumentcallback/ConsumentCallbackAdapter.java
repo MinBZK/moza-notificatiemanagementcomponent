@@ -53,10 +53,8 @@ public class ConsumentCallbackAdapter {
         try {
             client = clientFactory.maakClient(callbackUrl);
         } catch (IllegalArgumentException | RestClientDefinitionException e) {
-            // Buiten de retry-lus: het bouwen van de client faalt permanent. Bewust alleen deze twee
-            // typen: een andere RuntimeException uit de rest-client-extensie ligt niet aan de URL en
-            // hoort naar StatusUpdateVerzender te ontsnappen. De IllegalArgumentException-tak vangt
-            // alleen nog rijen van vóór CallbackUrlValidator af.
+            // Buiten de retry-lus: een client die niet te bouwen is, faalt permanent. Andere
+            // RuntimeExceptions ontsnappen bewust naar StatusUpdateVerzender.
             Log.errorf(e, "Callback-client kon niet worden gebouwd voor notificatie %s (url=%s) — "
                     + "statusupdate niet verstuurd", opdracht.notificatieId(), callbackUrl);
 
@@ -71,9 +69,11 @@ public class ConsumentCallbackAdapter {
                 "notificatie/" + opdracht.notificatieId(),
                 OffsetDateTime.now(ZoneOffset.UTC),
                 "application/json",
-                NotificatieData.van(opdracht.notificatieId(), opdracht.status()));
+                new NotificatieData(opdracht.notificatieId(), opdracht.status()));
 
-        verstuurMetHerpogingen(client, event, opdracht);
+        try (client) {
+            verstuurMetHerpogingen(client, event, opdracht);
+        }
     }
 
     private void verstuurMetHerpogingen(ConsumentCallbackClient client, NotificatieStatusEvent event,

@@ -220,9 +220,7 @@ class NotificatieServiceTest {
         assertEquals(notificatie.getId(), captor.getValue().notificatieId());
     }
 
-    // Een geslaagde statusupdate verwijdert de notificatie niet meer: de statusgeschiedenis moet
-    // blijven staan. De service verstuurt de callback niet eens zelf meer, dus er valt hier niets te
-    // variëren op de uitkomst ervan.
+    // Een geslaagde statusupdate verwijdert de notificatie niet; de statusgeschiedenis blijft staan.
     @Test
     void verwerkAfleverstatus_verwijdertNotificatieNiet() {
         Notificatie notificatie = notificatie("https://omc.example.nl/callback");

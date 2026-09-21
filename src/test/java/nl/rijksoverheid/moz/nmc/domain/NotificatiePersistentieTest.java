@@ -174,6 +174,38 @@ class NotificatiePersistentieTest {
         });
     }
 
+    // Een rij zoals de V2-backfill hem achterlaat: één geschiedenisrecord op volgnummer 0. Een
+    // volgende status hoort op volgnummer 1 te landen, niet op de primary key te botsen.
+    @Test
+    void notificatieUitDeBackfill_krijgtEenVolgendeStatusErgensAchter() {
+        UUID id = UUID.randomUUID();
+        UUID referentie = UUID.randomUUID();
+        OffsetDateTime aangemaakt = OffsetDateTime.parse("2026-01-15T10:00:00Z");
+        QuarkusTransaction.requiringNew().run(() -> {
+            var em = notificatieRepository.getEntityManager();
+            em.createNativeQuery("INSERT INTO notificatie (id, versie, external_reference, laatste_status, "
+                            + "laatste_status_tijdstip, laatste_status_update) VALUES (?1, 0, ?2, 'SENDING', ?3, ?3)")
+                    .setParameter(1, id).setParameter(2, referentie).setParameter(3, aangemaakt)
+                    .executeUpdate();
+            em.createNativeQuery("INSERT INTO notificatie_status (notificatie_id, volgnummer, status, tijdstip, "
+                            + "geregistreerd) VALUES (?1, 0, 'SENDING', ?2, ?2)")
+                    .setParameter(1, id).setParameter(2, aangemaakt)
+                    .executeUpdate();
+        });
+
+        QuarkusTransaction.requiringNew().run(() ->
+                assertTrue(notificatieRepository.findById(id).verwerkTerugmelding(StatusWaarde.DELIVERED, null)));
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            Notificatie herladen = notificatieRepository.findById(id);
+
+            assertEquals(List.of(StatusWaarde.SENDING, StatusWaarde.DELIVERED),
+                    herladen.getStatusGeschiedenis().stream().map(NotificatieStatus::status).toList());
+            assertEquals(StatusWaarde.DELIVERED, herladen.getStatus().status());
+            assertEquals(aangemaakt, herladen.getAangemaakt());
+        });
+    }
+
     // Zonder @Version zouden twee gelijktijdige callbacks die dezelfde geschiedenis inlezen elkaars
     // statusregel geruisloos overschrijven. De test bootst dat na: een geneste requiringNew()-
     // transactie commit een eigen statusregel terwijl de buitenste de notificatie al had ingelezen.

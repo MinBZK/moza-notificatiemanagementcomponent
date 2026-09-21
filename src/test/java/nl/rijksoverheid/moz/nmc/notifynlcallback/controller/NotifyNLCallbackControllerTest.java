@@ -245,10 +245,7 @@ class NotifyNLCallbackControllerTest {
 
     @Test
     void verwerkAfleverstatus_bewaartNotificatieInDatabase() {
-        // Een geslaagde callback naar de Dienstverlener verwijdert de notificatie niet meer: de
-        // statusgeschiedenis moet blijven staan. Er valt hier
-        // niets te variëren op het slagen van die callback: stuurStatusUpdate() geeft niets terug en
-        // de aanroeper doet niets met de uitkomst.
+        // Een geslaagde statusupdate verwijdert de notificatie niet; de statusgeschiedenis blijft staan.
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
 

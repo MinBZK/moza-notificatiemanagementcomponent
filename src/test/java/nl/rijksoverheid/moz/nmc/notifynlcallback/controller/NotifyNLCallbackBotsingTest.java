@@ -11,19 +11,23 @@ import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -47,58 +51,95 @@ class NotifyNLCallbackBotsingTest {
     @InjectMock
     ConsumentCallbackAdapter consumentCallbackAdapter;
 
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+
     @BeforeEach
     void setUp() {
         QuarkusTransaction.requiringNew().run(notificatieRepository::deleteAll);
     }
 
+    @AfterEach
+    void tearDown() {
+        executor.shutdownNow();
+    }
+
     @Test
-    void tweeGelijktijdigeReceipts_leggenBeideVastEnSturenElkEenStatusUpdate() throws Exception {
+    void tweeVerschillendeReceipts_leggenBeideVastEnSturenElkEenStatusUpdate() throws Exception {
         UUID referentie = UUID.randomUUID();
-        UUID id = QuarkusTransaction.requiringNew().call(() -> {
+        UUID id = maakVerzondenNotificatie(referentie);
+
+        laatBotsen(referentie, "delivered", "permanent-failure");
+
+        assertEquals(List.of(StatusWaarde.CREATED, StatusWaarde.SENDING,
+                StatusWaarde.PERMANENT_FAILURE, StatusWaarde.DELIVERED), geschiedenis(id));
+        // De teruggerolde eerste poging stuurt niets; alleen de twee commits doen dat.
+        assertEquals(List.of(StatusWaarde.PERMANENT_FAILURE, StatusWaarde.DELIVERED), verstuurdeStatussen(2));
+    }
+
+    // Een herhaling door NotifyNL die binnenkomt terwijl de eerste nog loopt: de verliezer herleest,
+    // ziet zijn status al staan en legt niets vast.
+    @Test
+    void tweeIdentiekeReceipts_leggenEenRecordVastEnSturenEenStatusUpdate() throws Exception {
+        UUID referentie = UUID.randomUUID();
+        UUID id = maakVerzondenNotificatie(referentie);
+
+        laatBotsen(referentie, "delivered", "delivered");
+
+        assertEquals(List.of(StatusWaarde.CREATED, StatusWaarde.SENDING, StatusWaarde.DELIVERED), geschiedenis(id));
+        assertEquals(List.of(StatusWaarde.DELIVERED), verstuurdeStatussen(1));
+    }
+
+    // De eerste lezer wacht na het inlezen tot de tweede receipt gecommit is, en loopt dan op de
+    // optimistic lock stuk. Beide receipts horen een 204 te krijgen.
+    private void laatBotsen(UUID referentie, String eersteStatus, String tweedeStatus) throws Exception {
+        CountDownLatch eersteHeeftGelezen = new CountDownLatch(1);
+        CountDownLatch tweedeIsGecommit = new CountDownLatch(1);
+        AtomicBoolean eersteLezing = new AtomicBoolean(true);
+        AtomicBoolean wachtenVerlopen = new AtomicBoolean(false);
+        doAnswer(aanroep -> {
+            Object resultaat = aanroep.callRealMethod();
+
+            if (eersteLezing.compareAndSet(true, false)) {
+                eersteHeeftGelezen.countDown();
+                wachtenVerlopen.set(!tweedeIsGecommit.await(10, TimeUnit.SECONDS));
+            }
+
+            return resultaat;
+        }).when(notificatieRepository).findByExternalReference(any());
+
+        Future<Integer> eerste = executor.submit(() -> stuurReceipt(referentie, eersteStatus));
+        assertTrue(eersteHeeftGelezen.await(10, TimeUnit.SECONDS), "eerste receipt las de notificatie niet");
+        int tweede = stuurReceipt(referentie, tweedeStatus);
+        tweedeIsGecommit.countDown();
+
+        assertEquals(204, tweede);
+        assertEquals(204, eerste.get(10, TimeUnit.SECONDS));
+        assertFalse(wachtenVerlopen.get(), "eerste receipt wachtte tevergeefs op de tweede");
+        // Eerste lezing, tweede receipt, herlezing na de botsing.
+        verify(notificatieRepository, times(3)).findByExternalReference(referentie);
+    }
+
+    private UUID maakVerzondenNotificatie(UUID referentie) {
+        return QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie("https://omc.example.nl/callback");
             notificatie.markeerVerzonden(referentie);
             notificatieRepository.persist(notificatie);
 
             return notificatie.getId();
         });
+    }
 
-        // De eerste lezer wacht na het inlezen tot de tweede receipt gecommit is.
-        CountDownLatch eersteHeeftGelezen = new CountDownLatch(1);
-        CountDownLatch tweedeIsGecommit = new CountDownLatch(1);
-        AtomicBoolean eersteLezing = new AtomicBoolean(true);
-        doAnswer(aanroep -> {
-            Object resultaat = aanroep.callRealMethod();
-            if (eersteLezing.compareAndSet(true, false)) {
-                eersteHeeftGelezen.countDown();
-                assertTrue(tweedeIsGecommit.await(10, TimeUnit.SECONDS));
-            }
-
-            return resultaat;
-        }).when(notificatieRepository).findByExternalReference(any());
-
-        CompletableFuture<Integer> eerste = CompletableFuture.supplyAsync(() -> stuurReceipt(referentie, "delivered"));
-        assertTrue(eersteHeeftGelezen.await(10, TimeUnit.SECONDS));
-        int tweedeStatus = stuurReceipt(referentie, "permanent-failure");
-        tweedeIsGecommit.countDown();
-
-        assertEquals(204, tweedeStatus);
-        assertEquals(204, eerste.get(10, TimeUnit.SECONDS));
-
-        // Eerste lezing, tweede receipt, herlezing na de botsing.
-        verify(notificatieRepository, times(3)).findByExternalReference(referentie);
-
-        List<StatusWaarde> geschiedenis = QuarkusTransaction.requiringNew().call(() ->
+    private List<StatusWaarde> geschiedenis(UUID id) {
+        return QuarkusTransaction.requiringNew().call(() ->
                 notificatieRepository.findById(id).getStatusGeschiedenis().stream()
                         .map(NotificatieStatus::status).toList());
-        assertEquals(List.of(StatusWaarde.CREATED, StatusWaarde.SENDING,
-                StatusWaarde.PERMANENT_FAILURE, StatusWaarde.DELIVERED), geschiedenis);
+    }
 
-        // De teruggerolde eerste poging stuurt niets; alleen de twee commits doen dat.
+    private List<StatusWaarde> verstuurdeStatussen(int aantal) {
         ArgumentCaptor<StatusUpdateOpdracht> captor = ArgumentCaptor.forClass(StatusUpdateOpdracht.class);
-        verify(consumentCallbackAdapter, times(2)).stuurStatusUpdate(captor.capture());
-        assertEquals(List.of(StatusWaarde.PERMANENT_FAILURE, StatusWaarde.DELIVERED),
-                captor.getAllValues().stream().map(StatusUpdateOpdracht::status).toList());
+        verify(consumentCallbackAdapter, times(aantal)).stuurStatusUpdate(captor.capture());
+
+        return captor.getAllValues().stream().map(StatusUpdateOpdracht::status).toList();
     }
 
     private static int stuurReceipt(UUID referentie, String status) {

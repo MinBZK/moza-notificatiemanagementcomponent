@@ -22,6 +22,7 @@ import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
 import java.lang.annotation.Annotation;
 import java.util.concurrent.CompletionStage;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackClient;
+import nl.rijksoverheid.moz.nmc.client.consumentcallback.NotificatieStatusEvent;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLAuthorizationHolder;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
@@ -334,9 +335,17 @@ public class NotificatieVerwerkingFuzzer {
     }
 
     private static ConsumentCallbackClient callbackClientStandIn() {
-        return event -> {
-            if (!callbackLukt) {
-                throw new WebApplicationException(Response.status(Response.Status.BAD_GATEWAY).build());
+        return new ConsumentCallbackClient() {
+            @Override
+            public void stuurStatusUpdate(NotificatieStatusEvent event) {
+                if (!callbackLukt) {
+                    throw new WebApplicationException(Response.status(Response.Status.BAD_GATEWAY).build());
+                }
+            }
+
+            @Override
+            public void close() {
+                // Niets te sluiten: er is geen echte HTTP-client.
             }
         };
     }

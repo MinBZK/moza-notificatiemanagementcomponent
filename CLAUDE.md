@@ -122,7 +122,7 @@ Geïmplementeerd:
 - `POST /api/nmc/v1/notifynl-callback`: ontvangt de afleverstatus van NotifyNL,
   beveiligd met een bearer token (`NotifyNLCallbackAuthFilter`).
 - **Statusupdate naar de aanroeper.** Heeft het verzoek een `callbackUrl`, dan
-  stuurt `ConsumentCallbackAdapter` bij elke afleverstatus een CloudEvent naar
+  stuurt `ConsumentCallbackAdapter` bij elke nieuw vastgelegde afleverstatus een CloudEvent naar
   die URL: maximaal drie pogingen met oplopende wachttijd. De `Notificatie` en
   zijn statusgeschiedenis blijven daarna staan.
 - **Adresselectie in de Profielservice-respons** (`ProfielServiceAdapter`): eerst
@@ -162,8 +162,8 @@ de logica die kiest tussen herverzending en contactherstel.
   Notify voor e-mail terugmeldt, plus `ONBEKEND`. Dat laatste is de vangwaarde van
   `NotificatieService#parseStatus` voor een status die de NMC niet kent: die wordt op
   ERROR gelogd en als `ONBEKEND` vastgelegd, zodat hij niet als een bekende uitkomst
-  landt. `CREATED` en `SENDING` legt de NMC zelf vast; NotifyNL hoort ze niet te
-  sturen, maar niets dwingt dat af. De `CHECK`-constraints in
+  landt. `CREATED` en `SENDING` legt de NMC zelf vast; stuurt NotifyNL ze toch, dan
+  weigert `volgtOp` ze. De `CHECK`-constraints in
   `V1__init_notificatie.sql` en `V2__notificatie_statusgeschiedenis.sql` sommen dezelfde waarden
   op; een nieuwe status vraagt dus ook een migratie.
   `moza-portaal/dependencies/omc/swagger.json` bevat een

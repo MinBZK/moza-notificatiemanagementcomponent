@@ -114,6 +114,8 @@ public class Notificatie {
      * @return false als de melding niets nieuws is en dus niet is vastgelegd
      */
     public boolean verwerkTerugmelding(StatusWaarde status, OffsetDateTime opgetreden) {
+        Objects.requireNonNull(status, "status is verplicht");
+
         if (!status.volgtOp(laatsteStatus.status())) {
             return false;
         }
