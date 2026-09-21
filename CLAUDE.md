@@ -153,19 +153,50 @@ de logica die kiest tussen herverzending en contactherstel.
 - **Observability-koppelvlak** (verwerkings- en statusinformatie voor
   Dienstafnemers, waarschijnlijk voor de wMEBV-bewijslast) heeft nu geen
   prioriteit. Het datamodel moet een audittrail van statussen en pogingen per
-  notificatie later wel zonder herontwerp toelaten. Let op: nu houdt `Notificatie`
-  alleen de laatste status bij en wordt de rij na een geslaagde statusupdate
-  verwijderd.
-- **`NotificatieStatus`** kent `CREATED`, `SENDING`, `DELIVERED`,
-  `PERMANENT_FAILURE`, `TEMPORARY_FAILURE` en `TECHNICAL_FAILURE`, naar de
-  afleverstatussen van GOV.UK Notify. Een onbekende status van NotifyNL wordt
-  gelogd en opgeslagen als `TECHNICAL_FAILURE`. De `CHECK`-constraint in
-  `V1__init_notificatie.sql` somt dezelfde waarden op; een nieuwe status vraagt dus
-  ook een migratie. `moza-portaal/dependencies/omc/swagger.json` bevat een
+  notificatie later wel zonder herontwerp toelaten. Het datamodel ondersteunt dat al:
+  `Notificatie` houdt de volledige statusgeschiedenis bij (`notificatie_status`, één
+  rij per overgang) naast een projectie van de laatste status op `notificatie` zelf.
+  Die projectie is waar de code op stuurt; de geschiedenis is het audittrail.
+- **`StatusWaarde`** kent `CREATED`, `SENDING`, `DELIVERED`, `PERMANENT_FAILURE`,
+  `TEMPORARY_FAILURE` en `TECHNICAL_FAILURE`, naar de afleverstatussen die GOV.UK
+  Notify voor e-mail terugmeldt, plus `ONBEKEND`. Dat laatste is de vangwaarde van
+  `NotificatieService#parseStatus` voor een status die de NMC niet kent: die wordt op
+  ERROR gelogd en als `ONBEKEND` vastgelegd, zodat hij niet als een bekende uitkomst
+  landt. `CREATED` en `SENDING` legt de NMC zelf vast; NotifyNL hoort ze niet te
+  sturen, maar niets dwingt dat af. De `CHECK`-constraints in
+  `V1__init_notificatie.sql` en `V2__notificatie_statusgeschiedenis.sql` sommen dezelfde waarden
+  op; een nieuwe status vraagt dus ook een migratie.
+  `moza-portaal/dependencies/omc/swagger.json` bevat een
   `DeliveryReceipt`/`DeliveryStatuses`-schema, maar dat hoort volgens Joeri
   waarschijnlijk bij een ander systeem dan de OMC per Dienstverlener (mogelijk een
   Output Management Systeem of Printstraat). Gebruik die swagger niet als contract
   voordat dat is opgehelderd.
+- **Afleverstatussen komen at-least-once en ongeordend binnen.** NotifyNL biedt een
+  callback opnieuw aan bij elke niet-2xx, dus de volgorde van binnenkomst zegt niets
+  over de volgorde van de gebeurtenissen. `StatusWaarde#volgtOp` bepaalt of een
+  binnengekomen status wordt vastgelegd, en onderscheidt alleen de verzendfase
+  (`CREATED`, `SENDING`) van wat NotifyNL daarna terugmeldt. Tussen die terugmeldingen
+  geldt geen rangorde: NotifyNL kan ná een bezorging alsnog een fout melden, dus elke
+  definitieve status volgt op elke andere. Alleen een exacte herhaling wordt geweigerd.
+  Welke uitkomst uiteindelijk telt is nog niet belegd — `isDefinitief` betekent
+  "NotifyNL heeft iets teruggemeld", niet "hier komt niets meer overheen".
+- **Gebeurtenistijd en registratietijd zijn aparte kolommen.**
+  `NotificatieStatus#tijdstip` is wanneer de status ontstond, op de klok van de bron:
+  voor een delivery receipt NotifyNL's `completed_at`, met `sent_at` en `created_at`
+  als terugval. Geen van die drie is verplicht in hun callbackschema; dan valt de NMC
+  terug op de eigen klok. `NotificatieStatus#geregistreerd` is wanneer de NMC de status
+  vastlegde, op de eigen klok. Ze lopen uiteen omdat NotifyNL een mislukte callback tot
+  5x met 5 minuten ertussen herhaalt. Wat op de eigen klok moet, gebruikt `geregistreerd`
+  (kolom `laatste_status_update`); `tijdstip` is het tijdstip voor het afleverbewijs en wordt
+  nergens op gefilterd of gesorteerd. De volgorde van de geschiedenis komt uit
+  `@OrderColumn` op `volgnummer`, niet uit een van beide tijdstippen.
+- **De statusupdate naar de Dienstverlener gaat pas ná de commit.**
+  `NotificatieService` vuurt een `StatusUpdateOpdracht` af; `StatusUpdateVerzender`
+  pakt die op bij `AFTER_SUCCESS` en roept `ConsumentCallbackAdapter` aan. Versturen
+  vóór de commit zou de Dienstverlener een status kunnen geven die de NMC daarna
+  terugrolt, en zou een DB-connectie bezet houden zolang de HTTP-pogingen duren. De
+  observer is bewust een eigen bean: in tests wordt de adapter met `@InjectMock`
+  vervangen, en een observer-methode op een mock wordt nooit aangeroepen.
 
 ## Technische stack
 
@@ -298,7 +329,13 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
 ## Database en migraties
 
 - **Migraties zijn onveranderlijk na toepassing.** Wijzig een bestaande `V*.sql`
-  nooit; voeg een `V(N+1)__...sql` toe in `src/main/resources/db/migration/`.
+  nooit; voeg een `V(N+1)__...sql` toe in `src/main/resources/db/migration/`. Flyway
+  bewaart een checksum per script: een gewijzigd script laat de migratie falen op een
+  database waar het al gedraaid heeft, ook op een previewcluster.
+- **Expand/contract bij een kolomwijziging.** Voeg eerst de nieuwe kolom toe, vul hem
+  in dezelfde migratie uit de oude, en laat de `DROP COLUMN` pas volgen als niets hem
+  meer leest. `V2__notificatie_statusgeschiedenis.sql` doet dat voor `notificatie.status` en
+  `notificatie.aangemaakt`.
 - **SQL moet op H2 én PostgreSQL draaien.** Dev en prod gebruiken PostgreSQL 18,
   tests H2.
 - **Houd de migratie en de entity gelijk.** Buiten tests staat
@@ -511,4 +548,4 @@ Details en debugroutes: `docs/zad-deploy.md`.
 - `../moza-profiel-service`: Profielservice, Quarkus (`src/main/resources/META-INF/openapi.yaml`)
 - `../moza-verificatie-service`: Quarkus; voorbeeld van de NotifyNL-integratie
 - `../moza-portaal`: Next.js-portaal met `dependencies/omc/swagger.json`; zie de
-  kanttekening bij `NotificatieStatus`.
+  kanttekening bij `StatusWaarde`.

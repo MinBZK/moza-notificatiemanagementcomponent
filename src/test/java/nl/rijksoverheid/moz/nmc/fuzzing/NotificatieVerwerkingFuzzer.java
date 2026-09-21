@@ -13,7 +13,14 @@ import jakarta.ws.rs.core.Response;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
 import nl.rijksoverheid.moz.nmc.api.model.DecentraleNotificatieAanvraagRequest;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieAanvraagRequest;
+import jakarta.enterprise.event.Event;
+import jakarta.enterprise.event.NotificationOptions;
+import jakarta.enterprise.util.TypeLiteral;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
+import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
+
+import java.lang.annotation.Annotation;
+import java.util.concurrent.CompletionStage;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackClient;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLAuthorizationHolder;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
@@ -104,6 +111,46 @@ public class NotificatieVerwerkingFuzzer {
 
     private static final GeheugenNotificatieRepository repository = new GeheugenNotificatieRepository();
 
+    /**
+     * Stand-in for the CDI {@code Event} that NotificatieService fires. In production
+     * StatusUpdateVerzender observes it at AFTER_SUCCESS so the callback runs after the commit;
+     * there is no CDI container here, so this delivers straight to the adapter. That keeps the
+     * consument-callback path in reach of the fuzzer, which is the point of wiring it at all.
+     */
+    private record DirecteStatusUpdateEvent(ConsumentCallbackAdapter adapter)
+            implements Event<StatusUpdateOpdracht> {
+
+        @Override
+        public void fire(StatusUpdateOpdracht opdracht) {
+            adapter.stuurStatusUpdate(opdracht);
+        }
+
+        @Override
+        public <U extends StatusUpdateOpdracht> CompletionStage<U> fireAsync(U opdracht) {
+            throw new UnsupportedOperationException("NotificatieService fires synchronously");
+        }
+
+        @Override
+        public <U extends StatusUpdateOpdracht> CompletionStage<U> fireAsync(U opdracht, NotificationOptions options) {
+            throw new UnsupportedOperationException("NotificatieService fires synchronously");
+        }
+
+        @Override
+        public Event<StatusUpdateOpdracht> select(Annotation... qualifiers) {
+            throw new UnsupportedOperationException("No qualifiers in play");
+        }
+
+        @Override
+        public <U extends StatusUpdateOpdracht> Event<U> select(Class<U> subtype, Annotation... qualifiers) {
+            throw new UnsupportedOperationException("No qualifiers in play");
+        }
+
+        @Override
+        public <U extends StatusUpdateOpdracht> Event<U> select(TypeLiteral<U> subtype, Annotation... qualifiers) {
+            throw new UnsupportedOperationException("No qualifiers in play");
+        }
+    }
+
     private static final CentraleNotificatieController centraleController;
     private static final DecentraleNotificatieController decentraleController;
     private static final NotifyNLCallbackController callbackController;
@@ -118,7 +165,7 @@ public class NotificatieVerwerkingFuzzer {
                         new NotifyNLAuthorizationHolder(), Optional.of(API_KEY)),
                 repository,
                 // No wait between callback retries.
-                new ConsumentCallbackAdapter(url -> callbackClientStandIn(), 0));
+                new DirecteStatusUpdateEvent(new ConsumentCallbackAdapter(url -> callbackClientStandIn(), 0)));
 
         LogboekContext logboekContext = new LogboekContext();
         HashHelper hashHelper = new HashHelper(Optional.of("fuzz-pepper-niet-voor-productie"));
@@ -362,7 +409,7 @@ public class NotificatieVerwerkingFuzzer {
         /** Stores a notificatie under the given NotifyNL reference. */
         void bewaarMetExterneReferentie(UUID externalReference) {
             Notificatie notificatie = new Notificatie("https://consument.example.invalid/callback");
-            notificatie.setExternalReference(externalReference);
+            notificatie.markeerVerzonden(externalReference);
             persist(notificatie);
         }
 

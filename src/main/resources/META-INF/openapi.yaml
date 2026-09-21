@@ -41,6 +41,38 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/NotificatieAanvraagRequest'
+      # De statuswaarden staan ook in de beschrijving van callbackUrl hierboven. Dat is geen
+      # dubbeling om niets: een afnemer die de spec in Swagger UI opent ziet de beschrijving
+      # bij het veld dat hij invult, terwijl dit blok pas zichtbaar is als hij doorklikt naar
+      # de callback. Beide halen /q/openapi (geverifieerd op het previewcluster).
+      callbacks:
+        statusupdate:
+          '{$request.body#/callbackUrl}':
+            post:
+              summary: Statusupdate (CloudEvents NL GOV)
+              description: |
+                De NMC stuurt deze callback zodra NotifyNL de bezorgstatus terugmeldt,
+                en alleen als bij de aanvraag een `callbackUrl` is meegegeven. De
+                callback gaat pas uit nadat de status is vastgelegd.
+
+                De NMC doet maximaal drie pogingen met oplopende tussenpozen. Slagen
+                die geen van alle, dan wordt de statusupdate niet opnieuw aangeboden;
+                de Dienstverlener kan de status dan alleen nog zelf opvragen.
+
+                Dezelfde status komt hooguit één keer voorbij: een herhaalde melding
+                van NotifyNL levert geen callback op. Ná een uitkomst kan wél een andere
+                uitkomst volgen — NotifyNL kan na een bezorging alsnog een fout melden —
+                en die wordt dan ook doorgegeven. De laatst ontvangen status is de meest
+                recente melding, niet per definitie de eindtoestand.
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema:
+                      $ref: '#/components/schemas/NotificatieStatusEvent'
+              responses:
+                '2XX':
+                  description: Statusupdate ontvangen
       responses:
         '200':
           description: Notificatie succesvol verstuurd
@@ -88,6 +120,38 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DecentraleNotificatieAanvraagRequest'
+      # De statuswaarden staan ook in de beschrijving van callbackUrl hierboven. Dat is geen
+      # dubbeling om niets: een afnemer die de spec in Swagger UI opent ziet de beschrijving
+      # bij het veld dat hij invult, terwijl dit blok pas zichtbaar is als hij doorklikt naar
+      # de callback. Beide halen /q/openapi (geverifieerd op het previewcluster).
+      callbacks:
+        statusupdate:
+          '{$request.body#/callbackUrl}':
+            post:
+              summary: Statusupdate (CloudEvents NL GOV)
+              description: |
+                De NMC stuurt deze callback zodra NotifyNL de bezorgstatus terugmeldt,
+                en alleen als bij de aanvraag een `callbackUrl` is meegegeven. De
+                callback gaat pas uit nadat de status is vastgelegd.
+
+                De NMC doet maximaal drie pogingen met oplopende tussenpozen. Slagen
+                die geen van alle, dan wordt de statusupdate niet opnieuw aangeboden;
+                de Dienstverlener kan de status dan alleen nog zelf opvragen.
+
+                Dezelfde status komt hooguit één keer voorbij: een herhaalde melding
+                van NotifyNL levert geen callback op. Ná een uitkomst kan wél een andere
+                uitkomst volgen — NotifyNL kan na een bezorging alsnog een fout melden —
+                en die wordt dan ook doorgegeven. De laatst ontvangen status is de meest
+                recente melding, niet per definitie de eindtoestand.
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema:
+                      $ref: '#/components/schemas/NotificatieStatusEvent'
+              responses:
+                '2XX':
+                  description: Statusupdate ontvangen
       responses:
         '200':
           description: Notificatie succesvol verstuurd
@@ -165,10 +229,39 @@ components:
           # @Size-validator voor heeft (HV000030). Vandaar een eigen constraint in plaats van
           # maxLength; die dekt meteen de scheme-, host- en poortregels uit de description.
           x-field-extra-annotation: "@nl.rijksoverheid.moz.nmc.validation.ValidCallbackUrl"
-          description: >-
+          # Literal block (|) en geen folded (>-): een folded scalar plakt gelijk-ingesprongen
+          # regels aan elkaar met spaties, waardoor de markdown-tabel hieronder als één
+          # doorlopende regel in het gepubliceerde document belandt en Swagger UI er geen tabel
+          # van maakt.
+          description: |
             Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
-            terugstuurt zodra de bezorgstatus bekend is. Weglaten als de
-            Dienstverlener de status zelf opvraagt via GET /notificaties/{id}.
+            terugstuurt zodra de bezorgstatus bekend is.
+
+            De statusupdate is een CloudEvent met in `data` het `notificatieId` en een
+            `status`. Mogelijke waarden, met hun betekenis:
+
+            | Waarde | Betekenis |
+            |---|---|
+            | `created` | Vastgelegd, nog niet aangeboden bij NotifyNL |
+            | `sending` | Aangeboden bij NotifyNL, nog geen uitkomst |
+            | `delivered` | Bezorgd |
+            | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
+            | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
+            | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
+            | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
+
+            `onbekend` zegt niets over de notificatie zelf: er is wél een terugmelding
+            ontvangen, maar die viel buiten de statussen die dit component kent.
+            Behandel hem niet als eindstatus, er kan later alsnog een bekende uitkomst
+            binnenkomen.
+
+            Dezelfde status komt hooguit één keer voorbij; een herhaalde melding levert
+            geen statusupdate op. Ná een uitkomst kan wél een andere uitkomst volgen,
+            bijvoorbeeld een fout na een bezorging. De NMC doet maximaal drie pogingen en
+            biedt daarna niet opnieuw aan.
+
+            Weglaten als de Dienstverlener de status zelf opvraagt via
+            GET /notificaties/{id}.
             Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
             tekens, zonder gebruikersinfo) wordt geaccepteerd; IP-adressen en interne
             hostnamen worden geweigerd (400).
@@ -203,9 +296,36 @@ components:
           format: uri
           # Zie de toelichting bij NotificatieAanvraagRequest.callbackUrl.
           x-field-extra-annotation: "@nl.rijksoverheid.moz.nmc.validation.ValidCallbackUrl"
-          description: >-
+          # Literal block (|) en geen folded (>-): een folded scalar plakt gelijk-ingesprongen
+          # regels aan elkaar met spaties, waardoor de markdown-tabel hieronder als één
+          # doorlopende regel in het gepubliceerde document belandt en Swagger UI er geen tabel
+          # van maakt.
+          description: |
             Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
             terugstuurt zodra de bezorgstatus bekend is.
+
+            De statusupdate is een CloudEvent met in `data` het `notificatieId` en een
+            `status`. Mogelijke waarden, met hun betekenis:
+
+            | Waarde | Betekenis |
+            |---|---|
+            | `created` | Vastgelegd, nog niet aangeboden bij NotifyNL |
+            | `sending` | Aangeboden bij NotifyNL, nog geen uitkomst |
+            | `delivered` | Bezorgd |
+            | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
+            | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
+            | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
+            | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
+
+            `onbekend` zegt niets over de notificatie zelf: er is wél een terugmelding
+            ontvangen, maar die viel buiten de statussen die dit component kent.
+            Behandel hem niet als eindstatus, er kan later alsnog een bekende uitkomst
+            binnenkomen.
+
+            Dezelfde status komt hooguit één keer voorbij; een herhaalde melding levert
+            geen statusupdate op. Ná een uitkomst kan wél een andere uitkomst volgen,
+            bijvoorbeeld een fout na een bezorging. De NMC doet maximaal drie pogingen en
+            biedt daarna niet opnieuw aan.
             Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
             tekens, zonder gebruikersinfo) wordt geaccepteerd; IP-adressen en interne
             hostnamen worden geweigerd (400).
@@ -219,6 +339,94 @@ components:
           type: string
           format: uuid
           description: NMC-interne referentie voor deze notificatie
+
+    NotificatieStatusEvent:
+      type: object
+      description: >-
+        Statusupdate als CloudEvent (NL GOV profiel). De envelop volgt CloudEvents 1.0;
+        de bezorgstatus zelf staat in `data`.
+      required:
+        - specversion
+        - id
+        - type
+        - source
+        - time
+        - datacontenttype
+        - data
+      properties:
+        specversion:
+          type: string
+          example: '1.0'
+        id:
+          type: string
+          format: uuid
+          description: Unieke identificatie van dit event, niet van de notificatie
+        type:
+          type: string
+          example: nl.rijksoverheid.moz.nmc.notificatie.status
+        source:
+          type: string
+          format: uri-reference
+          example: /api/nmc/v1/notificaties/3f1a...
+        subject:
+          type: string
+          example: notificatie/3f1a...
+        time:
+          type: string
+          format: date-time
+          description: Tijdstip waarop de NMC dit event verstuurde
+        datacontenttype:
+          type: string
+          example: application/json
+        data:
+          $ref: '#/components/schemas/NotificatieStatusData'
+
+    NotificatieStatusData:
+      type: object
+      required:
+        - notificatieId
+        - status
+      properties:
+        notificatieId:
+          type: string
+          format: uuid
+          description: De NMC-interne referentie die bij de aanvraag is teruggegeven
+        status:
+          $ref: '#/components/schemas/NotificatieStatus'
+
+    NotificatieStatus:
+      type: string
+      description: |
+        Bezorgstatus van de notificatie.
+
+        De eerste zes waarden komen overeen met het delivery-receiptmodel van
+        NotifyNL voor e-mail. `onbekend` is een waarde van de NMC zelf.
+
+        | Waarde | Betekenis |
+        |---|---|
+        | `created` | Door de NMC vastgelegd, nog niet aangeboden bij NotifyNL |
+        | `sending` | Aangeboden bij NotifyNL, nog geen uitkomst |
+        | `delivered` | Bezorgd |
+        | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
+        | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
+        | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
+        | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
+
+        `onbekend` betekent niet dat er iets mis is met de notificatie zelf: de NMC
+        heeft wél een terugmelding ontvangen, maar die viel buiten de statussen die
+        dit component kent. Dat gebeurt bijvoorbeeld als NotifyNL zijn vocabulaire
+        uitbreidt of als er een ander kanaal dan e-mail in het spel komt. De melding
+        wordt vastgelegd en de NMC logt hem, zodat de waarde alsnog toegevoegd kan
+        worden. Behandel `onbekend` niet als eindstatus: er kan later alsnog een
+        bekende uitkomst binnenkomen.
+      enum:
+        - created
+        - sending
+        - delivered
+        - temporary-failure
+        - permanent-failure
+        - technical-failure
+        - onbekend
 
     Problem:
       type: object

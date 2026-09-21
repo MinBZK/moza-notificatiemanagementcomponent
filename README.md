@@ -18,8 +18,8 @@ asynchrone bezorgstatus:
    bezorgstatus (delivery receipt).
 6. De NMC zoekt de notificatie op, werkt de status bij en stuurt — als er een
    `callbackUrl` is meegegeven — een statusupdate (**CloudEvents NL GOV**) naar
-   die URL. Na een geslaagde callback wordt het record verwijderd (minimale
-   dataminimalisatie).
+   die URL. Het al dan niet slagen van die callback bepaalt niet of het record
+   blijft bestaan: de notificatie en zijn statusgeschiedenis blijven staan.
 
 De `callbackUrl` is optioneel: Dienstverleners zonder eigen webhook-endpoint kunnen
 de status opvragen via `GET /centraal/notificaties/{id}` (nog niet geïmplementeerd).
@@ -150,7 +150,7 @@ Geïmplementeerde componenten zijn vetgedrukt; de rest is toekomstig ontwerp.
 | **Profielservice-adapter** | Client | Haalt contactvoorkeur op bij de Profielservice en kan een e-mailadres invalideren. |
 | **Verzendadapter** | Client (bearer-JWT) | Verstuurt berichten via NotifyNL (`template_id` + `personalisation`). |
 | **Consument-callback-adapter** | Webhook-client (CloudEvents NL GOV) | Stuurt de afleverstatus asynchroon terug naar de aanroeper via de opgegeven `callbackUrl`. |
-| **notificatiedatabase** | PostgreSQL | Slaat referentie, status en (bij centraal profiel) het versleuteld identificerend nummer op; records worden verwijderd zodra de callback is verstuurd. |
+| **notificatiedatabase** | PostgreSQL | Slaat referentie, status, statusgeschiedenis en (bij centraal profiel) het versleuteld identificerend nummer op. |
 | **Decentrale-regie-API** | REST (controller) | Inbound endpoint voor het decentraal profiel: intake op het meegegeven e-mailadres, zonder Profielservice-lookup. |
 | Adres-adapter | Client | Haalt een postadres op bij KvK Handelsregister of BRP als fallback bij contactherstel. |
 | Contactherstel-coordinator | Component | Coördineert de contactherselstroom bij onbereikbaarheid; initieert een nieuwe verzendpoging via een ander kanaal en meldt dit aan de Contactherstel-dienst. |
@@ -165,21 +165,55 @@ De externe systemen die de NMC aanroept of van ontvangt:
 
 ## Domeinmodel
 
-De `Notificatie`-entiteit is minimaal geïmplementeerd: hij bevat een
-NMC-interne `notificatieId` (UUID), de `notifyNlNotificatieId` (de referentie
-die NotifyNL intern gebruikt voor correlatie met delivery receipts), de
-optionele `callbackUrl` en de huidige `status`. Records worden verwijderd zodra
-de callback succesvol is verstuurd (dataminimalisatie).
+De `Notificatie`-entiteit bevat een NMC-interne `id` (UUID), de
+`externalReference` (het notificatie-id van NotifyNL, voor correlatie met
+delivery receipts) en de optionele `callbackUrl`. Elke statusovergang wordt
+vastgelegd in een geordende geschiedenis van `NotificatieStatus`-waarden — dit
+is ook de basis voor een toekomstig observability-koppelvlak.
 
-Onderstaande entiteiten zijn de **beoogde eindsituatie** voor latere stories en
+Elk record houdt **twee** tijdstippen uit elkaar:
+
+- `tijdstip` — wanneer de status ontstond, op de klok van de bron. Voor een
+  delivery receipt is dat NotifyNL's `completed_at`, met `sent_at` en
+  `created_at` als terugval. Dit is het tijdstip voor het afleverbewijs.
+- `geregistreerd` — wanneer de NMC de status vastlegde, op de eigen klok.
+
+Die twee lopen uiteen omdat NotifyNL een mislukte callback tot 5x met 5 minuten
+ertussen herhaalt. De geschiedenis wordt geordend op registratievolgorde
+(`@OrderColumn` op de kolom `volgnummer`), niet op een van beide tijdstippen:
+daardoor blijft `getAangemaakt()` (het eerste record) betrouwbaar, ook als een
+receipt met een scheve of oude `completed_at` binnenkomt.
+
+De huidige status staat als projectie van het laatste record op `Notificatie`
+zelf, bijgewerkt door `registreerStatus`: `laatste_status`,
+`laatste_status_tijdstip` (de gebeurtenistijd) en `laatste_status_update` (de
+registratietijd). `laatste_status_update` staat op de eigen klok, zodat een
+receipt met een oude `completed_at` het moment van de laatste registratie niet
+terugzet.
+
+Welke overgangen zijn toegestaan wordt uitsluitend bepaald door
+`StatusWaarde#volgtOp` in `NotificatieService`, niet door een tweede
+tijdcontrole in `Notificatie`: een externe klok kan scheef zijn en is daarmee
+ongeschikt om over correctheid te beslissen.
+De entiteit heeft optimistic locking (`@Version`): twee gelijktijdig verwerkte
+delivery receipts voor dezelfde notificatie zouden elkaars statusregel anders
+geruisloos overschrijven. De tweede transactie faalt dan op een
+`OptimisticLockException`. `NotifyNLCallbackController` vangt die af en probeert
+het tot drie keer opnieuw in een verse transactie; pas daarna gaat er een 5xx
+naar NotifyNL. Dat is bewust, want NotifyNL herhaalt een mislukte callback maar
+vijf keer met vijf minuten ertussen en gooit de receipt daarna weg — dat budget
+is voor echte storingen, niet voor interne contentie. De primary key
+`(notificatie_id, volgnummer)` op `notificatie_status` is het vangnet daaronder
+en geldt ook voor schrijvers die Hibernate omzeilen.
+
+Onderstaande entiteit is de **beoogde eindsituatie** voor latere stories en
 nog niet geïmplementeerd:
 
 - **`Verzending`**: één concrete verzendpoging (primaire verzending of
-  contactherstelpoging). Houdt het verzendkanaal, de ontvangergegevens, de
-  huidige status en de Notify-referentie bij.
-- **`StatusGebeurtenis`**: een append-only logboek van statusupdates per
-  verzending (bijv. delivery receipts van NotifyNL). Basis voor een toekomstig
-  observability-koppelvlak.
+  contactherstelpoging), met verzendkanaal, ontvangergegevens, status en
+  Notify-referentie. De huidige `NotificatieStatus`-geschiedenis hangt
+  rechtstreeks aan `Notificatie`; zodra `Verzending` bestaat, verschuift die
+  vermoedelijk naar per-verzendpoging.
 
 ## API
 
@@ -202,9 +236,25 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   token dat geconfigureerd wordt in NotifyNL's dashboard en via
   `notify.callback.bearer-token` in de NMC. De NMC werkt de status bij en
   stuurt — indien een `callbackUrl` aanwezig is — een **CloudEvents NL GOV**
-  statusupdate naar die URL. Retourneert `204` op succes, `401` bij een
+  statusupdate naar die URL. Die statusupdate gaat pas ná de commit de deur uit:
+  `NotificatieService` vuurt een `StatusUpdateOpdracht` af die
+  `StatusUpdateVerzender` bij `AFTER_SUCCESS` oppakt. Zou de update vóór de
+  commit verstuurd worden, dan kan de Dienstverlener een status krijgen die de
+  NMC vervolgens terugrolt (de commit kan alsnog falen op een
+  `OptimisticLockException` door een gelijktijdige tweede receipt, of op een
+  JTA-timeout). Retourneert `204` op succes, `401` bij een
   ontbrekend of ongeldig bearer token, en `404` als de NotifyNL-referentie
-  onbekend is. Dit endpoint heeft een eigen, losse OpenAPI-specificatie (zie
+  onbekend is. NotifyNL biedt een callback opnieuw aan bij elke niet-2xx, dus
+  receipts komen at-least-once en niet gegarandeerd op volgorde binnen.
+  `StatusWaarde#volgtOp` bepaalt welke status wordt vastgelegd: de NMC
+  onderscheidt alleen de verzendfase (`created`, `sending`) van wat NotifyNL
+  daarna terugmeldt. Tussen die terugmeldingen geldt geen rangorde, want NotifyNL
+  kan ná een bezorging alsnog een fout melden; zo'n melding wordt vastgelegd en
+  doorgegeven. Geweigerd worden alleen een exacte herhaling van de vastgelegde
+  status en een teruggang naar de verzendfase (`sending` na `delivered`). Die
+  worden op DEBUG gelogd, niet geregistreerd, en leveren geen statusupdate naar
+  de Dienstverlener op. Het endpoint antwoordt in dat geval alsnog `204`, zodat NotifyNL de callback niet
+  blijft herhalen. Dit endpoint heeft een eigen, losse OpenAPI-specificatie (zie
   hieronder), zodat het makkelijk te verwijderen is zodra de NMC publiek
   bereikbaar is en NotifyNL een echte callback-URL kan benaderen.
 
