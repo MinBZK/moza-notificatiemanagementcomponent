@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -16,4 +17,11 @@ import java.util.UUID;
  * {@code META-INF/openapi.yaml}.
  */
 public record NotificatieData(UUID notificatieId, String status) {
+
+    // Beide velden zijn verplicht in NotificatieStatusData in openapi.yaml; zonder deze controle gaat
+    // een null als ongeldig CloudEvent naar de Dienstverlener in plaats van hier op te vallen.
+    public NotificatieData {
+        Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
+        Objects.requireNonNull(status, "status is verplicht");
+    }
 }
