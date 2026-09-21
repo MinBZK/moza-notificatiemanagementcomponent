@@ -14,12 +14,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class ConsumentCallbackTestEndpoint {
 
     static final List<String> ONTVANGEN_CONTENT_TYPES = new CopyOnWriteArrayList<>();
+    static final List<String> ONTVANGEN_BODIES = new CopyOnWriteArrayList<>();
 
     @POST
     @Path("/{status}")
     public Response ontvang(@PathParam("status") int status, @HeaderParam("Content-Type") String contentType,
                             String body) {
         ONTVANGEN_CONTENT_TYPES.add(contentType);
+        ONTVANGEN_BODIES.add(body);
 
         return Response.status(status).header("Location", "https://elders.example.nl/callback").build();
     }

@@ -23,6 +23,7 @@ import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * De echte rest-client tegen een echt HTTP-endpoint: welke antwoorden als mislukt tellen, en welk
@@ -43,6 +44,7 @@ class ConsumentCallbackClientIntegratieTest {
     @BeforeEach
     void setUp() {
         ConsumentCallbackTestEndpoint.ONTVANGEN_CONTENT_TYPES.clear();
+        ConsumentCallbackTestEndpoint.ONTVANGEN_BODIES.clear();
     }
 
     @Test
@@ -77,6 +79,22 @@ class ConsumentCallbackClientIntegratieTest {
         }
     }
 
+    // Wat de rest-client echt over de lijn stuurt, niet wat een losse ObjectMapper ervan maakt.
+    @Test
+    void verzondenBody_isHetCloudEventUitDeSpec() throws Exception {
+        UUID notificatieId = UUID.randomUUID();
+        try (ConsumentCallbackClient client = clientFactory.maakClient(ontvanger + "/204")) {
+            client.stuurStatusUpdate(event(notificatieId, StatusWaarde.TECHNICAL_FAILURE));
+        }
+
+        JsonNode body = objectMapper.readTree(ConsumentCallbackTestEndpoint.ONTVANGEN_BODIES.getFirst());
+        assertEquals("1.0", body.path("specversion").asText());
+        assertTrue(body.path("time").isTextual(), "time hoort een ISO-8601-string te zijn, geen getal");
+        assertDoesNotThrow(() -> OffsetDateTime.parse(body.path("time").asText()));
+        assertEquals(notificatieId.toString(), body.path("data").path("notificatieId").asText());
+        assertEquals("technical-failure", body.path("data").path("status").asText());
+    }
+
     // Een geweigerde verbinding is een transportfout: de adapter herhaalt, gooit niet en geeft op.
     @Test
     void geweigerdeVerbinding_wordtAlsTransportfoutAfgehandeld() {
@@ -103,10 +121,12 @@ class ConsumentCallbackClientIntegratieTest {
     }
 
     private static NotificatieStatusEvent event() {
-        UUID id = UUID.randomUUID();
+        return event(UUID.randomUUID(), StatusWaarde.DELIVERED);
+    }
 
+    private static NotificatieStatusEvent event(UUID id, StatusWaarde status) {
         return new NotificatieStatusEvent("1.0", UUID.randomUUID(), "nl.rijksoverheid.moz.nmc.notificatie.status",
                 "/api/nmc/v1/notificaties/" + id, "notificatie/" + id, OffsetDateTime.now(ZoneOffset.UTC),
-                "application/json", new NotificatieData(id, StatusWaarde.DELIVERED));
+                "application/json", new NotificatieData(id, status));
     }
 }
