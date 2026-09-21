@@ -19,7 +19,7 @@ class NotificatieTest {
     void constructor_zetStatusCreatedEnEersteGeschiedenisRecord() {
         Notificatie notificatie = new Notificatie(null);
 
-        assertEquals(StatusWaarde.CREATED, notificatie.getStatus().status());
+        assertEquals(StatusWaarde.CREATED, notificatie.getStatus());
         assertEquals(1, notificatie.getStatusGeschiedenis().size());
         assertEquals(StatusWaarde.CREATED, notificatie.getStatusGeschiedenis().get(0).status());
     }
@@ -38,8 +38,8 @@ class NotificatieTest {
         assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(2).status());
     }
 
-    // getStatus() leest de projectiekolommen, niet de geschiedenis:
-    // bewaakt dat die het láátste record volgen, niet per ongeluk het eerste.
+    // getStatus() leest de kopie op Notificatie, niet de geschiedenis: bewaakt dat die het láátste
+    // record volgt, niet per ongeluk het eerste.
     @Test
     void getStatus_retourneertLaatsteGeschiedenisRecordNietHetEerste() {
         Notificatie notificatie = new Notificatie(null);
@@ -49,8 +49,8 @@ class NotificatieTest {
 
         List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
         NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
-        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
-        assertEquals(laatste.tijdstip(), notificatie.getStatus().tijdstip());
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
+        assertEquals(laatste.geregistreerd(), notificatie.getLaatsteStatusUpdate());
     }
 
     // De gebeurtenistijd komt van de bron (NotifyNL), de registratietijd van de eigen klok. Voor een
@@ -77,7 +77,7 @@ class NotificatieTest {
 
         notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(40));
 
-        assertFalse(notificatie.getStatus().geregistreerd().isBefore(voorRegistratie));
+        assertFalse(notificatie.getLaatsteStatusUpdate().isBefore(voorRegistratie));
     }
 
     // De projectie volgt het laatst geregistreerde record, ook als de gebeurtenistijd ouder is dan
@@ -90,8 +90,8 @@ class NotificatieTest {
 
         notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, oudereGebeurtenistijd);
 
-        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
-        assertEquals(oudereGebeurtenistijd, notificatie.getStatus().tijdstip());
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
+        assertEquals(oudereGebeurtenistijd, notificatie.getStatusGeschiedenis().getLast().tijdstip());
         assertEquals(3, notificatie.getStatusGeschiedenis().size());
     }
 
@@ -138,7 +138,7 @@ class NotificatieTest {
         notificatie.markeerVerzonden(referentie);
 
         assertEquals(referentie, notificatie.getExternalReference());
-        assertEquals(StatusWaarde.SENDING, notificatie.getStatus().status());
+        assertEquals(StatusWaarde.SENDING, notificatie.getStatus());
     }
 
     // Een tweede koppeling zou de eerste overschrijven, waarna de delivery receipts van die eerste
@@ -158,7 +158,7 @@ class NotificatieTest {
         notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
 
         assertThrows(IllegalStateException.class, () -> notificatie.markeerVerzonden(UUID.randomUUID()));
-        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
     }
 
     @Test
@@ -181,7 +181,7 @@ class NotificatieTest {
         assertFalse(notificatie.verwerkTerugmelding(StatusWaarde.SENDING, null));
         assertFalse(notificatie.verwerkTerugmelding(StatusWaarde.CREATED, null));
 
-        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
         assertEquals(3, notificatie.getStatusGeschiedenis().size());
     }
 
@@ -195,7 +195,7 @@ class NotificatieTest {
 
         assertTrue(notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null));
 
-        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
+        assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
         assertEquals(5, notificatie.getStatusGeschiedenis().size());
     }
 
@@ -205,7 +205,7 @@ class NotificatieTest {
 
         notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
 
-        assertEquals(notificatie.getStatus().geregistreerd(), notificatie.getStatus().tijdstip());
+        assertEquals(notificatie.getLaatsteStatusUpdate(), notificatie.getStatusGeschiedenis().getLast().tijdstip());
     }
 
     @Test
@@ -221,8 +221,7 @@ class NotificatieTest {
         List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
         NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
 
-        assertEquals(laatste.status(), notificatie.getStatus().status());
-        assertEquals(laatste.tijdstip(), notificatie.getStatus().tijdstip());
-        assertEquals(laatste.geregistreerd(), notificatie.getStatus().geregistreerd());
+        assertEquals(laatste.status(), notificatie.getStatus());
+        assertEquals(laatste.geregistreerd(), notificatie.getLaatsteStatusUpdate());
     }
 }

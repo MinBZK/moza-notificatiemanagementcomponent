@@ -98,13 +98,11 @@ class V2MigratieTest {
 
     private static void bevestigProjectie(Connection verbinding, UUID id, String status) throws SQLException {
         try (PreparedStatement select = verbinding.prepareStatement(
-                "SELECT laatste_status, laatste_status_tijdstip, laatste_status_update, versie FROM notificatie WHERE id = ?")) {
+                "SELECT laatste_status, laatste_status_update, versie FROM notificatie WHERE id = ?")) {
             select.setObject(1, id);
             try (ResultSet rij = select.executeQuery()) {
                 assertTrue(rij.next());
                 assertEquals(status, rij.getString("laatste_status"));
-                assertEquals(AANGEMAAKT.toInstant(),
-                        rij.getObject("laatste_status_tijdstip", OffsetDateTime.class).toInstant());
                 assertEquals(AANGEMAAKT.toInstant(),
                         rij.getObject("laatste_status_update", OffsetDateTime.class).toInstant());
                 assertEquals(0, rij.getLong("versie"));

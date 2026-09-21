@@ -68,8 +68,8 @@ class NotificatiePersistentieTest {
             assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(3).status());
             assertEquals(laatsteTijdstip, geschiedenis.get(3).tijdstip());
 
-            assertEquals(StatusWaarde.DELIVERED, herladen.getStatus().status());
-            assertEquals(laatsteTijdstip, herladen.getStatus().tijdstip());
+            assertEquals(StatusWaarde.DELIVERED, herladen.getStatus());
+            assertEquals(laatsteTijdstip, herladen.getStatusGeschiedenis().getLast().tijdstip());
         });
     }
 
@@ -102,8 +102,8 @@ class NotificatiePersistentieTest {
             assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(1).status());
             assertEquals(StatusWaarde.PERMANENT_FAILURE, geschiedenis.get(2).status());
 
-            assertEquals(StatusWaarde.PERMANENT_FAILURE, herladen.getStatus().status());
-            assertEquals(faalTijdstip, herladen.getStatus().tijdstip());
+            assertEquals(StatusWaarde.PERMANENT_FAILURE, herladen.getStatus());
+            assertEquals(faalTijdstip, herladen.getStatusGeschiedenis().getLast().tijdstip());
         });
     }
 
@@ -127,9 +127,9 @@ class NotificatiePersistentieTest {
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie herladen = notificatieRepository.findById(id);
 
-            assertEquals(verwacht, herladen.getStatus().tijdstip());
-            assertEquals(ZoneOffset.UTC, herladen.getStatus().tijdstip().getOffset());
-            assertEquals(ZoneOffset.UTC, herladen.getStatus().geregistreerd().getOffset());
+            assertEquals(verwacht, herladen.getStatusGeschiedenis().getLast().tijdstip());
+            assertEquals(ZoneOffset.UTC, herladen.getStatusGeschiedenis().getLast().tijdstip().getOffset());
+            assertEquals(ZoneOffset.UTC, herladen.getLaatsteStatusUpdate().getOffset());
         });
     }
 
@@ -184,7 +184,7 @@ class NotificatiePersistentieTest {
         QuarkusTransaction.requiringNew().run(() -> {
             var em = notificatieRepository.getEntityManager();
             em.createNativeQuery("INSERT INTO notificatie (id, versie, external_reference, laatste_status, "
-                            + "laatste_status_tijdstip, laatste_status_update) VALUES (?1, 0, ?2, 'SENDING', ?3, ?3)")
+                            + "laatste_status_update) VALUES (?1, 0, ?2, 'SENDING', ?3)")
                     .setParameter(1, id).setParameter(2, referentie).setParameter(3, aangemaakt)
                     .executeUpdate();
             em.createNativeQuery("INSERT INTO notificatie_status (notificatie_id, volgnummer, status, tijdstip, "
@@ -201,7 +201,7 @@ class NotificatiePersistentieTest {
 
             assertEquals(List.of(StatusWaarde.SENDING, StatusWaarde.DELIVERED),
                     herladen.getStatusGeschiedenis().stream().map(NotificatieStatus::status).toList());
-            assertEquals(StatusWaarde.DELIVERED, herladen.getStatus().status());
+            assertEquals(StatusWaarde.DELIVERED, herladen.getStatus());
             assertEquals(aangemaakt, herladen.getAangemaakt());
         });
     }

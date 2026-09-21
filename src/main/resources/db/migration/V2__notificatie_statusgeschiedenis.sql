@@ -34,17 +34,14 @@ CREATE TABLE notificatie_status (
 INSERT INTO notificatie_status (notificatie_id, volgnummer, status, tijdstip, geregistreerd)
 SELECT id, 0, status, aangemaakt, aangemaakt FROM notificatie;
 
--- Projectie van het laatste geschiedenisrecord, bijgewerkt door Notificatie#registreerStatus.
+-- Status en registratietijd van het laatste geschiedenisrecord, bijgewerkt door Notificatie#registreerStatus.
 -- Eerst nullable, zodat bestaande rijen gevuld kunnen worden, daarna pas NOT NULL.
 ALTER TABLE notificatie ADD COLUMN laatste_status varchar(32);
-ALTER TABLE notificatie ADD COLUMN laatste_status_tijdstip timestamp(6) with time zone;
 ALTER TABLE notificatie ADD COLUMN laatste_status_update timestamp(6) with time zone;
 
-UPDATE notificatie SET laatste_status = status, laatste_status_tijdstip = aangemaakt,
-    laatste_status_update = aangemaakt;
+UPDATE notificatie SET laatste_status = status, laatste_status_update = aangemaakt;
 
 ALTER TABLE notificatie ALTER COLUMN laatste_status SET NOT NULL;
-ALTER TABLE notificatie ALTER COLUMN laatste_status_tijdstip SET NOT NULL;
 ALTER TABLE notificatie ALTER COLUMN laatste_status_update SET NOT NULL;
 ALTER TABLE notificatie ADD CONSTRAINT chk_notificatie_laatste_status CHECK (laatste_status IN (
     'SENDING', 'DELIVERED', 'PERMANENT_FAILURE', 'TEMPORARY_FAILURE', 'TECHNICAL_FAILURE', 'CREATED', 'ONBEKEND'

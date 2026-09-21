@@ -184,12 +184,13 @@ ertussen herhaalt. De geschiedenis wordt geordend op registratievolgorde
 daardoor blijft `getAangemaakt()` (het eerste record) betrouwbaar, ook als een
 receipt met een scheve of oude `completed_at` binnenkomt.
 
-De huidige status staat als projectie van het laatste record op `Notificatie`
-zelf, bijgewerkt via `markeerVerzonden` en `verwerkTerugmelding`: `laatste_status`,
-`laatste_status_tijdstip` (de gebeurtenistijd) en `laatste_status_update` (de
-registratietijd). `laatste_status_update` staat op de eigen klok, zodat een
-receipt met een oude `completed_at` het moment van de laatste registratie niet
-terugzet.
+De huidige status staat als kopie van het laatste record op `Notificatie` zelf,
+bijgewerkt via `markeerVerzonden` en `verwerkTerugmelding`: `laatste_status` en
+`laatste_status_update` (de registratietijd). Zo kunnen de retentiejob en
+lijstvragen op een index filteren in plaats van over `notificatie_status` te
+aggregeren. De gebeurtenistijd staat alleen in de geschiedenis.
+`laatste_status_update` staat op de eigen klok, zodat een receipt met een oude
+`completed_at` het moment van de laatste registratie niet terugzet.
 
 Welke overgangen zijn toegestaan wordt uitsluitend bepaald door
 `StatusWaarde#volgtOp`, dat `Notificatie#verwerkTerugmelding` toepast, niet door

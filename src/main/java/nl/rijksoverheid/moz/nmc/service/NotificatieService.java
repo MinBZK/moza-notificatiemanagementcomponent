@@ -84,7 +84,7 @@ public class NotificatieService {
                 .orElseThrow(() -> new NotificatieNietGevondenException(
                         "Geen notificatie gevonden voor NotifyNL-referentie " + notifyNlNotificatieId));
 
-        StatusWaarde huidigeStatus = notificatie.getStatus().status();
+        StatusWaarde huidigeStatus = notificatie.getStatus();
         StatusWaarde nieuweStatus = parseStatus(status, notifyNlNotificatieId, notificatie.getId());
 
         // NotifyNL herhaalt een callback bij elke niet-2xx, dus dezelfde receipt komt vaker binnen.

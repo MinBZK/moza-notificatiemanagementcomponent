@@ -1,12 +1,11 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
 import jakarta.persistence.CollectionTable;
-import jakarta.persistence.AttributeOverride;
-import jakarta.persistence.AttributeOverrides;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
-import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -36,15 +35,14 @@ public class Notificatie {
     @Column(name = "callback_url", length = 2048)
     private String callbackUrl;
 
-    // Kopie van het laatste geschiedenisrecord, zodat de huidige status geen MAX over
-    // notificatie_status vraagt. Alleen registreerStatus(NotificatieStatus) schrijft beide velden.
-    @Embedded
-    @AttributeOverrides({
-            @AttributeOverride(name = "status", column = @Column(name = "laatste_status", nullable = false, length = 32)),
-            @AttributeOverride(name = "tijdstip", column = @Column(name = "laatste_status_tijdstip", nullable = false)),
-            @AttributeOverride(name = "geregistreerd", column = @Column(name = "laatste_status_update", nullable = false))
-    })
-    private NotificatieStatus laatsteStatus;
+    // Kopie van status en registratietijd van het laatste geschiedenisrecord, zodat de retentiejob en
+    // lijstvragen op een index kunnen filteren. Alleen registreerStatus(NotificatieStatus) schrijft ze.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "laatste_status", nullable = false, length = 32)
+    private StatusWaarde laatsteStatus;
+
+    @Column(name = "laatste_status_update", nullable = false)
+    private OffsetDateTime laatsteStatusUpdate;
 
     // @OrderColumn en geen @OrderBy: zonder ordeningskolom is dit voor Hibernate een bag, en wordt
     // elke toevoeging een delete-all plus reinsert. De volgorde is daarmee registratievolgorde, niet
@@ -71,9 +69,13 @@ public class Notificatie {
         return callbackUrl;
     }
 
-    /** De huidige status met zijn gebeurtenis- en registratietijd. */
-    public NotificatieStatus getStatus() {
+    public StatusWaarde getStatus() {
         return laatsteStatus;
+    }
+
+    /** Registratietijd van de huidige status, op de eigen klok. */
+    public OffsetDateTime getLaatsteStatusUpdate() {
+        return laatsteStatusUpdate;
     }
 
     public UUID getExternalReference() {
@@ -98,9 +100,9 @@ public class Notificatie {
                     + this.externalReference);
         }
 
-        if (!StatusWaarde.SENDING.volgtOp(laatsteStatus.status())) {
+        if (!StatusWaarde.SENDING.volgtOp(laatsteStatus)) {
             throw new IllegalStateException("Notificatie " + id + " kan niet verzonden worden vanuit status "
-                    + laatsteStatus.status());
+                    + laatsteStatus);
         }
 
         this.externalReference = externalReference;
@@ -116,7 +118,7 @@ public class Notificatie {
     public boolean verwerkTerugmelding(StatusWaarde status, OffsetDateTime opgetreden) {
         Objects.requireNonNull(status, "status is verplicht");
 
-        if (!status.volgtOp(laatsteStatus.status())) {
+        if (!status.volgtOp(laatsteStatus)) {
             return false;
         }
 
@@ -130,7 +132,8 @@ public class Notificatie {
     // gebeurtenistijd weigeren zou een geschiedenis opleveren die laatsteStatus tegenspreekt.
     private void registreerStatus(NotificatieStatus record) {
         this.statusGeschiedenis.add(record);
-        this.laatsteStatus = record;
+        this.laatsteStatus = record.status();
+        this.laatsteStatusUpdate = record.geregistreerd();
     }
 
     // Tijdstip van het eerste geschiedenisrecord: de CREATED uit de constructor, of voor een rij uit

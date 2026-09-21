@@ -184,7 +184,7 @@ class NotifyNLCallbackControllerTest {
             assertEquals(OffsetDateTime.parse(COMPLETED_AT), laatste.tijdstip());
             // De registratietijd komt van de eigen klok, niet van NotifyNL: completed_at ligt in 2025,
             // de registratie is van nu.
-            assertTrue(notificatie.getStatus().geregistreerd().isAfter(OffsetDateTime.parse(COMPLETED_AT)));
+            assertTrue(notificatie.getLaatsteStatusUpdate().isAfter(OffsetDateTime.parse(COMPLETED_AT)));
         });
     }
 
@@ -285,7 +285,7 @@ class NotifyNLCallbackControllerTest {
 
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie notificatie = notificatieRepository.findByExternalReference(notifyNlId).orElseThrow();
-            assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus().status());
+            assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
         });
     }
 
