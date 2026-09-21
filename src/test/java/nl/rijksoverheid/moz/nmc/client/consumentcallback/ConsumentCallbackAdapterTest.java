@@ -3,12 +3,17 @@ package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
+import java.net.ConnectException;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
+import java.util.logging.Level;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -45,7 +50,7 @@ class ConsumentCallbackAdapterTest {
 
     @Test
     void stuurStatusUpdate_eerstePogingMislukt_stoptNaEenGeslaagdeHerpoging() {
-        doThrow(new ProcessingException("tijdelijk onbereikbaar"))
+        doThrow(transportfout())
                 .doNothing()
                 .when(callbackClient).stuurStatusUpdate(any());
 
@@ -79,12 +84,55 @@ class ConsumentCallbackAdapterTest {
         verify(callbackClient, times(1)).stuurStatusUpdate(any());
     }
 
+    // De rest-client pakt ook een fout in de NMC zelf in als ProcessingException. Zonder
+    // transportfout als oorzaak hoort die door te gaan naar StatusUpdateVerzender.
+    @Test
+    void stuurStatusUpdate_processingExceptionZonderTransportfout_ontsnaptZonderHerpoging() {
+        doThrow(new ProcessingException("serialisatie kapot", new IllegalStateException("geen serializer")))
+                .when(callbackClient).stuurStatusUpdate(any());
+
+        assertThrows(ProcessingException.class,
+                () -> adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback")));
+
+        verify(callbackClient, times(1)).stuurStatusUpdate(any());
+    }
+
+    @Test
+    void stuurStatusUpdate_timeout_wordtAlsTransportfoutHerhaald() {
+        doThrow(new ProcessingException(new TimeoutException("read timeout")))
+                .when(callbackClient).stuurStatusUpdate(any());
+
+        assertDoesNotThrow(() -> adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback")));
+
+        verify(callbackClient, times(3)).stuurStatusUpdate(any());
+    }
+
+    // Een interrupt tijdens de HTTP-aanroep zelf komt ingepakt terug, met de vlag al gewist.
+    @Test
+    void stuurStatusUpdate_onderbrokenTijdensDeAanroep_stoptHerstelDeVlagEnLogtOpError() {
+        doThrow(new ProcessingException(new InterruptedException()))
+                .when(callbackClient).stuurStatusUpdate(any());
+
+        List<String> fouten;
+        try (LogVanger vanger = LogVanger.van(ConsumentCallbackAdapter.class)) {
+            adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback"));
+            fouten = vanger.regelsOpNiveau(Level.SEVERE);
+
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+
+        assertEquals(1, fouten.size());
+        verify(callbackClient, times(1)).stuurStatusUpdate(any());
+    }
+
     // Een onderbroken thread stopt met herhalen en houdt zijn interrupt-vlag, zodat de aanroeper
     // die nog ziet.
     @Test
     void stuurStatusUpdate_onderbrokenTijdensWachten_stoptEnBehoudtDeInterruptVlag() {
         ConsumentCallbackAdapter adapterMetWachttijd = new ConsumentCallbackAdapter(url -> callbackClient, 60_000L);
-        doThrow(new ProcessingException("onbereikbaar")).when(callbackClient).stuurStatusUpdate(any());
+        doThrow(transportfout()).when(callbackClient).stuurStatusUpdate(any());
 
         Thread.currentThread().interrupt();
         try {
@@ -168,6 +216,10 @@ class ConsumentCallbackAdapterTest {
     @Test
     void opdracht_zonderCallbackUrl_isToegestaan() {
         assertDoesNotThrow(() -> new StatusUpdateOpdracht(UUID.randomUUID(), null, StatusWaarde.DELIVERED));
+    }
+
+    private static ProcessingException transportfout() {
+        return new ProcessingException(new ConnectException("Connection refused"));
     }
 
     private static StatusUpdateOpdracht opdracht(String callbackUrl) {

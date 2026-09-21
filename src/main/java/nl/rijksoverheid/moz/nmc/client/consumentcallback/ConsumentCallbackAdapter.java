@@ -1,15 +1,19 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
 import io.quarkus.logging.Log;
+import io.vertx.core.http.HttpClosedException;
+import io.vertx.core.http.StreamResetException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.RestClientDefinitionException;
 
+import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Stuurt de afleverstatus als CloudEvent naar de callback-URL van de Dienstverlener, ná de commit
@@ -22,6 +26,9 @@ import java.util.UUID;
 public class ConsumentCallbackAdapter {
 
     private static final int MAX_POGINGEN = 3;
+
+    // Begrenst het aflopen van een eventueel kringvormige oorzakenketen.
+    private static final int MAX_OORZAAKDIEPTE = 20;
 
     private final ConsumentCallbackClientFactory clientFactory;
     private final long initieleWachtMs;
@@ -72,34 +79,73 @@ public class ConsumentCallbackAdapter {
     private void verstuurMetHerpogingen(ConsumentCallbackClient client, NotificatieStatusEvent event,
                                         StatusUpdateOpdracht opdracht) {
         long wachtMs = initieleWachtMs;
-        for (int poging = 1; poging <= MAX_POGINGEN; poging++) {
+        for (int poging = 1; ; poging++) {
+            RuntimeException fout;
             try {
                 client.stuurStatusUpdate(event);
 
                 return;
-            } catch (WebApplicationException | ProcessingException e) {
-                // Alleen een niet-2xx-antwoord of een transportfout ligt aan de Dienstverlener.
-                if (poging == MAX_POGINGEN) {
-                    Log.errorf(e, "Consument-callback naar %s mislukt na %d pogingen — statusupdate %s voor "
-                            + "notificatie %s niet afgeleverd aan de Dienstverlener; er volgt geen automatische "
-                            + "herpoging", opdracht.callbackUrl(), MAX_POGINGEN, opdracht.status(), opdracht.notificatieId());
-                } else {
-                    Log.warnf(e, "Consument-callback naar %s voor notificatie %s (status %s) mislukt (poging %d/%d) "
-                            + "— nieuwe poging na %dms", opdracht.callbackUrl(), opdracht.notificatieId(),
-                            opdracht.status(), poging, MAX_POGINGEN, wachtMs);
-                    try {
-                        Thread.sleep(wachtMs);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        Log.warnf(ie, "Consument-callback naar %s onderbroken na poging %d — statusupdate %s voor "
-                                + "notificatie %s niet afgeleverd", opdracht.callbackUrl(), poging,
-                                opdracht.status(), opdracht.notificatieId());
+            } catch (WebApplicationException e) {
+                fout = e;
+            } catch (ProcessingException e) {
+                // De rest-client pakt elke fout in als ProcessingException, ook een fout in de NMC zelf;
+                // alleen een transportfout ligt aan de Dienstverlener.
+                if (heeftOorzaak(e, InterruptedException.class)) {
+                    meldOnderbroken(e, opdracht, poging);
 
-                        return;
-                    }
-                    wachtMs *= 2;
+                    return;
+                }
+
+                if (!heeftOorzaak(e, IOException.class, TimeoutException.class, HttpClosedException.class,
+                        StreamResetException.class)) {
+                    throw e;
+                }
+
+                fout = e;
+            }
+
+            if (poging == MAX_POGINGEN) {
+                Log.errorf(fout, "Consument-callback naar %s mislukt na %d pogingen — statusupdate %s voor "
+                        + "notificatie %s niet afgeleverd aan de Dienstverlener; er volgt geen automatische "
+                        + "herpoging", opdracht.callbackUrl(), MAX_POGINGEN, opdracht.status(), opdracht.notificatieId());
+
+                return;
+            }
+
+            Log.warnf(fout, "Consument-callback naar %s voor notificatie %s (status %s) mislukt (poging %d/%d) "
+                    + "— nieuwe poging na %dms", opdracht.callbackUrl(), opdracht.notificatieId(),
+                    opdracht.status(), poging, MAX_POGINGEN, wachtMs);
+            try {
+                Thread.sleep(wachtMs);
+            } catch (InterruptedException e) {
+                meldOnderbroken(e, opdracht, poging);
+
+                return;
+            }
+            wachtMs *= 2;
+        }
+    }
+
+    // ERROR: de statusupdate is hiermee definitief verloren.
+    private static void meldOnderbroken(Exception e, StatusUpdateOpdracht opdracht, int poging) {
+        Thread.currentThread().interrupt();
+        Log.errorf(e, "Consument-callback naar %s onderbroken bij poging %d — statusupdate %s voor notificatie %s "
+                + "niet afgeleverd", opdracht.callbackUrl(), poging, opdracht.status(), opdracht.notificatieId());
+    }
+
+    @SafeVarargs
+    private static boolean heeftOorzaak(Throwable fout, Class<? extends Throwable>... typen) {
+        Throwable oorzaak = fout.getCause();
+        for (int diepte = 0; oorzaak != null && diepte < MAX_OORZAAKDIEPTE; diepte++) {
+            for (Class<? extends Throwable> type : typen) {
+                if (type.isInstance(oorzaak)) {
+                    return true;
                 }
             }
+
+            oorzaak = oorzaak.getCause();
         }
+
+        return false;
     }
 }

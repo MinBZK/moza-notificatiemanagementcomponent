@@ -68,7 +68,7 @@ paths:
               requestBody:
                 required: true
                 content:
-                  application/json:
+                  application/cloudevents+json:
                     schema:
                       $ref: '#/components/schemas/NotificatieStatusEvent'
               responses:
@@ -148,7 +148,7 @@ paths:
               requestBody:
                 required: true
                 content:
-                  application/json:
+                  application/cloudevents+json:
                     schema:
                       $ref: '#/components/schemas/NotificatieStatusEvent'
               responses:
