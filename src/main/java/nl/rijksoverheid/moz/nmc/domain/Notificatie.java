@@ -35,8 +35,9 @@ public class Notificatie {
     @Column(name = "callback_url", length = 2048)
     private String callbackUrl;
 
-    // Kopie van status en registratietijd van het laatste geschiedenisrecord, zodat de retentiejob en
-    // lijstvragen op een index kunnen filteren. Alleen registreerStatus(NotificatieStatus) schrijft ze.
+    // Kopie van status en registratietijd van het laatste geschiedenisrecord, zodat een retentiejob en
+    // lijstvragen op notificatie filteren zonder over notificatie_status te aggregeren. Alleen
+    // registreerStatus(NotificatieStatus) schrijft ze.
     @Enumerated(EnumType.STRING)
     @Column(name = "laatste_status", nullable = false, length = 32)
     private StatusWaarde laatsteStatus;

@@ -23,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Persisteert en herlaadt een Notificatie in twee losse transacties: bewijst dat NotificatieStatus-
- * hydratatie, @OrderColumn-volgorde (registratievolgorde, kolom volgnummer) en de projectie in
- * getStatus() ook standhouden na een echte round-trip door de database,
+ * hydratatie, @OrderColumn-volgorde (registratievolgorde, kolom volgnummer) en de kopie in
+ * getStatus() en getLaatsteStatusUpdate() ook standhouden na een echte round-trip door de database,
  * niet alleen in-memory (zie NotificatieTest).
  */
 @QuarkusTest
@@ -40,10 +40,8 @@ class NotificatiePersistentieTest {
 
     @Test
     void notificatie_naHerladen_behoudtStatusGeschiedenisInVolgordeEnBlijftInvariantKloppen() {
-        // Expliciet, ver uiteenliggend tijdstip voor de laatste overgang i.p.v. terugvallen op
-        // opeenvolgende now()-aanroepen: die kunnen in dezelfde kloktik vallen, waardoor de
-        // assertie op de projectie verderop ook zou slagen als die niet meer bijgewerkt werd.
-        // Afgerond op microseconden: de kolom is timestamp(6), anders faalt de vergelijking met de
+        // Een ver uiteenliggende gebeurtenistijd voor de laatste overgang, zodat de assertie erop niet
+        // toevallig op een eerder record past. Afgerond op microseconden: de kolom is timestamp(6), anders faalt de vergelijking met de
         // herladen (afgeronde) waarde op de nanoseconden die de database toch niet bewaart.
         OffsetDateTime laatsteTijdstip = OffsetDateTime.now(ZoneOffset.UTC).plusDays(1).truncatedTo(ChronoUnit.MICROS);
 
@@ -69,7 +67,7 @@ class NotificatiePersistentieTest {
             assertEquals(laatsteTijdstip, geschiedenis.get(3).tijdstip());
 
             assertEquals(StatusWaarde.DELIVERED, herladen.getStatus());
-            assertEquals(laatsteTijdstip, herladen.getStatusGeschiedenis().getLast().tijdstip());
+            assertEquals(geschiedenis.get(3).geregistreerd(), herladen.getLaatsteStatusUpdate());
         });
     }
 

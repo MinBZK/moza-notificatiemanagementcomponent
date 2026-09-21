@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import io.quarkus.logging.Log;
 import io.vertx.core.http.HttpClosedException;
 import io.vertx.core.http.StreamResetException;
@@ -71,8 +72,20 @@ public class ConsumentCallbackAdapter {
                 "application/json",
                 new NotificatieData(opdracht.notificatieId(), opdracht.status()));
 
-        try (client) {
+        try {
             verstuurMetHerpogingen(client, event, opdracht);
+        } finally {
+            sluit(client, opdracht);
+        }
+    }
+
+    // Een fout bij het sluiten zegt niets over de aflevering; doorgooien zou een afgeleverde update
+    // in StatusUpdateVerzender als verloren laten melden.
+    private static void sluit(ConsumentCallbackClient client, StatusUpdateOpdracht opdracht) {
+        try {
+            client.close();
+        } catch (RuntimeException e) {
+            Log.warnf(e, "Callback-client voor notificatie %s niet netjes gesloten", opdracht.notificatieId());
         }
     }
 
@@ -96,7 +109,9 @@ public class ConsumentCallbackAdapter {
                     return;
                 }
 
-                if (!heeftOorzaak(e, IOException.class, TimeoutException.class, HttpClosedException.class,
+                // Jacksons JsonProcessingException is een IOException, maar een serialisatiefout ligt
+                // aan de NMC.
+                if (heeftOorzaak(e, JsonProcessingException.class) || !heeftOorzaak(e, IOException.class, TimeoutException.class, HttpClosedException.class,
                         StreamResetException.class)) {
                     throw e;
                 }

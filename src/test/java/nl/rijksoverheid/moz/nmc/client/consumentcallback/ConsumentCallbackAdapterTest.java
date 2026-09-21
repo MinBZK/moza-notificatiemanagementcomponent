@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
+import com.fasterxml.jackson.databind.JsonMappingException;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
+import java.io.IOException;
 import java.net.ConnectException;
 import java.util.List;
 import java.util.UUID;
@@ -66,9 +68,14 @@ class ConsumentCallbackAdapterTest {
         doThrow(new WebApplicationException(503))
                 .when(callbackClient).stuurStatusUpdate(any());
 
-        assertDoesNotThrow(() -> adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback")));
+        List<String> fouten;
+        try (LogVanger vanger = LogVanger.van(ConsumentCallbackAdapter.class)) {
+            assertDoesNotThrow(() -> adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback")));
+            fouten = vanger.regelsOpNiveau(Level.SEVERE);
+        }
 
         verify(callbackClient, times(3)).stuurStatusUpdate(any());
+        assertEquals(1, fouten.size(), "definitief verlies hoort op ERROR gelogd te worden");
     }
 
     // Alleen een fout aan de kant van de Dienstverlener wordt herhaald. Een fout in de NMC zelf
@@ -88,7 +95,19 @@ class ConsumentCallbackAdapterTest {
     // transportfout als oorzaak hoort die door te gaan naar StatusUpdateVerzender.
     @Test
     void stuurStatusUpdate_processingExceptionZonderTransportfout_ontsnaptZonderHerpoging() {
-        doThrow(new ProcessingException("serialisatie kapot", new IllegalStateException("geen serializer")))
+        doThrow(new ProcessingException(new IllegalStateException("geen serializer")))
+                .when(callbackClient).stuurStatusUpdate(any());
+
+        assertThrows(ProcessingException.class,
+                () -> adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback")));
+
+        verify(callbackClient, times(1)).stuurStatusUpdate(any());
+    }
+
+    // Een serialisatiefout komt als IOException-subtype binnen, maar is een fout in de NMC zelf.
+    @Test
+    void stuurStatusUpdate_serialisatiefout_ontsnaptZonderHerpoging() {
+        doThrow(new ProcessingException(JsonMappingException.fromUnexpectedIOE(new IOException("geen serializer"))))
                 .when(callbackClient).stuurStatusUpdate(any());
 
         assertThrows(ProcessingException.class,
@@ -134,9 +153,11 @@ class ConsumentCallbackAdapterTest {
         ConsumentCallbackAdapter adapterMetWachttijd = new ConsumentCallbackAdapter(url -> callbackClient, 60_000L);
         doThrow(transportfout()).when(callbackClient).stuurStatusUpdate(any());
 
+        List<String> fouten;
         Thread.currentThread().interrupt();
-        try {
+        try (LogVanger vanger = LogVanger.van(ConsumentCallbackAdapter.class)) {
             adapterMetWachttijd.stuurStatusUpdate(opdracht("https://omc.example.nl/callback"));
+            fouten = vanger.regelsOpNiveau(Level.SEVERE);
 
             assertTrue(Thread.currentThread().isInterrupted());
         } finally {
@@ -144,6 +165,22 @@ class ConsumentCallbackAdapterTest {
         }
 
         verify(callbackClient, times(1)).stuurStatusUpdate(any());
+        assertEquals(1, fouten.size(), "een onderbroken statusupdate is verloren en hoort op ERROR");
+    }
+
+    // Een fout bij het sluiten na een geslaagde aflevering mag de update niet als verloren laten melden.
+    @Test
+    void stuurStatusUpdate_closeGooitNaGeslaagdeAflevering_gooitNietEnLogtOpWarn() {
+        doThrow(new IllegalStateException("verbinding al dicht")).when(callbackClient).close();
+
+        List<String> waarschuwingen;
+        try (LogVanger vanger = LogVanger.van(ConsumentCallbackAdapter.class)) {
+            assertDoesNotThrow(() -> adapter.stuurStatusUpdate(opdracht("https://omc.example.nl/callback")));
+            waarschuwingen = vanger.regelsOpNiveau(Level.WARNING);
+        }
+
+        verify(callbackClient, times(1)).stuurStatusUpdate(any());
+        assertEquals(1, waarschuwingen.size());
     }
 
     // Elke statusupdate bouwt een eigen client; zonder close() lekken zijn HTTP-verbindingen, ook

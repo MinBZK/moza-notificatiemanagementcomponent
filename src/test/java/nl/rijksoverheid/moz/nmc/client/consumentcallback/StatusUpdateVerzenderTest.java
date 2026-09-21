@@ -6,12 +6,16 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.List;
 import java.util.UUID;
+import java.util.logging.Level;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -65,11 +69,16 @@ class StatusUpdateVerzenderTest {
         doThrow(new IllegalStateException("truststore niet leesbaar"))
                 .when(consumentCallbackAdapter).stuurStatusUpdate(any());
 
-        assertDoesNotThrow(() -> QuarkusTransaction.requiringNew().run(() ->
-                statusUpdateEvent.fire(opdracht("https://omc.example.nl/callback"))));
+        List<String> fouten;
+        try (LogVanger vanger = LogVanger.van(StatusUpdateVerzender.class)) {
+            assertDoesNotThrow(() -> QuarkusTransaction.requiringNew().run(() ->
+                    statusUpdateEvent.fire(opdracht("https://omc.example.nl/callback"))));
+            fouten = vanger.regelsOpNiveau(Level.SEVERE);
+        }
 
         verify(consumentCallbackAdapter).stuurStatusUpdate(any());
         Mockito.reset(consumentCallbackAdapter);
+        assertEquals(1, fouten.size(), "de fout hoort op ERROR in het log te staan, anders is hij weg");
     }
 
     private static StatusUpdateOpdracht opdracht(String callbackUrl) {

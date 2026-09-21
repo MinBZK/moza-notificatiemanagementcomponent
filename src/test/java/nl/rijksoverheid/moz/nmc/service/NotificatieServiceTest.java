@@ -149,9 +149,8 @@ class NotificatieServiceTest {
         service.verwerkAfleverstatus(UUID.randomUUID(), "sending", null);
 
         assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
-        // Niet alleen de afgeleide status, ook de geschiedenis zelf moet onaangeroerd blijven: een
-        // extra (genegeerde) record zou het laatste tijdstip verzetten, ook al bleef getStatus() dan
-        // toevallig DELIVERED.
+        // Niet alleen de gekopieerde status, ook de geschiedenis moet onaangeroerd blijven: een extra
+        // record zou laatsteStatusUpdate verzetten, ook al bleef getStatus() dan DELIVERED.
         assertEquals(aantalStatussenNaDelivered, notificatie.getStatusGeschiedenis().size());
     }
 

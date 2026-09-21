@@ -155,8 +155,9 @@ de logica die kiest tussen herverzending en contactherstel.
   prioriteit. Het datamodel moet een audittrail van statussen en pogingen per
   notificatie later wel zonder herontwerp toelaten. Het datamodel ondersteunt dat al:
   `Notificatie` houdt de volledige statusgeschiedenis bij (`notificatie_status`, één
-  rij per overgang) naast een projectie van de laatste status op `notificatie` zelf.
-  Die projectie is waar de code op stuurt; de geschiedenis is het audittrail.
+  rij per overgang) naast een kopie van status en registratietijd van het laatste
+  record op `notificatie` zelf. Die kopie is waar de code op stuurt; de geschiedenis
+  is het audittrail.
 - **`StatusWaarde`** kent `CREATED`, `SENDING`, `DELIVERED`, `PERMANENT_FAILURE`,
   `TEMPORARY_FAILURE` en `TECHNICAL_FAILURE`, naar de afleverstatussen die GOV.UK
   Notify voor e-mail terugmeldt, plus `ONBEKEND`. Dat laatste is de vangwaarde van
@@ -189,7 +190,7 @@ de logica die kiest tussen herverzending en contactherstel.
   terug op de eigen klok. `NotificatieStatus#geregistreerd` is wanneer de NMC de status
   vastlegde, op de eigen klok. Ze lopen uiteen omdat NotifyNL een mislukte callback tot
   5x met 5 minuten ertussen herhaalt. Wat op de eigen klok moet, gebruikt `geregistreerd`
-  (kolom `laatste_status_update`); `tijdstip` is het tijdstip voor het afleverbewijs en wordt
+  (kolom `geregistreerd`, gekopieerd naar `laatste_status_update`); `tijdstip` is het tijdstip voor het afleverbewijs en wordt
   nergens op gefilterd of gesorteerd. De volgorde van de geschiedenis komt uit
   `@OrderColumn` op `volgnummer`, niet uit een van beide tijdstippen.
 - **De statusupdate naar de Dienstverlener gaat pas ná de commit.**

@@ -80,8 +80,8 @@ class NotificatieTest {
         assertFalse(notificatie.getLaatsteStatusUpdate().isBefore(voorRegistratie));
     }
 
-    // De projectie volgt het laatst geregistreerde record, ook als de gebeurtenistijd ouder is dan
-    // die van de vorige status: de gebeurtenistijd komt van een externe klok en kan scheef zijn.
+    // De kopie volgt het laatst geregistreerde record, ook als de gebeurtenistijd ouder is dan die van
+    // de vorige status; laatsteStatusUpdate volgt de eigen klok, niet die oudere gebeurtenistijd.
     @Test
     void verwerkTerugmelding_metOudereGebeurtenistijdDanDeHuidige_volgtDeProjectieDeLaatsteRegistratie() {
         Notificatie notificatie = new Notificatie(null);
@@ -92,6 +92,7 @@ class NotificatieTest {
 
         assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
         assertEquals(oudereGebeurtenistijd, notificatie.getStatusGeschiedenis().getLast().tijdstip());
+        assertTrue(notificatie.getLaatsteStatusUpdate().isAfter(oudereGebeurtenistijd));
         assertEquals(3, notificatie.getStatusGeschiedenis().size());
     }
 
@@ -216,8 +217,8 @@ class NotificatieTest {
     }
 
     private static void bevestigProjectieVolgtGeschiedenis(Notificatie notificatie) {
-        // De geschiedenis is geordend op registratietijd, dus het laatste element is de laatste
-        // registratie — precies wat de projectie hoort te volgen.
+        // De geschiedenis is geordend op registratievolgorde (volgnummer), dus het laatste element is
+        // de laatste registratie — precies wat de kopie hoort te volgen.
         List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
         NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
 
