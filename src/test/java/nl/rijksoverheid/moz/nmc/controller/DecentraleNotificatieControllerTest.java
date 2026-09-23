@@ -53,7 +53,7 @@ class DecentraleNotificatieControllerTest {
         ArgumentCaptor<SendEmailRequest> verzoek = ArgumentCaptor.forClass(SendEmailRequest.class);
         Mockito.verify(sendAMessageApi).sendEmail(verzoek.capture());
         assertEquals("burger@example.nl", verzoek.getValue().getEmailAddress());
-        assertEquals("e72c75c5-e74c-4a78-8f2d-c06187a4d51c", verzoek.getValue().getTemplateId());
+        assertEquals("fee3eaf3-53ab-44ce-ac09-1ef7070b28a1", verzoek.getValue().getTemplateId());
     }
 
     @Test

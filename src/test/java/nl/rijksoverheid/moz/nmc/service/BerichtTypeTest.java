@@ -10,7 +10,7 @@ class BerichtTypeTest {
     @Test
     void vanNaam_stuurgroepAgenda_retourneertBerichtType() {
         assertEquals(BerichtType.STUURGROEP_AGENDA, BerichtType.vanNaam("Stuurgroep Agenda"));
-        assertEquals("e72c75c5-e74c-4a78-8f2d-c06187a4d51c", BerichtType.STUURGROEP_AGENDA.getTemplateId());
+        assertEquals("fee3eaf3-53ab-44ce-ac09-1ef7070b28a1", BerichtType.STUURGROEP_AGENDA.getTemplateId());
     }
 
     @Test
