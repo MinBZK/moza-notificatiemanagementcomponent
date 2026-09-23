@@ -13,6 +13,8 @@ public enum StatusWaarde {
     CREATED,
     // Vangt elke NotifyNL-status op die niet op één van de bovenstaande afbeeldt (zie
     // NotificatieService#parseStatus), zodat die niet stilzwijgend als een bekende status landt.
+    // Een tweede onbekende melding is voor volgtOp een herhaling en levert dus geen extra record en
+    // geen callback op; de ruwe waarde staat wel op ERROR in het log.
     ONBEKEND;
 
     /**

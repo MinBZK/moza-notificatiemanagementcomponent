@@ -173,7 +173,10 @@ de logica die kiest tussen herverzending en contactherstel.
   Notify voor e-mail terugmeldt, plus `ONBEKEND`. Dat laatste is de vangwaarde van
   `NotificatieService#parseStatus` voor een status die de NMC niet kent: die wordt op
   ERROR gelogd en als `ONBEKEND` vastgelegd, zodat hij niet als een bekende uitkomst
-  landt. `CREATED` en `SENDING` legt de NMC zelf vast; stuurt NotifyNL ze toch, dan
+  landt. Komt er daarna nog een onbekende waarde binnen, dan is dat voor `volgtOp` een
+  herhaling: geen extra record en geen callback, alleen de ERROR-regel met de ruwe waarde.
+  Of `onbekend` überhaupt naar de Dienstverlener teruggekoppeld moet worden, staat open in
+  MinBZK/MijnOverheidZakelijk#1132. `CREATED` en `SENDING` legt de NMC zelf vast; stuurt NotifyNL ze toch, dan
   weigert `volgtOp` ze. De `CHECK`-constraints in
   `V1__init_notificatie.sql` en `V2__notificatie_statusgeschiedenis.sql` sommen dezelfde waarden
   op; een nieuwe status vraagt dus ook een migratie.
