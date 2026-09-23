@@ -10,13 +10,13 @@ class BerichtTypeTest {
     @Test
     void vanNaam_stuurgroepAgenda_retourneertBerichtType() {
         assertEquals(BerichtType.STUURGROEP_AGENDA, BerichtType.vanNaam("Stuurgroep Agenda"));
-        assertEquals("e72c75c5-e74c-4a78-8f2d-c06187a4d51c", BerichtType.STUURGROEP_AGENDA.getTemplateId());
+        assertEquals("fee3eaf3-53ab-44ce-ac09-1ef7070b28a1", BerichtType.STUURGROEP_AGENDA.getTemplateId());
     }
 
     @Test
     void vanNaam_demoTemplate_retourneertBerichtType() {
         assertEquals(BerichtType.DEMO_TEMPLATE, BerichtType.vanNaam("Demo template"));
-        assertEquals("a1f49022-846c-420d-b7f7-dd7b328f1474", BerichtType.DEMO_TEMPLATE.getTemplateId());
+        assertEquals("09d9343b-0a55-43cc-887b-c36cb6c9123d", BerichtType.DEMO_TEMPLATE.getTemplateId());
     }
 
     @Test
