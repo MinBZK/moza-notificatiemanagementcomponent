@@ -158,6 +158,16 @@ de logica die kiest tussen herverzending en contactherstel.
   rij per overgang) naast een kopie van status en registratietijd van het laatste
   record op `notificatie` zelf. Die kopie is waar de code op stuurt; de geschiedenis
   is het audittrail.
+- **Een tweede schrijver van de statusgeschiedenis moet de `notificatie`-rij locken.**
+  Binnen Java schrijft alleen `Notificatie#registreerStatus` zowel `notificatie_status`
+  als de kopie (`laatste_status`, `laatste_status_update`), en `@Version` vangt twee
+  gelijktijdige schrijvers af. In de database koppelt geen constraint de kopie aan de rij
+  met het hoogste `volgnummer`. Wie er een schrijver bij zet (retentiejob, script,
+  migratie), leest de rij dus met `SELECT ... FOR UPDATE` — de retentiejob uit
+  MinBZK/moza-notificatiemanagementcomponent#46 doet dat met `FOR UPDATE SKIP LOCKED` — of
+  laat de kopie en de geschiedenis uit de pas lopen. Een
+  ontbrekend `volgnummer` is net zo fataal: `@OrderColumn` laadt daar een null voor in, en
+  `Notificatie` gooit dan een `IllegalStateException`.
 - **`StatusWaarde`** kent `CREATED`, `SENDING`, `DELIVERED`, `PERMANENT_FAILURE`,
   `TEMPORARY_FAILURE` en `TECHNICAL_FAILURE`, naar de afleverstatussen die GOV.UK
   Notify voor e-mail terugmeldt, plus `ONBEKEND`. Dat laatste is de vangwaarde van
