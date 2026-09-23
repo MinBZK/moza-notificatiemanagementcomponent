@@ -16,7 +16,7 @@ class BerichtTypeTest {
     @Test
     void vanNaam_demoTemplate_retourneertBerichtType() {
         assertEquals(BerichtType.DEMO_TEMPLATE, BerichtType.vanNaam("Demo template"));
-        assertEquals("a1f49022-846c-420d-b7f7-dd7b328f1474", BerichtType.DEMO_TEMPLATE.getTemplateId());
+        assertEquals("09d9343b-0a55-43cc-887b-c36cb6c9123d", BerichtType.DEMO_TEMPLATE.getTemplateId());
     }
 
     @Test
