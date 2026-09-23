@@ -54,6 +54,8 @@ Benodigde env-vars op die deployment:
 | `QUARKUS_FLYWAY_MIGRATE_AT_START` = `true` | Container draait prod-profiel waar dit `false` is; zonder migraties faalt boot op `schema-management=validate` |
 | `NOTIFY_API_KEY`, `NOTIFY_TEMPLATE_ID` | NotifyNL-integratie |
 | `QUARKUS_REST_CLIENT_NOTIFY_URL` | NotifyNL-endpoint; `application.properties` heeft geen default (leeg buiten `%test`), dus verplicht per deployomgeving |
+| `QUARKUS_REST_CLIENT_NOTIFY_TLS_CONFIGURATION_NAME` = `notify` | Alleen voor de Logius-demo van NotifyNL: laat de notify-client de TLS-configuratie `notify` hieronder gebruiken. Op omgevingen met een publiek vertrouwd NotifyNL-endpoint weglaten, dan geldt de standaard-truststore |
+| `QUARKUS_TLS_NOTIFY_TRUST_STORE_PEM_CERTS` = `/certs/notifynl-demo-certsign.pem` | Certificaatketen voor die demo (uit `src/main/jib/certs/`, zit in het image). De demo-server stuurt het tussencertificaat niet mee; dit bestand vult dat aan. Vervalt zodra Logius de keten herstelt |
 | `QUARKUS_REST_CLIENT_PROFIELSERVICE_URL` | Profielservice-endpoint; idem, geen default, verplicht per deployomgeving |
 | `HASH_PEPPER` | Keyed HMAC pepper (mag niet leeg in prod) |
 | `LOGBOEKDATAVERWERKING_ENABLED` | Verwerkingenlogging (LDV). `%prod` laat 'm leeg, dus verplicht per deployomgeving. **Voorlopig `false`**; op `true` zetten zodra de ClickHouse-config hieronder werkt |
