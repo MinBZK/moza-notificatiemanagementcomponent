@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 
 class NotifyNLVerzendAdapterTest {
@@ -78,8 +79,24 @@ class NotifyNLVerzendAdapterTest {
         Mockito.when(sendAMessageApi.sendEmail(any()))
                 .thenThrow(new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build()));
 
-        assertThrows(NotifyNLVerzendException.class,
+        NotifyNLVerzendException exception = assertThrows(NotifyNLVerzendException.class,
                 () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
+
+        assertTrue(exception.getMessage().contains("400"));
+    }
+
+    @Test
+    void verstuurEmail_notifyNlFoutMetBody_neemtReasonOpInHetBericht() {
+        String body = "{\"errors\":[{\"error\":\"BadRequestError\","
+                + "\"message\":\"Can't send to this recipient using a team-only API key\"}],\"status_code\":400}";
+        Mockito.when(sendAMessageApi.sendEmail(any()))
+                .thenThrow(new WebApplicationException(
+                        Response.status(Response.Status.BAD_REQUEST).entity(body).build()));
+
+        NotifyNLVerzendException exception = assertThrows(NotifyNLVerzendException.class,
+                () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
+
+        assertTrue(exception.getMessage().contains("team-only API key"));
     }
 
     @Test
