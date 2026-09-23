@@ -4,6 +4,7 @@ import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailRequest;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailRequestPersonalisation;
@@ -69,7 +70,18 @@ public class NotifyNLVerzendAdapter {
         try {
             return sendAMessageApi.sendEmail(notifyRequest);
         } catch (WebApplicationException e) {
-            throw new NotifyNLVerzendException("NotifyNL gaf status " + e.getResponse().getStatus() + " terug", e);
+            throw new NotifyNLVerzendException("NotifyNL gaf status " + e.getResponse().getStatus()
+                    + " terug: " + foutmelding(e.getResponse()), e);
+        }
+    }
+
+    // NotifyNL zet de reden van een afwijzing in de body. Zonder die reden is een 400 niet te herleiden.
+    private static String foutmelding(Response respons) {
+        try {
+            String body = respons.readEntity(String.class);
+            return body == null || body.isBlank() ? "geen body" : body;
+        } catch (RuntimeException e) {
+            return "body niet leesbaar";
         }
     }
 
