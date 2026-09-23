@@ -12,6 +12,7 @@ public class QuarkusConsumentCallbackClientFactory implements ConsumentCallbackC
     public ConsumentCallbackClient maakClient(String url) {
         return QuarkusRestClientBuilder.newBuilder()
                 .baseUri(URI.create(url))
+                .register(GeenSuccesAntwoordMapper.class)
                 .build(ConsumentCallbackClient.class);
     }
 }
