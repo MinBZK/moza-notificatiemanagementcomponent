@@ -25,6 +25,7 @@ import org.mockito.Mockito;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -195,7 +196,8 @@ class NotifyNLCallbackControllerTest {
     void verwerkAfleverstatus_receiptZonderTijdstippen_wordtVerwerkt() {
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
-        OffsetDateTime voorCallback = OffsetDateTime.now(ZoneOffset.UTC);
+        // Afgekapt op microseconden, net als NotificatieStatus; zie NotificatieTest.
+        OffsetDateTime voorCallback = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
         given()
                 .contentType(ContentType.JSON)
@@ -264,6 +266,32 @@ class NotifyNLCallbackControllerTest {
                 .statusCode(204);
 
         assertTrue(notificatieRepository.findByExternalReference(notifyNlId).isPresent());
+    }
+
+    // De statusupdate naar de Dienstverlener staat los van het vastleggen: mislukt die, dan krijgt
+    // NotifyNL alsnog 204 (anders herhaalt het die receipt) en blijft de statusgeschiedenis staan.
+    @Test
+    void verwerkAfleverstatus_mislukteConsumentCallback_geeftTochTweehonderdvierEnBewaartDeStatus() {
+        UUID notifyNlId = UUID.randomUUID();
+        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
+        Mockito.doThrow(new IllegalStateException("consument onbereikbaar"))
+                .when(consumentCallbackAdapter).stuurStatusUpdate(any());
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(aanvraag("https://omc.example.com/callback"))
+                .when().post("/api/nmc/v1/centraal/notificaties")
+                .then().statusCode(200);
+
+        stuurDeliveryReceipt(notifyNlId, "delivered");
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            Notificatie notificatie = notificatieRepository.findByExternalReference(notifyNlId).orElseThrow();
+
+            assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
+            assertEquals(3, notificatie.getStatusGeschiedenis().size());
+        });
+        Mockito.reset(consumentCallbackAdapter);
     }
 
     // Einde-tot-eind-tegenhanger van de unit test in NotificatieServiceTest: een laat aangekomen

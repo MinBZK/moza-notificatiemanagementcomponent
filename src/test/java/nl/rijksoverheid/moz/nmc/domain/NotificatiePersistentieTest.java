@@ -204,6 +204,33 @@ class NotificatiePersistentieTest {
         });
     }
 
+    // Een gat in volgnummer kan alleen buiten Hibernate om ontstaan; @OrderColumn laadt dan een null in
+    // de lijst. Dat hoort een melding op te leveren die de oorzaak noemt, geen NullPointerException.
+    @Test
+    void notificatieMetEenOntbrekendVolgnummer_meldtDatDeGeschiedenisOnvolledigIs() {
+        UUID id = QuarkusTransaction.requiringNew().call(() -> {
+            Notificatie notificatie = new Notificatie(null);
+            notificatie.markeerVerzonden(UUID.randomUUID());
+            notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
+            notificatieRepository.persist(notificatie);
+
+            return notificatie.getId();
+        });
+
+        QuarkusTransaction.requiringNew().run(() -> notificatieRepository.getEntityManager()
+                .createNativeQuery("DELETE FROM notificatie_status WHERE notificatie_id = ?1 AND volgnummer = 1")
+                .setParameter(1, id)
+                .executeUpdate());
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            Notificatie herladen = notificatieRepository.findById(id);
+
+            IllegalStateException fout = assertThrows(IllegalStateException.class, herladen::getStatusGeschiedenis);
+
+            assertTrue(fout.getMessage().contains("mist een volgnummer"), fout.getMessage());
+        });
+    }
+
     // Zonder @Version zouden twee gelijktijdige callbacks die dezelfde geschiedenis inlezen elkaars
     // statusregel geruisloos overschrijven. De test bootst dat na: een geneste requiringNew()-
     // transactie commit een eigen statusregel terwijl de buitenste de notificatie al had ingelezen.

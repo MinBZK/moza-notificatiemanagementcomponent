@@ -73,7 +73,9 @@ class NotificatieTest {
     @Test
     void verwerkTerugmelding_metOudeGebeurtenistijd_zetDeRegistratietijdNietTerug() {
         Notificatie notificatie = new Notificatie(null);
-        OffsetDateTime voorRegistratie = OffsetDateTime.now(ZoneOffset.UTC);
+        // Afgekapt op microseconden, net als NotificatieStatus: anders is dezelfde microseconde met
+        // nanoseconden erbij "later" en faalt de vergelijking willekeurig.
+        OffsetDateTime voorRegistratie = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
         notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(40));
 

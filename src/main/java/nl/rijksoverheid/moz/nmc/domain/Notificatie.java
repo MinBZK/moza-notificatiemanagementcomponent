@@ -36,8 +36,10 @@ public class Notificatie {
     private String callbackUrl;
 
     // Kopie van status en registratietijd van het laatste geschiedenisrecord, zodat een retentiejob en
-    // lijstvragen op notificatie filteren zonder over notificatie_status te aggregeren. Alleen
-    // registreerStatus(NotificatieStatus) schrijft ze.
+    // lijstvragen op notificatie filteren zonder over notificatie_status te aggregeren. Binnen Java
+    // schrijft alleen registreerStatus(NotificatieStatus) ze; geen constraint koppelt laatste_status aan
+    // het hoogste volgnummer, dus een tweede schrijver moet de notificatie-rij locken (SELECT ... FOR
+    // UPDATE).
     @Enumerated(EnumType.STRING)
     @Column(name = "laatste_status", nullable = false, length = 32)
     private StatusWaarde laatsteStatus;
@@ -145,16 +147,28 @@ public class Notificatie {
 
     // Vereist een actieve persistence context: statusGeschiedenis is een lazy @ElementCollection.
     public List<NotificatieStatus> getStatusGeschiedenis() {
+        bevestigVolledigeGeschiedenis();
+
         return List.copyOf(statusGeschiedenis);
     }
 
-    // Vangnet voor rijen die buiten Java zijn ontstaan: de database eist geen statusregel, en een lege
-    // lijst gaf anders een NoSuchElementException zonder oorzaak.
-    private NotificatieStatus eersteStatus() {
+    // Vangnet voor rijen die buiten Java zijn ontstaan: de database eist geen statusregel, en een
+    // ontbrekend volgnummer levert via @OrderColumn een null in de lijst op. Zonder deze controle
+    // wordt dat een NoSuchElementException of NullPointerException die de oorzaak niet noemt.
+    private void bevestigVolledigeGeschiedenis() {
         if (statusGeschiedenis.isEmpty()) {
             throw new IllegalStateException(
                     "Notificatie " + id + " heeft geen statusgeschiedenis, datamigratie onvolledig?");
         }
+
+        if (statusGeschiedenis.contains(null)) {
+            throw new IllegalStateException("Notificatie " + id + " mist een volgnummer in notificatie_status; "
+                    + "de statusgeschiedenis is buiten Hibernate om gewijzigd");
+        }
+    }
+
+    private NotificatieStatus eersteStatus() {
+        bevestigVolledigeGeschiedenis();
 
         return statusGeschiedenis.getFirst();
     }
