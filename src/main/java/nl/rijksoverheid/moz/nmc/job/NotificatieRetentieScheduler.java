@@ -11,7 +11,6 @@ import jakarta.enterprise.event.Observes;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.Kandidaat;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -56,33 +55,11 @@ public class NotificatieRetentieScheduler {
     private static final String TRIGGER_ID = "notificatie-retentie";
 
     private final NotificatieRepository notificatieRepository;
-    private final Duration bewaartermijn;
+    private final RetentieConfiguratie configuratie;
 
-    // Bovengrens op het aantal batches per run, tegen een onverwacht grote achterstand. De default
-    // ligt ruim boven elk realistisch volume: 10.000 batches is 10 miljoen notificaties in één run.
-    // Configureerbaar zodat een beheerder de run kan begrenzen zonder release, en zodat een test hem
-    // kan bereiken zonder tien miljoen rijen te planten.
-    private final int maxBatches;
-
-    public NotificatieRetentieScheduler(NotificatieRepository notificatieRepository,
-            @ConfigProperty(name = "notificatie.retentie.bewaartermijn") Duration bewaartermijn,
-            @ConfigProperty(name = "notificatie.retentie.max-batches", defaultValue = "10000") int maxBatches) {
-        if (maxBatches < 1) {
-            throw new IllegalArgumentException(
-                    "notificatie.retentie.max-batches moet minstens 1 zijn, maar was " + maxBatches);
-        }
-
-        this.maxBatches = maxBatches;
-        // Een niet-positieve termijn is één configuratie-typefout verwijderd van "verwijder de hele
-        // tabel bij de volgende run", dat hoort bij het opstarten te falen, niet stilletjes midden
-        // in de nacht.
-        if (bewaartermijn.isNegative() || bewaartermijn.isZero()) {
-            throw new IllegalArgumentException(
-                    "notificatie.retentie.bewaartermijn moet positief zijn, maar was " + bewaartermijn);
-        }
-
+    public NotificatieRetentieScheduler(NotificatieRepository notificatieRepository, RetentieConfiguratie configuratie) {
         this.notificatieRepository = notificatieRepository;
-        this.bewaartermijn = bewaartermijn;
+        this.configuratie = configuratie;
     }
 
     // concurrentExecution = SKIP geldt per JVM: bij N pods draaien er elke nacht N volledige scans,
@@ -92,7 +69,7 @@ public class NotificatieRetentieScheduler {
     @Scheduled(identity = TRIGGER_ID, cron = "{notificatie.retentie.cron}",
             timeZone = "Europe/Amsterdam", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     public void verwijderVerlopenNotificaties() {
-        OffsetDateTime grens = OffsetDateTime.now(ZoneOffset.UTC).minus(bewaartermijn);
+        OffsetDateTime grens = OffsetDateTime.now(ZoneOffset.UTC).minus(configuratie.bewaartermijn());
 
         int batches = 0;
         int totaalVerwijderd = 0;
@@ -107,7 +84,7 @@ public class NotificatieRetentieScheduler {
         // try/finally zodat de samenvatting ook wordt gelogd als een batch gooit; de batches daarvóór
         // zijn dan al gecommit. De exceptie ontsnapt daarna, zodat FailedExecution blijft vuren.
         try {
-            while (!klaar && batches < maxBatches) {
+            while (!klaar && batches < configuratie.maxBatches()) {
                 batches++;
                 BatchVoortgang voortgang = new BatchVoortgang(Math.max(0, MAX_MELDINGEN - gemeldeRegels));
                 boolean geslaagd = true;
@@ -168,7 +145,7 @@ public class NotificatieRetentieScheduler {
             if (!klaar) {
                 Log.errorf("Retentiejob: gestopt na de bovengrens van %d batches terwijl er nog "
                         + "verlopen notificaties waren (grens=%s), de rest blijft staan tot de "
-                        + "volgende run", maxBatches, grens);
+                        + "volgende run", configuratie.maxBatches(), grens);
             }
         } finally {
             if (mislukteBatchesTotaal > 0) {
@@ -233,6 +210,9 @@ public class NotificatieRetentieScheduler {
     // Houder die de voortgang van één batch vasthoudt, ook als de transactie terugrolt. Een
     // retourwaarde werkt daar niet: bij een rollback is die er niet, terwijl juist dan de geclaimde
     // ids en de al weggeschreven meldingen bekend moeten zijn.
+    //
+    // De schrijvers zijn private, want alleen verwijderBatch vult ze; de lezers zijn
+    // package-private omdat de test van de batchgrens ze ook afleest.
     static final class BatchVoortgang {
 
         private final int meldbudget;
@@ -295,6 +275,8 @@ public class NotificatieRetentieScheduler {
     // Vuurt voor élke @Scheduled-methode, vandaar de filtering op trigger-id. Zonder deze observer
     // wordt een overgeslagen run alleen op DEBUG gelogd, en blijft een vastgelopen run (lock-wait,
     // DB-failover) die de opruiming stopzet dus onzichtbaar.
+    // Package-private zodat NotificatieRetentieSchedulerUnitTest de filtering op trigger-id kan
+    // toetsen zonder een container te starten.
     void opOvergeslagenUitvoering(@Observes SkippedExecution event) {
         if (!TRIGGER_ID.equals(event.getExecution().getTrigger().getId())) {
             return;
@@ -307,6 +289,7 @@ public class NotificatieRetentieScheduler {
     // Zonder deze observer belandt een ontsnapte fout alleen onder de schedulerlogcategorie van
     // Quarkus en niet onder dit package, waar een operator op filtert. Al gecommitte batches blijven
     // verwijderd. Filtert op trigger-id om dezelfde reden als de observer hierboven.
+    // Package-private om dezelfde reden als de observer hierboven.
     void opMislukteUitvoering(@Observes FailedExecution event) {
         if (!TRIGGER_ID.equals(event.getExecution().getTrigger().getId())) {
             return;

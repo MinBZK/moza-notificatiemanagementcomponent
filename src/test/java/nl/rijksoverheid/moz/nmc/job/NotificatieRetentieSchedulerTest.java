@@ -96,7 +96,7 @@ class NotificatieRetentieSchedulerTest {
         UUID verlopenId = maakNotificatie(null, StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(3));
         UUID nietVerlopenId = maakNotificatie(null, StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
 
-        new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(2), 10_000).verwijderVerlopenNotificaties();
+        new NotificatieRetentieScheduler(notificatieRepository, new RetentieConfiguratie(Duration.ofDays(2), 10_000)).verwijderVerlopenNotificaties();
 
         QuarkusTransaction.requiringNew().run(() -> {
             assertTrue(notificatieRepository.findByIdOptional(verlopenId).isEmpty());
@@ -204,7 +204,7 @@ class NotificatieRetentieSchedulerTest {
     void verwijderVerlopenNotificaties_bovengrensBereikt_stoptEnLaatDeRestStaan() {
         plantVerlopenNotificaties(2500, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), StatusWaarde.DELIVERED);
 
-        new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(7), 2)
+        new NotificatieRetentieScheduler(notificatieRepository, new RetentieConfiguratie(Duration.ofDays(7), 2))
                 .verwijderVerlopenNotificaties();
 
         long overgebleven = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count());
@@ -599,7 +599,7 @@ class NotificatieRetentieSchedulerTest {
     private int verwijderBatchOp(OffsetDateTime grens) {
         NotificatieRetentieScheduler.BatchVoortgang voortgang =
                 new NotificatieRetentieScheduler.BatchVoortgang(0);
-        new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(7), 10_000)
+        new NotificatieRetentieScheduler(notificatieRepository, new RetentieConfiguratie(Duration.ofDays(7), 10_000))
                 .verwijderBatch(grens, List.of(), voortgang);
 
         return voortgang.verwijderd();
