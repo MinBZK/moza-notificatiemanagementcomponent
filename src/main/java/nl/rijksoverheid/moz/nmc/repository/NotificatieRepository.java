@@ -15,7 +15,7 @@ import java.util.UUID;
 public class NotificatieRepository implements PanacheRepositoryBase<Notificatie, UUID> {
 
     // Native SQL omdat JPQL geen lock-clausule met SKIP LOCKED kent. Zie
-    // NotificatieRetentieScheduler#verwijderBatch voor waarom die clausule er staat. %s is leeg of de
+    // RetentieBatch#verwijder voor waarom die clausule er staat. %s is leeg of de
     // uitsluiting hieronder, zodat beide varianten maar één keer beschreven staan.
     private static final String CLAIM_VERLOPEN_SQL = """
             SELECT id

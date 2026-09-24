@@ -2,9 +2,11 @@ package nl.rijksoverheid.moz.nmc.testhelper;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.persistence.EntityManager;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -19,14 +21,31 @@ public final class NotificatieFixtures {
     /** Een notificatie met één statusregel op volgnummer 0, zoals de V2-backfill hem achterlaat. */
     public static void voegNotificatieMetEenStatusregelToe(EntityManager entityManager, UUID id, UUID externalReference,
                                                            StatusWaarde status, OffsetDateTime tijdstip) {
-        entityManager.createNativeQuery("INSERT INTO notificatie (id, versie, external_reference, laatste_status, "
-                        + "laatste_status_update) VALUES (?1, 0, ?2, ?3, ?4)")
+        voegNotificatieToe(entityManager, id, externalReference, null,
+                List.of(NotificatieStatus.opEigenKlok(status, tijdstip)));
+    }
+
+    /**
+     * Een notificatie met een bewust terug- of vooruitgedateerde geschiedenis, die
+     * {@code Notificatie#registreerStatus} niet kan maken: die stempelt altijd de eigen klok van nu.
+     * De kopie op {@code notificatie} volgt het laatste record, net als in productie.
+     */
+    public static void voegNotificatieToe(EntityManager entityManager, UUID id, UUID externalReference,
+                                          String callbackUrl, List<NotificatieStatus> geschiedenis) {
+        NotificatieStatus laatste = geschiedenis.getLast();
+        entityManager.createNativeQuery("INSERT INTO notificatie (id, versie, external_reference, callback_url, "
+                        + "laatste_status, laatste_status_update) VALUES (?1, 0, ?2, ?3, ?4, ?5)")
                 .setParameter(1, id)
                 .setParameter(2, externalReference)
-                .setParameter(3, status.name())
-                .setParameter(4, tijdstip)
+                .setParameter(3, callbackUrl)
+                .setParameter(4, laatste.status().name())
+                .setParameter(5, laatste.geregistreerd())
                 .executeUpdate();
-        voegStatusregelToe(entityManager, id, 0, status, tijdstip);
+
+        for (int volgnummer = 0; volgnummer < geschiedenis.size(); volgnummer++) {
+            NotificatieStatus record = geschiedenis.get(volgnummer);
+            voegStatusregelToe(entityManager, id, volgnummer, record.status(), record.tijdstip());
+        }
     }
 
     public static int voegStatusregelToe(EntityManager entityManager, UUID notificatieId, int volgnummer,

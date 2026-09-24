@@ -67,6 +67,7 @@ public class NotificatieRetentieScheduler {
         int batches = 0;
         int totaalVerwijderd = 0;
         int totaalZonderEindstatus = 0;
+        int totaalOnbekend = 0;
         int gemeldeRegels = 0;
         int mislukteBatchesOpRij = 0;
         int mislukteBatchesTotaal = 0;
@@ -91,9 +92,11 @@ public class NotificatieRetentieScheduler {
                     mislukteBatchesOpRij++;
                     mislukteBatchesTotaal++;
                     overgeslagen.addAll(batch.geclaimd());
+                    boolean afbreken = mislukteBatchesOpRij >= MAX_MISLUKTE_BATCHES_OP_RIJ
+                            || mislukteBatchesTotaal >= MAX_MISLUKTE_BATCHES_TOTAAL;
                     Log.errorf(e, "Retentiejob: batch %d kon niet verwijderd worden (grens=%s, %d rijen "
-                            + "geclaimd) — deze rijen worden deze run overgeslagen en de job gaat door "
-                            + "met de volgende batch", batches, grens, batch.geclaimd().size());
+                            + "geclaimd) — deze rijen worden deze run overgeslagen%s", batches, grens,
+                            batch.geclaimd().size(), afbreken ? "" : " en de job gaat door met de volgende batch");
 
                     // Op rij mislukt wijst op een storing die de volgende batch net zo hard raakt.
                     // De teller gaat na elke geslaagde batch terug op nul, zodat losse
@@ -117,11 +120,16 @@ public class NotificatieRetentieScheduler {
 
                 // Buiten de try: ook een mislukte batch heeft zijn meldingen al weggeschreven, want
                 // RetentieBatch meldt vóór de DELETE. Niet meetellen zou het meldbudget laten lekken.
-                totaalVerwijderd += batch.verwijderd();
-                totaalZonderEindstatus += batch.zonderEindstatus();
                 gemeldeRegels += batch.gemeld();
 
                 if (geslaagd) {
+                    // Binnen deze tak: beide tellers worden in de transactie gezet, dus na een
+                    // rollback — ook een die pas bij de commit afgaat — staan ze er wel maar is er
+                    // niets verwijderd.
+                    totaalVerwijderd += batch.verwijderd();
+                    totaalZonderEindstatus += batch.zonderEindstatus();
+                    totaalOnbekend += batch.onbekend();
+
                     // Alleen opeenvolgende mislukkingen wijzen op een storing. Niet gedekt door een
                     // test: het verschil met een cumulatieve teller vraagt meer dan
                     // MAX_MISLUKTE_BATCHES_OP_RIJ verspreide mislukkingen, en dus een populatie die
@@ -153,9 +161,12 @@ public class NotificatieRetentieScheduler {
                         + "hierboven afzonderlijk gemeld", gemeldeRegels, totaalZonderEindstatus);
             }
 
+            // Het aantal met ONBEKEND staat er apart bij: die statussen zijn definitief, dus ze
+            // krijgen geen eigen WARN, maar ze zijn wel weg zonder dat de NMC de uitkomst kende.
             Log.infof("Retentiejob: %d verlopen notificatie(s) verwijderd in %d batch(es) (%d mislukt, "
-                    + "%d overgeslagen), waarvan %d zonder eindstatus (grens=%s)", totaalVerwijderd,
-                    batches, mislukteBatchesTotaal, overgeslagen.size(), totaalZonderEindstatus, grens);
+                    + "%d overgeslagen), waarvan %d zonder eindstatus en %d met status onbekend "
+                    + "(grens=%s)", totaalVerwijderd, batches, mislukteBatchesTotaal, overgeslagen.size(),
+                    totaalZonderEindstatus, totaalOnbekend, grens);
         }
     }
 

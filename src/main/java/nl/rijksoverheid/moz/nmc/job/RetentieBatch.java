@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.job;
 
 import io.quarkus.logging.Log;
+import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.Kandidaat;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 
@@ -28,11 +29,17 @@ class RetentieBatch {
     private final int meldbudget;
 
     private final List<UUID> geclaimd = new ArrayList<>();
+    private boolean gebruikt;
     private int zonderEindstatus;
+    private int onbekend;
     private int gemeld;
     private int verwijderd;
 
     RetentieBatch(NotificatieRepository notificatieRepository, int meldbudget) {
+        if (meldbudget < 0) {
+            throw new IllegalArgumentException("meldbudget mag niet negatief zijn, maar was " + meldbudget);
+        }
+
         this.notificatieRepository = notificatieRepository;
         this.meldbudget = meldbudget;
     }
@@ -49,6 +56,13 @@ class RetentieBatch {
      * @param uitgesloten ids die een eerdere batch in deze run heeft overgeslagen
      */
     void verwijder(OffsetDateTime grens, List<UUID> uitgesloten) {
+        // Een tweede aanroep zou geclaimd optellen en de tellers overschrijven, waarna vol() en de
+        // samenvatting van de scheduler niet meer kloppen.
+        if (gebruikt) {
+            throw new IllegalStateException("Deze RetentieBatch is al uitgevoerd");
+        }
+
+        gebruikt = true;
         List<UUID> ids = notificatieRepository.claimVerlopen(grens, GROOTTE, uitgesloten);
         geclaimd.addAll(ids);
 
@@ -56,7 +70,9 @@ class RetentieBatch {
             return;
         }
 
-        List<Kandidaat> kandidaten = notificatieRepository.zoekKandidaten(ids).stream()
+        List<Kandidaat> alle = notificatieRepository.zoekKandidaten(ids);
+        onbekend = (int) alle.stream().filter(kandidaat -> kandidaat.status() == StatusWaarde.ONBEKEND).count();
+        List<Kandidaat> kandidaten = alle.stream()
                 .filter(kandidaat -> !kandidaat.status().isDefinitief())
                 .toList();
         zonderEindstatus = kandidaten.size();
@@ -81,12 +97,22 @@ class RetentieBatch {
         return List.copyOf(geclaimd);
     }
 
+    /**
+     * Of deze batch vol zat; zo niet, dan is de achterstand voor deze pod op. SKIP LOCKED mag minder
+     * rijen teruggeven dan gevraagd wanneer een andere pod ze vasthoudt — dat is dan diens werk en
+     * gaat in dezelfde nacht weg.
+     */
     boolean vol() {
         return geclaimd.size() == GROOTTE;
     }
 
     int zonderEindstatus() {
         return zonderEindstatus;
+    }
+
+    /** Verwijderd met status ONBEKEND: definitief, maar de NMC kende de uitkomst nooit. */
+    int onbekend() {
+        return onbekend;
     }
 
     int gemeld() {

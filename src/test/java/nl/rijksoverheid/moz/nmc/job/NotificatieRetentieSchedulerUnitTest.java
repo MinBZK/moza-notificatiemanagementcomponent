@@ -8,6 +8,9 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
@@ -109,6 +112,24 @@ class NotificatieRetentieSchedulerUnitTest {
         when(uitvoering.getTrigger()).thenReturn(trigger);
 
         return uitvoering;
+    }
+
+    // RetentieBatch houdt zijn uitkomst zelf vast; een tweede aanroep zou geclaimd optellen en de
+    // tellers overschrijven, waarna vol() en de samenvatting van de scheduler niet meer kloppen.
+    @Test
+    void retentieBatch_tweeKeerUitvoeren_weigertDeTweede() {
+        RetentieBatch batch = new RetentieBatch(notificatieRepository, 0);
+        batch.verwijder(OffsetDateTime.now(ZoneOffset.UTC), List.of());
+
+        assertThrows(IllegalStateException.class,
+                () -> batch.verwijder(OffsetDateTime.now(ZoneOffset.UTC), List.of()));
+    }
+
+    // Een negatief meldbudget zou pas opvallen als subList(0, gemeld) omvalt, met een melding die
+    // niets over de oorzaak zegt.
+    @Test
+    void retentieBatch_metEenNegatiefMeldbudget_weigert() {
+        assertThrows(IllegalArgumentException.class, () -> new RetentieBatch(notificatieRepository, -1));
     }
 
     // Een bovengrens van 0 zou betekenen dat de lus nooit draait en de tabel stilzwijgend doorgroeit.
