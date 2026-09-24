@@ -10,6 +10,7 @@ import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.Kandidaat;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -114,7 +115,7 @@ class NotificatieRetentieSchedulerTest {
         int aantalRijen = 1005;
         OffsetDateTime verlopenTijdstip = OffsetDateTime.now(ZoneOffset.UTC).minusDays(31);
 
-        plantVerlopenNotificaties(aantalRijen, verlopenTijdstip, "DELIVERED");
+        plantVerlopenNotificaties(aantalRijen, verlopenTijdstip, StatusWaarde.DELIVERED);
 
         scheduler.verwijderVerlopenNotificaties();
 
@@ -132,7 +133,7 @@ class NotificatieRetentieSchedulerTest {
         int aantalRijen = 1005;
         OffsetDateTime verlopenTijdstip = OffsetDateTime.now(ZoneOffset.UTC).minusDays(31);
 
-        plantVerlopenNotificaties(aantalRijen, verlopenTijdstip, "DELIVERED");
+        plantVerlopenNotificaties(aantalRijen, verlopenTijdstip, StatusWaarde.DELIVERED);
 
         // grens is "nu", niet exact verlopenTijdstip: een gelijke grens loopt tegen
         // afrondingsverschil in de timestamp(6)-kolom aan (opgeslagen waarde vs. in-memory waarde
@@ -151,7 +152,7 @@ class NotificatieRetentieSchedulerTest {
     // vangt een mislukte batch af — dus wat hier valt is de isolatie, niet de exceptie.
     @Test
     void verwijderVerlopenNotificaties_alsEenLatereBatchFaalt_blijftDeEerdereBatchVerwijderd() {
-        plantVerlopenNotificaties(1500, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
+        plantVerlopenNotificaties(1500, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), StatusWaarde.DELIVERED);
 
         AtomicInteger batches = new AtomicInteger();
         doAnswer(invocation -> {
@@ -176,7 +177,7 @@ class NotificatieRetentieSchedulerTest {
     // lus slaat de geclaimde ids nu over en gaat door.
     @Test
     void verwijderVerlopenNotificaties_alsEenBatchFaalt_gaatDoorMetDeVolgende() {
-        plantVerlopenNotificaties(1005, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
+        plantVerlopenNotificaties(1005, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), StatusWaarde.DELIVERED);
 
         AtomicInteger batches = new AtomicInteger();
         doAnswer(invocation -> {
@@ -201,7 +202,7 @@ class NotificatieRetentieSchedulerTest {
     // gaan tot alles weg is, en wat blijft staan blijft staan.
     @Test
     void verwijderVerlopenNotificaties_bovengrensBereikt_stoptEnLaatDeRestStaan() {
-        plantVerlopenNotificaties(2500, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
+        plantVerlopenNotificaties(2500, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), StatusWaarde.DELIVERED);
 
         new NotificatieRetentieScheduler(notificatieRepository, Duration.ofDays(7), 2)
                 .verwijderVerlopenNotificaties();
@@ -217,7 +218,7 @@ class NotificatieRetentieSchedulerTest {
     // rondes op dezelfde 1000 rijen, met een ERROR die naar het verkeerde probleem wijst.
     @Test
     void verwijderVerlopenNotificaties_alsDeDeleteMinderVerwijdertDanGeclaimd_slaatDieRijenOver() {
-        plantVerlopenNotificaties(1005, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
+        plantVerlopenNotificaties(1005, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), StatusWaarde.DELIVERED);
 
         AtomicInteger aanroepen = new AtomicInteger();
         doAnswer(invocation -> {
@@ -243,7 +244,7 @@ class NotificatieRetentieSchedulerTest {
     // telde de samenvatting minder dan er detailregels onder staan.
     @Test
     void verwijderVerlopenNotificaties_alsEenBatchFaalt_teltDeAlGeschrevenMeldingenMee() {
-        plantVerlopenNotificaties(1005, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "SENDING");
+        plantVerlopenNotificaties(1005, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), StatusWaarde.SENDING);
 
         AtomicInteger aanroepen = new AtomicInteger();
         doAnswer(invocation -> {
@@ -269,7 +270,7 @@ class NotificatieRetentieSchedulerTest {
     // Een run waarin batches mislukken mag qua samenvatting niet op een geslaagde run lijken.
     @Test
     void verwijderVerlopenNotificaties_alsEenBatchFaalt_meldtDatInDeSamenvatting() {
-        plantVerlopenNotificaties(1005, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
+        plantVerlopenNotificaties(1005, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), StatusWaarde.DELIVERED);
 
         AtomicInteger aanroepen = new AtomicInteger();
         doAnswer(invocation -> {
@@ -296,7 +297,7 @@ class NotificatieRetentieSchedulerTest {
     // gijzelen.
     @Test
     void verwijderVerlopenNotificaties_alsBatchesBlijvenFalen_breektDeRunAf() {
-        plantVerlopenNotificaties(6000, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "DELIVERED");
+        plantVerlopenNotificaties(6000, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), StatusWaarde.DELIVERED);
 
         doAnswer(invocation -> {
             throw new RuntimeException("structurele storing");
@@ -369,7 +370,7 @@ class NotificatieRetentieSchedulerTest {
     // volledig, zodat een dashboard dat daarop telt niet stilzwijgend afkapt.
     @Test
     void verwijderVerlopenNotificaties_metMeerRijenDanDeMeldgrens_kaptDetailregelsAfMaarNietDeTelling() {
-        plantVerlopenNotificaties(150, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), "SENDING");
+        plantVerlopenNotificaties(150, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), StatusWaarde.SENDING);
 
         List<String> meldingen;
         try (LogVanger vanger = LogVanger.van(NotificatieRetentieScheduler.class)) {
@@ -436,7 +437,7 @@ class NotificatieRetentieSchedulerTest {
         int aantalNotificaties = 1005;
         OffsetDateTime verlopenTijdstip = OffsetDateTime.now(ZoneOffset.UTC).minusDays(31);
 
-        plantVerlopenNotificaties(aantalNotificaties, verlopenTijdstip, "SENDING", "DELIVERED");
+        plantVerlopenNotificaties(aantalNotificaties, verlopenTijdstip, StatusWaarde.SENDING, StatusWaarde.DELIVERED);
 
         scheduler.verwijderVerlopenNotificaties();
 
@@ -542,10 +543,8 @@ class NotificatieRetentieSchedulerTest {
         UUID id = maakNotificatie(null, StatusWaarde.CREATED, OffsetDateTime.now(ZoneOffset.UTC));
         assertTrue(aantalNotificatieStatussenVoor(id) > 0);
 
-        QuarkusTransaction.requiringNew().run(() -> notificatieRepository.getEntityManager()
-                .createNativeQuery("DELETE FROM notificatie WHERE id = ?1")
-                .setParameter(1, id)
-                .executeUpdate());
+        QuarkusTransaction.requiringNew().run(() ->
+                NotificatieFixtures.verwijderNotificatie(notificatieRepository.getEntityManager(), id));
 
         assertEquals(0L, aantalNotificatieStatussenVoor(id));
     }
@@ -590,37 +589,8 @@ class NotificatieRetentieSchedulerTest {
         }
     }
 
-    // De geschiedenis leeft in notificatie_status, een aparte tabel van notificatie (zie
-    // V2__notificatie_statusgeschiedenis.sql), vandaar een apart INSERT...SELECT per status. RANDOM_UUID() in
-    // losse statements zou niet corresponderen tussen beide tabellen; een deterministisch UUID
-    // afgeleid van SYSTEM_RANGE's rijnummer (X) laat alle inserts voor dezelfde rij naar dezelfde
-    // gegenereerde notificatie-id verwijzen. De projectiekolommen op notificatie worden hier
-    // rechtstreeks gezet (de laatst meegegeven status geldt als de laatste), omdat deze fixture
-    // Notificatie#registreerStatus bewust overslaat.
-    private void plantVerlopenNotificaties(int aantalRijen, OffsetDateTime tijdstip, String... statussen) {
-        String idExpressie = "CAST(('00000000-0000-0000-0000-' || LPAD(CAST(X AS VARCHAR), 12, '0')) AS UUID)";
-        String laatsteStatus = statussen[statussen.length - 1];
-        // volgnummer is de @OrderColumn van Notificatie#statusGeschiedenis en nul-gebaseerd; deze
-        // fixture schrijft rechtstreeks SQL en moet hem dus zelf meetellen.
-        int[] volgnummerHouder = {0};
-        QuarkusTransaction.requiringNew().run(() -> {
-            notificatieRepository.getEntityManager()
-                    .createNativeQuery("INSERT INTO notificatie (id, laatste_status, laatste_status_update) SELECT "
-                            + idExpressie + ", '" + laatsteStatus + "', ?1 FROM SYSTEM_RANGE(1, ?2)")
-                    .setParameter(1, tijdstip)
-                    .setParameter(2, aantalRijen)
-                    .executeUpdate();
-            for (String status : statussen) {
-                notificatieRepository.getEntityManager()
-                        .createNativeQuery("INSERT INTO notificatie_status (notificatie_id, volgnummer, status, tijdstip, "
-                                + "geregistreerd) SELECT " + idExpressie + ", ?3, '" + status + "', ?1, ?1 "
-                                + "FROM SYSTEM_RANGE(1, ?2)")
-                        .setParameter(1, tijdstip)
-                        .setParameter(2, aantalRijen)
-                        .setParameter(3, volgnummerHouder[0]++)
-                        .executeUpdate();
-            }
-        });
+    private void plantVerlopenNotificaties(int aantalRijen, OffsetDateTime tijdstip, StatusWaarde... statussen) {
+        NotificatieFixtures.plantNotificaties(notificatieRepository.getEntityManager(), aantalRijen, tijdstip, statussen);
     }
 
     // Een rechtstreeks geconstrueerde scheduler, niet het @Inject-veld: dat laatste is een
@@ -639,9 +609,7 @@ class NotificatieRetentieSchedulerTest {
     // via JPQL: de collection-tabel wordt hier rechtstreeks met SQL geteld, ook zodat deze telling
     // blijft werken nadat de bijbehorende Notificatie al is verwijderd.
     private long aantalNotificatieStatussenVoor(UUID notificatieId) {
-        return QuarkusTransaction.requiringNew().call(() -> ((Number) notificatieRepository.getEntityManager()
-                .createNativeQuery("SELECT COUNT(*) FROM notificatie_status WHERE notificatie_id = ?1")
-                .setParameter(1, notificatieId)
-                .getSingleResult()).longValue());
+        return QuarkusTransaction.requiringNew().call(() ->
+                NotificatieFixtures.telStatusregels(notificatieRepository.getEntityManager(), notificatieId));
     }
 }

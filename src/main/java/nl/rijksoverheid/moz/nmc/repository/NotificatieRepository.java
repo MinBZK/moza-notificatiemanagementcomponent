@@ -15,26 +15,19 @@ import java.util.UUID;
 public class NotificatieRepository implements PanacheRepositoryBase<Notificatie, UUID> {
 
     // Native SQL omdat JPQL geen lock-clausule met SKIP LOCKED kent. Zie
-    // NotificatieRetentieScheduler#verwijderBatch voor waarom die clausule er staat.
+    // NotificatieRetentieScheduler#verwijderBatch voor waarom die clausule er staat. %s is leeg of de
+    // uitsluiting hieronder, zodat beide varianten maar één keer beschreven staan.
     private static final String CLAIM_VERLOPEN_SQL = """
             SELECT id
               FROM notificatie
-             WHERE laatste_status_update <= ?1
+             WHERE laatste_status_update <= ?1%s
              ORDER BY laatste_status_update
              FETCH FIRST ?2 ROWS ONLY
                FOR UPDATE SKIP LOCKED
             """;
 
-    // Variant die eerder mislukte rijen overslaat; zie de batchlus in de scheduler.
-    private static final String CLAIM_VERLOPEN_MET_UITSLUITING_SQL = """
-            SELECT id
-              FROM notificatie
-             WHERE laatste_status_update <= ?1
-               AND id NOT IN (?3)
-             ORDER BY laatste_status_update
-             FETCH FIRST ?2 ROWS ONLY
-               FOR UPDATE SKIP LOCKED
-            """;
+    // Slaat rijen over die in een eerdere batch mislukten; zie de batchlus in de scheduler.
+    private static final String UITSLUITING_SQL = "\n   AND id NOT IN (?3)";
 
     public Optional<Notificatie> findByExternalReference(UUID externalReference) {
         return find(Notificatie_.EXTERNAL_REFERENCE, externalReference).singleResultOptional();
@@ -52,7 +45,7 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
         // addScalar is nodig omdat een native query een uuid-kolom per dialect anders oplevert:
         // PostgreSQL een UUID, H2 een byte[].
         NativeQuery<UUID> query = getEntityManager()
-                .createNativeQuery(uitgesloten.isEmpty() ? CLAIM_VERLOPEN_SQL : CLAIM_VERLOPEN_MET_UITSLUITING_SQL)
+                .createNativeQuery(CLAIM_VERLOPEN_SQL.formatted(uitgesloten.isEmpty() ? "" : UITSLUITING_SQL))
                 .unwrap(NativeQuery.class)
                 .addScalar("id", UUID.class)
                 .setParameter(1, grens)
@@ -70,15 +63,12 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
      * <p>
      * Een JPQL-constructorexpressie en geen kolommen uit de native query hierboven: de expressie
      * noemt de recordcomponenten op type, zodat een verkeerde ariteit of een niet-passend type een
-     * fout op de query zelf geeft in plaats van een {@code ClassCastException} verderop. Dit is een
-     * gewone {@code createQuery}, dus die controle valt bij het uitvoeren, niet bij het opstarten.
-     * De {@code ORDER BY} staat er omdat {@code IN} geen volgorde garandeert.
+     * fout op de query zelf geeft in plaats van een {@code ClassCastException} verderop. De
+     * {@code ORDER BY} staat er omdat {@code IN} geen volgorde garandeert.
      */
     public List<Kandidaat> zoekKandidaten(List<UUID> ids) {
         return getEntityManager()
-                .createQuery("SELECT new nl.rijksoverheid.moz.nmc.repository.Kandidaat(n.id, n.externalReference, "
-                        + "n.laatsteStatus, n.laatsteStatusUpdate) FROM Notificatie n "
-                        + "WHERE n.id IN :ids ORDER BY n.laatsteStatusUpdate", Kandidaat.class)
+                .createNamedQuery(Notificatie.ZOEK_KANDIDATEN, Kandidaat.class)
                 .setParameter("ids", ids)
                 .getResultList();
     }
@@ -92,7 +82,7 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
      */
     public int verwijderOpId(List<UUID> ids) {
         return getEntityManager()
-                .createQuery("DELETE FROM Notificatie n WHERE n.id IN :ids")
+                .createNamedQuery(Notificatie.VERWIJDER_OP_ID)
                 .setParameter("ids", ids)
                 .executeUpdate();
     }

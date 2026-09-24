@@ -5,6 +5,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.OptimisticLockException;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.hibernate.StaleStateException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -146,12 +147,8 @@ class NotificatiePersistentieTest {
         });
 
         assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() ->
-                notificatieRepository.getEntityManager()
-                        .createNativeQuery("INSERT INTO notificatie_status "
-                                + "(notificatie_id, volgnummer, status, tijdstip, geregistreerd) "
-                                + "VALUES (?1, 0, 'SENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
-                        .setParameter(1, id)
-                        .executeUpdate()),
+                        NotificatieFixtures.voegStatusregelToe(notificatieRepository.getEntityManager(), id, 0,
+                                StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC))),
                 "volgnummer 0 is al bezet door de CREATED uit de constructor");
     }
 
@@ -179,17 +176,8 @@ class NotificatiePersistentieTest {
         UUID id = UUID.randomUUID();
         UUID referentie = UUID.randomUUID();
         OffsetDateTime aangemaakt = OffsetDateTime.parse("2026-01-15T10:00:00Z");
-        QuarkusTransaction.requiringNew().run(() -> {
-            var em = notificatieRepository.getEntityManager();
-            em.createNativeQuery("INSERT INTO notificatie (id, versie, external_reference, laatste_status, "
-                            + "laatste_status_update) VALUES (?1, 0, ?2, 'SENDING', ?3)")
-                    .setParameter(1, id).setParameter(2, referentie).setParameter(3, aangemaakt)
-                    .executeUpdate();
-            em.createNativeQuery("INSERT INTO notificatie_status (notificatie_id, volgnummer, status, tijdstip, "
-                            + "geregistreerd) VALUES (?1, 0, 'SENDING', ?2, ?2)")
-                    .setParameter(1, id).setParameter(2, aangemaakt)
-                    .executeUpdate();
-        });
+        QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.voegNotificatieMetEenStatusregelToe(
+                notificatieRepository.getEntityManager(), id, referentie, StatusWaarde.SENDING, aangemaakt));
 
         QuarkusTransaction.requiringNew().run(() ->
                 assertTrue(notificatieRepository.findById(id).verwerkTerugmelding(StatusWaarde.DELIVERED, null)));
@@ -217,10 +205,8 @@ class NotificatiePersistentieTest {
             return notificatie.getId();
         });
 
-        QuarkusTransaction.requiringNew().run(() -> notificatieRepository.getEntityManager()
-                .createNativeQuery("DELETE FROM notificatie_status WHERE notificatie_id = ?1 AND volgnummer = 1")
-                .setParameter(1, id)
-                .executeUpdate());
+        QuarkusTransaction.requiringNew().run(() ->
+                NotificatieFixtures.verwijderStatusregel(notificatieRepository.getEntityManager(), id, 1));
 
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie herladen = notificatieRepository.findById(id);

@@ -158,6 +158,13 @@ de logica die kiest tussen herverzending en contactherstel.
   rij per overgang) naast een kopie van status en registratietijd van het laatste
   record op `notificatie` zelf. Die kopie is waar de code op stuurt; de geschiedenis
   is het audittrail.
+- **Queries staan in `NotificatieRepository`, niet in een entiteit of een service.** De
+  JPQL van de retentiejob staat als `@NamedQuery` op `Notificatie`, want JPA kent geen
+  andere plek en Hibernate controleert ze daar bij het opstarten; uitvoeren gebeurt
+  uitsluitend in de repository. Entiteiten krijgen geen finders en geen native SQL, en
+  `getEntityManager()` verlaat de repository niet. Tests mogen wél rechtstreeks SQL
+  schrijven wanneer ze een toestand nodig hebben die Hibernate niet kan maken; die
+  statements staan gebundeld in `NotificatieFixtures`.
 - **Een tweede schrijver van de statusgeschiedenis moet de `notificatie`-rij locken.**
   Binnen Java schrijft alleen `Notificatie#registreerStatus` zowel `notificatie_status`
   als de kopie (`laatste_status`, `laatste_status_update`), en `@Version` vangt twee

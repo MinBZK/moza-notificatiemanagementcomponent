@@ -7,6 +7,7 @@ import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -51,11 +52,8 @@ class BewaartermijnConfiguratieTest {
             return notificatie.getId();
         });
 
-        QuarkusTransaction.requiringNew().run(() -> notificatieRepository.getEntityManager()
-                .createNativeQuery("UPDATE notificatie SET laatste_status_update = ?1 WHERE id = ?2")
-                .setParameter(1, OffsetDateTime.now(ZoneOffset.UTC).minus(ouderdom))
-                .setParameter(2, id)
-                .executeUpdate());
+        QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.verzetLaatsteStatusUpdate(
+                notificatieRepository.getEntityManager(), id, OffsetDateTime.now(ZoneOffset.UTC).minus(ouderdom)));
 
         return id;
     }
