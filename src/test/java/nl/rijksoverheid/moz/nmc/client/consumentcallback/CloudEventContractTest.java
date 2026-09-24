@@ -82,10 +82,28 @@ class CloudEventContractTest {
         return verschil;
     }
 
+    // Een overgang zonder reden, zoals naar bezorgd, is de meest voorkomende callback. Een expliciete
+    // null voor reden zou geen waarde uit de Reden-enum zijn en de validatie bij de Dienstverlener breken.
+    @org.junit.jupiter.api.Test
+    void cloudEvent_zonderReden_laatHetVeldWegEnVoldoetAanHetSchema() throws Exception {
+        JsonPath spec = given().queryParam("format", "JSON")
+                .when().get("/q/openapi")
+                .then().statusCode(200)
+                .extract().jsonPath();
+        JsonNode json = objectMapper.valueToTree(verstuurdEvent(NotificatieStatus.BEZORGD, null));
+
+        bevestigVelden(json.get("data"), spec.getMap("components.schemas.NotificatieStatusData"));
+        assertTrue(json.get("data").get("reden") == null, "reden hoort weg te blijven, niet null te zijn");
+    }
+
     private static NotificatieStatusEvent verstuurdEvent(NotificatieStatus naar) {
+        return verstuurdEvent(naar, Reden.ONBEREIKBAAR);
+    }
+
+    private static NotificatieStatusEvent verstuurdEvent(NotificatieStatus naar, Reden reden) {
         ConsumentCallbackClient client = Mockito.mock(ConsumentCallbackClient.class);
         new ConsumentCallbackAdapter(url -> client, 0L).stuurStatusUpdate(new StatusUpdateOpdracht(UUID.randomUUID(),
-                "https://omc.example.nl/callback", 3L, NotificatieStatus.VERZONDEN, naar, Reden.ONBEREIKBAAR, OffsetDateTime.parse("2026-01-15T10:00:00Z")));
+                "https://omc.example.nl/callback", 3L, NotificatieStatus.VERZONDEN, naar, reden, OffsetDateTime.parse("2026-01-15T10:00:00Z")));
 
         ArgumentCaptor<NotificatieStatusEvent> captor = ArgumentCaptor.forClass(NotificatieStatusEvent.class);
         verify(client).stuurStatusUpdate(captor.capture());

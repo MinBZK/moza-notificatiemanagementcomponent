@@ -44,7 +44,7 @@ public class Overgangsfunctie {
         entityManager.persist(notificatie);
         entityManager.flush();
 
-        return schrijfEvent(notificatie, null, null);
+        return schrijfEvent(notificatie, null);
     }
 
     /**
@@ -74,7 +74,7 @@ public class Overgangsfunctie {
 
         entityManager.flush();
 
-        return OvergangUitkomst.uitgevoerd(van, schrijfEvent(notificatie, van, reden));
+        return OvergangUitkomst.uitgevoerd(van, schrijfEvent(notificatie, van));
     }
 
     /**
@@ -93,9 +93,11 @@ public class Overgangsfunctie {
         return notificatie;
     }
 
-    private Event schrijfEvent(Notificatie notificatie, NotificatieStatus van, Reden reden) {
+    // Status en reden komen van de rij, zodat het event nooit afwijkt van wat er vastligt; bij een
+    // herverzending wordt de reden van de aanroeper niet op de rij gezet.
+    private Event schrijfEvent(Notificatie notificatie, NotificatieStatus van) {
         Event event = new Event(notificatie.getId(), notificatie.getVersie(), van,
-                notificatie.getStatus(), reden);
+                notificatie.getStatus(), notificatie.getReden());
         eventRepository.persist(event);
 
         return event;

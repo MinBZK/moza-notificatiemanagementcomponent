@@ -131,7 +131,8 @@ class OvergangsfunctieTest {
     void voerUit_herverzending_houdtStatusEnReden() {
         UUID id = aangenomenNotificatieMetStatus(NotificatieStatus.VERZONDEN);
 
-        QuarkusTransaction.requiringNew().run(() -> overgangsfunctie.voerUit(id, NotificatieStatus.VERZONDEN, null));
+        // Een meegegeven reden mag bij een herverzending niet op het event belanden als hij niet op de rij staat.
+        QuarkusTransaction.requiringNew().run(() -> overgangsfunctie.voerUit(id, NotificatieStatus.VERZONDEN, Reden.TECHNISCH));
 
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie herladen = notificatieRepository.findById(id);
@@ -139,6 +140,7 @@ class OvergangsfunctieTest {
             assertEquals(NotificatieStatus.VERZONDEN, herladen.getStatus());
             assertNull(herladen.getReden());
             assertEquals(1, herladen.getVersie());
+            assertNull(eventRepository.findByNotificatie(id).getLast().getReden());
         });
     }
 

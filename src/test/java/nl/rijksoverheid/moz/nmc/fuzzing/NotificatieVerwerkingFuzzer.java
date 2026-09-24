@@ -71,7 +71,7 @@ import java.util.logging.Logger;
  *
  * <p>A Jackson error, a constraint violation and an {@link HttpProblem} are expected outcomes.
  * Findings: any other exception, a 5xx while every stand-in the route reaches succeeds, and a
- * notificatie that is kept after a delivered callback or deleted after a failed one.
+ * delivery receipt that deletes the notificatie or takes it back to before the send.
  */
 public class NotificatieVerwerkingFuzzer {
 
@@ -86,7 +86,8 @@ public class NotificatieVerwerkingFuzzer {
     private static final String[] IDENTIFICATIE_TYPES = {"BSN", "KVK", "RSIN", "INVALID"};
     private static final String[] BERICHT_TYPES = {"Stuurgroep Agenda", "Demo template", "onbekend"};
     private static final String[] AFLEVER_STATUSSEN = {
-        "delivered", "permanent-failure", "temporary-failure", "technical-failure", "onbekend"
+        "delivered", "permanent-failure", "temporary-failure", "technical-failure", "onbekend",
+        "created", "sending", "pending"
     };
 
     // One shape per reject branch of CallbackUrlValidator: scheme, userinfo, IPv4- and
@@ -126,7 +127,7 @@ public class NotificatieVerwerkingFuzzer {
     private static final GeheugenOvergangsfunctie overgangsfunctie = new GeheugenOvergangsfunctie();
 
     /**
-     * Stand-in for the CDI {@code Event} that NotificatieService fires. In production
+     * Stand-in for the CDI {@code Event} that ReceiptVerwerker fires. In production
      * StatusUpdateVerzender observes it at AFTER_SUCCESS so the callback runs after the commit;
      * there is no CDI container here, so this delivers straight to the adapter. That keeps the
      * consument-callback path in reach of the fuzzer, which is the point of wiring it at all.
@@ -141,12 +142,12 @@ public class NotificatieVerwerkingFuzzer {
 
         @Override
         public <U extends StatusUpdateOpdracht> CompletionStage<U> fireAsync(U opdracht) {
-            throw new UnsupportedOperationException("NotificatieService fires synchronously");
+            throw new UnsupportedOperationException("ReceiptVerwerker fires synchronously");
         }
 
         @Override
         public <U extends StatusUpdateOpdracht> CompletionStage<U> fireAsync(U opdracht, NotificationOptions options) {
-            throw new UnsupportedOperationException("NotificatieService fires synchronously");
+            throw new UnsupportedOperationException("ReceiptVerwerker fires synchronously");
         }
 
         @Override

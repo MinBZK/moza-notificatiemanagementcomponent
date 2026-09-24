@@ -361,6 +361,9 @@ components:
 
     NotificatieStatusData:
       type: object
+      description: >-
+        Eén statusovergang. `van` ontbreekt bij het eerste event van een notificatie en
+        `reden` ontbreekt bij een overgang zonder reden, zoals naar `bezorgd`.
       required:
         - naar
         - versie
