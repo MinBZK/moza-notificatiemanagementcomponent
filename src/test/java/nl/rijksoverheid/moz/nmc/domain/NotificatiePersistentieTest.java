@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Persisteert en herlaadt een Notificatie in twee losse transacties: bewijst dat NotificatieStatus-
+ * Persisteert en herlaadt een Notificatie in twee losse transacties: bewijst dat StatusRegistratie-
  * hydratatie, @OrderColumn-volgorde (registratievolgorde, kolom volgnummer) en de kopie in
  * getStatus() en getLaatsteStatusUpdate() ook standhouden na een echte round-trip door de database,
  * niet alleen in-memory (zie NotificatieTest).
@@ -58,7 +58,7 @@ class NotificatiePersistentieTest {
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie herladen = notificatieRepository.findById(id);
 
-            List<NotificatieStatus> geschiedenis = herladen.getStatusGeschiedenis();
+            List<StatusRegistratie> geschiedenis = herladen.getStatusGeschiedenis();
             assertEquals(4, geschiedenis.size());
             assertEquals(StatusWaarde.CREATED, geschiedenis.get(0).status());
             assertEquals(StatusWaarde.SENDING, geschiedenis.get(1).status());
@@ -94,7 +94,7 @@ class NotificatiePersistentieTest {
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie herladen = notificatieRepository.findById(id);
 
-            List<NotificatieStatus> geschiedenis = herladen.getStatusGeschiedenis();
+            List<StatusRegistratie> geschiedenis = herladen.getStatusGeschiedenis();
             assertEquals(3, geschiedenis.size());
             assertEquals(StatusWaarde.CREATED, geschiedenis.get(0).status());
             assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(1).status());
@@ -196,7 +196,7 @@ class NotificatiePersistentieTest {
             Notificatie herladen = notificatieRepository.findById(id);
 
             assertEquals(List.of(StatusWaarde.SENDING, StatusWaarde.DELIVERED),
-                    herladen.getStatusGeschiedenis().stream().map(NotificatieStatus::status).toList());
+                    herladen.getStatusGeschiedenis().stream().map(StatusRegistratie::status).toList());
             assertEquals(StatusWaarde.DELIVERED, herladen.getStatus());
             assertEquals(aangemaakt, herladen.getAangemaakt());
         });
@@ -261,7 +261,7 @@ class NotificatiePersistentieTest {
         // De kern van het probleem: de statusregel van de gecommitte transactie mag niet stilzwijgend
         // verdwenen zijn.
         QuarkusTransaction.requiringNew().run(() -> {
-            List<NotificatieStatus> geschiedenis = notificatieRepository.findById(id).getStatusGeschiedenis();
+            List<StatusRegistratie> geschiedenis = notificatieRepository.findById(id).getStatusGeschiedenis();
 
             assertEquals(2, geschiedenis.size());
             assertEquals(StatusWaarde.DELIVERED, geschiedenis.get(1).status());
