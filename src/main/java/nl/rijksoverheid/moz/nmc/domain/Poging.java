@@ -15,8 +15,8 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Eén verzending van een notificatie bij NotifyNL. Het id gaat als {@code reference} mee in het
- * verzendverzoek, zodat een receipt ook zonder NotifyNL-id bij de poging terechtkomt.
+ * Eén verzending van een notificatie bij NotifyNL. Een receipt wordt via het NotifyNL-id aan de
+ * poging gekoppeld.
  */
 @Entity
 public class Poging {
