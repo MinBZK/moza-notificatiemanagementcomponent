@@ -40,8 +40,6 @@ public class NotificatieRetentieScheduler {
     // achterstand overschrijdt de JTA-transactietimeout van 60s en rolt dan alles terug.
     private static final int BATCH_GROOTTE = 1000;
 
-
-
     // Een enkele mislukte batch is niet fataal, een structurele storing (DB weg, schema kapot) wel:
     // zonder deze grens probeert de run het tot maxBatches toe opnieuw.
     private static final int MAX_MISLUKTE_BATCHES_OP_RIJ = 5;
