@@ -6,7 +6,6 @@ import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OrderColumn;
@@ -22,8 +21,9 @@ import java.util.UUID;
 @Entity
 public class Notificatie {
 
+    // Toegekend bij het aanmaken en niet bij de persist: de versleutelde velden zijn aan deze id
+    // gebonden en worden vóór de eerste opslag gezet.
     @Id
-    @GeneratedValue
     private UUID id;
 
     @Version
@@ -55,11 +55,24 @@ public class Notificatie {
     @OrderColumn(name = "volgnummer")
     private List<NotificatieStatus> statusGeschiedenis = new ArrayList<>();
 
+    @Column(name = "ontvanger_versleuteld")
+    private byte[] ontvangerVersleuteld;
+
+    @Column(name = "personalisation_versleuteld")
+    private byte[] personalisationVersleuteld;
+
+    @Column(name = "sleutel_gewrapt")
+    private byte[] sleutelGewrapt;
+
+    @Column(name = "kek_versie")
+    private Integer kekVersie;
+
     protected Notificatie() {
         // Voor JPA
     }
 
     public Notificatie(String callbackUrl) {
+        this.id = UUID.randomUUID();
         this.callbackUrl = callbackUrl;
         registreerStatus(NotificatieStatus.opEigenKlok(StatusWaarde.CREATED, OffsetDateTime.now(ZoneOffset.UTC)));
     }
@@ -171,5 +184,17 @@ public class Notificatie {
         bevestigVolledigeGeschiedenis();
 
         return statusGeschiedenis.getFirst();
+    }
+
+    public void bewaarVersleuteldeGegevens(VersleuteldeGegevens gegevens) {
+        Objects.requireNonNull(gegevens, "gegevens is verplicht");
+        this.ontvangerVersleuteld = gegevens.ontvangerVersleuteld();
+        this.personalisationVersleuteld = gegevens.personalisationVersleuteld();
+        this.sleutelGewrapt = gegevens.sleutelGewrapt();
+        this.kekVersie = gegevens.kekVersie();
+    }
+
+    public VersleuteldeGegevens getVersleuteldeGegevens() {
+        return new VersleuteldeGegevens(ontvangerVersleuteld, personalisationVersleuteld, sleutelGewrapt, kekVersie);
     }
 }

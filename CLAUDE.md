@@ -375,7 +375,7 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
 
 ## Configuratie en secrets
 
-Drie waarden staan leeg in `application.properties` en **laten de applicatie niet
+Deze waarden staan leeg in `application.properties` en **laten de applicatie niet
 starten als ze ontbreken**:
 
 | Property | Gebruikt door |
@@ -383,6 +383,8 @@ starten als ze ontbreken**:
 | `notify.api-key` | `NotifyNLVerzendAdapter`: JWT voor NotifyNL |
 | `notify.callback.bearer-token` | `NotifyNLCallbackAuthFilter`: controle op de NotifyNL-callback |
 | `hash.pepper` | `HashHelper`: HMAC-SHA-256 om BSN/KVK/RSIN en e-mailadressen te pseudonimiseren voor het logboek |
+| `nmc.kek.huidige-versie` | `ConfigKekProvider`: KEK-versie waarmee `Sleutelbeheer` nieuwe sleutels per notificatie wrapt |
+| `nmc.kek.versie.<n>` | `ConfigKekProvider`: KEK per versie, base64 van 32 bytes; die van de huidige versie is verplicht, oudere zolang er rijen met die `kek_versie` zijn |
 
 Lokaal horen ze in een niet-ingecheckte `src/main/resources/application-dev.properties`,
 nooit in `application.properties`. Onder `%test` staan dummywaarden.
