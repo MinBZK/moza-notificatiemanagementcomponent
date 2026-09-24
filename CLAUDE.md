@@ -374,6 +374,14 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
   `notificatie.aangemaakt`.
 - **SQL moet op H2 én PostgreSQL draaien.** Dev en prod gebruiken PostgreSQL 18,
   tests H2.
+- **Een index op een gevulde tabel gaat met `CREATE INDEX CONCURRENTLY`.** Een gewone
+  `CREATE INDEX` neemt op PostgreSQL een `SHARE`-lock: `SELECT` blijft werken, maar elke
+  `INSERT`, `UPDATE` en `DELETE` wacht tot de index klaar is, bij miljoenen rijen minuten.
+  `CONCURRENTLY` kan niet in een transactie, dus zo'n statement krijgt een eigen migratie
+  met `-- flyway:executeInTransaction=false`, en H2 kent het niet, dus de testsuite dekt
+  dat script niet. Faalt de bouw halverwege, dan blijft er een `INVALID` index achter die
+  handmatig gedropt moet worden. `V3__notificatie_retentie.sql` doet het bewust zonder:
+  die index is er vóór de eerste productiedata.
 - **Houd de migratie en de entity gelijk.** Buiten tests staat
   `schema-management.strategy=validate`: wijkt een entity af van het gemigreerde
   schema, dan start de applicatie niet. Controleer een nieuwe migratie tegen
