@@ -3,8 +3,10 @@ package nl.rijksoverheid.moz.nmc.domain;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
+import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -24,10 +26,16 @@ class PogingPersistentieTest {
     @Inject
     PogingRepository pogingRepository;
 
+    @Inject
+    EventRepository eventRepository;
+
+    @Inject
+    Overgangsfunctie overgangsfunctie;
+
     @BeforeEach
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
-            pogingRepository.deleteAll();
+            eventRepository.deleteAll();
             notificatieRepository.deleteAll();
         });
     }
@@ -79,7 +87,7 @@ class PogingPersistentieTest {
     private UUID nieuweNotificatie() {
         return QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(null);
-            notificatieRepository.persist(notificatie);
+            overgangsfunctie.neemAan(notificatie);
 
             return notificatie.getId();
         });

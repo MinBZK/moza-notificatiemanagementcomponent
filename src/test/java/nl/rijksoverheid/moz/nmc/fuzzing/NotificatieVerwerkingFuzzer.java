@@ -35,6 +35,15 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResp
 import nl.rijksoverheid.moz.nmc.controller.CentraleNotificatieController;
 import nl.rijksoverheid.moz.nmc.controller.DecentraleNotificatieController;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.OvergangUitkomst;
+import nl.rijksoverheid.moz.nmc.domain.Overgangsregels;
+import nl.rijksoverheid.moz.nmc.domain.Poging;
+import nl.rijksoverheid.moz.nmc.domain.Reden;
+import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
+import nl.rijksoverheid.moz.nmc.service.NotificatieNietGevondenException;
+import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
+import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.controller.NotifyNLCallbackController;
@@ -62,7 +71,7 @@ import java.util.logging.Logger;
  *
  * <p>A Jackson error, a constraint violation and an {@link HttpProblem} are expected outcomes.
  * Findings: any other exception, a 5xx while every stand-in the route reaches succeeds, and a
- * notificatie that is kept after a delivered callback or deleted after a failed one.
+ * delivery receipt that deletes the notificatie or takes it back to before the send.
  */
 public class NotificatieVerwerkingFuzzer {
 
@@ -77,7 +86,8 @@ public class NotificatieVerwerkingFuzzer {
     private static final String[] IDENTIFICATIE_TYPES = {"BSN", "KVK", "RSIN", "INVALID"};
     private static final String[] BERICHT_TYPES = {"Stuurgroep Agenda", "Demo template", "onbekend"};
     private static final String[] AFLEVER_STATUSSEN = {
-        "delivered", "permanent-failure", "temporary-failure", "technical-failure", "onbekend"
+        "delivered", "permanent-failure", "temporary-failure", "technical-failure", "onbekend",
+        "created", "sending", "pending"
     };
 
     // One shape per reject branch of CallbackUrlValidator: scheme, userinfo, IPv4- and
@@ -112,8 +122,12 @@ public class NotificatieVerwerkingFuzzer {
 
     private static final GeheugenNotificatieRepository repository = new GeheugenNotificatieRepository();
 
+    private static final GeheugenPogingRepository pogingen = new GeheugenPogingRepository();
+
+    private static final GeheugenOvergangsfunctie overgangsfunctie = new GeheugenOvergangsfunctie();
+
     /**
-     * Stand-in for the CDI {@code Event} that NotificatieService fires. In production
+     * Stand-in for the CDI {@code Event} that ReceiptVerwerker fires. In production
      * StatusUpdateVerzender observes it at AFTER_SUCCESS so the callback runs after the commit;
      * there is no CDI container here, so this delivers straight to the adapter. That keeps the
      * consument-callback path in reach of the fuzzer, which is the point of wiring it at all.
@@ -128,12 +142,12 @@ public class NotificatieVerwerkingFuzzer {
 
         @Override
         public <U extends StatusUpdateOpdracht> CompletionStage<U> fireAsync(U opdracht) {
-            throw new UnsupportedOperationException("NotificatieService fires synchronously");
+            throw new UnsupportedOperationException("ReceiptVerwerker fires synchronously");
         }
 
         @Override
         public <U extends StatusUpdateOpdracht> CompletionStage<U> fireAsync(U opdracht, NotificationOptions options) {
-            throw new UnsupportedOperationException("NotificatieService fires synchronously");
+            throw new UnsupportedOperationException("ReceiptVerwerker fires synchronously");
         }
 
         @Override
@@ -164,7 +178,9 @@ public class NotificatieVerwerkingFuzzer {
                 new ProfielServiceAdapter(profielApiStandIn()),
                 new NotifyNLVerzendAdapter(notifyApiStandIn(), new NotifyNLJwtFactory(),
                         new NotifyNLAuthorizationHolder(), Optional.of(API_KEY)),
-                repository,
+                pogingen,
+                overgangsfunctie);
+        ReceiptVerwerker receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
                 // No wait between callback retries.
                 new DirecteStatusUpdateEvent(new ConsumentCallbackAdapter(url -> callbackClientStandIn(), 0)));
 
@@ -173,11 +189,12 @@ public class NotificatieVerwerkingFuzzer {
 
         centraleController = new CentraleNotificatieController(service, logboekContext, hashHelper);
         decentraleController = new DecentraleNotificatieController(service, logboekContext, hashHelper);
-        callbackController = new NotifyNLCallbackController(service);
+        callbackController = new NotifyNLCallbackController(receiptVerwerker);
     }
 
     public static void fuzzerTestOneInput(FuzzedDataProvider data) {
         repository.leegmaken();
+        pogingen.leegmaken();
 
         int route = data.consumeInt(0, 4);
         profielAntwoord = gewogenAntwoord(data);
@@ -214,17 +231,24 @@ public class NotificatieVerwerkingFuzzer {
         if (melding == null) {
             return;
         }
-        if (notificatieIsBekend) {
-            repository.bewaarMetExterneReferentie(melding.getId());
-        }
+        UUID bekendeId = notificatieIsBekend ? bewaarVerzonden(melding.getId()) : null;
         // The callback adapter absorbs a failing callback; a 5xx on this route is always a finding.
         roepAan(() -> callbackController.verwerkAfleverstatus(melding), true);
 
         // A delivery receipt never deletes the notificatie, whatever the outcome of the consumer
-        // callback: its status history has to stay.
-        if (notificatieIsBekend && repository.findByExternalReference(melding.getId()).isEmpty()) {
-            throw new AssertionError("notificatie verwijderd na %s consument-callback".formatted(
-                    callbackLukt ? "geslaagde" : "mislukte"));
+        // callback, and never takes it back to before the send.
+        if (bekendeId != null) {
+            Notificatie notificatie = repository.findById(bekendeId);
+
+            if (notificatie == null) {
+                throw new AssertionError("notificatie verwijderd na %s consument-callback".formatted(
+                        callbackLukt ? "geslaagde" : "mislukte"));
+            }
+
+            if (notificatie.getStatus() == NotificatieStatus.AANGENOMEN
+                    || notificatie.getStatus() == NotificatieStatus.IN_VERZENDING) {
+                throw new AssertionError("notificatie teruggezet naar " + notificatie.getStatus());
+            }
         }
     }
 
@@ -378,6 +402,93 @@ public class NotificatieVerwerkingFuzzer {
                         .isDefault(true)));
     }
 
+    /** A notificatie on VERZONDEN with one poging under the given NotifyNL id. */
+    private static UUID bewaarVerzonden(UUID notifyId) {
+        Notificatie notificatie = new Notificatie("https://consument.example.invalid/callback");
+        overgangsfunctie.neemAan(notificatie);
+        Poging poging = new Poging(notificatie.getId(), 1);
+        pogingen.persist(poging);
+        overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
+        poging.markeerVerzonden(notifyId, java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC));
+        overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
+
+        return notificatie.getId();
+    }
+
+    /** In-memory stand-in for the pogingen; column constraints are not enforced. */
+    private static final class GeheugenPogingRepository extends PogingRepository {
+
+        private final Map<UUID, Poging> opgeslagen = new HashMap<>();
+
+        @Override
+        public void persist(Poging poging) {
+            opgeslagen.put(poging.getId(), poging);
+        }
+
+        @Override
+        public Optional<Poging> findByNotifyId(UUID notifyId) {
+            return opgeslagen.values().stream().filter(p -> notifyId.equals(p.getNotifyId())).findFirst();
+        }
+
+        @Override
+        public void herlaad(Poging poging) {
+            // No-op; the in-memory copy is the only copy.
+        }
+
+        void leegmaken() {
+            opgeslagen.clear();
+        }
+    }
+
+    /**
+     * In-memory stand-in for the transition function: applies Overgangsregels without a database,
+     * lock or trigger, and numbers events per notificatie.
+     */
+    private static final class GeheugenOvergangsfunctie extends Overgangsfunctie {
+
+        private final Map<UUID, Long> versies = new HashMap<>();
+
+        GeheugenOvergangsfunctie() {
+            super(null, null);
+        }
+
+        @Override
+        public nl.rijksoverheid.moz.nmc.domain.Event neemAan(Notificatie notificatie) {
+            notificatie.pasOvergangToe(NotificatieStatus.AANGENOMEN, null);
+            repository.persist(notificatie);
+            versies.put(notificatie.getId(), 0L);
+
+            return new nl.rijksoverheid.moz.nmc.domain.Event(notificatie.getId(), 0, null, NotificatieStatus.AANGENOMEN, null);
+        }
+
+        @Override
+        public Notificatie vergrendel(UUID notificatieId) {
+            Notificatie notificatie = repository.findById(notificatieId);
+
+            if (notificatie == null) {
+                throw new NotificatieNietGevondenException("Geen notificatie gevonden met id " + notificatieId);
+            }
+
+            return notificatie;
+        }
+
+        @Override
+        public OvergangUitkomst voerUit(UUID notificatieId, NotificatieStatus naar, Reden reden) {
+            Notificatie notificatie = vergrendel(notificatieId);
+            NotificatieStatus van = notificatie.getStatus();
+
+            if (!Overgangsregels.isToegestaan(van, naar)) {
+                return OvergangUitkomst.geweigerd(van, naar);
+            }
+
+            notificatie.pasOvergangToe(naar, reden);
+            long versie = versies.merge(notificatieId, 1L, Long::sum);
+
+            return OvergangUitkomst.uitgevoerd(van,
+                    new nl.rijksoverheid.moz.nmc.domain.Event(notificatieId, versie, van, naar, reden));
+        }
+    }
+
     /** In-memory stand-in for the Panache repository; column constraints are not enforced. */
     private static final class GeheugenNotificatieRepository extends NotificatieRepository {
 
@@ -406,17 +517,8 @@ public class NotificatieVerwerkingFuzzer {
         }
 
         @Override
-        public Optional<Notificatie> findByExternalReference(UUID externalReference) {
-            return opgeslagen.values().stream()
-                    .filter(n -> externalReference.equals(n.getExternalReference()))
-                    .findFirst();
-        }
-
-        /** Stores a notificatie under the given NotifyNL reference. */
-        void bewaarMetExterneReferentie(UUID externalReference) {
-            Notificatie notificatie = new Notificatie("https://consument.example.invalid/callback");
-            notificatie.markeerVerzonden(externalReference);
-            persist(notificatie);
+        public Notificatie findById(UUID id) {
+            return opgeslagen.get(id);
         }
 
         private static void zetId(Notificatie notificatie, UUID id) {

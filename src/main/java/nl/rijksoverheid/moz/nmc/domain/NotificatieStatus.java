@@ -1,5 +1,9 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
+import com.fasterxml.jackson.annotation.JsonValue;
+
+import java.util.Locale;
+
 /**
  * De status in de levenscyclus van een notificatie. De uitkomst van een afzonderlijke verzending
  * staat op de poging ({@link PogingStatus}).
@@ -16,5 +20,11 @@ public enum NotificatieStatus {
     // Terminaal, maar een later binnengekomen receipt mag hem nog corrigeren.
     BEZORGSTATUS_ONBEKEND,
     VERLOPEN,
-    GEANNULEERD
+    GEANNULEERD;
+
+    /** De kebab-case-weergave in de API en in het CloudEvent, bijvoorbeeld {@code niet-bezorgbaar}. */
+    @JsonValue
+    public String toApiValue() {
+        return name().toLowerCase(Locale.ROOT).replace('_', '-');
+    }
 }

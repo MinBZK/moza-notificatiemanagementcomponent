@@ -5,11 +5,12 @@ import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
-import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -82,6 +83,7 @@ class StatusUpdateVerzenderTest {
     }
 
     private static StatusUpdateOpdracht opdracht(String callbackUrl) {
-        return new StatusUpdateOpdracht(UUID.randomUUID(), callbackUrl, StatusWaarde.DELIVERED);
+        return new StatusUpdateOpdracht(UUID.randomUUID(), callbackUrl, 3L,
+                NotificatieStatus.VERZONDEN, NotificatieStatus.BEZORGD, null, OffsetDateTime.parse("2026-01-15T10:00:00Z"));
     }
 }
