@@ -222,7 +222,7 @@ de logica die kiest tussen herverzending en contactherstel.
   `META-INF/notifynl-callback-openapi.yaml`, Quarkus REST + Jackson
 - **Uitgaande clients:** quarkus-openapi-generator voor Profielservice en
   NotifyNL; een dynamisch gebouwde REST-client voor de callback naar de aanroeper
-- **Persistentie:** PostgreSQL 18 + Hibernate ORM Panache + Flyway; H2 in tests
+- **Persistentie:** PostgreSQL 18 + Hibernate ORM Panache + Flyway; in tests een embedded PostgreSQL (Zonky)
 - **Test:** JUnit 5, REST-assured, Mockito, Jazzer (fuzzing)
 - **Fouten:** RFC 9457 `application/problem+json` via quarkus-http-problem
 - **Audit:** LDV-wrapper (`logboekdataverwerking`), standaard uitgeschakeld
@@ -296,11 +296,16 @@ source "$HOME/.sdkman/bin/sdkman-init.sh"
 ```bash
 podman compose up -d          # PostgreSQL voor dev-mode (docker compose werkt ook)
 ./mvnw quarkus:dev            # live reload op http://localhost:8080
-./mvnw verify                 # volledige suite incl. coverage-gate; H2, geen containers nodig
+./mvnw verify                 # volledige suite incl. coverage-gate; embedded PostgreSQL, geen containers nodig
 ```
 
-Tests hebben geen containers nodig: `%test` draait op H2 in-memory. Profielservice,
-NotifyNL en de callback naar de aanroeper worden gemockt.
+Tests hebben geen containers nodig: `EmbeddedPostgresTestResource` start een echte
+PostgreSQL 18 als kindproces van de test-JVM (Zonky) en geeft url en credentials aan
+Quarkus door; Flyway migreert die database bij het opstarten en `validate` controleert
+het schema tegen de entities. Elke `@QuarkusTest` deelt die ene database, dus een test
+ruimt zijn eigen rijen op. Tests die zonder Quarkus tegen de migraties werken
+(`V2MigratieTest`) starten hun eigen embedded PostgreSQL. Profielservice, NotifyNL en de
+callback naar de aanroeper worden gemockt.
 
 Dev-mode draait standaard op poort 8080, en `%dev.quarkus.rest-client.profielservice.url`
 wijst óók naar `http://localhost:8080`. Draai je een echte Profielservice lokaal,
@@ -352,12 +357,11 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
   in dezelfde migratie uit de oude, en laat de `DROP COLUMN` pas volgen als niets hem
   meer leest. `V2__notificatie_statusgeschiedenis.sql` doet dat voor `notificatie.status` en
   `notificatie.aangemaakt`.
-- **SQL moet op H2 én PostgreSQL draaien.** Dev en prod gebruiken PostgreSQL 18,
-  tests H2.
-- **Houd de migratie en de entity gelijk.** Buiten tests staat
+- **SQL is PostgreSQL 18.** Dev, test en prod draaien hetzelfde dialect, dus
+  PostgreSQL-eigen SQL is toegestaan en draait ook in de tests.
+- **Houd de migratie en de entity gelijk.** In elk profiel staat
   `schema-management.strategy=validate`: wijkt een entity af van het gemigreerde
-  schema, dan start de applicatie niet. Controleer een nieuwe migratie tegen
-  PostgreSQL met `podman compose up -d` en `./mvnw quarkus:dev`.
+  schema, dan start de applicatie niet, en de testsuite dus ook niet.
 - **In prod draait Flyway niet bij het starten**
   (`%prod.quarkus.flyway.migrate-at-start=false`). Op ZAD staat
   `QUARKUS_FLYWAY_MIGRATE_AT_START=true` in de deploymentconfig; zonder die

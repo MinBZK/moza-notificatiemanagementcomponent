@@ -318,7 +318,7 @@ podman compose up -d
 
 Dit start één Postgres-container met de `nmc`-database/-user (via de
 standaard `POSTGRES_DB`/`POSTGRES_USER`/`POSTGRES_PASSWORD`-omgevingsvariabelen).
-In test mode (`%test`) wordt H2 in-memory gebruikt. Voor productie moeten
+In test mode (`%test`) start de testsuite zelf een embedded PostgreSQL. Voor productie moeten
 `QUARKUS_DATASOURCE_USERNAME` en `QUARKUS_DATASOURCE_PASSWORD` als
 omgevingsvariabelen worden meegegeven, en
 draait de migratie niet automatisch bij opstarten

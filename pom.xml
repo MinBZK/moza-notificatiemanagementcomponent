@@ -41,6 +41,15 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Zelfde major als docker-compose en prod (PostgreSQL 18), zodat de tests hetzelfde
+                 dialect zien. -->
+            <dependency>
+                <groupId>io.zonky.test.postgres</groupId>
+                <artifactId>embedded-postgres-binaries-bom</artifactId>
+                <version>18.4.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -99,11 +108,12 @@
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-jdbc-h2</artifactId>
+            <artifactId>quarkus-jdbc-postgresql</artifactId>
         </dependency>
+        <!-- Worker-lus en periodieke taken; de takentabel is de planner, dus geen Quartz. -->
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-jdbc-postgresql</artifactId>
+            <artifactId>quarkus-scheduler</artifactId>
         </dependency>
         <!-- Readiness/liveness-probes (/q/health). Readiness bevat automatisch een
              datasource-check, zodat een ZAD-deploy met onbereikbare DB als
@@ -135,6 +145,32 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Echte PostgreSQL als kindproces van de test-JVM, zonder Docker; zie
+             EmbeddedPostgresTestResource. De extensie brengt alleen amd64-binaries mee; de twee
+             arm64-artefacten dekken Apple Silicon en arm64-runners. -->
+        <dependency>
+            <groupId>io.zonky.test</groupId>
+            <artifactId>embedded-postgres</artifactId>
+            <version>2.1.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.zonky.test.postgres</groupId>
+            <artifactId>embedded-postgres-binaries-darwin-arm64v8</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.zonky.test.postgres</groupId>
+            <artifactId>embedded-postgres-binaries-linux-arm64v8</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Voor tests die Flyway zonder Quarkus aansturen (V2MigratieTest); de Quarkus-extensie
+             laadt dit dialect zelf, de kale Flyway-API niet. -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
