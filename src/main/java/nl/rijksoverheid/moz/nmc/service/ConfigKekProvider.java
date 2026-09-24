@@ -18,7 +18,9 @@ import java.util.function.Function;
  * {@code nmc.kek.versie.<n>} met een base64-gecodeerde sleutel van 256 bits. Als env-var:
  * {@code NMC_KEK_HUIDIGE_VERSIE} en {@code NMC_KEK_VERSIE_<n>}.
  * <p>
- * Eager bij het opstarten, zodat een ontbrekende of ongeldige KEK de applicatie niet laat starten.
+ * Eager bij het opstarten, zodat een ontbrekende of ongeldige KEK de applicatie niet laat starten. Alle
+ * versies van 1 tot en met {@value #MAX_VERSIE} worden gelezen, ook die boven de huidige: na het
+ * terugzetten van de huidige versie blijven rijen onder een hogere versie leesbaar.
  */
 @Startup
 @ApplicationScoped
@@ -26,6 +28,8 @@ public class ConfigKekProvider implements KekProvider {
 
     static final String HUIDIGE_VERSIE = "nmc.kek.huidige-versie";
     static final String VERSIE_PREFIX = "nmc.kek.versie.";
+
+    static final int MAX_VERSIE = 100;
 
     private static final int KEK_LENGTE_BYTES = 32;
 
@@ -43,8 +47,8 @@ public class ConfigKekProvider implements KekProvider {
                 .orElseThrow(() -> new IllegalStateException(HUIDIGE_VERSIE + " is niet geconfigureerd"));
         this.huidigeVersie = leesVersie(versie.strip());
 
-        // Een oudere versie mag ontbreken, bijvoorbeeld nadat alle sleutels zijn geherwrapt.
-        for (int v = 1; v <= huidigeVersie; v++) {
+        // Een versie mag ontbreken, bijvoorbeeld een oudere nadat alle sleutels zijn geherwrapt.
+        for (int v = 1; v <= MAX_VERSIE; v++) {
             int kekVersie = v;
             configWaarde.apply(VERSIE_PREFIX + kekVersie)
                     .filter(s -> !s.isBlank())
@@ -76,8 +80,8 @@ public class ConfigKekProvider implements KekProvider {
             throw new IllegalStateException(HUIDIGE_VERSIE + " is geen geheel getal: " + waarde);
         }
 
-        if (versie < 1) {
-            throw new IllegalStateException(HUIDIGE_VERSIE + " moet 1 of hoger zijn, is " + versie);
+        if (versie < 1 || versie > MAX_VERSIE) {
+            throw new IllegalStateException(HUIDIGE_VERSIE + " moet tussen 1 en " + MAX_VERSIE + " liggen, is " + versie);
         }
 
         return versie;

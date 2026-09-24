@@ -9,6 +9,7 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.GeenEmailadresGevondenExce
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
 import nl.rijksoverheid.moz.nmc.controller.IdentificatieType;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
@@ -116,8 +117,23 @@ class NotificatieServiceTest {
         Notificatie resultaat = service.verstuurDecentraal(
                 new DecentraleNotificatieVersturenOpdracht("burger@example.nl", TEST_TEMPLATE_ID, Map.of("naam", "Voorbeeld BV"), null));
 
-        assertEquals("burger@example.nl", sleutelbeheer.ontsleutelOntvanger(resultaat.getVersleuteldeGegevens()));
-        assertEquals(Map.of("naam", "Voorbeeld BV"), sleutelbeheer.ontsleutelPersonalisation(resultaat.getVersleuteldeGegevens()));
+        assertEquals(Ontvanger.email("burger@example.nl"),
+                sleutelbeheer.ontsleutelOntvanger(resultaat.getId(), resultaat.getVersleuteldeGegevens()));
+        assertEquals(Map.of("naam", "Voorbeeld BV"),
+                sleutelbeheer.ontsleutelPersonalisation(resultaat.getId(), resultaat.getVersleuteldeGegevens()));
+    }
+
+    // Bij centrale regie komt het adres uit de Profielservice en wordt het niet opgeslagen; op de rij staat
+    // het identificerend nummer, waarmee de verzending het adres opnieuw kan ophalen.
+    @Test
+    void versturen_bewaartHetIdentificerendNummerEnNietHetAdresUitDeProfielservice() throws NotifyNLConfiguratieException, NotifyNLVerzendException {
+        when(profielServiceAdapter.zoekEmailAdres(any())).thenReturn("burger@example.nl");
+        when(verzendAdapter.verstuurEmail(any(), any(), any())).thenReturn(UUID.randomUUID());
+
+        Notificatie resultaat = service.versturen(opdracht(null));
+
+        assertEquals(new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
+                sleutelbeheer.ontsleutelOntvanger(resultaat.getId(), resultaat.getVersleuteldeGegevens()));
     }
 
     @Test

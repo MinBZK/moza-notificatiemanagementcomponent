@@ -8,7 +8,11 @@ import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
+import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
+import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
+import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.domain.VersleuteldeGegevens;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
@@ -48,6 +52,11 @@ class VersleuteldeOpslagIntegratieTest {
             "naam", "Vertrouwelijke Holding BV",
             "zaaknummer", "ZAAK-2026-000123");
     private static final String CALLBACK_URL = "https://aanroeper.example.nl/status";
+    private static final String KVK_NUMMER = "90004321";
+
+    @InjectMock
+    @RestClient
+    ProfielApi profielApi;
 
     @InjectMock
     @RestClient
@@ -107,8 +116,43 @@ class VersleuteldeOpslagIntegratieTest {
             return notificatie.getVersleuteldeGegevens();
         });
 
-        assertEquals(EMAIL, sleutelbeheer.ontsleutelOntvanger(gegevens));
-        assertEquals(PERSONALISATION, sleutelbeheer.ontsleutelPersonalisation(gegevens));
+        assertEquals(Ontvanger.email(EMAIL), sleutelbeheer.ontsleutelOntvanger(id, gegevens));
+        assertEquals(PERSONALISATION, sleutelbeheer.ontsleutelPersonalisation(id, gegevens));
+    }
+
+    // Centrale regie: het adres uit de Profielservice staat nergens op de rij, ook niet versleuteld; het
+    // identificerend nummer staat er alleen versleuteld.
+    @Test
+    void centraleNotificatieVersturen_rijBevatGeenAdresEnGeenLeesbaarNummer() throws Exception {
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(new PartijResponse()
+                .partijId(UUID.randomUUID())
+                .contactgegevens(List.of(new ContactgegevenResponse()
+                        .type(ContactgegevenResponse.TypeEnum.EMAIL).waarde(EMAIL).isDefault(true))));
+
+        String notificatieId = given()
+                .contentType(ContentType.JSON)
+                .body(Map.of(
+                        "identificatieType", "KVK",
+                        "identificatieNummer", KVK_NUMMER,
+                        "dienstverlener", "Gemeente Voorbeeld",
+                        "berichtType", "Stuurgroep Agenda",
+                        "berichtgegevens", PERSONALISATION))
+                .when().post("/api/nmc/v1/centraal/notificaties")
+                .then()
+                .statusCode(200)
+                .extract().path("notificatieId");
+        UUID id = UUID.fromString(notificatieId);
+
+        for (Map.Entry<String, byte[]> kolom : leesRij(id).entrySet()) {
+            for (String geheim : List.of(EMAIL, KVK_NUMMER)) {
+                assertFalse(bevat(kolom.getValue(), geheim.getBytes(StandardCharsets.UTF_8)),
+                        "kolom " + kolom.getKey() + " bevat " + geheim + " leesbaar");
+            }
+        }
+
+        VersleuteldeGegevens gegevens = QuarkusTransaction.requiringNew().call(() ->
+                notificatieRepository.findById(id).getVersleuteldeGegevens());
+        assertEquals(new Ontvanger(Ontvanger.Soort.KVK, KVK_NUMMER), sleutelbeheer.ontsleutelOntvanger(id, gegevens));
     }
 
     private UUID verstuur() {

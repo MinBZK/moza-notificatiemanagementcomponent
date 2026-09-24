@@ -6,7 +6,6 @@ import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OrderColumn;
@@ -22,8 +21,9 @@ import java.util.UUID;
 @Entity
 public class Notificatie {
 
+    // Toegekend bij het aanmaken en niet bij de persist: de versleutelde velden zijn aan deze id
+    // gebonden en worden vóór de eerste opslag gezet.
     @Id
-    @GeneratedValue
     private UUID id;
 
     @Version
@@ -72,6 +72,7 @@ public class Notificatie {
     }
 
     public Notificatie(String callbackUrl) {
+        this.id = UUID.randomUUID();
         this.callbackUrl = callbackUrl;
         registreerStatus(NotificatieStatus.opEigenKlok(StatusWaarde.CREATED, OffsetDateTime.now(ZoneOffset.UTC)));
     }

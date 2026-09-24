@@ -48,12 +48,30 @@ class ConfigKekProviderTest {
         assertFalse(provider.kek(1).isPresent());
     }
 
+    // Na het terugzetten van de huidige versie moeten rijen onder de hogere versie leesbaar blijven.
     @Test
-    void constructor_versieBovenHuidigeVersie_wordtNietGelezen() {
+    void constructor_versieBovenHuidigeVersie_wordtOokGelezen() {
         ConfigKekProvider provider = provider(Map.of(
-                "nmc.kek.huidige-versie", "1", "nmc.kek.versie.1", KEK_1, "nmc.kek.versie.2", "geen-base64!"));
+                "nmc.kek.huidige-versie", "1", "nmc.kek.versie.1", KEK_1, "nmc.kek.versie.2", KEK_2));
 
-        assertTrue(provider.kek(2).isEmpty());
+        assertEquals(1, provider.huidigeVersie());
+        assertArrayEquals(Base64.getDecoder().decode(KEK_2), provider.kek(2).orElseThrow().getEncoded());
+    }
+
+    @Test
+    void constructor_ongeldigeKekBovenHuidigeVersie_gooitIllegalStateException() {
+        assertThrows(IllegalStateException.class, () -> provider(Map.of(
+                "nmc.kek.huidige-versie", "1", "nmc.kek.versie.1", KEK_1, "nmc.kek.versie.2", "geen-base64!")));
+    }
+
+    // Een tikfout in de versie mag het opstarten niet laten hangen; hij wordt direct geweigerd.
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"101", "1000000000", "2147483647"})
+    void constructor_huidigeVersieBovenMaximum_gooitIllegalStateException(String versie) {
+        IllegalStateException fout = assertThrows(IllegalStateException.class,
+                () -> provider(Map.of("nmc.kek.huidige-versie", versie, "nmc.kek.versie.1", KEK_1)));
+
+        assertTrue(fout.getMessage().contains("tussen 1 en " + ConfigKekProvider.MAX_VERSIE));
     }
 
     @Test
