@@ -36,7 +36,7 @@ public class Overgangsfunctie {
     public Event neemAan(Notificatie notificatie) {
         Objects.requireNonNull(notificatie, "notificatie is verplicht");
 
-        if (notificatie.getNotificatieStatus() != null) {
+        if (notificatie.getStatus() != null) {
             throw new IllegalStateException("Notificatie " + notificatie.getId() + " is al aangenomen");
         }
 
@@ -56,15 +56,10 @@ public class Overgangsfunctie {
     public OvergangUitkomst voerUit(UUID notificatieId, NotificatieStatus naar, Reden reden) {
         Objects.requireNonNull(naar, "naar is verplicht");
 
-        Notificatie notificatie = entityManager.find(Notificatie.class, notificatieId, LockModeType.PESSIMISTIC_WRITE);
+        Notificatie notificatie = vergrendel(notificatieId);
+        NotificatieStatus van = notificatie.getStatus();
 
-        if (notificatie == null) {
-            throw new NotificatieNietGevondenException("Geen notificatie gevonden met id " + notificatieId);
-        }
-
-        NotificatieStatus van = notificatie.getNotificatieStatus();
-
-        if (van == null || !Overgangsregels.isToegestaan(van, naar)) {
+        if (!Overgangsregels.isToegestaan(van, naar)) {
             return OvergangUitkomst.geweigerd(van, naar);
         }
 
@@ -82,9 +77,25 @@ public class Overgangsfunctie {
         return OvergangUitkomst.uitgevoerd(van, schrijfEvent(notificatie, van, reden));
     }
 
+    /**
+     * Vergrendelt de notificatierij tot het einde van de transactie. Wie pogingen van de notificatie
+     * leest om over een overgang te beslissen, doet dat pas hierna.
+     *
+     * @throws NotificatieNietGevondenException als de notificatie niet bestaat
+     */
+    public Notificatie vergrendel(UUID notificatieId) {
+        Notificatie notificatie = entityManager.find(Notificatie.class, notificatieId, LockModeType.PESSIMISTIC_WRITE);
+
+        if (notificatie == null) {
+            throw new NotificatieNietGevondenException("Geen notificatie gevonden met id " + notificatieId);
+        }
+
+        return notificatie;
+    }
+
     private Event schrijfEvent(Notificatie notificatie, NotificatieStatus van, Reden reden) {
         Event event = new Event(notificatie.getId(), notificatie.getVersie(), van,
-                notificatie.getNotificatieStatus(), reden);
+                notificatie.getStatus(), reden);
         eventRepository.persist(event);
 
         return event;

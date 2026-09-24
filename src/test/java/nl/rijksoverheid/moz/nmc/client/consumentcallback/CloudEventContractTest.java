@@ -5,7 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.path.json.JsonPath;
 import jakarta.inject.Inject;
-import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Reden;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
@@ -35,8 +36,8 @@ class CloudEventContractTest {
     ObjectMapper objectMapper;
 
     @ParameterizedTest
-    @EnumSource(StatusWaarde.class)
-    void cloudEvent_alsJson_voldoetAanHetGepubliceerdeSchema(StatusWaarde status) throws Exception {
+    @EnumSource(NotificatieStatus.class)
+    void cloudEvent_alsJson_voldoetAanHetGepubliceerdeSchema(NotificatieStatus status) throws Exception {
         JsonPath spec = given().queryParam("format", "JSON")
                 .when().get("/q/openapi")
                 .then().statusCode(200)
@@ -49,10 +50,17 @@ class CloudEventContractTest {
         assertTrue(json.get("time").isTextual(), "time hoort een ISO-8601-string te zijn, geen getal");
         assertDoesNotThrow(() -> OffsetDateTime.parse(json.get("time").asText()));
         assertDoesNotThrow(() -> UUID.fromString(json.get("id").asText()));
-        assertDoesNotThrow(() -> UUID.fromString(json.get("data").get("notificatieId").asText()));
-        List<String> toegestaan = spec.getList("components.schemas.NotificatieStatus.enum", String.class);
-        assertTrue(toegestaan.contains(json.get("data").get("status").asText()),
-                "data.status hoort een waarde uit de NotificatieStatus-enum te zijn");
+        assertDoesNotThrow(() -> UUID.fromString(json.get("subject").asText()));
+        assertTrue(json.get("sequence").isTextual(), "sequence hoort volgens de CloudEvents-extensie een string te zijn");
+        assertEquals(json.get("data").get("versie").asText(), json.get("sequence").asText());
+        List<String> statussen = spec.getList("components.schemas.NotificatieStatus.enum", String.class);
+        assertTrue(statussen.contains(json.get("data").get("naar").asText()),
+                "data.naar hoort een waarde uit de NotificatieStatus-enum te zijn");
+        assertTrue(statussen.contains(json.get("data").get("van").asText()),
+                "data.van hoort een waarde uit de NotificatieStatus-enum te zijn");
+        List<String> redenen = spec.getList("components.schemas.Reden.enum", String.class);
+        assertTrue(redenen.contains(json.get("data").get("reden").asText()),
+                "data.reden hoort een waarde uit de Reden-enum te zijn");
     }
 
     // Elk verplicht veld aanwezig en geen veld dat het schema niet kent.
@@ -74,10 +82,10 @@ class CloudEventContractTest {
         return verschil;
     }
 
-    private static NotificatieStatusEvent verstuurdEvent(StatusWaarde status) {
+    private static NotificatieStatusEvent verstuurdEvent(NotificatieStatus naar) {
         ConsumentCallbackClient client = Mockito.mock(ConsumentCallbackClient.class);
-        new ConsumentCallbackAdapter(url -> client, 0L)
-                .stuurStatusUpdate(new StatusUpdateOpdracht(UUID.randomUUID(), "https://omc.example.nl/callback", status));
+        new ConsumentCallbackAdapter(url -> client, 0L).stuurStatusUpdate(new StatusUpdateOpdracht(UUID.randomUUID(),
+                "https://omc.example.nl/callback", 3L, NotificatieStatus.VERZONDEN, naar, Reden.ONBEREIKBAAR, OffsetDateTime.parse("2026-01-15T10:00:00Z")));
 
         ArgumentCaptor<NotificatieStatusEvent> captor = ArgumentCaptor.forClass(NotificatieStatusEvent.class);
         verify(client).stuurStatusUpdate(captor.capture());

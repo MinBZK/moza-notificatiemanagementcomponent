@@ -1,22 +1,23 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
-import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Reden;
 
 import java.util.Objects;
-import java.util.UUID;
 
 /**
- * Payload van het CloudEvent naar de Dienstverlener; status wordt via StatusWaarde#toApiValue als
- * API-waarde geserialiseerd.
- * <p>
- * TODO (buiten scope): zonder volgnummer kan de Dienstverlener een ingehaalde update niet herkennen.
- * Het volgnummer uit {@code notificatie_status} meesturen lost dat op, maar verandert het contract.
+ * Payload van het CloudEvent naar de Dienstverlener: één statusovergang. Statussen en reden gaan als
+ * API-waarde over de lijn ({@code niet-bezorgbaar}).
+ *
+ * @param van    de status vóór de overgang
+ * @param naar   de status na de overgang
+ * @param reden  de reden bij een terminale status, anders null
+ * @param versie het volgnummer van de overgang, gelijk aan {@code sequence} in de envelop
  */
-public record NotificatieData(UUID notificatieId, StatusWaarde status) {
+public record NotificatieData(NotificatieStatus van, NotificatieStatus naar, Reden reden, long versie) {
 
-    // Beide velden zijn verplicht in openapi.yaml; zo valt een null hier op en niet bij de Dienstverlener.
+    // naar is verplicht in openapi.yaml; zo valt een null hier op en niet bij de Dienstverlener.
     public NotificatieData {
-        Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
-        Objects.requireNonNull(status, "status is verplicht");
+        Objects.requireNonNull(naar, "naar is verplicht");
     }
 }
