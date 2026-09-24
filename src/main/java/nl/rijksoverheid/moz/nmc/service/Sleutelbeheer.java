@@ -11,10 +11,10 @@ import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
-import java.security.InvalidKeyException;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Map;
@@ -22,17 +22,18 @@ import java.util.Objects;
 
 /**
  * Versleutelt ontvanger en personalisation van een notificatie met een eigen AES-256-GCM-sleutel per
- * notificatie. Die sleutel wordt met de huidige KEK gewrapt (AES Key Wrap, RFC 3394) en samen met de
+ * notificatie. Die sleutel wordt met de huidige KEK gewrapt, ook met AES-256-GCM, en samen met de
  * KEK-versie op de rij bewaard. Het wissen van de gewrapte sleutel maakt de gegevens onleesbaar.
  * <p>
  * Ciphertext is {@code IV (12 bytes) || versleutelde gegevens || tag (16 bytes)}. De veldnaam gaat als
- * associated data mee, zodat ontvanger en personalisation niet onderling verwisseld kunnen worden.
+ * associated data mee, zodat ontvanger en personalisation niet onderling verwisseld kunnen worden. Bij de
+ * gewrapte sleutel is dat {@code sleutel:<kek_versie>}, zodat die niet als veld te gebruiken is en onder
+ * een andere KEK-versie niet opengaat.
  */
 @ApplicationScoped
 public class Sleutelbeheer {
 
     private static final String GCM = "AES/GCM/NoPadding";
-    private static final String KEY_WRAP = "AESWrap";
     private static final int SLEUTEL_BITS = 256;
     private static final int IV_BYTES = 12;
     private static final int TAG_BITS = 128;
@@ -63,13 +64,11 @@ public class Sleutelbeheer {
             SecretKey sleutel = generator.generateKey();
 
             int kekVersie = kekProvider.huidigeVersie();
-            Cipher wrap = Cipher.getInstance(KEY_WRAP);
-            wrap.init(Cipher.WRAP_MODE, kek(kekVersie));
 
             return new VersleuteldeGegevens(
                     versleutelVeld(sleutel, AAD_ONTVANGER, ontvanger.getBytes(StandardCharsets.UTF_8)),
                     versleutelVeld(sleutel, AAD_PERSONALISATION, serialiseer(personalisation)),
-                    wrap.wrap(sleutel),
+                    wrap(sleutel, kekVersie),
                     kekVersie);
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("Versleutelen van notificatiegegevens mislukt", e);
@@ -92,7 +91,11 @@ public class Sleutelbeheer {
         }
     }
 
-    private SecretKey pakUit(VersleuteldeGegevens gegevens) {
+    byte[] wrap(SecretKey sleutel, int kekVersie) throws GeneralSecurityException {
+        return versleutelVeld(kek(kekVersie), aadSleutel(kekVersie), sleutel.getEncoded());
+    }
+
+    SecretKey pakUit(VersleuteldeGegevens gegevens) {
         Objects.requireNonNull(gegevens, "gegevens is verplicht");
 
         if (gegevens.sleutelGewrapt() == null) {
@@ -103,16 +106,18 @@ public class Sleutelbeheer {
             throw new OntsleutelenMisluktException("De notificatie heeft een gewrapte sleutel zonder KEK-versie");
         }
 
-        try {
-            Cipher unwrap = Cipher.getInstance(KEY_WRAP);
-            unwrap.init(Cipher.UNWRAP_MODE, kek(gegevens.kekVersie()));
+        int kekVersie = gegevens.kekVersie();
+        SecretKey kek = kek(kekVersie);
 
-            return (SecretKey) unwrap.unwrap(gegevens.sleutelGewrapt(), "AES", Cipher.SECRET_KEY);
-        } catch (InvalidKeyException e) {
-            throw new OntsleutelenMisluktException("Gewrapte sleutel past niet bij KEK-versie " + gegevens.kekVersie(), e);
-        } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("Uitpakken van de sleutel mislukt", e);
+        try {
+            return new SecretKeySpec(ontsleutelVeld(kek, aadSleutel(kekVersie), gegevens.sleutelGewrapt()), "AES");
+        } catch (OntsleutelenMisluktException e) {
+            throw new OntsleutelenMisluktException("Gewrapte sleutel past niet bij KEK-versie " + kekVersie, e);
         }
+    }
+
+    private static byte[] aadSleutel(int kekVersie) {
+        return ("sleutel:" + kekVersie).getBytes(StandardCharsets.UTF_8);
     }
 
     private SecretKey kek(int versie) {

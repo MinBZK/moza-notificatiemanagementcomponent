@@ -7,14 +7,18 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -73,8 +77,7 @@ class SleutelbeheerTest {
         VersleuteldeGegevens eerste = sleutelbeheer.versleutel("burger@example.nl", Map.of("naam", "Voorbeeld BV"));
         VersleuteldeGegevens tweede = sleutelbeheer.versleutel("burger@example.nl", Map.of("naam", "Voorbeeld BV"));
 
-        // AES Key Wrap is deterministisch: een andere gewrapte sleutel betekent een andere sleutel.
-        assertFalse(Arrays.equals(eerste.sleutelGewrapt(), tweede.sleutelGewrapt()));
+        assertFalse(Arrays.equals(sleutelbeheer.pakUit(eerste).getEncoded(), sleutelbeheer.pakUit(tweede).getEncoded()));
         assertFalse(Arrays.equals(iv(eerste.ontvangerVersleuteld()), iv(tweede.ontvangerVersleuteld())));
         assertFalse(Arrays.equals(iv(eerste.personalisationVersleuteld()), iv(tweede.personalisationVersleuteld())));
         assertFalse(Arrays.equals(eerste.ontvangerVersleuteld(), tweede.ontvangerVersleuteld()));
@@ -222,8 +225,66 @@ class SleutelbeheerTest {
         VersleuteldeGegevens gegevens = sleutelbeheer.versleutel("a@b.nl", Map.of());
 
         assertEquals(12 + "a@b.nl".length() + 16, gegevens.ontvangerVersleuteld().length);
-        // RFC 3394 voegt 8 bytes integriteitswaarde toe aan de 32-byte sleutel.
-        assertEquals(40, gegevens.sleutelGewrapt().length);
+        assertEquals(12 + 32 + 16, gegevens.sleutelGewrapt().length);
+    }
+
+    @Test
+    void wrap_zelfdeSleutelTweeKeer_levertVerschillendeWrapsDieBeideUitpakken() throws GeneralSecurityException {
+        KeyGenerator generator = KeyGenerator.getInstance("AES");
+        generator.init(256);
+        SecretKey sleutel = generator.generateKey();
+
+        byte[] eerste = sleutelbeheer.wrap(sleutel, 1);
+        byte[] tweede = sleutelbeheer.wrap(sleutel, 1);
+
+        assertFalse(Arrays.equals(eerste, tweede));
+        assertArrayEquals(sleutel.getEncoded(), sleutelbeheer.pakUit(new VersleuteldeGegevens(null, null, eerste, 1)).getEncoded());
+        assertArrayEquals(sleutel.getEncoded(), sleutelbeheer.pakUit(new VersleuteldeGegevens(null, null, tweede, 1)).getEncoded());
+    }
+
+    @Test
+    void ontsleutel_gewijzigdeGewrapteSleutel_gooitOntsleutelenMisluktException() {
+        VersleuteldeGegevens gegevens = sleutelbeheer.versleutel("burger@example.nl", Map.of());
+        byte[] gewrapt = gegevens.sleutelGewrapt().clone();
+        gewrapt[gewrapt.length - 1] ^= 1;
+
+        OntsleutelenMisluktException fout = assertThrows(OntsleutelenMisluktException.class,
+                () -> sleutelbeheer.ontsleutelOntvanger(metSleutel(gegevens, gewrapt, 1)));
+        assertFalse(fout instanceof SleutelGewistException);
+    }
+
+    @Test
+    void ontsleutel_teKorteGewrapteSleutel_gooitOntsleutelenMisluktException() {
+        VersleuteldeGegevens gegevens = sleutelbeheer.versleutel("burger@example.nl", Map.of());
+
+        assertThrows(OntsleutelenMisluktException.class,
+                () -> sleutelbeheer.ontsleutelOntvanger(metSleutel(gegevens, new byte[27], 1)));
+    }
+
+    @Test
+    void ontsleutel_gewraptOnderVersie1AlsVersie2Aangeboden_gooitOntsleutelenMisluktException() {
+        Sleutelbeheer tweeVersies = sleutelbeheer(1, Map.of(1, KEK_1, 2, KEK_2));
+        VersleuteldeGegevens gegevens = tweeVersies.versleutel("burger@example.nl", Map.of());
+
+        assertThrows(OntsleutelenMisluktException.class,
+                () -> tweeVersies.ontsleutelOntvanger(metSleutel(gegevens, gegevens.sleutelGewrapt(), 2)));
+    }
+
+    @Test
+    void ontsleutel_zelfdeKekOnderAndereVersie_gooitOntsleutelenMisluktException() {
+        Sleutelbeheer zelfdeKek = sleutelbeheer(1, Map.of(1, KEK_1, 2, KEK_1));
+        VersleuteldeGegevens gegevens = zelfdeKek.versleutel("burger@example.nl", Map.of());
+
+        assertThrows(OntsleutelenMisluktException.class,
+                () -> zelfdeKek.ontsleutelOntvanger(metSleutel(gegevens, gegevens.sleutelGewrapt(), 2)));
+    }
+
+    @Test
+    void ontsleutel_gewrapteSleutelAlsVeldAangeboden_gooitOntsleutelenMisluktException() {
+        VersleuteldeGegevens gegevens = sleutelbeheer.versleutel("burger@example.nl", Map.of());
+
+        assertThrows(OntsleutelenMisluktException.class,
+                () -> sleutelbeheer.ontsleutelOntvanger(metOntvanger(gegevens, gegevens.sleutelGewrapt())));
     }
 
     private static KekProvider kekProvider() {
@@ -241,5 +302,10 @@ class SleutelbeheerTest {
     private static VersleuteldeGegevens metOntvanger(VersleuteldeGegevens gegevens, byte[] ontvanger) {
         return new VersleuteldeGegevens(ontvanger, gegevens.personalisationVersleuteld(),
                 gegevens.sleutelGewrapt(), gegevens.kekVersie());
+    }
+
+    private static VersleuteldeGegevens metSleutel(VersleuteldeGegevens gegevens, byte[] gewrapt, int kekVersie) {
+        return new VersleuteldeGegevens(gegevens.ontvangerVersleuteld(), gegevens.personalisationVersleuteld(),
+                gewrapt, kekVersie);
     }
 }
