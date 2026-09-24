@@ -39,9 +39,13 @@ import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.controller.NotifyNLCallbackController;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.service.KekProvider;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
+import nl.rijksoverheid.moz.nmc.service.Sleutelbeheer;
 import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
 
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
 import java.net.URLEncoder;
@@ -152,6 +156,21 @@ public class NotificatieVerwerkingFuzzer {
         }
     }
 
+    private static final class VasteKekProvider implements KekProvider {
+
+        private static final SecretKey KEK = new SecretKeySpec(new byte[32], "AES");
+
+        @Override
+        public int huidigeVersie() {
+            return 1;
+        }
+
+        @Override
+        public Optional<SecretKey> kek(int versie) {
+            return versie == 1 ? Optional.of(KEK) : Optional.empty();
+        }
+    }
+
     private static final CentraleNotificatieController centraleController;
     private static final DecentraleNotificatieController decentraleController;
     private static final NotifyNLCallbackController callbackController;
@@ -166,7 +185,8 @@ public class NotificatieVerwerkingFuzzer {
                         new NotifyNLAuthorizationHolder(), Optional.of(API_KEY)),
                 repository,
                 // No wait between callback retries.
-                new DirecteStatusUpdateEvent(new ConsumentCallbackAdapter(url -> callbackClientStandIn(), 0)));
+                new DirecteStatusUpdateEvent(new ConsumentCallbackAdapter(url -> callbackClientStandIn(), 0)),
+                new Sleutelbeheer(new VasteKekProvider(), new ObjectMapper()));
 
         LogboekContext logboekContext = new LogboekContext();
         HashHelper hashHelper = new HashHelper(Optional.of("fuzz-pepper-niet-voor-productie"));

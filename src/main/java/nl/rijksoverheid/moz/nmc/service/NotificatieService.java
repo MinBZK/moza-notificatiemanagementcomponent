@@ -26,15 +26,18 @@ public class NotificatieService {
     private final NotifyNLVerzendAdapter verzendAdapter;
     private final NotificatieRepository notificatieRepository;
     private final Event<StatusUpdateOpdracht> statusUpdateEvent;
+    private final Sleutelbeheer sleutelbeheer;
 
     public NotificatieService(ProfielServiceAdapter profielServiceAdapter,
                                NotifyNLVerzendAdapter verzendAdapter,
                                NotificatieRepository notificatieRepository,
-                               Event<StatusUpdateOpdracht> statusUpdateEvent) {
+                               Event<StatusUpdateOpdracht> statusUpdateEvent,
+                               Sleutelbeheer sleutelbeheer) {
         this.profielServiceAdapter = profielServiceAdapter;
         this.verzendAdapter = verzendAdapter;
         this.notificatieRepository = notificatieRepository;
         this.statusUpdateEvent = statusUpdateEvent;
+        this.sleutelbeheer = sleutelbeheer;
     }
 
     // TODO (buiten scope): deze transactie blijft open over de synchrone Profielservice- en
@@ -58,6 +61,7 @@ public class NotificatieService {
         // Flush vóór het versturen, zodat een INSERT-fout geen verstuurde e-mail zonder record
         // oplevert. Een fout bij de commit daarna kan dat nog wel.
         Notificatie notificatie = new Notificatie(callbackUrl);
+        notificatie.bewaarVersleuteldeGegevens(sleutelbeheer.versleutel(emailAdres, berichtgegevens));
         notificatieRepository.persist(notificatie);
         notificatieRepository.flush();
 

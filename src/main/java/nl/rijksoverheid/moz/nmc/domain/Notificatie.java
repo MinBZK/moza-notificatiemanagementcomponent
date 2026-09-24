@@ -55,6 +55,18 @@ public class Notificatie {
     @OrderColumn(name = "volgnummer")
     private List<NotificatieStatus> statusGeschiedenis = new ArrayList<>();
 
+    @Column(name = "ontvanger_versleuteld")
+    private byte[] ontvangerVersleuteld;
+
+    @Column(name = "personalisation_versleuteld")
+    private byte[] personalisationVersleuteld;
+
+    @Column(name = "sleutel_gewrapt")
+    private byte[] sleutelGewrapt;
+
+    @Column(name = "kek_versie")
+    private Integer kekVersie;
+
     protected Notificatie() {
         // Voor JPA
     }
@@ -171,5 +183,17 @@ public class Notificatie {
         bevestigVolledigeGeschiedenis();
 
         return statusGeschiedenis.getFirst();
+    }
+
+    public void bewaarVersleuteldeGegevens(VersleuteldeGegevens gegevens) {
+        Objects.requireNonNull(gegevens, "gegevens is verplicht");
+        this.ontvangerVersleuteld = gegevens.ontvangerVersleuteld();
+        this.personalisationVersleuteld = gegevens.personalisationVersleuteld();
+        this.sleutelGewrapt = gegevens.sleutelGewrapt();
+        this.kekVersie = gegevens.kekVersie();
+    }
+
+    public VersleuteldeGegevens getVersleuteldeGegevens() {
+        return new VersleuteldeGegevens(ontvangerVersleuteld, personalisationVersleuteld, sleutelGewrapt, kekVersie);
     }
 }

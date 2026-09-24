@@ -46,6 +46,7 @@ class NotificatieServiceTest {
     private NotificatieRepository notificatieRepository;
     @SuppressWarnings("unchecked")
     private Event<StatusUpdateOpdracht> statusUpdateEvent;
+    private Sleutelbeheer sleutelbeheer;
     private NotificatieService service;
 
     @BeforeEach
@@ -54,7 +55,8 @@ class NotificatieServiceTest {
         verzendAdapter = mock(NotifyNLVerzendAdapter.class);
         notificatieRepository = mock(NotificatieRepository.class);
         statusUpdateEvent = mock(Event.class);
-        service = new NotificatieService(profielServiceAdapter, verzendAdapter, notificatieRepository, statusUpdateEvent);
+        sleutelbeheer = SleutelbeheerTest.sleutelbeheer(1, Map.of(1, SleutelbeheerTest.KEK_1));
+        service = new NotificatieService(profielServiceAdapter, verzendAdapter, notificatieRepository, statusUpdateEvent, sleutelbeheer);
     }
 
     @Test
@@ -105,6 +107,17 @@ class NotificatieServiceTest {
         assertEquals(notifyNlId, resultaat.getExternalReference());
         assertEquals("https://omc.example.nl/callback", resultaat.getCallbackUrl());
         verifyNoInteractions(profielServiceAdapter);
+    }
+
+    @Test
+    void verstuurDecentraal_bewaartOntvangerEnPersonalisationVersleuteld() throws NotifyNLConfiguratieException, NotifyNLVerzendException {
+        when(verzendAdapter.verstuurEmail(any(), any(), any())).thenReturn(UUID.randomUUID());
+
+        Notificatie resultaat = service.verstuurDecentraal(
+                new DecentraleNotificatieVersturenOpdracht("burger@example.nl", TEST_TEMPLATE_ID, Map.of("naam", "Voorbeeld BV"), null));
+
+        assertEquals("burger@example.nl", sleutelbeheer.ontsleutelOntvanger(resultaat.getVersleuteldeGegevens()));
+        assertEquals(Map.of("naam", "Voorbeeld BV"), sleutelbeheer.ontsleutelPersonalisation(resultaat.getVersleuteldeGegevens()));
     }
 
     @Test
