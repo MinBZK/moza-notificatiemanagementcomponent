@@ -121,16 +121,22 @@ Geïmplementeerd:
   zelf; geen Profielservice-lookup.
 - `POST /api/nmc/v1/notifynl-callback`: ontvangt de afleverstatus van NotifyNL,
   beveiligd met een bearer token (`NotifyNLCallbackAuthFilter`).
+- **Statusmodel uit ADR 0024.** `notificatie` draagt de status en een versie,
+  `poging` de uitkomst per verzending, `event` het eventlog met één rij per
+  overgang. `Overgangsfunctie` is de enige schrijver van de status; een deferred
+  databasetrigger weigert een nieuwe versie zonder event of een niet-toegestane
+  overgang.
 - **Statusupdate naar de aanroeper.** Heeft het verzoek een `callbackUrl`, dan
-  stuurt `ConsumentCallbackAdapter` bij elke nieuw vastgelegde afleverstatus een CloudEvent naar
-  die URL: maximaal drie pogingen met oplopende wachttijd. De `Notificatie` en
-  zijn statusgeschiedenis blijven daarna staan.
+  stuurt `ConsumentCallbackAdapter` bij elke overgang die op een receipt volgt een
+  CloudEvent naar die URL: maximaal drie pogingen met oplopende wachttijd.
 - **Adresselectie in de Profielservice-respons** (`ProfielServiceAdapter`): eerst
   een e-mailadres met exact de scope Dienstverlener + dienst, dan een met alleen
   de Dienstverlener als scope, dan het default-adres, dan een adres zonder scopes.
 
-Beide create-flows delen `NotificatieService.verstuurNaarEmail(...)` (persist →
-NotifyNL → status `SENDING`); de centrale flow doet eerst de Profielservice-lookup.
+Beide create-flows delen `NotificatieService.verstuurNaarEmail(...)`: aannemen,
+een poging aanmaken, naar `in-verzending`, versturen bij NotifyNL en naar
+`verzonden`, alles nog synchroon in één transactie. De centrale flow doet eerst de
+Profielservice-lookup.
 
 Nog niet gebouwd: een endpoint om de status op te vragen, contactherstel, de
 Templating Service-koppeling (templates staan als vaste NotifyNL-template-IDs in
@@ -152,67 +158,49 @@ de logica die kiest tussen herverzending en contactherstel.
   template volstaat, lage prioriteit.
 - **Observability-koppelvlak** (verwerkings- en statusinformatie voor
   Dienstafnemers, waarschijnlijk voor de wMEBV-bewijslast) heeft nu geen
-  prioriteit. Het datamodel moet een audittrail van statussen en pogingen per
-  notificatie later wel zonder herontwerp toelaten. Het datamodel ondersteunt dat al:
-  `Notificatie` houdt de volledige statusgeschiedenis bij (`notificatie_status`, één
-  rij per overgang) naast een kopie van status en registratietijd van het laatste
-  record op `notificatie` zelf. Die kopie is waar de code op stuurt; de geschiedenis
-  is het audittrail.
-- **Een tweede schrijver van de statusgeschiedenis moet de `notificatie`-rij locken.**
-  Binnen Java schrijft alleen `Notificatie#registreerStatus` zowel `notificatie_status`
-  als de kopie (`laatste_status`, `laatste_status_update`), en `@Version` vangt twee
-  gelijktijdige schrijvers af. In de database koppelt geen constraint de kopie aan de rij
-  met het hoogste `volgnummer`. Wie er een schrijver bij zet (retentiejob, script,
-  migratie), leest de rij dus met `SELECT ... FOR UPDATE` — de retentiejob uit
-  MinBZK/moza-notificatiemanagementcomponent#46 doet dat met `FOR UPDATE SKIP LOCKED` — of
-  laat de kopie en de geschiedenis uit de pas lopen. Een
-  ontbrekend `volgnummer` is net zo fataal: `@OrderColumn` laadt daar een null voor in, en
-  `Notificatie` gooit dan een `IllegalStateException`.
-- **`StatusWaarde`** kent `CREATED`, `SENDING`, `DELIVERED`, `PERMANENT_FAILURE`,
-  `TEMPORARY_FAILURE` en `TECHNICAL_FAILURE`, naar de afleverstatussen die GOV.UK
-  Notify voor e-mail terugmeldt, plus `ONBEKEND`. Dat laatste is de vangwaarde van
-  `NotificatieService#parseStatus` voor een status die de NMC niet kent: die wordt op
-  ERROR gelogd en als `ONBEKEND` vastgelegd, zodat hij niet als een bekende uitkomst
-  landt. Komt er daarna nog een onbekende waarde binnen, dan is dat voor `volgtOp` een
-  herhaling: geen extra record en geen callback, alleen de ERROR-regel met de ruwe waarde.
-  Of `onbekend` überhaupt naar de Dienstverlener teruggekoppeld moet worden, staat open in
-  MinBZK/MijnOverheidZakelijk#1132. `CREATED` en `SENDING` legt de NMC zelf vast; stuurt NotifyNL ze toch, dan
-  weigert `volgtOp` ze. De `CHECK`-constraints in
-  `V1__init_notificatie.sql` en `V2__notificatie_statusgeschiedenis.sql` sommen dezelfde waarden
-  op; een nieuwe status vraagt dus ook een migratie.
+  prioriteit. Het eventlog `event` is het audittrail: één rij per overgang, met het
+  volgnummer gelijk aan de versie van de notificatie.
+- **Elke schrijver van de status gaat via `Overgangsfunctie`.** Die vergrendelt de
+  `notificatie`-rij (`PESSIMISTIC_WRITE`), toetst de overgang aan `Overgangsregels`,
+  verhoogt de versie met precies één en schrijft het event, in de transactie van de
+  aanroeper. De deferred constraint trigger `notificatie_overgang` (V5) bewaakt ook
+  schrijvers buiten Hibernate, maar controleert minder: een nieuwe rij begint op
+  `AANGENOMEN`, en een nieuwe versie moet een toegestane overgang zijn met in dezelfde
+  transactie een event met die versie als volgnummer. Een stap van precies één en de
+  vergrendeling dwingt hij niet af. Let op: elke update van een
+  `notificatie`-rij via Hibernate verhoogt `@Version` en vraagt dus een event. Een
+  schrijver die geen overgang doet (bijvoorbeeld het wissen van een sleutel) moet
+  de versie buiten beschouwing laten. In tests zet je de trigger uit met
+  `SET LOCAL session_replication_role = replica`; de databasefout van een deferred
+  trigger zit bij de commit als suppressed exception onder de `RollbackException`.
+- **Statussen.** `NotificatieStatus` (tien waarden, levenscyclus) en `PogingStatus`
+  (zeven waarden, uitkomst per verzending) staan als `CHECK`-constraint in V4; een
+  nieuwe waarde vraagt dus ook een migratie, en voor `NotificatieStatus` een regel in
+  `toegestane_overgang` en `Overgangsregels`. In de API en het CloudEvent gaan
+  statussen en redenen als kebab-case (`toApiValue`).
   `moza-portaal/dependencies/omc/swagger.json` bevat een
   `DeliveryReceipt`/`DeliveryStatuses`-schema, maar dat hoort volgens Joeri
   waarschijnlijk bij een ander systeem dan de OMC per Dienstverlener (mogelijk een
   Output Management Systeem of Printstraat). Gebruik die swagger niet als contract
   voordat dat is opgehelderd.
 - **Afleverstatussen komen at-least-once en ongeordend binnen.** NotifyNL biedt een
-  callback opnieuw aan bij elke niet-2xx, dus de volgorde van binnenkomst zegt niets
-  over de volgorde van de gebeurtenissen. `StatusWaarde#volgtOp` bepaalt of een
-  binnengekomen status wordt vastgelegd, en onderscheidt alleen de verzendfase
-  (`CREATED`, `SENDING`) van wat NotifyNL daarna terugmeldt. Tussen die terugmeldingen
-  geldt geen rangorde: NotifyNL kan ná een bezorging alsnog een fout melden, dus elke
-  definitieve status volgt op elke andere. Geweigerd worden alleen een herhaling van
-  de huidige status en een teruggang naar de verzendfase; een eerdere status die
-  terugkomt (A, B, A) wordt wél vastgelegd en doorgegeven.
-  Welke uitkomst uiteindelijk telt is nog niet belegd — `isDefinitief` betekent
-  "NotifyNL heeft iets teruggemeld", niet "hier komt niets meer overheen".
-- **Gebeurtenistijd en registratietijd zijn aparte kolommen.**
-  `NotificatieStatus#tijdstip` is wanneer de status ontstond, op de klok van de bron:
-  voor een delivery receipt NotifyNL's `completed_at`, met `sent_at` en `created_at`
-  als terugval. Geen van die drie is verplicht in hun callbackschema; dan valt de NMC
-  terug op de eigen klok. `NotificatieStatus#geregistreerd` is wanneer de NMC de status
-  vastlegde, op de eigen klok. Ze lopen uiteen omdat NotifyNL een mislukte callback tot
-  5x met 5 minuten ertussen herhaalt. Wat op de eigen klok moet, gebruikt `geregistreerd`
-  (kolom `geregistreerd`, gekopieerd naar `laatste_status_update`); `tijdstip` is het tijdstip voor het afleverbewijs en wordt
-  nergens op gefilterd of gesorteerd. De volgorde van de geschiedenis komt uit
-  `@OrderColumn` op `volgnummer`, niet uit een van beide tijdstippen.
+  callback opnieuw aan bij elke niet-2xx. `ReceiptVerwerker` ordent per poging op het
+  tijdstip in de receipt (`completed_at`, met `sent_at` en `created_at` als terugval,
+  begrensd op de eigen klok); een herhaalde of oudere receipt verandert niets. De
+  poging wordt pas na het vergrendelen van de notificatie opnieuw gelezen, zodat een
+  receipt die op de vergrendeling wachtte de uitkomst van de eerste ziet. Tot er
+  herverzending is, zijn `temporary-failure` en `technical-failure` terminaal.
+  Tussenstatussen worden genegeerd; een onbekende status wordt op ERROR gelogd en
+  verandert niets.
+- **Receipttijd en registratietijd zijn gescheiden.** Het tijdstip uit de receipt staat
+  op `poging.receipt_tijdstip` en is het tijdstip voor het afleverbewijs; `event.tijdstip`
+  en `notificatie.laatste_status_update` staan op de eigen klok.
 - **De statusupdate naar de Dienstverlener gaat pas ná de commit.**
-  `NotificatieService` vuurt een `StatusUpdateOpdracht` af; `StatusUpdateVerzender`
-  pakt die op bij `AFTER_SUCCESS` en roept `ConsumentCallbackAdapter` aan. Versturen
-  vóór de commit zou de Dienstverlener een status kunnen geven die de NMC daarna
-  terugrolt, en zou een DB-connectie bezet houden zolang de HTTP-pogingen duren. De
-  observer is bewust een eigen bean: in tests wordt de adapter met `@InjectMock`
-  vervangen, en een observer-methode op een mock wordt nooit aangeroepen.
+  `ReceiptVerwerker` vuurt bij een uitgevoerde overgang een `StatusUpdateOpdracht` af;
+  `StatusUpdateVerzender` pakt die op bij `AFTER_SUCCESS` en roept
+  `ConsumentCallbackAdapter` aan. Faalt de commit, bijvoorbeeld op de trigger, dan gaat
+  er niets uit. De observer is bewust een eigen bean: in tests wordt de adapter met
+  `@InjectMock` vervangen, en een observer-methode op een mock wordt nooit aangeroepen.
 
 ## Technische stack
 
@@ -355,8 +343,8 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
   database waar het al gedraaid heeft, ook op een previewcluster.
 - **Expand/contract bij een kolomwijziging.** Voeg eerst de nieuwe kolom toe, vul hem
   in dezelfde migratie uit de oude, en laat de `DROP COLUMN` pas volgen als niets hem
-  meer leest. `V2__notificatie_statusgeschiedenis.sql` doet dat voor `notificatie.status` en
-  `notificatie.aangemaakt`.
+  meer leest. V4 (expand), V5 (overstap en backfill) en V6 (contract) doen dat voor de
+  overstap naar het statusmodel uit ADR 0024.
 - **SQL is PostgreSQL 18.** Dev, test en prod draaien hetzelfde dialect, dus
   PostgreSQL-eigen SQL is toegestaan en draait ook in de tests.
 - **Houd de migratie en de entity gelijk.** In elk profiel staat
@@ -366,11 +354,11 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
   (`%prod.quarkus.flyway.migrate-at-start=false`). Op ZAD staat
   `QUARKUS_FLYWAY_MIGRATE_AT_START=true` in de deploymentconfig; zonder die
   instelling faalt de container op een lege database.
-- Queries gebruiken het JPA-metamodel (`Notificatie_.EXTERNAL_REFERENCE`) in plaats
+- Queries gebruiken het JPA-metamodel (`Poging_.NOTIFY_ID`) in plaats
   van losse strings. De `hibernate-processor` genereert dat; hij staat expliciet in
   `annotationProcessorPaths` omdat classpath-processors sinds JDK 23 niet meer
   vanzelf draaien.
-- Schrijf kolomnamen in de migratie met underscores (`external_reference`) en
+- Schrijf kolomnamen in de migratie met underscores (`laatste_status_update`) en
   zet ze met `@Column(name = ...)` expliciet op de entity.
 
 ## Configuratie en secrets
@@ -568,4 +556,4 @@ Details en debugroutes: `docs/zad-deploy.md`.
 - `../moza-profiel-service`: Profielservice, Quarkus (`src/main/resources/META-INF/openapi.yaml`)
 - `../moza-verificatie-service`: Quarkus; voorbeeld van de NotifyNL-integratie
 - `../moza-portaal`: Next.js-portaal met `dependencies/omc/swagger.json`; zie de
-  kanttekening bij `StatusWaarde`.
+  kanttekening bij de statussen.

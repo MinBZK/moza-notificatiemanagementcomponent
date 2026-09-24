@@ -153,6 +153,25 @@ class V5MigratieTest {
         assertFalse(events(id).isEmpty());
     }
 
+    // V6 ruimt het oude model op nadat V5 het heeft overgezet; de gemigreerde gegevens blijven staan.
+    @Test
+    void v6_naDeBackfill_verwijdertOudeGeschiedenisEnReferentie() throws SQLException {
+        migreerTot("4");
+        UUID notifyId = UUID.randomUUID();
+        UUID id = oudeNotificatie(notifyId, "DELIVERED", 2, "CREATED", "SENDING", "DELIVERED");
+
+        migreerTot("6");
+
+        try (ResultSet tabellen = verbinding.getMetaData().getTables(null, null, "notificatie_status", null);
+             ResultSet kolommen = verbinding.getMetaData().getColumns(null, null, "notificatie", "external_reference")) {
+            assertFalse(tabellen.next(), "notificatie_status hoort vervallen te zijn");
+            assertFalse(kolommen.next(), "notificatie.external_reference hoort vervallen te zijn");
+        }
+
+        assertEquals(List.of("BEZORGD", notifyId.toString()), poging(id));
+        assertEquals(3, events(id).size());
+    }
+
     private void migreerTot(String versie) {
         Flyway.configure()
                 .dataSource(jdbcUrl, DB_USER, DB_PASSWORD)
