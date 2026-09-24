@@ -158,6 +158,12 @@ de logica die kiest tussen herverzending en contactherstel.
   rij per overgang) naast een kopie van status en registratietijd van het laatste
   record op `notificatie` zelf. Die kopie is waar de code op stuurt; de geschiedenis
   is het audittrail.
+- **Een test rekt zichtbaarheid hooguit op tot package-private.** `public` is nooit een
+  testkeuze: dat maakt van een implementatiedetail een belofte aan elke aanroeper.
+  Package-private mag wel — het blijft binnen het package en de compiler bewaakt het — en
+  bij zo'n seam staat een comment met de reden. Moet je meer dan een handvol leden openen,
+  haal er dan een klasse uit (zoals `RetentieBatch`) in plaats van de bestaande verder open
+  te zetten. Reflectie om private leden te bereiken is geen alternatief.
 - **Queries staan in `NotificatieRepository`, niet in een entiteit of een service.** De
   JPQL van de retentiejob staat als `@NamedQuery` op `Notificatie`, want JPA kent geen
   andere plek en Hibernate controleert ze daar bij het opstarten; uitvoeren gebeurt

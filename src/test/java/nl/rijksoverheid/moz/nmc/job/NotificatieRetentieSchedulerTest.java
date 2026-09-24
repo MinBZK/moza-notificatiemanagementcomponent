@@ -125,9 +125,8 @@ class NotificatieRetentieSchedulerTest {
 
     // Vult aan op de vorige test: die bewijst dat de lus doorgaat tot alles weg is, maar zou ook
     // slagen voor een enkele onbegrensde DELETE (geen batching), het eindresultaat is hetzelfde.
-    // Deze test roept verwijderBatch (privé; via reflectie, zie verwijderBatchOp voor waarom er geen
-    // productiecode-zichtbaarheid voor wordt opgerekt) rechtstreeks aan en bewijst dat één aanroep
-    // écht begrensd is tot BATCH_GROOTTE.
+    // Deze test gebruikt één RetentieBatch rechtstreeks en bewijst dat één batch écht begrensd is
+    // tot RetentieBatch.GROOTTE.
     @Test
     void verwijderBatch_metMeerKandidatenDanBatchGrootte_verwijdertPreciesBatchGrootte() {
         int aantalRijen = 1005;
@@ -256,7 +255,7 @@ class NotificatieRetentieSchedulerTest {
         }).when(notificatieRepository).verwijderOpId(any());
 
         List<String> meldingen;
-        try (LogVanger vanger = LogVanger.van(NotificatieRetentieScheduler.class)) {
+        try (LogVanger vanger = LogVanger.vanPakket(NotificatieRetentieScheduler.class.getPackage())) {
             scheduler.verwijderVerlopenNotificaties();
             meldingen = vanger.regelsOpNiveau(Level.WARNING);
         }
@@ -282,7 +281,7 @@ class NotificatieRetentieSchedulerTest {
         }).when(notificatieRepository).verwijderOpId(any());
 
         List<String> fouten;
-        try (LogVanger vanger = LogVanger.van(NotificatieRetentieScheduler.class)) {
+        try (LogVanger vanger = LogVanger.vanPakket(NotificatieRetentieScheduler.class.getPackage())) {
             scheduler.verwijderVerlopenNotificaties();
             fouten = vanger.regelsOpNiveau(Level.SEVERE);
         }
@@ -328,7 +327,7 @@ class NotificatieRetentieSchedulerTest {
                 notifyNlReferentie);
 
         List<String> meldingen;
-        try (LogVanger vanger = LogVanger.van(NotificatieRetentieScheduler.class)) {
+        try (LogVanger vanger = LogVanger.vanPakket(NotificatieRetentieScheduler.class.getPackage())) {
             scheduler.verwijderVerlopenNotificaties();
             meldingen = vanger.regelsOpNiveau(Level.WARNING);
         }
@@ -357,7 +356,7 @@ class NotificatieRetentieSchedulerTest {
         maakNotificatie(null, StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
 
         List<String> meldingen;
-        try (LogVanger vanger = LogVanger.van(NotificatieRetentieScheduler.class)) {
+        try (LogVanger vanger = LogVanger.vanPakket(NotificatieRetentieScheduler.class.getPackage())) {
             scheduler.verwijderVerlopenNotificaties();
             meldingen = vanger.regelsOpNiveau(Level.WARNING);
         }
@@ -373,7 +372,7 @@ class NotificatieRetentieSchedulerTest {
         plantVerlopenNotificaties(150, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), StatusWaarde.SENDING);
 
         List<String> meldingen;
-        try (LogVanger vanger = LogVanger.van(NotificatieRetentieScheduler.class)) {
+        try (LogVanger vanger = LogVanger.vanPakket(NotificatieRetentieScheduler.class.getPackage())) {
             scheduler.verwijderVerlopenNotificaties();
             meldingen = vanger.regelsOpNiveau(Level.WARNING);
         }
@@ -395,7 +394,7 @@ class NotificatieRetentieSchedulerTest {
         UUID middelsteId = maakNotificatie(null, StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC).minusDays(60));
 
         List<String> meldingen;
-        try (LogVanger vanger = LogVanger.van(NotificatieRetentieScheduler.class)) {
+        try (LogVanger vanger = LogVanger.vanPakket(NotificatieRetentieScheduler.class.getPackage())) {
             scheduler.verwijderVerlopenNotificaties();
             meldingen = vanger.regelsOpNiveau(Level.WARNING);
         }
@@ -593,21 +592,15 @@ class NotificatieRetentieSchedulerTest {
         NotificatieFixtures.plantNotificaties(notificatieRepository.getEntityManager(), aantalRijen, tijdstip, statussen);
     }
 
-    // Een rechtstreeks geconstrueerde scheduler, niet het @Inject-veld: dat laatste is een
-    // CDI-clientproxy waarvan de eigen velden leeg zijn. De meegegeven Duration en bovengrens doen
-    // er niet toe; verwijderBatch gebruikt alleen de grens-parameter.
+    // Rechtstreeks één batch, zonder de lus eromheen: zo is de batchgrens te toetsen zonder
+    // meerdere batches aan rijen te planten.
     private int verwijderBatchOp(OffsetDateTime grens) {
-        NotificatieRetentieScheduler.BatchVoortgang voortgang =
-                new NotificatieRetentieScheduler.BatchVoortgang(0);
-        new NotificatieRetentieScheduler(notificatieRepository, new RetentieConfiguratie(Duration.ofDays(7), 10_000))
-                .verwijderBatch(grens, List.of(), voortgang);
+        RetentieBatch batch = new RetentieBatch(notificatieRepository, 0);
+        batch.verwijder(grens, List.of());
 
-        return voortgang.verwijderd();
+        return batch.verwijderd();
     }
 
-    // NotificatieStatus is een @Embeddable (@ElementCollection), dus niet zelfstandig bevraagbaar
-    // via JPQL: de collection-tabel wordt hier rechtstreeks met SQL geteld, ook zodat deze telling
-    // blijft werken nadat de bijbehorende Notificatie al is verwijderd.
     private long aantalNotificatieStatussenVoor(UUID notificatieId) {
         return QuarkusTransaction.requiringNew().call(() ->
                 NotificatieFixtures.telStatusregels(notificatieRepository.getEntityManager(), notificatieId));
