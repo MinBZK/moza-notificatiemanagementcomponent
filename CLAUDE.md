@@ -158,6 +158,19 @@ de logica die kiest tussen herverzending en contactherstel.
   rij per overgang) naast een kopie van status en registratietijd van het laatste
   record op `notificatie` zelf. Die kopie is waar de code op stuurt; de geschiedenis
   is het audittrail.
+- **Een test rekt zichtbaarheid hooguit op tot package-private.** `public` is nooit een
+  testkeuze: dat maakt van een implementatiedetail een belofte aan elke aanroeper.
+  Package-private mag wel — het blijft binnen het package en de compiler bewaakt het — en
+  bij zo'n seam staat een comment met de reden. Moet je meer dan een handvol leden openen,
+  haal er dan een klasse uit (zoals `RetentieBatch`) in plaats van de bestaande verder open
+  te zetten. Reflectie om private leden te bereiken is geen alternatief.
+- **Queries staan in `NotificatieRepository`, niet in een entiteit of een service.** De
+  JPQL van de retentiejob staat als `@NamedQuery` op `Notificatie`, want JPA kent geen
+  andere plek en Hibernate controleert ze daar bij het opstarten; uitvoeren gebeurt
+  uitsluitend in de repository. Entiteiten krijgen geen finders en geen native SQL, en
+  `getEntityManager()` verlaat de repository niet. Tests mogen wél rechtstreeks SQL
+  schrijven wanneer ze een toestand nodig hebben die Hibernate niet kan maken; die
+  statements staan gebundeld in `NotificatieFixtures`.
 - **Een tweede schrijver van de statusgeschiedenis moet de `notificatie`-rij locken.**
   Binnen Java schrijft alleen `Notificatie#registreerStatus` zowel `notificatie_status`
   als de kopie (`laatste_status`, `laatste_status_update`), en `@Version` vangt twee
@@ -202,8 +215,9 @@ de logica die kiest tussen herverzending en contactherstel.
   als terugval. Geen van die drie is verplicht in hun callbackschema; dan valt de NMC
   terug op de eigen klok. `NotificatieStatus#geregistreerd` is wanneer de NMC de status
   vastlegde, op de eigen klok. Ze lopen uiteen omdat NotifyNL een mislukte callback tot
-  5x met 5 minuten ertussen herhaalt. Wat op de eigen klok moet, gebruikt `geregistreerd`
-  (kolom `geregistreerd`, gekopieerd naar `laatste_status_update`); `tijdstip` is het tijdstip voor het afleverbewijs en wordt
+  5x met 5 minuten ertussen herhaalt. De bewaartermijn vaart op `geregistreerd` (kolom
+  `geregistreerd`, gekopieerd naar `laatste_status_update`); `tijdstip` is het tijdstip
+  voor het afleverbewijs en wordt
   nergens op gefilterd of gesorteerd. De volgorde van de geschiedenis komt uit
   `@OrderColumn` op `volgnummer`, niet uit een van beide tijdstippen.
 - **De statusupdate naar de Dienstverlener gaat pas ná de commit.**
@@ -213,6 +227,12 @@ de logica die kiest tussen herverzending en contactherstel.
   terugrolt, en zou een DB-connectie bezet houden zolang de HTTP-pogingen duren. De
   observer is bewust een eigen bean: in tests wordt de adapter met `@InjectMock`
   vervangen, en een observer-methode op een mock wordt nooit aangeroepen.
+- **`NotificatieRetentieScheduler` ruimt verlopen notificaties op**, in batches met een
+  eigen transactie per batch, `notificatie.retentie.bewaartermijn` na de laatste
+  statusregistratie en los van of de callback naar de Dienstverlener slaagde. De batch
+  claimt met `FOR UPDATE SKIP LOCKED`, omdat er in productie minimaal drie pods draaien.
+  Een notificatie die verloopt terwijl hij nog op `CREATED` of `SENDING` staat, wordt
+  apart op WARN gemeld voordat de rij weggaat; dat is het enige spoor dat overblijft.
 
 ## Technische stack
 
@@ -354,6 +374,14 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
   `notificatie.aangemaakt`.
 - **SQL moet op H2 én PostgreSQL draaien.** Dev en prod gebruiken PostgreSQL 18,
   tests H2.
+- **Een index op een gevulde tabel gaat met `CREATE INDEX CONCURRENTLY`.** Een gewone
+  `CREATE INDEX` neemt op PostgreSQL een `SHARE`-lock: `SELECT` blijft werken, maar elke
+  `INSERT`, `UPDATE` en `DELETE` wacht tot de index klaar is, bij miljoenen rijen minuten.
+  `CONCURRENTLY` kan niet in een transactie, dus zo'n statement krijgt een eigen migratie
+  met `-- flyway:executeInTransaction=false`, en H2 kent het niet, dus de testsuite dekt
+  dat script niet. Faalt de bouw halverwege, dan blijft er een `INVALID` index achter die
+  handmatig gedropt moet worden. `V3__notificatie_retentie.sql` doet het bewust zonder:
+  die index is er vóór de eerste productiedata.
 - **Houd de migratie en de entity gelijk.** Buiten tests staat
   `schema-management.strategy=validate`: wijkt een entity af van het gemigreerde
   schema, dan start de applicatie niet. Controleer een nieuwe migratie tegen

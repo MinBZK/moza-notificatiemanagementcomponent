@@ -53,6 +53,11 @@ public final class LogVanger implements AutoCloseable {
         return new LogVanger(categorie.getName());
     }
 
+    /** Vangt ook de regels van de klassen in dit package op, via de loggerhiërarchie. */
+    public static LogVanger vanPakket(Package pakket) {
+        return new LogVanger(pakket.getName());
+    }
+
     /**
      * Alle opgevangen regels van precies dit niveau, als tekst.
      * <p>

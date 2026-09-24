@@ -19,7 +19,9 @@ asynchrone bezorgstatus:
 6. De NMC zoekt de notificatie op, werkt de status bij en stuurt — als er een
    `callbackUrl` is meegegeven — een statusupdate (**CloudEvents NL GOV**) naar
    die URL. Het al dan niet slagen van die callback bepaalt niet of het record
-   blijft bestaan: de notificatie en zijn statusgeschiedenis blijven staan.
+   blijft bestaan: een retentiejob verwijdert een notificatie pas nadat de
+   geconfigureerde `notificatie.retentie.bewaartermijn` (zie
+   `application.properties`) verstreken is sinds de laatste statusupdate.
 
 De `callbackUrl` is optioneel: Dienstverleners zonder eigen webhook-endpoint kunnen
 de status opvragen via `GET /centraal/notificaties/{id}` (nog niet geïmplementeerd).
@@ -150,7 +152,7 @@ Geïmplementeerde componenten zijn vetgedrukt; de rest is toekomstig ontwerp.
 | **Profielservice-adapter** | Client | Haalt contactvoorkeur op bij de Profielservice en kan een e-mailadres invalideren. |
 | **Verzendadapter** | Client (bearer-JWT) | Verstuurt berichten via NotifyNL (`template_id` + `personalisation`). |
 | **Consument-callback-adapter** | Webhook-client (CloudEvents NL GOV) | Stuurt de afleverstatus asynchroon terug naar de aanroeper via de opgegeven `callbackUrl`. |
-| **notificatiedatabase** | PostgreSQL | Slaat referentie, status, statusgeschiedenis en (bij centraal profiel) het versleuteld identificerend nummer op. |
+| **notificatiedatabase** | PostgreSQL | Slaat referentie, status, statusgeschiedenis en (bij centraal profiel) het versleuteld identificerend nummer op; een retentiejob verwijdert records `notificatie.retentie.bewaartermijn` na de laatste statusupdate, los van of de callback is afgeleverd. |
 | **Decentrale-regie-API** | REST (controller) | Inbound endpoint voor het decentraal profiel: intake op het meegegeven e-mailadres, zonder Profielservice-lookup. |
 | Adres-adapter | Client | Haalt een postadres op bij KvK Handelsregister of BRP als fallback bij contactherstel. |
 | Contactherstel-coordinator | Component | Coördineert de contactherselstroom bij onbereikbaarheid; initieert een nieuwe verzendpoging via een ander kanaal en meldt dit aan de Contactherstel-dienst. |
@@ -206,6 +208,33 @@ vijf keer met vijf minuten ertussen en gooit de receipt daarna weg — dat budge
 is voor echte storingen, niet voor interne contentie. De primary key
 `(notificatie_id, volgnummer)` op `notificatie_status` is het vangnet daaronder
 en geldt ook voor schrijvers die Hibernate omzeilen.
+
+Een retentiejob (`NotificatieRetentieScheduler`) verwijdert een `Notificatie`
+— inclusief zijn statusgeschiedenis — zodra die laatste statuswijziging ouder
+is dan de geconfigureerde `notificatie.retentie.bewaartermijn` (zie
+`application.properties`). Die staat op **7 dagen**, conform de afspraak met de
+Belastingdienst. De property heeft geen default in de code: is hij niet gezet,
+dan faalt de applicatie bij het opstarten in plaats van stilzwijgend een
+termijn te kiezen. Dit staat los van
+het slagen van de consument-callback. De job draait dagelijks om 03:00
+Europese/Amsterdamse tijd (`notificatie.retentie.cron`) en verwijdert in
+begrensde batches, zodat één run niet vastloopt op een grote achterstand.
+Elke batch wordt geclaimd met `FOR UPDATE SKIP LOCKED`: bij meerdere replica's
+verdelen de pods de achterstand onder elkaar in plaats van allemaal dezelfde
+oudste rijen te selecteren en op elkaars rijlocks te wachten.
+Een notificatie die verloopt zonder definitieve status (`StatusWaarde#isDefinitief`:
+nog `created` of `sending`) krijgt er ook geen meer: NotifyNL meldt niets meer terug en
+de NMC verwerkt hem niet verder. Dat wordt per notificatie gelogd op WARN, in
+dezelfde transactie als de verwijdering, zodat er een aanknopingspunt overblijft
+nadat de rij weg is. De regel gebruikt `key=value` zodat er een dashboard op te
+bouwen is:
+
+```
+Retentiejob: notificatie verlopen zonder eindstatus notificatieId=... notifyNlReferentie=... status=SENDING laatsteStatusUpdate=...
+```
+
+De detailregels zijn begrensd op 100 per run; het totaal in de afsluitende
+samenvatting is dat niet, zodat een dashboard dat daarop telt compleet blijft.
 
 Onderstaande entiteit is de **beoogde eindsituatie** voor latere stories en
 nog niet geïmplementeerd:
