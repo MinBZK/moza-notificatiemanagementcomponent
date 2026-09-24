@@ -107,8 +107,6 @@ class NotificatiePersistentieTest {
 
     // De andere persistentietests kappen hun fixtures zelf al af op microseconden en gebruiken UTC;
     // hier gaat een waarde mét nanoseconden én een niet-UTC-offset door de database heen en terug.
-    // Dit draait op H2, dat de offset bewaart: de precisiekant wordt volledig getoetst, de offsetkant
-    // pas echt op PostgreSQL.
     @Test
     void notificatieStatus_metNanosecondenEnEenAndereOffset_komtGenormaliseerdTerug() {
         OffsetDateTime ruw = OffsetDateTime.parse("2026-03-01T14:00:00.123456789+02:00");
