@@ -37,7 +37,7 @@ public class Notificatie {
 
     // Kopie van status en registratietijd van het laatste geschiedenisrecord, zodat een retentiejob en
     // lijstvragen op notificatie filteren zonder over notificatie_status te aggregeren. Binnen Java
-    // schrijft alleen registreerStatus(NotificatieStatus) ze; geen constraint koppelt laatste_status aan
+    // schrijft alleen registreerStatus(StatusRegistratie) ze; geen constraint koppelt laatste_status aan
     // het hoogste volgnummer, dus een tweede schrijver moet de notificatie-rij locken (SELECT ... FOR
     // UPDATE).
     @Enumerated(EnumType.STRING)
@@ -47,13 +47,23 @@ public class Notificatie {
     @Column(name = "laatste_status_update", nullable = false)
     private OffsetDateTime laatsteStatusUpdate;
 
+    // Status in de levenscyclus uit ADR 0024. Alleen Overgangsfunctie schrijft hem; leeg voor een
+    // notificatie die nog niet via de overgangsfunctie is aangenomen.
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private NotificatieStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private Reden reden;
+
     // @OrderColumn en geen @OrderBy: zonder ordeningskolom is dit voor Hibernate een bag, en wordt
     // elke toevoeging een delete-all plus reinsert. De volgorde is daarmee registratievolgorde, niet
     // die van tijdstip — dat laatste zou een oude completed_at vóór de aanmaakstatus sorteren.
     @ElementCollection
     @CollectionTable(name = "notificatie_status", joinColumns = @JoinColumn(name = "notificatie_id"))
     @OrderColumn(name = "volgnummer")
-    private List<NotificatieStatus> statusGeschiedenis = new ArrayList<>();
+    private List<StatusRegistratie> statusGeschiedenis = new ArrayList<>();
 
     protected Notificatie() {
         // Voor JPA
@@ -61,7 +71,7 @@ public class Notificatie {
 
     public Notificatie(String callbackUrl) {
         this.callbackUrl = callbackUrl;
-        registreerStatus(NotificatieStatus.opEigenKlok(StatusWaarde.CREATED, OffsetDateTime.now(ZoneOffset.UTC)));
+        registreerStatus(StatusRegistratie.opEigenKlok(StatusWaarde.CREATED, OffsetDateTime.now(ZoneOffset.UTC)));
     }
 
     public UUID getId() {
@@ -83,6 +93,27 @@ public class Notificatie {
 
     public UUID getExternalReference() {
         return externalReference;
+    }
+
+    public long getVersie() {
+        return versie;
+    }
+
+    public NotificatieStatus getNotificatieStatus() {
+        return status;
+    }
+
+    public Reden getReden() {
+        return reden;
+    }
+
+    /**
+     * Zet status en reden. Alleen voor Overgangsfunctie, die de rij vergrendelt, de overgang toetst en
+     * het event schrijft.
+     */
+    public void pasOvergangToe(NotificatieStatus naar, Reden reden) {
+        this.status = Objects.requireNonNull(naar, "naar is verplicht");
+        this.reden = reden;
     }
 
     /**
@@ -109,7 +140,7 @@ public class Notificatie {
         }
 
         this.externalReference = externalReference;
-        registreerStatus(NotificatieStatus.opEigenKlok(StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC)));
+        registreerStatus(StatusRegistratie.opEigenKlok(StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC)));
     }
 
     /**
@@ -126,14 +157,14 @@ public class Notificatie {
         }
 
         OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
-        registreerStatus(new NotificatieStatus(status, opgetreden != null ? opgetreden : nu, nu));
+        registreerStatus(new StatusRegistratie(status, opgetreden != null ? opgetreden : nu, nu));
 
         return true;
     }
 
     // Enige mutatiepunt voor status. Bewust geen controle op tijdstip: een scheve of oude
     // gebeurtenistijd weigeren zou een geschiedenis opleveren die laatsteStatus tegenspreekt.
-    private void registreerStatus(NotificatieStatus record) {
+    private void registreerStatus(StatusRegistratie record) {
         this.statusGeschiedenis.add(record);
         this.laatsteStatus = record.status();
         this.laatsteStatusUpdate = record.geregistreerd();
@@ -146,7 +177,7 @@ public class Notificatie {
     }
 
     // Vereist een actieve persistence context: statusGeschiedenis is een lazy @ElementCollection.
-    public List<NotificatieStatus> getStatusGeschiedenis() {
+    public List<StatusRegistratie> getStatusGeschiedenis() {
         bevestigVolledigeGeschiedenis();
 
         return List.copyOf(statusGeschiedenis);
@@ -167,7 +198,7 @@ public class Notificatie {
         }
     }
 
-    private NotificatieStatus eersteStatus() {
+    private StatusRegistratie eersteStatus() {
         bevestigVolledigeGeschiedenis();
 
         return statusGeschiedenis.getFirst();
