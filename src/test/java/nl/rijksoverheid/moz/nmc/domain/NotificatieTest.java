@@ -31,7 +31,7 @@ class NotificatieTest {
         notificatie.markeerVerzonden(UUID.randomUUID());
         notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
 
-        List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
+        List<StatusRegistratie> geschiedenis = notificatie.getStatusGeschiedenis();
         assertEquals(3, geschiedenis.size());
         assertEquals(StatusWaarde.CREATED, geschiedenis.get(0).status());
         assertEquals(StatusWaarde.SENDING, geschiedenis.get(1).status());
@@ -47,8 +47,8 @@ class NotificatieTest {
         notificatie.markeerVerzonden(UUID.randomUUID());
         notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
 
-        List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
-        NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
+        List<StatusRegistratie> geschiedenis = notificatie.getStatusGeschiedenis();
+        StatusRegistratie laatste = geschiedenis.get(geschiedenis.size() - 1);
         assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
         assertEquals(laatste.geregistreerd(), notificatie.getLaatsteStatusUpdate());
     }
@@ -62,8 +62,8 @@ class NotificatieTest {
 
         notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, opgetreden);
 
-        List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
-        NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
+        List<StatusRegistratie> geschiedenis = notificatie.getStatusGeschiedenis();
+        StatusRegistratie laatste = geschiedenis.get(geschiedenis.size() - 1);
         assertEquals(opgetreden, laatste.tijdstip());
         assertTrue(laatste.geregistreerd().isAfter(opgetreden));
     }
@@ -73,7 +73,7 @@ class NotificatieTest {
     @Test
     void verwerkTerugmelding_metOudeGebeurtenistijd_zetDeRegistratietijdNietTerug() {
         Notificatie notificatie = new Notificatie(null);
-        // Afgekapt op microseconden, net als NotificatieStatus: anders is dezelfde microseconde met
+        // Afgekapt op microseconden, net als StatusRegistratie: anders is dezelfde microseconde met
         // nanoseconden erbij "later" en faalt de vergelijking willekeurig.
         OffsetDateTime voorRegistratie = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
@@ -221,8 +221,8 @@ class NotificatieTest {
     private static void bevestigProjectieVolgtGeschiedenis(Notificatie notificatie) {
         // De geschiedenis is geordend op registratievolgorde (volgnummer), dus het laatste element is
         // de laatste registratie — precies wat de kopie hoort te volgen.
-        List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
-        NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
+        List<StatusRegistratie> geschiedenis = notificatie.getStatusGeschiedenis();
+        StatusRegistratie laatste = geschiedenis.get(geschiedenis.size() - 1);
 
         assertEquals(laatste.status(), notificatie.getStatus());
         assertEquals(laatste.geregistreerd(), notificatie.getLaatsteStatusUpdate());
