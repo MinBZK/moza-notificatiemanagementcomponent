@@ -20,7 +20,9 @@ asynchrone bezorgstatus:
 6. De NMC legt de uitkomst op de verzendpoging vast, voert de bijbehorende
    statusovergang uit en stuurt, als er een `callbackUrl` is meegegeven, die
    overgang als **CloudEvents NL GOV** naar die URL. Het slagen van die callback
-   heeft geen invloed op wat de NMC vastlegt.
+   heeft geen invloed op wat de NMC vastlegt. Een retentiejob verwijdert de
+   notificatie pas nadat `notificatie.retentie.bewaartermijn` (zie
+   `application.properties`) verstreken is sinds de laatste statusovergang.
 
 De `callbackUrl` is optioneel: Dienstverleners zonder eigen webhook-endpoint kunnen
 de status opvragen via `GET /centraal/notificaties/{id}` (nog niet geïmplementeerd).
@@ -151,7 +153,7 @@ Geïmplementeerde componenten zijn vetgedrukt; de rest is toekomstig ontwerp.
 | **Profielservice-adapter** | Client | Haalt contactvoorkeur op bij de Profielservice en kan een e-mailadres invalideren. |
 | **Verzendadapter** | Client (bearer-JWT) | Verstuurt berichten via NotifyNL (`template_id` + `personalisation`). |
 | **Consument-callback-adapter** | Webhook-client (CloudEvents NL GOV) | Stuurt de afleverstatus asynchroon terug naar de aanroeper via de opgegeven `callbackUrl`. |
-| **notificatiedatabase** | PostgreSQL | Slaat notificaties met hun status, de verzendpogingen en het eventlog op. |
+| **notificatiedatabase** | PostgreSQL | Slaat notificaties met hun status, de verzendpogingen en het eventlog op; een retentiejob verwijdert notificaties `notificatie.retentie.bewaartermijn` na de laatste overgang. |
 | **Decentrale-regie-API** | REST (controller) | Inbound endpoint voor het decentraal profiel: intake op het meegegeven e-mailadres, zonder Profielservice-lookup. |
 | Adres-adapter | Client | Haalt een postadres op bij KvK Handelsregister of BRP als fallback bij contactherstel. |
 | Contactherstel-coordinator | Component | Coördineert de contactherselstroom bij onbereikbaarheid; initieert een nieuwe verzendpoging via een ander kanaal en meldt dit aan de Contactherstel-dienst. |
@@ -195,6 +197,28 @@ Twee tijdstippen blijven uit elkaar: het tijdstip uit de receipt
 en bepaalt de volgorde van receipts; het tijdstip op het event is de
 registratietijd op de eigen klok. `laatste_status_update` op `notificatie` is het
 tijdstip van de laatste statuswijziging; de retentiejob selecteert erop.
+
+Die retentiejob (`NotificatieRetentieScheduler`) verwijdert een `Notificatie`
+met zijn pogingen zodra die laatste statuswijziging ouder is dan de
+geconfigureerde `notificatie.retentie.bewaartermijn` (zie
+`application.properties`), ongeacht de status; de events blijven staan. De
+termijn staat op **7 dagen**, conform de afspraak met de Belastingdienst, en
+heeft geen default in de code: is hij niet gezet, dan faalt de applicatie bij
+het opstarten. De job draait dagelijks om 03:00 Europese/Amsterdamse tijd
+(`notificatie.retentie.cron`) en verwijdert in begrensde batches, elk geclaimd
+met `FOR UPDATE SKIP LOCKED`, zodat meerdere pods de achterstand onder elkaar
+verdelen. Een notificatie die verloopt zonder uitkomst (niet terminaal en niet
+`bezorgd`) wordt per notificatie op WARN gemeld, in dezelfde transactie als de
+verwijdering. De regel gebruikt `key=value` zodat er een dashboard op te bouwen
+is:
+
+```
+Retentiejob: notificatie verlopen zonder eindstatus notificatieId=... status=VERZONDEN laatsteStatusUpdate=...
+```
+
+De detailregels zijn begrensd op 100 per run; het totaal in de afsluitende
+samenvatting is dat niet. De job is een tussenstand: de wistaak en
+onderhoudstaak uit ADR 0024 vervangen hem.
 
 ## API
 
@@ -353,3 +377,4 @@ asynchrone bezorgstatus en consument-callback, zoals beschreven onder
 - **`GET /centraal/notificaties/{id}`** voor statuspoll zonder callbackUrl
 - **Bearer-JWT-authenticatie** voor de uitgaande consument-callback
 - Een uitgewerkt **observability-koppelvlak**
+

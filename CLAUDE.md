@@ -178,6 +178,20 @@ de logica die kiest tussen herverzending en contactherstel.
   nieuwe waarde vraagt dus ook een migratie, en voor `NotificatieStatus` een regel in
   `toegestane_overgang` en `Overgangsregels`. In de API en het CloudEvent gaan
   statussen en redenen als kebab-case (`toApiValue`).
+- **Een test rekt zichtbaarheid hooguit op tot package-private.** `public` is nooit een
+  testkeuze: dat maakt van een implementatiedetail een belofte aan elke aanroeper.
+  Package-private mag wel, het blijft binnen het package en de compiler bewaakt het, en
+  bij zo'n seam staat een comment met de reden. Moet je meer dan een handvol leden openen,
+  haal er dan een klasse uit (zoals `RetentieBatch`) in plaats van de bestaande verder open
+  te zetten. Reflectie om private leden te bereiken is geen alternatief.
+- **Queries staan in een repository, niet in een entiteit of een service.** De JPQL van
+  de retentiejob staat als `@NamedQuery` op `Notificatie`, want JPA kent geen andere plek
+  en Hibernate controleert ze daar bij het opstarten; uitvoeren gebeurt uitsluitend in
+  `NotificatieRepository`. Entiteiten krijgen geen finders en geen native SQL, en
+  `getEntityManager()` verlaat de repository niet. Tests mogen wél rechtstreeks SQL
+  schrijven wanneer ze een toestand nodig hebben die de overgangsfunctie niet maakt; die
+  statements staan gebundeld in `NotificatieFixtures`, die de trigger voor de eigen
+  transactie uitzet.
   `moza-portaal/dependencies/omc/swagger.json` bevat een
   `DeliveryReceipt`/`DeliveryStatuses`-schema, maar dat hoort volgens Joeri
   waarschijnlijk bij een ander systeem dan de OMC per Dienstverlener (mogelijk een
@@ -201,6 +215,14 @@ de logica die kiest tussen herverzending en contactherstel.
   `ConsumentCallbackAdapter` aan. Faalt de commit, bijvoorbeeld op de trigger, dan gaat
   er niets uit. De observer is bewust een eigen bean: in tests wordt de adapter met
   `@InjectMock` vervangen, en een observer-methode op een mock wordt nooit aangeroepen.
+- **`NotificatieRetentieScheduler` ruimt verlopen notificaties op**, in batches met een
+  eigen transactie per batch, `notificatie.retentie.bewaartermijn` na de laatste overgang
+  (`laatste_status_update`) en los van de status en van of de callback naar de
+  Dienstverlener slaagde. De batch claimt met `FOR UPDATE SKIP LOCKED`, omdat er in
+  productie minimaal drie pods draaien. De pogingen gaan mee via de foreignkey; de events
+  blijven staan. Een notificatie die verloopt zonder uitkomst (niet terminaal en niet
+  `BEZORGD`) wordt apart op WARN gemeld voordat de rij weggaat. Dit is een tussenstand:
+  de wistaak en onderhoudstaak uit ADR 0024 vervangen deze job.
 
 ## Technische stack
 
@@ -347,6 +369,13 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
   overstap naar het statusmodel uit ADR 0024.
 - **SQL is PostgreSQL 18.** Dev, test en prod draaien hetzelfde dialect, dus
   PostgreSQL-eigen SQL is toegestaan en draait ook in de tests.
+- **Een index op een gevulde tabel gaat met `CREATE INDEX CONCURRENTLY`.** Een gewone
+  `CREATE INDEX` neemt op PostgreSQL een `SHARE`-lock: `SELECT` blijft werken, maar elke
+  `INSERT`, `UPDATE` en `DELETE` wacht tot de index klaar is, bij miljoenen rijen minuten.
+  `CONCURRENTLY` kan niet in een transactie, dus zo'n statement krijgt een eigen migratie
+  met `-- flyway:executeInTransaction=false`. Faalt de bouw halverwege, dan blijft er een
+  `INVALID` index achter die handmatig gedropt moet worden. `V3__notificatie_retentie.sql`
+  doet het bewust zonder: die index is er vóór de eerste productiedata.
 - **Houd de migratie en de entity gelijk.** In elk profiel staat
   `schema-management.strategy=validate`: wijkt een entity af van het gemigreerde
   schema, dan start de applicatie niet, en de testsuite dus ook niet.
