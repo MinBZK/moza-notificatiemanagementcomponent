@@ -90,4 +90,41 @@ public class Poging {
     public OffsetDateTime getReceiptTijdstip() {
         return receiptTijdstip;
     }
+
+    /**
+     * Legt vast dat NotifyNL de poging heeft aangenomen.
+     *
+     * @throws IllegalStateException als de poging niet meer op {@code GEPLAND} staat
+     */
+    public void markeerVerzonden(UUID notifyId, OffsetDateTime op) {
+        Objects.requireNonNull(notifyId, "notifyId is verplicht");
+
+        if (status != PogingStatus.GEPLAND) {
+            throw new IllegalStateException("Poging " + id + " is al verzonden (status " + status + ")");
+        }
+
+        this.notifyId = notifyId;
+        this.verzondenOp = Objects.requireNonNull(op, "op is verplicht");
+        this.status = PogingStatus.VERZONDEN;
+    }
+
+    /**
+     * Legt de uitkomst uit een receipt vast als die nieuwer is dan de laatst vastgelegde. Receipts
+     * komen ongeordend binnen; de volgorde komt uit het tijdstip in de receipt zelf.
+     *
+     * @return false als de receipt een herhaling of ouder is en dus niets heeft veranderd
+     */
+    public boolean verwerkReceipt(PogingStatus uitkomst, OffsetDateTime tijdstip) {
+        Objects.requireNonNull(uitkomst, "uitkomst is verplicht");
+        Objects.requireNonNull(tijdstip, "tijdstip is verplicht");
+
+        if (receiptTijdstip != null && !tijdstip.isAfter(receiptTijdstip)) {
+            return false;
+        }
+
+        this.status = uitkomst;
+        this.receiptTijdstip = tijdstip;
+
+        return true;
+    }
 }

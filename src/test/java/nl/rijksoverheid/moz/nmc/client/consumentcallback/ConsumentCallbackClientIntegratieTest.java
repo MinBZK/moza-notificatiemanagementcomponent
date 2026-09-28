@@ -6,7 +6,8 @@ import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
-import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Reden;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -84,15 +85,19 @@ class ConsumentCallbackClientIntegratieTest {
     void verzondenBody_isHetCloudEventUitDeSpec() throws Exception {
         UUID notificatieId = UUID.randomUUID();
         try (ConsumentCallbackClient client = clientFactory.maakClient(ontvanger + "/204")) {
-            client.stuurStatusUpdate(event(notificatieId, StatusWaarde.TECHNICAL_FAILURE));
+            client.stuurStatusUpdate(event(notificatieId, NotificatieStatus.TECHNISCH_MISLUKT));
         }
 
         JsonNode body = objectMapper.readTree(ConsumentCallbackTestEndpoint.ONTVANGEN_BODIES.getFirst());
         assertEquals("1.0", body.path("specversion").asText());
         assertTrue(body.path("time").isTextual(), "time hoort een ISO-8601-string te zijn, geen getal");
         assertDoesNotThrow(() -> OffsetDateTime.parse(body.path("time").asText()));
-        assertEquals(notificatieId.toString(), body.path("data").path("notificatieId").asText());
-        assertEquals("technical-failure", body.path("data").path("status").asText());
+        assertEquals(notificatieId.toString(), body.path("subject").asText());
+        assertTrue(body.path("sequence").isTextual(), "sequence hoort een string te zijn");
+        assertEquals("3", body.path("sequence").asText());
+        assertEquals("verzonden", body.path("data").path("van").asText());
+        assertEquals("technisch-mislukt", body.path("data").path("naar").asText());
+        assertEquals("technisch", body.path("data").path("reden").asText());
     }
 
     // Een geweigerde verbinding is een transportfout: de adapter herhaalt, gooit niet en geeft op.
@@ -100,8 +105,8 @@ class ConsumentCallbackClientIntegratieTest {
     void geweigerdeVerbinding_wordtAlsTransportfoutAfgehandeld() {
         ConsumentCallbackAdapter adapter = new ConsumentCallbackAdapter(clientFactory, 0L);
 
-        assertDoesNotThrow(() -> adapter.stuurStatusUpdate(new StatusUpdateOpdracht(
-                UUID.randomUUID(), "http://localhost:1/callback", StatusWaarde.DELIVERED)));
+        assertDoesNotThrow(() -> adapter.stuurStatusUpdate(new StatusUpdateOpdracht(UUID.randomUUID(),
+                "http://localhost:1/callback", 3L, NotificatieStatus.VERZONDEN, NotificatieStatus.BEZORGD, null, OffsetDateTime.parse("2026-01-15T10:00:00Z"))));
     }
 
     private List<String> beloofdeContentTypes() throws Exception {
@@ -121,12 +126,14 @@ class ConsumentCallbackClientIntegratieTest {
     }
 
     private static NotificatieStatusEvent event() {
-        return event(UUID.randomUUID(), StatusWaarde.DELIVERED);
+        return event(UUID.randomUUID(), NotificatieStatus.BEZORGD);
     }
 
-    private static NotificatieStatusEvent event(UUID id, StatusWaarde status) {
-        return new NotificatieStatusEvent("1.0", UUID.randomUUID(), "nl.rijksoverheid.moz.nmc.notificatie.status",
-                "/api/nmc/v1/notificaties/" + id, "notificatie/" + id, OffsetDateTime.now(ZoneOffset.UTC),
-                "application/json", new NotificatieData(id, status));
+    private static NotificatieStatusEvent event(UUID id, NotificatieStatus naar) {
+        return new NotificatieStatusEvent("1.0", UUID.randomUUID(),
+                "nl.overheid.moz.notificatie.status." + naar.toApiValue(),
+                "/api/nmc/v1/notificaties/" + id, id.toString(), OffsetDateTime.now(ZoneOffset.UTC),
+                "application/json", "3", "Integer",
+                new NotificatieData(NotificatieStatus.VERZONDEN, naar, Reden.TECHNISCH, 3L));
     }
 }

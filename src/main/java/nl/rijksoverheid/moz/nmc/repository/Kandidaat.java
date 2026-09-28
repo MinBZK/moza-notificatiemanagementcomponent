@@ -1,6 +1,6 @@
 package nl.rijksoverheid.moz.nmc.repository;
 
-import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -12,7 +12,7 @@ import java.util.UUID;
  * geneste klasse daar een {@code $} in het pad krijgt. In dit package omdat een repositoryquery hem
  * teruggeeft.
  *
- * @param laatsteStatusUpdate de registratietijd van de laatste status, waar de bewaartermijn op vaart
+ * @param laatsteStatusUpdate de registratietijd van de laatste overgang, waar de bewaartermijn op vaart
  */
-public record Kandidaat(UUID id, UUID externalReference, StatusWaarde status, OffsetDateTime laatsteStatusUpdate) {
+public record Kandidaat(UUID id, NotificatieStatus status, OffsetDateTime laatsteStatusUpdate) {
 }
