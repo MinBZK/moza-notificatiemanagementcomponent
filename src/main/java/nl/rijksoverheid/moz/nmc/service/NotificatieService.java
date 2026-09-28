@@ -28,17 +28,20 @@ public class NotificatieService {
     private final PogingRepository pogingRepository;
     private final Overgangsfunctie overgangsfunctie;
     private final Sleutelbeheer sleutelbeheer;
+    private final DvProvider dvProvider;
 
     public NotificatieService(ProfielServiceAdapter profielServiceAdapter,
                                NotifyNLVerzendAdapter verzendAdapter,
                                PogingRepository pogingRepository,
                                Overgangsfunctie overgangsfunctie,
-                               Sleutelbeheer sleutelbeheer) {
+                               Sleutelbeheer sleutelbeheer,
+                               DvProvider dvProvider) {
         this.profielServiceAdapter = profielServiceAdapter;
         this.verzendAdapter = verzendAdapter;
         this.pogingRepository = pogingRepository;
         this.overgangsfunctie = overgangsfunctie;
         this.sleutelbeheer = sleutelbeheer;
+        this.dvProvider = dvProvider;
     }
 
     // TODO (buiten scope): deze transactie blijft open over de synchrone Profielservice- en
@@ -69,7 +72,7 @@ public class NotificatieService {
     // meeneemt zonder tweede update.
     private Notificatie verstuurNaarEmail(String emailAdres, Ontvanger ontvanger, String templateId,
                                           Map<String, String> berichtgegevens, String callbackUrl) {
-        Notificatie notificatie = new Notificatie(callbackUrl);
+        Notificatie notificatie = new Notificatie(dvProvider.huidigeDvId(), callbackUrl);
         notificatie.bewaarVersleuteldeGegevens(sleutelbeheer.versleutel(notificatie.getId(), ontvanger, berichtgegevens));
         overgangsfunctie.neemAan(notificatie);
 
