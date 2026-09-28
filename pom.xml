@@ -102,6 +102,11 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-hibernate-orm-panache</artifactId>
         </dependency>
+        <!-- Worker-lus en periodieke taken; de takentabel is de planner, dus geen Quartz. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-scheduler</artifactId>
+        </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-flyway</artifactId>
@@ -109,11 +114,6 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-jdbc-postgresql</artifactId>
-        </dependency>
-        <!-- Worker-lus en periodieke taken; de takentabel is de planner, dus geen Quartz. -->
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-scheduler</artifactId>
         </dependency>
         <!-- Readiness/liveness-probes (/q/health). Readiness bevat automatisch een
              datasource-check, zodat een ZAD-deploy met onbereikbare DB als

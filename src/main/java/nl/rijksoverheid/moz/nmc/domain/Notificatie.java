@@ -6,6 +6,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
+import jakarta.persistence.NamedQuery;
 import jakarta.persistence.Version;
 
 import java.time.OffsetDateTime;
@@ -14,8 +15,18 @@ import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
 
+// De queries staan als @NamedQuery en niet in de repository, omdat Hibernate ze dan bij het opstarten
+// controleert in plaats van bij de eerste aanroep — die valt voor de retentiejob midden in de nacht.
+// JPA kent geen andere plek dan de entiteit; uitvoeren gebeurt uitsluitend in NotificatieRepository.
+@NamedQuery(name = Notificatie.ZOEK_KANDIDATEN,
+        query = "SELECT new nl.rijksoverheid.moz.nmc.repository.Kandidaat(n.id, n.status, n.laatsteStatusUpdate) "
+                + "FROM Notificatie n WHERE n.id IN :ids ORDER BY n.laatsteStatusUpdate")
+@NamedQuery(name = Notificatie.VERWIJDER_OP_ID, query = "DELETE FROM Notificatie n WHERE n.id IN :ids")
 @Entity
 public class Notificatie {
+
+    public static final String ZOEK_KANDIDATEN = "Notificatie.zoekKandidaten";
+    public static final String VERWIJDER_OP_ID = "Notificatie.verwijderOpId";
 
     @Id
     @GeneratedValue
