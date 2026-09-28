@@ -1,4 +1,4 @@
--- V6: ontvanger en personalisation versleuteld op de notificatierij, met een sleutel per
+-- V7: ontvanger en personalisation versleuteld op de notificatierij, met een sleutel per
 -- notificatie die gewrapt is door de KEK van versie kek_versie.
 -- Nullable: bestaande rijen hebben deze gegevens niet, en het wissen van de sleutel zet
 -- sleutel_gewrapt op null.
