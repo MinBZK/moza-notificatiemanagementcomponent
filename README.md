@@ -380,3 +380,4 @@ asynchrone bezorgstatus en consument-callback, zoals beschreven onder
 - **`GET /centraal/notificaties/{id}`** voor statuspoll zonder callbackUrl
 - **Bearer-JWT-authenticatie** voor de uitgaande consument-callback
 - Een uitgewerkt **observability-koppelvlak**
+
