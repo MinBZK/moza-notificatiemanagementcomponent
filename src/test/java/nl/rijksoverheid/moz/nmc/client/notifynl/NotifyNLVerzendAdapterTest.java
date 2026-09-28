@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.client.notifynl;
 
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
+import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.GetMessageDataApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,15 +23,17 @@ class NotifyNLVerzendAdapterTest {
 
     private SendAMessageApi sendAMessageApi;
     private NotifyNLJwtFactory notifyNLJwtFactory;
+    private GetMessageDataApi getMessageDataApi;
     private NotifyNLAuthorizationHolder authorizationHolder;
     private NotifyNLVerzendAdapter adapter;
 
     @BeforeEach
     void setUp() {
         sendAMessageApi = Mockito.mock(SendAMessageApi.class);
+        getMessageDataApi = Mockito.mock(GetMessageDataApi.class);
         notifyNLJwtFactory = Mockito.mock(NotifyNLJwtFactory.class);
         authorizationHolder = new NotifyNLAuthorizationHolder();
-        adapter = new NotifyNLVerzendAdapter(sendAMessageApi, notifyNLJwtFactory, authorizationHolder,
+        adapter = new NotifyNLVerzendAdapter(sendAMessageApi, getMessageDataApi, notifyNLJwtFactory, authorizationHolder,
                 Optional.of("test-key"));
 
         Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
@@ -100,7 +103,7 @@ class NotifyNLVerzendAdapterTest {
 
     @Test
     void constructor_ontbrekendeApiKey_gooitIllegalStateException() {
-        assertThrows(IllegalStateException.class, () -> new NotifyNLVerzendAdapter(sendAMessageApi, notifyNLJwtFactory,
+        assertThrows(IllegalStateException.class, () -> new NotifyNLVerzendAdapter(sendAMessageApi, getMessageDataApi, notifyNLJwtFactory,
                 authorizationHolder, Optional.empty()));
     }
 }

@@ -3,9 +3,11 @@ package nl.rijksoverheid.moz.nmc.repository;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import org.hibernate.query.NativeQuery;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -49,6 +51,25 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
         }
 
         return query.getResultList();
+    }
+
+    /** Het aantal notificaties dat deze dienstverlener sinds {@code vanaf} heeft aangeboden. */
+    public long telAangenomenSinds(UUID dvId, OffsetDateTime vanaf) {
+        return count("dvId = ?1 and aangenomenOp >= ?2", dvId, vanaf);
+    }
+
+    /**
+     * Notificaties zonder terminale status waarvoor geen taak open staat of mislukt is: die zijn
+     * blijven steken en krijgen van de controletaak de ontbrekende taak.
+     */
+    public List<Notificatie> zonderTaak(Collection<NotificatieStatus> terminaal, int limiet) {
+        return getEntityManager()
+                .createQuery("SELECT n FROM Notificatie n WHERE n.status NOT IN :terminaal "
+                        + "AND NOT EXISTS (SELECT t.id FROM Taak t WHERE t.notificatieId = n.id) "
+                        + "ORDER BY n.laatsteStatusUpdate", Notificatie.class)
+                .setParameter("terminaal", terminaal)
+                .setMaxResults(limiet)
+                .getResultList();
     }
 
     /**

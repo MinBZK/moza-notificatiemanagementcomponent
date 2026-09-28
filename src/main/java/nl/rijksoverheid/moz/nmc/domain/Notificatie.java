@@ -56,6 +56,10 @@ public class Notificatie {
     @Column(name = "laatste_status_update", nullable = false)
     private OffsetDateTime laatsteStatusUpdate;
 
+    // Het quotum per dienstverlener telt op dit tijdstip.
+    @Column(name = "aangenomen_op", nullable = false, updatable = false)
+    private OffsetDateTime aangenomenOp;
+
     @Column(name = "ontvanger_versleuteld")
     private byte[] ontvangerVersleuteld;
 
@@ -77,6 +81,11 @@ public class Notificatie {
         this.id = UUID.randomUUID();
         this.dvId = Objects.requireNonNull(dvId, "dvId is verplicht");
         this.callbackUrl = callbackUrl;
+        this.aangenomenOp = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+    }
+
+    public OffsetDateTime getAangenomenOp() {
+        return aangenomenOp;
     }
 
     public UUID getId() {

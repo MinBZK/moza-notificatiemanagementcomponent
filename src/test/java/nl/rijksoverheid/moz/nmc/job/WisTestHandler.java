@@ -10,19 +10,19 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
 /**
- * Handler voor de soort CONTROLE in de testsuite; er is nog geen echte. Het gedrag is per test in te
+ * Handler voor de soort WISSEN in de testsuite; er is nog geen echte. Het gedrag is per test in te
  * stellen. De worker-lus staat in tests uit, dus deze handler draait alleen als een test een ronde
  * aanroept.
  */
 @ApplicationScoped
-public class ControleTestHandler implements TaakHandler {
+public class WisTestHandler implements TaakHandler {
 
     static final AtomicReference<BiFunction<Taak, Lease, TaakUitkomst>> GEDRAG =
             new AtomicReference<>((taak, lease) -> TaakUitkomst.afgerond());
 
     @Override
     public TaakSoort soort() {
-        return TaakSoort.CONTROLE;
+        return TaakSoort.WISSEN;
     }
 
     @Override
