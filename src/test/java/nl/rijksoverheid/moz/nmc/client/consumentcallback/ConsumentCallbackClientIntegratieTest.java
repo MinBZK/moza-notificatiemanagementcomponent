@@ -105,7 +105,7 @@ class ConsumentCallbackClientIntegratieTest {
     void geweigerdeVerbinding_wordtAlsTransportfoutAfgehandeld() {
         ConsumentCallbackAdapter adapter = new ConsumentCallbackAdapter(clientFactory, 0L);
 
-        assertDoesNotThrow(() -> adapter.stuurStatusUpdate(new StatusUpdateOpdracht(UUID.randomUUID(),
+        assertDoesNotThrow(() -> adapter.stuurStatusUpdate(new StatusUpdateOpdracht(7L, UUID.randomUUID(),
                 "http://localhost:1/callback", 3L, NotificatieStatus.VERZONDEN, NotificatieStatus.BEZORGD, null, OffsetDateTime.parse("2026-01-15T10:00:00Z"))));
     }
 
@@ -130,7 +130,7 @@ class ConsumentCallbackClientIntegratieTest {
     }
 
     private static NotificatieStatusEvent event(UUID id, NotificatieStatus naar) {
-        return new NotificatieStatusEvent("1.0", UUID.randomUUID(),
+        return new NotificatieStatusEvent("1.0", "7",
                 "nl.overheid.moz.notificatie.status." + naar.toApiValue(),
                 "/api/nmc/v1/notificaties/" + id, id.toString(), OffsetDateTime.now(ZoneOffset.UTC),
                 "application/json", "3", "Integer",

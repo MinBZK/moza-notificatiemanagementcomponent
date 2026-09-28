@@ -13,10 +13,11 @@ import java.util.UUID;
  * na de commit uitgevoerd door StatusUpdateVerzender. Bevat platte waarden: de observer draait
  * buiten de transactie waarin de entities geladen zijn.
  *
+ * @param eventId  het id van het event in het eventlog; wordt het {@code id} van het CloudEvent
  * @param versie   het volgnummer van de overgang; de Dienstverlener ordent daarop
  * @param tijdstip wanneer de overgang is vastgelegd, op de klok van de NMC
  */
-public record StatusUpdateOpdracht(UUID notificatieId, String callbackUrl, long versie,
+public record StatusUpdateOpdracht(long eventId, UUID notificatieId, String callbackUrl, long versie,
                                    NotificatieStatus van, NotificatieStatus naar, Reden reden,
                                    OffsetDateTime tijdstip) {
 
@@ -30,7 +31,7 @@ public record StatusUpdateOpdracht(UUID notificatieId, String callbackUrl, long 
     }
 
     public static StatusUpdateOpdracht van(Event event, String callbackUrl) {
-        return new StatusUpdateOpdracht(event.getNotificatieId(), callbackUrl, event.getVolgnummer(),
+        return new StatusUpdateOpdracht(event.getId(), event.getNotificatieId(), callbackUrl, event.getVolgnummer(),
                 event.getVan(), event.getNaar(), event.getReden(), event.getTijdstip());
     }
 }

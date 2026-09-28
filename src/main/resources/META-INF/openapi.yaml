@@ -23,6 +23,10 @@ tags:
     description: >-
       Decentrale notificaties (decentraal profiel / doorgeefluik); de aanroeper heeft
       de contactgegevens zelf al bepaald en levert het e-mailadres rechtstreeks aan.
+  - name: Wijzigingen
+    description: >-
+      De eventfeed: de statusovergangen van de notificaties van de Dienstverlener als
+      CloudEvents, gelezen met een cursor en bevestigd door die cursor terug te schrijven.
 
 paths:
   /api/nmc/v1/centraal/notificaties:
@@ -174,6 +178,116 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
+  /api/nmc/v1/notificaties/wijzigingen:
+    get:
+      operationId: wijzigingenLezen
+      summary: Statusovergangen lezen vanaf een cursor
+      description: |
+        Geeft de statusovergangen van de notificaties van de Dienstverlener terug als
+        CloudEvents (NL GOV profiel), in commitvolgorde, vanaf de meegegeven cursor. Zonder
+        cursor begint de pagina bij het oudste beschikbare event. Elk antwoord draagt de
+        cursor voor de volgende pagina; een lege pagina betekent dat er op dit moment niets
+        nieuws is.
+
+        Een event verschijnt pas in de feed nadat elke oudere transactie is afgerond, zodat
+        een cursor nooit een laat gecommit event overslaat. De feed garandeert geen volgorde
+        tussen events van dezelfde notificatie: verwerk per `subject` op `sequence` en negeer
+        een lager volgnummer na een hoger.
+
+        De cursor is een ondoorzichtige tekst. Hij vervalt (410) wanneer het cluster na een
+        herstel uit back-up een nieuw epoch heeft gekregen, of wanneer hij onder het oudste
+        beschikbare event wijst omdat dat deel van het log is opgeruimd; lees dan opnieuw
+        zonder cursor. De paginagrootte is begrensd op een geconfigureerd maximum en het
+        aantal aanroepen per Dienstverlener per minuut ook (429).
+      tags:
+        - Wijzigingen
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          description: De cursor uit het vorige antwoord; weglaten om bij het oudste beschikbare event te beginnen
+          schema:
+            type: string
+            maxLength: 200
+        - name: limiet
+          in: query
+          required: false
+          description: Het gewenste aantal events per pagina; meer dan het geconfigureerde maximum levert het maximum
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+      responses:
+        '200':
+          description: Een pagina events met de cursor voor de volgende pagina
+          headers:
+            API-Version:
+              schema:
+                type: string
+              description: Versie van de API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WijzigingenPagina'
+        '400':
+          description: De cursor is niet te ontleden of `limiet` is kleiner dan 1
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '410':
+          description: >-
+            De cursor is vervallen: een ander cluster-epoch of onder het oudste beschikbare
+            event. Lees opnieuw zonder cursor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/CursorVervallenProblem'
+        '429':
+          description: De aanroeplimiet per Dienstverlener per minuut is bereikt
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AanroeplimietProblem'
+
+  /api/nmc/v1/notificaties/wijzigingen/bevestiging:
+    put:
+      operationId: wijzigingenBevestigen
+      summary: Verwerkte statusovergangen bevestigen
+      description: |
+        Legt vast tot welke cursor de Dienstverlener de events heeft verwerkt. De NMC bewaart
+        per Dienstverlener één bevestiging en zet die alleen vooruit: een cursor die ouder is
+        dan de bewaarde bevestiging verandert niets en krijgt toch `204`. Een vervallen cursor
+        (ander cluster-epoch of onder het oudste beschikbare event) krijgt `410`.
+      tags:
+        - Wijzigingen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BevestigingRequest'
+      responses:
+        '204':
+          description: Bevestiging vastgelegd, of ouder dan de bewaarde bevestiging en daarom ongewijzigd
+          headers:
+            API-Version:
+              schema:
+                type: string
+              description: Versie van de API
+        '400':
+          description: De cursor ontbreekt of is niet te ontleden
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '410':
+          description: De cursor is vervallen; lees de feed opnieuw zonder cursor
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/CursorVervallenProblem'
+
 components:
   schemas:
     IdentificatieType:
@@ -323,8 +437,11 @@ components:
           example: '1.0'
         id:
           type: string
-          format: uuid
-          description: Unieke identificatie van dit event, niet van de notificatie
+          description: >-
+            Het id van het event in het eventlog, als tekst. Hetzelfde event heeft in de
+            feed en in de callback hetzelfde `id`, zodat een Dienstverlener die beide
+            gebruikt dubbele verwerking kan herkennen.
+          example: '1042'
         type:
           type: string
           description: >-
@@ -428,6 +545,62 @@ components:
         - verlopen
         - geannuleerd
         - technisch
+
+    WijzigingenPagina:
+      type: object
+      description: >-
+        Eén pagina uit de eventfeed. `events` zijn de CloudEvents in commitvolgorde; `cursor`
+        is de positie ná het laatste event van deze pagina, mee te geven bij de volgende aanroep
+        en terug te schrijven als bevestiging. Bij een lege pagina is `cursor` gelijk aan de
+        meegegeven cursor en ontbreekt hij als er nog geen event is.
+      required:
+        - events
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificatieStatusEvent'
+        cursor:
+          type: string
+          description: De cursor voor de volgende pagina; een ondoorzichtige tekst
+          example: MTo0MjoxMDQy
+
+    BevestigingRequest:
+      type: object
+      required:
+        - cursor
+      properties:
+        cursor:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: De cursor uit de laatste volledig verwerkte pagina
+
+    CursorVervallenProblem:
+      description: >-
+        De cursor is vervallen: het cluster-epoch in de cursor is niet het huidige, of de
+        cursor wijst onder het oudste beschikbare event. Lees de feed opnieuw zonder cursor.
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - https://mijnoverheidzakelijk.nl/nmc/problemen/cursor-vervallen
+
+    AanroeplimietProblem:
+      description: >-
+        De Dienstverlener heeft in de lopende minuut meer aanroepen op de feed gedaan dan
+        toegestaan. Probeer het in de volgende minuut opnieuw.
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - https://mijnoverheidzakelijk.nl/nmc/problemen/aanroeplimiet-overschreden
 
     Problem:
       type: object
