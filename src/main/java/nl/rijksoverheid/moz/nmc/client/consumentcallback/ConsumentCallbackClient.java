@@ -5,7 +5,7 @@ import jakarta.ws.rs.POST;
 
 // Hand-written REST client (not OpenAPI-generated) — the consumer's callbackUrl is only known
 // at runtime, so there's no fixed spec to generate this from.
-public interface ConsumentCallbackClient {
+public interface ConsumentCallbackClient extends AutoCloseable {
 
     /**
      * POSTs a CloudEvents-formatted notificatie-status update to the consumer-supplied
@@ -14,4 +14,8 @@ public interface ConsumentCallbackClient {
     @POST
     @Consumes("application/cloudevents+json")
     void stuurStatusUpdate(NotificatieStatusEvent event);
+
+    // Elke statusupdate bouwt een eigen client; sluiten geeft zijn HTTP-verbindingen vrij.
+    @Override
+    void close();
 }

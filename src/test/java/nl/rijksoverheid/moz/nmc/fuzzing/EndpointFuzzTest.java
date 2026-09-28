@@ -74,7 +74,7 @@ public class EndpointFuzzTest {
             notificatieRepository.deleteAll();
             for (UUID referentie : BEKENDE_NOTIFY_REFERENTIES) {
                 Notificatie notificatie = new Notificatie(null);
-                notificatie.setExternalReference(referentie);
+                notificatie.markeerVerzonden(referentie);
                 notificatieRepository.persist(notificatie);
             }
         });
