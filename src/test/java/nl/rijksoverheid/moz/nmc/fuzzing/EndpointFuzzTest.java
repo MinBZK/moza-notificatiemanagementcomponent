@@ -16,6 +16,11 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Poging;
+import nl.rijksoverheid.moz.nmc.repository.EventRepository;
+import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
+import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +28,8 @@ import org.mockito.Mockito;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -66,21 +73,35 @@ public class EndpointFuzzTest {
     @Inject
     NotificatieRepository notificatieRepository;
 
+    @Inject
+    PogingRepository pogingRepository;
+
+    @Inject
+    EventRepository eventRepository;
+
+    @Inject
+    Overgangsfunctie overgangsfunctie;
+
     @BeforeEach
     void setUp() {
         // Wipes what earlier invocations committed, then seeds the notificaties the
         // afleverstatus-corpus refers to.
         QuarkusTransaction.requiringNew().run(() -> {
+            eventRepository.deleteAll();
             notificatieRepository.deleteAll();
             for (UUID referentie : BEKENDE_NOTIFY_REFERENTIES) {
                 Notificatie notificatie = new Notificatie(null);
-                notificatie.markeerVerzonden(referentie);
-                notificatieRepository.persist(notificatie);
+                overgangsfunctie.neemAan(notificatie);
+                Poging poging = new Poging(notificatie.getId(), 1);
+                pogingRepository.persist(poging);
+                overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
+                poging.markeerVerzonden(referentie, OffsetDateTime.now(ZoneOffset.UTC));
+                overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
             }
         });
 
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmailadres());
-        // One id per invocation: external_reference is unique and each fuzz method sends exactly once.
+        // One id per invocation: poging.notify_id is unique and each fuzz method sends exactly once.
         Mockito.when(sendAMessageApi.sendEmail(any()))
                 .thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
     }

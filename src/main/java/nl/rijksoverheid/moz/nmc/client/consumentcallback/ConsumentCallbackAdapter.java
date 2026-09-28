@@ -11,8 +11,6 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.RestClientDefinitionException;
 
 import java.io.IOException;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 
@@ -27,6 +25,8 @@ import java.util.concurrent.TimeoutException;
 public class ConsumentCallbackAdapter {
 
     private static final int MAX_POGINGEN = 3;
+
+    private static final String TYPE_PREFIX = "nl.overheid.moz.notificatie.status.";
 
     // Begrenst het aflopen van een eventueel kringvormige oorzakenketen.
     private static final int MAX_OORZAAKDIEPTE = 20;
@@ -65,12 +65,15 @@ public class ConsumentCallbackAdapter {
         NotificatieStatusEvent event = new NotificatieStatusEvent(
                 "1.0",
                 UUID.randomUUID(),
-                "nl.rijksoverheid.moz.nmc.notificatie.status",
+                TYPE_PREFIX + opdracht.naar().toApiValue(),
                 "/api/nmc/v1/notificaties/" + opdracht.notificatieId(),
-                "notificatie/" + opdracht.notificatieId(),
-                OffsetDateTime.now(ZoneOffset.UTC),
+                opdracht.notificatieId().toString(),
+                opdracht.tijdstip(),
                 "application/json",
-                new NotificatieData(opdracht.notificatieId(), opdracht.status()));
+                // De sequence-extensie van CloudEvents schrijft een string voor.
+                String.valueOf(opdracht.versie()),
+                "Integer",
+                new NotificatieData(opdracht.van(), opdracht.naar(), opdracht.reden(), opdracht.versie()));
 
         try {
             verstuurMetHerpogingen(client, event, opdracht);
@@ -122,14 +125,14 @@ public class ConsumentCallbackAdapter {
             if (poging == MAX_POGINGEN) {
                 Log.errorf(fout, "Consument-callback naar %s mislukt na %d pogingen — statusupdate %s voor "
                         + "notificatie %s niet afgeleverd aan de Dienstverlener; er volgt geen automatische "
-                        + "herpoging", opdracht.callbackUrl(), MAX_POGINGEN, opdracht.status(), opdracht.notificatieId());
+                        + "herpoging", opdracht.callbackUrl(), MAX_POGINGEN, opdracht.naar(), opdracht.notificatieId());
 
                 return;
             }
 
             Log.warnf(fout, "Consument-callback naar %s voor notificatie %s (status %s) mislukt (poging %d/%d) "
                     + "— nieuwe poging na %dms", opdracht.callbackUrl(), opdracht.notificatieId(),
-                    opdracht.status(), poging, MAX_POGINGEN, wachtMs);
+                    opdracht.naar(), poging, MAX_POGINGEN, wachtMs);
             try {
                 Thread.sleep(wachtMs);
             } catch (InterruptedException e) {
@@ -145,7 +148,7 @@ public class ConsumentCallbackAdapter {
     private static void meldOnderbroken(Exception e, StatusUpdateOpdracht opdracht, int poging) {
         Thread.currentThread().interrupt();
         Log.errorf(e, "Consument-callback naar %s onderbroken bij poging %d — statusupdate %s voor notificatie %s "
-                + "niet afgeleverd", opdracht.callbackUrl(), poging, opdracht.status(), opdracht.notificatieId());
+                + "niet afgeleverd", opdracht.callbackUrl(), poging, opdracht.naar(), opdracht.notificatieId());
     }
 
     @SafeVarargs
