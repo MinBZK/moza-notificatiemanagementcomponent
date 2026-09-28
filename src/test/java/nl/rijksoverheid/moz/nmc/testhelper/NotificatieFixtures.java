@@ -101,9 +101,10 @@ public final class NotificatieFixtures {
                     .executeUpdate();
 
             for (int nummer = 1; nummer <= aantalPogingen; nummer++) {
-                entityManager.createNativeQuery("INSERT INTO poging (id, notificatie_id, nummer, status, notify_id) "
-                                + "SELECT gen_random_uuid(), " + idExpressie + ", ?3, ?4, gen_random_uuid() "
+                entityManager.createNativeQuery("INSERT INTO poging (id, notificatie_id, nummer, status, notify_id, verzonden_op) "
+                                + "SELECT gen_random_uuid(), " + idExpressie + ", ?3, ?4, gen_random_uuid(), ?1 "
                                 + "FROM generate_series(1, ?2) AS g")
+                        .setParameter(1, tijdstip)
                         .setParameter(2, aantalRijen)
                         .setParameter(3, nummer)
                         .setParameter(4, PogingStatus.VERZONDEN.name())
