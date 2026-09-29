@@ -434,11 +434,13 @@ public class NotificatieVerwerkingFuzzer {
 
     /**
      * In-memory stand-in for the transition function: applies Overgangsregels without a database,
-     * lock or trigger, and numbers events per notificatie.
+     * lock or trigger, and numbers events per notificatie. Event ids come from a counter, as the
+     * database identity would hand them out; the status update uses the id as CloudEvent id.
      */
     private static final class GeheugenOvergangsfunctie extends Overgangsfunctie {
 
         private final Map<UUID, Long> versies = new HashMap<>();
+        private long volgendEventId = 1;
 
         GeheugenOvergangsfunctie() {
             super(null, null);
@@ -450,7 +452,7 @@ public class NotificatieVerwerkingFuzzer {
             repository.persist(notificatie);
             versies.put(notificatie.getId(), 0L);
 
-            return new nl.rijksoverheid.moz.nmc.domain.Event(NotificatieFixtures.DV_ID, notificatie.getId(), 0, null, NotificatieStatus.AANGENOMEN, null);
+            return event(notificatie.getId(), 0, null, NotificatieStatus.AANGENOMEN, null);
         }
 
         @Override
@@ -476,8 +478,19 @@ public class NotificatieVerwerkingFuzzer {
             notificatie.pasOvergangToe(naar, reden);
             long versie = versies.merge(notificatieId, 1L, Long::sum);
 
-            return OvergangUitkomst.uitgevoerd(van,
-                    new nl.rijksoverheid.moz.nmc.domain.Event(NotificatieFixtures.DV_ID, notificatieId, versie, van, naar, reden));
+            return OvergangUitkomst.uitgevoerd(van, event(notificatieId, versie, van, naar, reden));
+        }
+
+        private nl.rijksoverheid.moz.nmc.domain.Event event(UUID notificatieId, long volgnummer, NotificatieStatus van,
+                                                            NotificatieStatus naar, Reden reden) {
+            long id = volgendEventId++;
+
+            return new nl.rijksoverheid.moz.nmc.domain.Event(NotificatieFixtures.DV_ID, notificatieId, volgnummer, van, naar, reden) {
+                @Override
+                public Long getId() {
+                    return id;
+                }
+            };
         }
     }
 
