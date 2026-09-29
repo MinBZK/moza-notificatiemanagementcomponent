@@ -200,6 +200,8 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
 - **`verzendbudget`** is een rij per Notify-service per minuut met de resterende
   tokens; het verzenden en de navraag claimen ertegen, met een vast deel
   gereserveerd voor de navraag.
+- **`bevestiging`** is per dienstverlener de feedcursor die hij zelf terugschrijft;
+  hij gaat alleen vooruit.
 
 `Overgangsfunctie` is de enige schrijver van de status. Hij vergrendelt de
 notificatierij (`SELECT ... FOR UPDATE`), toetst de overgang aan
@@ -251,6 +253,14 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
 - **`POST /decentraal/notificaties`**: idem voor een meegegeven e-mailadres (geen
   Profielservice-lookup). Retourneert `202`, `400` bij een onbekend berichttype,
   een ongeldig e-mailadres of een ongeldige `callbackUrl`, en `429` bij het quotum.
+- **`GET /notificaties/wijzigingen?cursor=&limiet=`**: de events van de eigen
+  notificaties als CloudEvents, in commitvolgorde, met de cursor voor de volgende
+  pagina. Zonder cursor vanaf het oudste beschikbare event. `400` bij een ongeldige
+  cursor, `410` bij een vervallen cursor (begin dan zonder cursor), `429` bij de
+  aanroeplimiet. Verwerk per `subject` op `sequence`: de feed garandeert geen
+  volgorde binnen één notificatie.
+- **`PUT /notificaties/wijzigingen/bevestiging`**: legt de cursor vast tot waar de
+  Dienstverlener heeft verwerkt; een oudere cursor verandert niets. `204`, `400` of `410`.
 - **`POST /notifynl-callback`**: webhook waarop NotifyNL de bezorgstatus
   (delivery receipt) van een verzending terugmeldt. Beveiligd met een bearer
   token dat geconfigureerd wordt in NotifyNL's dashboard en via

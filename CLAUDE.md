@@ -143,6 +143,13 @@ Geïmplementeerd:
 - **Eén geconfigureerde dienstverlener.** `dienstverlener` heeft één rij uit de
   migratie; `DvProvider` levert die `dv_id`, die op elke notificatie en elk event
   staat. Tokenvalidatie per dienstverlener vervangt later alleen de provider.
+- **Eventfeed met bevestiging.** `GET /api/nmc/v1/notificaties/wijzigingen` leest het
+  eventlog van de dienstverlener op (transactie-id, event-id) onder het watermerk
+  `pg_snapshot_xmin(pg_current_snapshot())`, zodat een cursor nooit een event overslaat
+  dat later committet dan een event met een hogere transactie-id. De cursor is
+  base64url van `epoch:xid:eventId`; een ander epoch (`nmc.feed.cluster-epoch`) of een
+  positie onder het oudste event geeft 410. `PUT .../wijzigingen/bevestiging` schrijft
+  `bevestiging`, alleen vooruit. De aanroeplimiet (`Aanroeplimiet`) telt per pod.
 
 Beide intakes gaan via `AannameService`: notificatie op `aangenomen` met event 0, de
 versleutelde payload en een verzendtaak in één transactie; het quotum per
@@ -236,6 +243,10 @@ de logica die kiest tussen herverzending en contactherstel.
   `ConsumentCallbackAdapter` aan. Faalt de commit, bijvoorbeeld op de trigger, dan gaat
   er niets uit. De observer is bewust een eigen bean: in tests wordt de adapter met
   `@InjectMock` vervangen, en een observer-methode op een mock wordt nooit aangeroepen.
+- **Callback en feed leveren hetzelfde CloudEvent.** `NotificatieStatusEvent.van` bouwt
+  beide; `id` is het event-id uit het eventlog, zodat een Dienstverlener een event uit de
+  callback in de feed herkent. `xid` staat niet op de entity `Event`: de feed leest hem
+  met native SQL via `xid::text::bigint`, omdat `xid8` geen cast naar `bigint` kent.
 - **`NotificatieRetentieScheduler` ruimt verlopen notificaties op**, in batches met een
   eigen transactie per batch, `notificatie.retentie.bewaartermijn` na de laatste overgang
   (`laatste_status_update`) en los van de status en van of de callback naar de
