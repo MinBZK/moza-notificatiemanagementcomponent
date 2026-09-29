@@ -132,7 +132,10 @@ public class ReceiptVerwerker {
         Overgang overgang = Overgang.bij(uitkomst.get(), poging.getNummer() == 1, notificatie.isVerlopen(nu));
 
         if (overgang.herverzending()) {
-            planHerverzending(notificatie, nu);
+            // Een eerdere faalreceipt op deze poging heeft de herverzending al gepland.
+            if (vorige != PogingStatus.TIJDELIJK_MISLUKT && vorige != PogingStatus.TECHNISCH_MISLUKT) {
+                planHerverzending(notificatie, nu);
+            }
 
             return;
         }
