@@ -29,6 +29,9 @@ import java.util.UUID;
  * taak opnieuw plant, zodat een worker die zijn lease verloor de positie niet verzet. Een 2xx is
  * geen bevestiging; die schrijft de Dienstverlener zelf met de feedcursor.
  * <p>
+ * Een geslaagde ronde zet de pogingen van de taak terug, zodat alleen een reeks onverwachte fouten
+ * op rij hem op mislukt zet en niet fouten verspreid over zijn hele levensduur.
+ * <p>
  * Een mislukte levering kost de taak geen poging: de wachttijd loopt op met het aantal mislukkingen
  * op rij, en na het afgesproken aantal pauzeert de webhook met een oplopende wachttijd tot ten
  * hoogste een dag. Een geslaagde levering zet de teller terug. Een ongeldige webhook-URL geldt als
@@ -100,7 +103,10 @@ public class TerugkoppelTaakHandler implements TaakHandler {
                 yield TaakUitkomst.afgerond();
             }
             case Gepauzeerd g -> TaakUitkomst.uitgesteld(g.tot(), false);
-            case GeenEvents g -> TaakUitkomst.uitgesteld(nu().plus(interval), false);
+            case GeenEvents g -> {
+                QuarkusTransaction.requiringNew().run(() -> taakClaimer.herplanNaSucces(taak, nu().plus(interval)));
+                yield TaakUitkomst.alAfgerond();
+            }
             case OngeldigeUrl o -> {
                 Log.errorf("Webhook-URL van dienstverlener %s is ongeldig (%s); de webhook pauzeert zonder aanroep",
                         dvId, o.reden());
@@ -165,7 +171,7 @@ public class TerugkoppelTaakHandler implements TaakHandler {
     // Direct weer aan de beurt: er kunnen meer events klaarstaan dan in één bundel pasten.
     private void registreerLevering(Taak taak, Levering levering) {
         OffsetDateTime nu = nu();
-        taakClaimer.stelUit(taak, nu, false);
+        taakClaimer.herplanNaSucces(taak, nu);
         webhookpositieRepository.bewaar(new Webhookpositie(taak.getDvId(), levering.cursor(), 0, null), nu);
     }
 

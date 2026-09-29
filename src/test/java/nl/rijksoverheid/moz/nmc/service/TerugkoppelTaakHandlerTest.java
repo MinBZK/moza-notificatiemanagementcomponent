@@ -125,6 +125,24 @@ class TerugkoppelTaakHandlerTest {
         assertTrue(taak.getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC)), "na een lege ronde op het interval");
     }
 
+    // De taak plant zichzelf zijn hele levensduur opnieuw; fouten die verspreid over die tijd vallen
+    // mogen niet optellen tot mislukt.
+    @Test
+    void geslaagdeRonde_zetDePogingenTerug() {
+        zetWebhook(ontvanger + "/204", null);
+        zetPogingen(1);
+        schrijfEvents(1);
+
+        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
+        assertEquals(0, terugkoppeltaak().getPogingen(), "na een levering");
+
+        zetPogingen(1);
+        maakAanDeBeurt();
+        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
+        assertEquals(0, terugkoppeltaak().getPogingen(), "na een ronde zonder events");
+        assertEquals(TaakStatus.OPEN, terugkoppeltaak().getStatus());
+    }
+
     // De JWT moet te controleren zijn met alleen wat het NMC publiceert.
     @Test
     void terugkoppelen_jwtIsTeVerifierenMetDeJwks() throws Exception {
@@ -345,6 +363,13 @@ class TerugkoppelTaakHandlerTest {
                 .setParameter(1, url)
                 .setParameter(2, maxMislukkingen)
                 .setParameter(3, NotificatieFixtures.DV_ID)
+                .executeUpdate());
+    }
+
+    private void zetPogingen(int pogingen) {
+        QuarkusTransaction.requiringNew().run(() -> entityManager
+                .createNativeQuery("UPDATE taak SET pogingen = ?1 WHERE soort = 'TERUGKOPPELEN'")
+                .setParameter(1, pogingen)
                 .executeUpdate());
     }
 
