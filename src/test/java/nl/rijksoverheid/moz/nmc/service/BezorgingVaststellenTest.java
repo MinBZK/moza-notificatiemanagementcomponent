@@ -103,6 +103,38 @@ class BezorgingVaststellenTest {
         assertEquals(NotificatieStatus.DEFINITIEF_BEZORGD, notificatie(bezorgd.notificatieId()).getStatus());
     }
 
+    // Ook als de poging na de eerste late faalreceipt niet meer op bezorgd staat, blijft de termijn gelden.
+    @Test
+    void tweedeFaalreceiptNaDeTermijn_wordtOokAlleenOpDePogingVastgelegd() {
+        OffsetDateTime bezorgdOp = OffsetDateTime.now(ZoneOffset.UTC).minusDays(7).minusHours(6);
+        Bezorgd bezorgd = bezorgd(bezorgdOp);
+
+        receiptVerwerker.verwerk(bezorgd.notifyId(), bezorgd.pogingId().toString(), "temporary-failure",
+                bezorgdOp.plusDays(7).plusHours(1));
+        receiptVerwerker.verwerk(bezorgd.notifyId(), bezorgd.pogingId().toString(), "permanent-failure",
+                bezorgdOp.plusDays(7).plusHours(2));
+
+        assertEquals(NotificatieStatus.BEZORGD, notificatie(bezorgd.notificatieId()).getStatus());
+        assertEquals(PogingStatus.PERMANENT_MISLUKT, poging(bezorgd.pogingId()).getStatus());
+        assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, taken().getFirst().getSoort(), "de vaststeltaak blijft staan");
+    }
+
+    // Een technical-failure geeft vanuit bezorgd geen overgang, maar de termijn loopt nog vanaf de bezorging.
+    @Test
+    void faalreceiptBinnenDeTermijnNaEenGeweigerdeOvergang_volgtDeGewoneRegels() {
+        OffsetDateTime bezorgdOp = OffsetDateTime.now(ZoneOffset.UTC).minusDays(3);
+        Bezorgd bezorgd = bezorgd(bezorgdOp);
+
+        receiptVerwerker.verwerk(bezorgd.notifyId(), bezorgd.pogingId().toString(), "technical-failure", bezorgdOp.plusDays(1));
+        assertEquals(NotificatieStatus.BEZORGD, notificatie(bezorgd.notificatieId()).getStatus());
+
+        receiptVerwerker.verwerk(bezorgd.notifyId(), bezorgd.pogingId().toString(), "permanent-failure", bezorgdOp.plusDays(2));
+
+        assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(bezorgd.notificatieId()).getStatus());
+        assertEquals(bezorgdOp.truncatedTo(ChronoUnit.MICROS).toInstant(), poging(bezorgd.pogingId()).getBezorgdOp().toInstant());
+        assertTrue(taken().isEmpty());
+    }
+
     @Test
     void vaststeltaak_notificatieNietMeerBezorgd_rondtAfZonderOvergang() {
         Bezorgd bezorgd = bezorgd(OffsetDateTime.now(ZoneOffset.UTC).minusDays(9));

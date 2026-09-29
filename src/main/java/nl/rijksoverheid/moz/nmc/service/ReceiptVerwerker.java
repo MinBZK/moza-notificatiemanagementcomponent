@@ -85,7 +85,6 @@ public class ReceiptVerwerker {
         }
 
         PogingStatus vorige = poging.getStatus();
-        OffsetDateTime vorigeReceipt = poging.getReceiptTijdstip();
 
         if (!poging.verwerkReceipt(uitkomst.get(), tijdstip)) {
             Log.debugf("Receipt %s voor NotifyNL-referentie %s is een herhaling of ouder dan de vastgelegde "
@@ -99,10 +98,12 @@ public class ReceiptVerwerker {
             taakRepository.verwijderOpen(TaakSoort.RECONCILIEREN, notificatie.getId());
         }
 
-        if (notificatie.getStatus() == NotificatieStatus.BEZORGD && vorige == PogingStatus.BEZORGD
-                && !vaststellingstermijn.binnen(vorigeReceipt, tijdstip)) {
-            Log.infof("Receipt %s voor notificatie %s valt na de vaststellingstermijn; alleen op de poging vastgelegd",
-                    status, notificatie.getId());
+        // Op een bezorgde notificatie geeft een faalreceipt alleen een overgang als hij gaat over de
+        // poging waarop bezorgd rust en binnen de vaststellingstermijn valt.
+        if (notificatie.getStatus() == NotificatieStatus.BEZORGD && uitkomst.get() != PogingStatus.BEZORGD
+                && (poging.getBezorgdOp() == null || !vaststellingstermijn.binnen(poging.getBezorgdOp(), tijdstip))) {
+            Log.infof("Receipt %s voor notificatie %s valt buiten de vaststellingstermijn van de bezorging; alleen op "
+                    + "de poging vastgelegd", status, notificatie.getId());
 
             return;
         }

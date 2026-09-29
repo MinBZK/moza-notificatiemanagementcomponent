@@ -121,10 +121,11 @@ public class ControleTaakHandler implements TaakHandler {
                 && (poging.getStatus() == PogingStatus.VERZONDEN || poging.getStatus() == PogingStatus.ONBEKEND);
     }
 
-    // De vaststeltaak houdt de termijn vanaf de bezorging aan, ook als hij hier opnieuw wordt gepland.
+    // De vaststeltaak houdt de termijn vanaf de bezorging aan, ook als hij hier opnieuw wordt gepland;
+    // zonder bekend bezorgtijdstip loopt de termijn vanaf nu, zodat hij nooit te vroeg vaststelt.
     private OffsetDateTime due(TaakSoort soort, Optional<Poging> laatste, OffsetDateTime nu) {
         return soort == TaakSoort.BEZORGING_VASTSTELLEN
-                ? laatste.map(Poging::getReceiptTijdstip).map(vaststellingstermijn::vaststellenOp).orElse(nu)
+                ? vaststellingstermijn.vaststellenOp(laatste.map(Poging::getBezorgdOp).orElse(nu))
                 : nu;
     }
 

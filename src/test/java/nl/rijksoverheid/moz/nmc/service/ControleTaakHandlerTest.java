@@ -103,6 +103,16 @@ class ControleTaakHandlerTest {
         assertEquals(bezorgdOp.plusDays(8).toInstant(), perNotificatie().get(id).getDue().toInstant());
     }
 
+    // Zonder bekend bezorgtijdstip loopt de termijn vanaf nu, zodat de taak nooit te vroeg vaststelt.
+    @Test
+    void controle_bezorgdZonderBezorgtijdstip_plantDeVaststeltaakEenVolleTermijnVooruit() {
+        UUID id = notificatie(NotificatieStatus.BEZORGD, UUID.randomUUID());
+
+        taakWorker.verwerk(TaakSoort.CONTROLE);
+
+        assertTrue(perNotificatie().get(id).getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusDays(7)));
+    }
+
     @Test
     void controle_laatNotificatiesMetEenOpenOfMislukteTaakMetRust() {
         UUID metOpenTaak = notificatie(NotificatieStatus.AANGENOMEN, null);

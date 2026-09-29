@@ -48,6 +48,10 @@ public class Poging {
     @Column(name = "receipt_tijdstip")
     private OffsetDateTime receiptTijdstip;
 
+    // Het tijdstip uit de eerste verwerkte delivered-receipt; een latere faalreceipt laat het staan.
+    @Column(name = "bezorgd_op")
+    private OffsetDateTime bezorgdOp;
+
     protected Poging() {
         // Voor JPA
     }
@@ -89,6 +93,11 @@ public class Poging {
 
     public OffsetDateTime getReceiptTijdstip() {
         return receiptTijdstip;
+    }
+
+    /** Het tijdstip van de bezorging waarop de vaststellingstermijn loopt; null als er geen delivered was. */
+    public OffsetDateTime getBezorgdOp() {
+        return bezorgdOp;
     }
 
     /**
@@ -159,6 +168,10 @@ public class Poging {
 
         this.status = uitkomst;
         this.receiptTijdstip = tijdstip;
+
+        if (uitkomst == PogingStatus.BEZORGD && bezorgdOp == null) {
+            this.bezorgdOp = tijdstip;
+        }
 
         return true;
     }

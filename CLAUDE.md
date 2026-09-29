@@ -154,7 +154,8 @@ Geïmplementeerd:
   Een verwerkte receipt rondt de navraag af. `delivered` plant een vaststeltaak op het
   tijdstip uit de receipt plus `Vaststellingstermijn` (`nmc.vaststelling.*`); een
   faalreceipt binnen de termijn rondt die af, een faalreceipt met een tijdstip daarna
-  wordt alleen op de poging vastgelegd.
+  wordt alleen op de poging vastgelegd. De termijn loopt vanaf `poging.bezorgd_op`, dat een
+  latere faalreceipt niet overschrijft.
 - **Eén geconfigureerde dienstverlener.** `dienstverlener` heeft één rij uit de
   migratie; `DvProvider` levert die `dv_id`, die op elke notificatie en elk event
   staat. Tokenvalidatie per dienstverlener vervangt later alleen de provider.
