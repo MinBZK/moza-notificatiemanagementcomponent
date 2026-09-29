@@ -1,31 +1,36 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
-import jakarta.ws.rs.WebApplicationException;
-import jakarta.ws.rs.core.Response;
-import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
-import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
-import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ApiProfielserviceV1VoorkeurPost201ResponseScopesInner;
-import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
-import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
-import java.util.List;
 import java.util.UUID;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
-import static org.mockito.ArgumentMatchers.any;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.verifyNoInteractions;
 
+/** De intake is een aanname: 202 na de commit, zonder aanroep van de Profielservice of NotifyNL. */
 @QuarkusTest
 class CentraleNotificatieControllerTest {
+
+    private static final String PAD = "/api/nmc/v1/centraal/notificaties";
 
     @InjectMock
     @RestClient
@@ -35,374 +40,130 @@ class CentraleNotificatieControllerTest {
     @RestClient
     SendAMessageApi sendAMessageApi;
 
-    @InjectMock
-    NotifyNLJwtFactory notifyNLJwtFactory;
+    @Inject
+    NotificatieRepository notificatieRepository;
+
+    @Inject
+    TaakRepository taakRepository;
+
+    @Inject
+    EntityManager entityManager;
 
     @BeforeEach
     void setUp() {
-        Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
+        QuarkusTransaction.requiringNew().run(() -> {
+            taakRepository.deleteAll();
+            notificatieRepository.deleteAll();
+        });
+    }
+
+    @AfterEach
+    void quotumWeg() {
+        zetQuotum(null);
     }
 
     @Test
-    void notificatieVersturen_happyFlow_retourneert200() {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail("burger@example.nl", true));
+    void notificatieVersturen_happyFlow_retourneert202MetLocationEnPlantDeVerzendtaak() {
+        String id = given()
+                .contentType(ContentType.JSON)
+                .body(aanvraag("Stuurgroep Agenda", "\"dienst\": \"Parkeervergunning\","))
+                .when().post(PAD)
+                .then()
+                .statusCode(202)
+                .header("Location", equalTo("/api/nmc/v1/notificaties/" + idUitDatabase()))
+                .body("notificatieId", notNullValue())
+                .extract().path("notificatieId");
 
-        UUID notifyNlId = UUID.randomUUID();
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
+        QuarkusTransaction.requiringNew().run(() -> {
+            assertEquals(NotificatieStatus.AANGENOMEN, notificatieRepository.findById(UUID.fromString(id)).getStatus());
+            assertEquals(TaakSoort.VERZENDEN, taakRepository.listAll().getFirst().getSoort());
+        });
+        verifyNoInteractions(profielApi, sendAMessageApi);
+    }
 
-        String aanvraag = """
-                {
-                  "identificatieType": "KVK",
-                  "identificatieNummer": "12345678",
-                  "dienstverlener": "Gemeente Voorbeeld",
-                  "dienst": "Parkeervergunning",
-                  "berichtType": "Stuurgroep Agenda",
-                  "berichtgegevens": { "naam": "Voorbeeld BV" }
-                }
-                """;
-
+    @Test
+    void notificatieVersturen_zonderDienst_retourneert202() {
         given()
                 .contentType(ContentType.JSON)
-                .body(aanvraag)
-                .when().post("/api/nmc/v1/centraal/notificaties")
+                .body(aanvraag("Stuurgroep Agenda", ""))
+                .when().post(PAD)
                 .then()
-                .statusCode(200)
-                .body("notificatieId", org.hamcrest.Matchers.notNullValue());
+                .statusCode(202);
     }
 
     @Test
     void notificatieVersturen_ongeldigeCallbackUrl_retourneert400() {
-        String aanvraag = """
-                {
-                  "identificatieType": "KVK",
-                  "identificatieNummer": "12345678",
-                  "dienstverlener": "Gemeente Voorbeeld",
-                  "berichtType": "Stuurgroep Agenda",
-                  "callbackUrl": "https://10.0.0.1/callback"
-                }
-                """;
-
         given()
                 .contentType(ContentType.JSON)
-                .body(aanvraag)
-                .when().post("/api/nmc/v1/centraal/notificaties")
+                .body(aanvraag("Stuurgroep Agenda", "\"callbackUrl\": \"http://127.0.0.1/cb\","))
+                .when().post(PAD)
                 .then()
                 .statusCode(400)
-                .contentType("application/problem+json")
-                .body("violations[0].field", org.hamcrest.Matchers.endsWith("callbackUrl"))
-                .body("violations[0].message", org.hamcrest.Matchers.containsString("IP-adres"));
-    }
-
-    @Test
-    void notificatieVersturen_geenEmailadresGevonden_retourneert400() {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijZonderEmail());
-
-        String aanvraag = """
-                {
-                  "identificatieType": "KVK",
-                  "identificatieNummer": "12345678",
-                  "dienstverlener": "Gemeente Voorbeeld",
-                  "dienst": "Parkeervergunning",
-                  "berichtType": "Stuurgroep Agenda"
-                }
-                """;
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag)
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then()
-                .statusCode(400)
-                .contentType("application/problem+json");
-    }
-
-    @Test
-    void notificatieVersturen_zonderDienst_retourneert200() {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail("burger@example.nl", true));
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(UUID.randomUUID()));
-
-        String aanvraag = """
-                {
-                  "identificatieType": "KVK",
-                  "identificatieNummer": "12345678",
-                  "dienstverlener": "Gemeente Voorbeeld",
-                  "berichtType": "Stuurgroep Agenda"
-                }
-                """;
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag)
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then()
-                .statusCode(200);
+                .body("violations", notNullValue());
     }
 
     @Test
     void notificatieVersturen_ontbrekendIdentificatieNummer_retourneert400() {
-        String aanvraag = """
-                {
-                  "identificatieType": "KVK",
-                  "dienstverlener": "Gemeente Voorbeeld",
-                  "dienst": "Parkeervergunning"
-                }
-                """;
-
         given()
                 .contentType(ContentType.JSON)
-                .body(aanvraag)
-                .when().post("/api/nmc/v1/centraal/notificaties")
+                .body("""
+                        {
+                          "identificatieType": "KVK",
+                          "dienstverlener": "Gemeente Voorbeeld",
+                          "berichtType": "Stuurgroep Agenda"
+                        }
+                        """)
+                .when().post(PAD)
                 .then()
                 .statusCode(400);
-    }
-
-    @Test
-    void notificatieVersturen_leegIdentificatieNummer_retourneert400() {
-        String aanvraag = """
-                {
-                  "identificatieType": "KVK",
-                  "identificatieNummer": "",
-                  "dienstverlener": "Gemeente Voorbeeld",
-                  "dienst": "Parkeervergunning",
-                  "berichtType": "Stuurgroep Agenda"
-                }
-                """;
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag)
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then()
-                .statusCode(400)
-                .contentType("application/problem+json");
-    }
-
-    @Test
-    void notificatieVersturen_notifyGeenNotificatieId_retourneert500() {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail("burger@example.nl", true));
-
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse());
-
-        String aanvraag = """
-                {
-                  "identificatieType": "KVK",
-                  "identificatieNummer": "12345678",
-                  "dienstverlener": "Gemeente Voorbeeld",
-                  "dienst": "Parkeervergunning",
-                  "berichtType": "Stuurgroep Agenda"
-                }
-                """;
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag)
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then()
-                .statusCode(500)
-                .contentType("application/problem+json");
-    }
-
-    @Test
-    void notificatieVersturen_notifyGeenStatus201_retourneert500() {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail("burger@example.nl", true));
-
-        Mockito.when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build()));
-
-        String aanvraag = """
-                {
-                  "identificatieType": "KVK",
-                  "identificatieNummer": "12345678",
-                  "dienstverlener": "Gemeente Voorbeeld",
-                  "dienst": "Parkeervergunning",
-                  "berichtType": "Stuurgroep Agenda"
-                }
-                """;
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag)
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then()
-                .statusCode(500)
-                .contentType("application/problem+json");
-    }
-
-    @Test
-    void notificatieVersturen_partijNietGevonden_retourneert400() {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.NOT_FOUND).build()));
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then()
-                .statusCode(400)
-                .contentType("application/problem+json");
-    }
-
-    @Test
-    void notificatieVersturen_profielserviceFout_retourneert500() {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.INTERNAL_SERVER_ERROR).build()));
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then()
-                .statusCode(500)
-                .contentType("application/problem+json");
-    }
-
-    @Test
-    void notificatieVersturen_ongeldigeApiKeyConfiguratie_retourneert500() {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail("burger@example.nl", true));
-        Mockito.when(notifyNLJwtFactory.authorizationHeader(any()))
-                .thenThrow(new IllegalArgumentException("Ongeldige key"));
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then()
-                .statusCode(500)
-                .contentType("application/problem+json");
-    }
-
-    @Test
-    void notificatieVersturen_emailMetExacteScope_wordtGekozen() {
-        // Only a scoped email exists (no default/unscoped), so a 200 proves the scope lookup works
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
-                .thenReturn(partijMetEnkelGescopedeEmail("scoped@example.nl", "Gemeente Voorbeeld", "Parkeervergunning"));
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(UUID.randomUUID()));
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then()
-                .statusCode(200);
-    }
-
-    @Test
-    void notificatieVersturen_emailMetDienstverlenerScopeZonderDienst_wordtGekozen() {
-        // Scoped to dienstverlener only (no dienst), no default — should still be picked
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
-                .thenReturn(partijMetEnkelGescopedeEmail("dv-scoped@example.nl", "Gemeente Voorbeeld", null));
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(UUID.randomUUID()));
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then()
-                .statusCode(200);
-    }
-
-    @Test
-    void notificatieVersturen_emailMetVerkeerdeScope_valtTerugOpDefault() {
-        // Wrong-scoped email + unscoped default — default should be picked, not the scoped one
-        PartijResponse partij = new PartijResponse()
-                .partijId(UUID.randomUUID())
-                .contactgegevens(List.of(
-                        gescopedeEmail("wrong-scoped@example.nl", "Andere Dienstverlener", "Parkeervergunning"),
-                        ongescopedeEmail("default@example.nl", true)));
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partij);
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(UUID.randomUUID()));
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then()
-                .statusCode(200);
-    }
-
-    @Test
-    void notificatieVersturen_alleEmailsMetVerkeerdeScope_retourneert400() {
-        // All emails scoped to wrong dienstverlener, no fallback available
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
-                .thenReturn(partijMetEnkelGescopedeEmail("wrong@example.nl", "Andere Dienstverlener", "Parkeervergunning"));
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then()
-                .statusCode(400)
-                .contentType("application/problem+json");
     }
 
     @Test
     void notificatieVersturen_onbekendBerichtType_retourneert400() {
         given()
                 .contentType(ContentType.JSON)
-                .body("""
-                        {
-                          "identificatieType": "KVK",
-                          "identificatieNummer": "12345678",
-                          "dienstverlener": "Gemeente Voorbeeld",
-                          "dienst": "Parkeervergunning",
-                          "berichtType": "Onbekend Type XYZ"
-                        }
-                        """)
-                .when().post("/api/nmc/v1/centraal/notificaties")
+                .body(aanvraag("Bestaat Niet", ""))
+                .when().post(PAD)
                 .then()
                 .statusCode(400)
-                .contentType("application/problem+json");
+                .body("title", equalTo("Notificatie niet aangenomen."));
     }
 
-    private String standaardAanvraag() {
+    @Test
+    void notificatieVersturen_quotumBereikt_retourneert429MetEigenType() {
+        zetQuotum(1);
+        given().contentType(ContentType.JSON).body(aanvraag("Stuurgroep Agenda", "")).when().post(PAD).then().statusCode(202);
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(aanvraag("Stuurgroep Agenda", ""))
+                .when().post(PAD)
+                .then()
+                .statusCode(429)
+                .contentType("application/problem+json")
+                .body("type", equalTo("https://mijnoverheidzakelijk.nl/nmc/problemen/quotum-overschreden"));
+    }
+
+    private static String aanvraag(String berichtType, String extraVeld) {
         return """
                 {
                   "identificatieType": "KVK",
                   "identificatieNummer": "12345678",
                   "dienstverlener": "Gemeente Voorbeeld",
-                  "dienst": "Parkeervergunning",
-                  "berichtType": "Stuurgroep Agenda"
+                  %s
+                  "berichtType": "%s",
+                  "berichtgegevens": { "naam": "Voorbeeld BV" }
                 }
-                """;
+                """.formatted(extraVeld, berichtType);
     }
 
-    private PartijResponse partijMetEnkelGescopedeEmail(String email, String dienstverlenerNaam, String dienstNaam) {
-        return new PartijResponse()
-                .partijId(UUID.randomUUID())
-                .contactgegevens(List.of(gescopedeEmail(email, dienstverlenerNaam, dienstNaam)));
+    private String idUitDatabase() {
+        return QuarkusTransaction.requiringNew().call(() -> notificatieRepository.listAll().getFirst().getId().toString());
     }
 
-    private ContactgegevenResponse gescopedeEmail(String email, String dienstverlenerNaam, String dienstNaam) {
-        ApiProfielserviceV1VoorkeurPost201ResponseScopesInner scope = new ApiProfielserviceV1VoorkeurPost201ResponseScopesInner()
-                .dienstverlenerNaam(dienstverlenerNaam)
-                .dienstNaam(dienstNaam);
-
-        return new ContactgegevenResponse()
-                .type(ContactgegevenResponse.TypeEnum.EMAIL)
-                .waarde(email)
-                .scopes(List.of(scope));
-    }
-
-    private ContactgegevenResponse ongescopedeEmail(String email, boolean isDefault) {
-        return new ContactgegevenResponse()
-                .type(ContactgegevenResponse.TypeEnum.EMAIL)
-                .waarde(email)
-                .isDefault(isDefault);
-    }
-
-    private PartijResponse partijMetEmail(String email, boolean isDefault) {
-        return new PartijResponse()
-                .partijId(UUID.randomUUID())
-                .contactgegevens(List.of(ongescopedeEmail(email, isDefault)));
-    }
-
-    private PartijResponse partijZonderEmail() {
-        return new PartijResponse()
-                .partijId(UUID.randomUUID())
-                .contactgegevens(List.of());
-    }
-
-    private SendEmailResponse notifyResponse(UUID notifyReferentie) {
-        return new SendEmailResponse().id(notifyReferentie.toString());
+    private void zetQuotum(Integer quotum) {
+        QuarkusTransaction.requiringNew().run(() -> entityManager
+                .createNativeQuery("UPDATE dienstverlener SET quotum_per_dag = ?1 WHERE id = ?2")
+                .setParameter(1, quotum).setParameter(2, NotificatieFixtures.DV_ID).executeUpdate());
     }
 }

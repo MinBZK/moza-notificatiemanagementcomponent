@@ -61,11 +61,11 @@ class TaakClaimerTest {
 
     @Test
     void claim_neemtAlleenTakenDieAanDeBeurtZijn_oudsteEerst() {
-        long later = plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().plusHours(1));
-        long oud = plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusHours(2));
-        long recent = plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        long later = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().plusHours(1));
+        long oud = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusHours(2));
+        long recent = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
 
-        List<Taak> geclaimd = taakClaimer.claim(TaakSoort.CONTROLE, 10);
+        List<Taak> geclaimd = taakClaimer.claim(TaakSoort.ONDERHOUD, 10);
 
         assertEquals(List.of(oud, recent), geclaimd.stream().map(Taak::getId).toList());
         assertEquals(1, geclaimd.getFirst().getClaimEpoch());
@@ -75,21 +75,21 @@ class TaakClaimerTest {
 
     @Test
     void claim_geclaimdeTaak_isNietOpnieuwTeClaimenZolangDeLeaseLoopt() {
-        plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
 
-        assertEquals(1, taakClaimer.claim(TaakSoort.CONTROLE, 10).size());
-        assertEquals(0, taakClaimer.claim(TaakSoort.CONTROLE, 10).size());
+        assertEquals(1, taakClaimer.claim(TaakSoort.ONDERHOUD, 10).size());
+        assertEquals(0, taakClaimer.claim(TaakSoort.ONDERHOUD, 10).size());
     }
 
     // Een verlopen lease betekent dat de worker is uitgevallen; de taak gaat naar de volgende claim,
     // met een hoger epoch zodat de oude worker niets meer kan afronden.
     @Test
     void claim_verlopenLease_leidtTotHerclaimMetHogerEpoch() {
-        long id = plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
-        Taak eerste = taakClaimer.claim(TaakSoort.CONTROLE, 10).getFirst();
+        long id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        Taak eerste = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
         laatLeaseVerlopen(id);
 
-        Taak tweede = taakClaimer.claim(TaakSoort.CONTROLE, 10).getFirst();
+        Taak tweede = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
 
         assertEquals(id, tweede.getId());
         assertEquals(eerste.getClaimEpoch() + 1, tweede.getClaimEpoch());
@@ -103,10 +103,10 @@ class TaakClaimerTest {
     // laat die transactie terugrollen.
     @Test
     void rondAf_binnenEenTransactieMetVerlorenLease_rolDeTransactieTerug() {
-        long id = plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
-        Taak eerste = taakClaimer.claim(TaakSoort.CONTROLE, 10).getFirst();
+        long id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        Taak eerste = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
         laatLeaseVerlopen(id);
-        taakClaimer.claim(TaakSoort.CONTROLE, 10);
+        taakClaimer.claim(TaakSoort.ONDERHOUD, 10);
         UUID markering = UUID.randomUUID();
 
         assertThrows(TaakVerlorenException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
@@ -123,8 +123,8 @@ class TaakClaimerTest {
 
     @Test
     void stelUit_zetDueEnLaatDeLeaseLos_enTeltAlleenAlsGevraagdEenPoging() {
-        long id = plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
-        Taak taak = taakClaimer.claim(TaakSoort.CONTROLE, 10).getFirst();
+        long id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        Taak taak = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
         OffsetDateTime straks = nu().plusMinutes(10).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
 
         taakClaimer.stelUit(taak, straks, false);
@@ -139,21 +139,21 @@ class TaakClaimerTest {
 
     @Test
     void markeerMislukt_zetStatusEnHoudtDeTaakUitDeClaim() {
-        long id = plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
-        Taak taak = taakClaimer.claim(TaakSoort.CONTROLE, 10).getFirst();
+        long id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        Taak taak = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
 
         taakClaimer.markeerMislukt(taak);
 
         assertEquals(TaakStatus.MISLUKT, zoek(id).getStatus());
         laatLeaseVerlopen(id);
-        assertEquals(0, taakClaimer.claim(TaakSoort.CONTROLE, 10).size());
-        assertEquals(1, taakRepository.telMetStatus(TaakSoort.CONTROLE, TaakStatus.MISLUKT));
+        assertEquals(0, taakClaimer.claim(TaakSoort.ONDERHOUD, 10).size());
+        assertEquals(1, taakRepository.telMetStatus(TaakSoort.ONDERHOUD, TaakStatus.MISLUKT));
     }
 
     @Test
     void verleng_zetDeLeaseVerderVooruit() {
-        long id = plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
-        Taak taak = taakClaimer.claim(TaakSoort.CONTROLE, 10).getFirst();
+        long id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        Taak taak = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
         QuarkusTransaction.requiringNew().run(() -> entityManager
                 .createNativeQuery("UPDATE taak SET lease_tot = ?2 WHERE id = ?1")
                 .setParameter(1, id).setParameter(2, nu().plusSeconds(5)).executeUpdate());
@@ -167,7 +167,7 @@ class TaakClaimerTest {
     @Test
     void claim_tweeGelijktijdigeWorkers_claimenNooitDezelfdeTaak() throws Exception {
         for (int i = 0; i < 20; i++) {
-            plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+            plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         }
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService workers = Executors.newFixedThreadPool(2);
@@ -179,7 +179,7 @@ class TaakClaimerTest {
                 resultaten.add(workers.submit(() -> {
                     start.await(5, TimeUnit.SECONDS);
 
-                    return taakClaimer.claim(TaakSoort.CONTROLE, 20);
+                    return taakClaimer.claim(TaakSoort.ONDERHOUD, 20);
                 }));
             }
 
@@ -205,11 +205,11 @@ class TaakClaimerTest {
     @Test
     void claim_meerdereDienstverleners_verdeeltDeBatch() {
         for (int i = 0; i < 5; i++) {
-            plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusHours(2));
-            plan(TaakSoort.CONTROLE, TWEEDE_DV, nu().minusMinutes(1));
+            plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusHours(2));
+            plan(TaakSoort.ONDERHOUD, TWEEDE_DV, nu().minusMinutes(1));
         }
 
-        List<Taak> geclaimd = taakClaimer.claim(TaakSoort.CONTROLE, 4);
+        List<Taak> geclaimd = taakClaimer.claim(TaakSoort.ONDERHOUD, 4);
 
         assertEquals(4, geclaimd.size());
         assertEquals(2, geclaimd.stream().filter(t -> NotificatieFixtures.DV_ID.equals(t.getDvId())).count());

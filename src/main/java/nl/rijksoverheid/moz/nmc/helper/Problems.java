@@ -13,6 +13,9 @@ public final class Problems {
     /** Probleemtype van een overschreden aanroeplimiet op de feed (429); staat ook in openapi.yaml. */
     public static final URI TYPE_AANROEPLIMIET_OVERSCHREDEN = URI.create("https://mijnoverheidzakelijk.nl/nmc/problemen/aanroeplimiet-overschreden");
 
+    /** Probleemtype van een overschreden quotum bij de aanname (429); staat ook in openapi.yaml. */
+    public static final URI TYPE_QUOTUM_OVERSCHREDEN = URI.create("https://mijnoverheidzakelijk.nl/nmc/problemen/quotum-overschreden");
+
     private Problems() {
     }
 
@@ -62,6 +65,16 @@ public final class Problems {
         return HttpProblem.builder()
                 .withStatus(Response.Status.BAD_GATEWAY)
                 .withTitle(title)
+                .withDetail(detail)
+                .build();
+    }
+
+    /** 429 met een eigen probleemtype, zodat een Dienstverlener het quotum van andere fouten onderscheidt. */
+    public static HttpProblem quotumOverschreden(String detail) {
+        return HttpProblem.builder()
+                .withType(TYPE_QUOTUM_OVERSCHREDEN)
+                .withStatus(Response.Status.TOO_MANY_REQUESTS)
+                .withTitle("Quotum overschreden")
                 .withDetail(detail)
                 .build();
     }

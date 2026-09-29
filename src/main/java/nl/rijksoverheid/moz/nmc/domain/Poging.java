@@ -108,6 +108,27 @@ public class Poging {
         this.status = PogingStatus.VERZONDEN;
     }
 
+    /** Of een receipt met dit NotifyNL-id over deze poging gaat: het eigen id of een duplicaat. */
+    public boolean hoortBij(UUID notifyId) {
+        return notifyId.equals(this.notifyId) || duplicaatIds.contains(notifyId);
+    }
+
+    /**
+     * Legt een tweede NotifyNL-id vast: een dubbele verzending na een herclaim, met dezelfde ontvanger
+     * en inhoud. Receipts voor dat id worden verwerkt alsof ze deze poging betreffen.
+     */
+    public void registreerDuplicaat(UUID notifyId) {
+        Objects.requireNonNull(notifyId, "notifyId is verplicht");
+
+        if (this.notifyId == null) {
+            throw new IllegalStateException("Poging " + id + " heeft nog geen NotifyNL-id; een duplicaat kan pas daarna");
+        }
+
+        if (!hoortBij(notifyId)) {
+            duplicaatIds.add(notifyId);
+        }
+    }
+
     /**
      * Legt de uitkomst uit een receipt vast als die nieuwer is dan de laatst vastgelegde. Receipts
      * komen ongeordend binnen; de volgorde komt uit het tijdstip in de receipt zelf.

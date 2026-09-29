@@ -1,116 +1,90 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
-import jakarta.ws.rs.WebApplicationException;
-import jakarta.ws.rs.core.Response;
-import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
+import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
-import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailRequest;
-import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.service.Sleutelbeheer;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;
 
 import java.util.UUID;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
 
+/** De intake is een aanname: 202 na de commit, zonder aanroep van NotifyNL. */
 @QuarkusTest
 class DecentraleNotificatieControllerTest {
+
+    private static final String PAD = "/api/nmc/v1/decentraal/notificaties";
 
     @InjectMock
     @RestClient
     SendAMessageApi sendAMessageApi;
 
-    @InjectMock
-    NotifyNLJwtFactory notifyNLJwtFactory;
+    @Inject
+    NotificatieRepository notificatieRepository;
+
+    @Inject
+    TaakRepository taakRepository;
+
+    @Inject
+    Sleutelbeheer sleutelbeheer;
 
     @BeforeEach
     void setUp() {
-        Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
+        QuarkusTransaction.requiringNew().run(() -> {
+            taakRepository.deleteAll();
+            notificatieRepository.deleteAll();
+        });
     }
 
     @Test
-    void decentraleNotificatieVersturen_happyFlow_verstuurtNaarOpgegevenEmailEnTemplate() {
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(UUID.randomUUID()));
-
-        given()
+    void decentraleNotificatieVersturen_happyFlow_retourneert202EnBewaartHetAdresVersleuteld() {
+        String id = given()
                 .contentType(ContentType.JSON)
-                .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/decentraal/notificaties")
+                .body(aanvraag("burger@example.nl", "Stuurgroep Agenda", "\"callbackUrl\": \"https://omc.example.nl/cb\","))
+                .when().post(PAD)
                 .then()
-                .statusCode(200)
-                .body("notificatieId", org.hamcrest.Matchers.notNullValue());
+                .statusCode(202)
+                .header("Location", startsWith("/api/nmc/v1/notificaties/"))
+                .body("notificatieId", notNullValue())
+                .extract().path("notificatieId");
 
-        // Kern van het decentraal profiel: NotifyNL krijgt exact het meegegeven e-mailadres en de template
-        // die bij het berichttype hoort — niet een opgezocht adres.
-        ArgumentCaptor<SendEmailRequest> verzoek = ArgumentCaptor.forClass(SendEmailRequest.class);
-        Mockito.verify(sendAMessageApi).sendEmail(verzoek.capture());
-        assertEquals("burger@example.nl", verzoek.getValue().getEmailAddress());
-        assertEquals("e72c75c5-e74c-4a78-8f2d-c06187a4d51c", verzoek.getValue().getTemplateId());
-    }
-
-    @Test
-    void decentraleNotificatieVersturen_metBerichtgegevens_retourneert200() {
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(UUID.randomUUID()));
-
-        given()
-                .contentType(ContentType.JSON)
-                .body("""
-                        {
-                          "emailAdres": "burger@example.nl",
-                          "berichtType": "Stuurgroep Agenda",
-                          "berichtgegevens": { "naam": "Voorbeeld BV" }
-                        }
-                        """)
-                .when().post("/api/nmc/v1/decentraal/notificaties")
-                .then()
-                .statusCode(200);
-    }
-
-    @Test
-    void decentraleNotificatieVersturen_metCallbackUrl_retourneert200() {
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(UUID.randomUUID()));
-
-        given()
-                .contentType(ContentType.JSON)
-                .body("""
-                        {
-                          "emailAdres": "burger@example.nl",
-                          "berichtType": "Stuurgroep Agenda",
-                          "callbackUrl": "https://aanroeper.example.nl/status"
-                        }
-                        """)
-                .when().post("/api/nmc/v1/decentraal/notificaties")
-                .then()
-                .statusCode(200);
+        QuarkusTransaction.requiringNew().run(() -> {
+            Notificatie notificatie = notificatieRepository.findById(UUID.fromString(id));
+            assertEquals(NotificatieStatus.AANGENOMEN, notificatie.getStatus());
+            assertEquals("https://omc.example.nl/cb", notificatie.getCallbackUrl());
+            assertEquals(Ontvanger.email("burger@example.nl"),
+                    sleutelbeheer.ontsleutelOntvanger(notificatie.getId(), notificatie.getVersleuteldeGegevens()));
+            assertEquals(TaakSoort.VERZENDEN, taakRepository.listAll().getFirst().getSoort());
+        });
+        verifyNoInteractions(sendAMessageApi);
     }
 
     @Test
     void decentraleNotificatieVersturen_ongeldigeCallbackUrl_retourneert400() {
         given()
                 .contentType(ContentType.JSON)
-                .body("""
-                        {
-                          "emailAdres": "burger@example.nl",
-                          "berichtType": "Stuurgroep Agenda",
-                          "callbackUrl": "http://localhost:9999/status"
-                        }
-                        """)
-                .when().post("/api/nmc/v1/decentraal/notificaties")
+                .body(aanvraag("burger@example.nl", "Stuurgroep Agenda", "\"callbackUrl\": \"http://127.0.0.1/cb\","))
+                .when().post(PAD)
                 .then()
                 .statusCode(400)
-                .contentType("application/problem+json")
-                // @ValidCallbackUrl weigert de aanvraag voor de methodebody, dus de reden komt
-                // als veldgebonden violation terug in plaats van als los detail-veld.
-                .body("violations[0].field", org.hamcrest.Matchers.endsWith("callbackUrl"))
-                .body("violations[0].message", org.hamcrest.Matchers.containsString("absolute https-URL"));
+                .body("violations", notNullValue());
     }
 
     @Test
@@ -118,11 +92,9 @@ class DecentraleNotificatieControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body("""
-                        {
-                          "berichtType": "Stuurgroep Agenda"
-                        }
+                        { "berichtType": "Stuurgroep Agenda" }
                         """)
-                .when().post("/api/nmc/v1/decentraal/notificaties")
+                .when().post(PAD)
                 .then()
                 .statusCode(400);
     }
@@ -131,13 +103,8 @@ class DecentraleNotificatieControllerTest {
     void decentraleNotificatieVersturen_ongeldigEmailAdres_retourneert400() {
         given()
                 .contentType(ContentType.JSON)
-                .body("""
-                        {
-                          "emailAdres": "geen-geldig-emailadres",
-                          "berichtType": "Stuurgroep Agenda"
-                        }
-                        """)
-                .when().post("/api/nmc/v1/decentraal/notificaties")
+                .body(aanvraag("geen-adres", "Stuurgroep Agenda", ""))
+                .when().post(PAD)
                 .then()
                 .statusCode(400);
     }
@@ -146,69 +113,21 @@ class DecentraleNotificatieControllerTest {
     void decentraleNotificatieVersturen_onbekendBerichtType_retourneert400() {
         given()
                 .contentType(ContentType.JSON)
-                .body("""
-                        {
-                          "emailAdres": "burger@example.nl",
-                          "berichtType": "Onbekend Type XYZ"
-                        }
-                        """)
-                .when().post("/api/nmc/v1/decentraal/notificaties")
+                .body(aanvraag("burger@example.nl", "Bestaat Niet", ""))
+                .when().post(PAD)
                 .then()
                 .statusCode(400)
-                .contentType("application/problem+json");
+                .body("title", equalTo("Notificatie niet aangenomen."));
     }
 
-    @Test
-    void decentraleNotificatieVersturen_notifyGeenNotificatieId_retourneert500() {
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse());
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/decentraal/notificaties")
-                .then()
-                .statusCode(500)
-                .contentType("application/problem+json");
-    }
-
-    @Test
-    void decentraleNotificatieVersturen_notifyGeeftFoutstatus_retourneert500() {
-        Mockito.when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build()));
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/decentraal/notificaties")
-                .then()
-                .statusCode(500)
-                .contentType("application/problem+json");
-    }
-
-    @Test
-    void decentraleNotificatieVersturen_ongeldigeApiKeyConfiguratie_retourneert500() {
-        Mockito.when(notifyNLJwtFactory.authorizationHeader(any()))
-                .thenThrow(new IllegalArgumentException("Ongeldige key"));
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(standaardAanvraag())
-                .when().post("/api/nmc/v1/decentraal/notificaties")
-                .then()
-                .statusCode(500)
-                .contentType("application/problem+json");
-    }
-
-    private String standaardAanvraag() {
+    private static String aanvraag(String emailAdres, String berichtType, String extraVeld) {
         return """
                 {
-                  "emailAdres": "burger@example.nl",
-                  "berichtType": "Stuurgroep Agenda"
+                  "emailAdres": "%s",
+                  %s
+                  "berichtType": "%s",
+                  "berichtgegevens": { "naam": "Voorbeeld BV" }
                 }
-                """;
-    }
-
-    private SendEmailResponse notifyResponse(UUID notifyReferentie) {
-        return new SendEmailResponse().id(notifyReferentie.toString());
+                """.formatted(emailAdres, extraVeld, berichtType);
     }
 }
