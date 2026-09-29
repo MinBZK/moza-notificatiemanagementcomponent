@@ -39,6 +39,7 @@ import java.util.Map;
 public class TaakWorker {
 
     private static final Duration BASIS_WACHTTIJD = Duration.ofSeconds(30);
+    private static final Duration MAX_WACHTTIJD = Duration.ofDays(1);
 
     private final TaakClaimer taakClaimer;
     private final TaakRepository taakRepository;
@@ -155,6 +156,8 @@ public class TaakWorker {
 
             switch (uitkomst) {
                 case TaakUitkomst.Afgerond a -> taakClaimer.rondAf(taak);
+                case TaakUitkomst.Uitgesteld u when u.teltAlsPoging() && taak.getPogingen() + 1 >= maxPogingen ->
+                        putUit(handler, taak, null);
                 case TaakUitkomst.Uitgesteld u -> taakClaimer.stelUit(taak, u.due(), u.teltAlsPoging());
                 case TaakUitkomst.AlAfgerond a -> {
                     // De handler heeft de rij in zijn eigen transactie afgerond.
@@ -164,28 +167,59 @@ public class TaakWorker {
             // Een andere worker heeft de taak; wat deze worker deed is teruggerold of blijft zonder gevolg.
             Log.warn(e.getMessage());
         } catch (RuntimeException e) {
-            faal(taak, e);
+            faal(handler, taak, e);
         }
     }
 
     // Een fout in de handler kost een poging. De wachttijd loopt op met het aantal pogingen, zodat
     // een taak die steeds faalt niet elke ronde opnieuw aan de beurt is.
-    private void faal(Taak taak, RuntimeException fout) {
+    private void faal(TaakHandler handler, Taak taak, RuntimeException fout) {
         int pogingen = taak.getPogingen() + 1;
 
         try {
             if (pogingen >= maxPogingen) {
-                taakClaimer.markeerMislukt(taak);
-                Log.errorf(fout, "Taak %s/%d na %d pogingen op mislukt gezet; wacht op beheer",
-                        taak.getSoort(), taak.getId(), pogingen);
+                putUit(handler, taak, fout);
             } else {
-                OffsetDateTime due = OffsetDateTime.now(ZoneOffset.UTC).plus(BASIS_WACHTTIJD.multipliedBy(1L << (pogingen - 1)));
+                OffsetDateTime due = OffsetDateTime.now(ZoneOffset.UTC).plus(wachttijd(pogingen));
                 taakClaimer.stelUit(taak, due, true);
                 Log.warnf(fout, "Taak %s/%d mislukt (poging %d van %d), opnieuw op %s",
                         taak.getSoort(), taak.getId(), pogingen, maxPogingen, due);
             }
         } catch (TaakVerlorenException e) {
             Log.warn(e.getMessage());
+        } catch (RuntimeException e) {
+            // De rest van de batch gaat door; deze taak komt terug zodra zijn lease verloopt.
+            Log.errorf(e, "Taak %s/%d kon na een fout niet worden bijgewerkt", taak.getSoort(), taak.getId());
         }
+    }
+
+    // De handler krijgt de kans de uitputting af te handelen, in dezelfde transactie als de taakrij.
+    private void putUit(TaakHandler handler, Taak taak, RuntimeException fout) {
+        boolean afgehandeld = QuarkusTransaction.requiringNew().call(() -> {
+            if (handler.uitgeput(taak)) {
+                taakClaimer.rondAf(taak);
+
+                return true;
+            }
+
+            taakClaimer.markeerMislukt(taak);
+
+            return false;
+        });
+
+        if (afgehandeld) {
+            Log.warnf(fout, "Taak %s/%d uitgeput na %d pogingen; door de handler afgehandeld",
+                    taak.getSoort(), taak.getId(), maxPogingen);
+        } else {
+            Log.errorf(fout, "Taak %s/%d na %d pogingen op mislukt gezet; wacht op beheer",
+                    taak.getSoort(), taak.getId(), maxPogingen);
+        }
+    }
+
+    // Verdubbelt per poging, begrensd op een dag zodat een hoog maximum niet overloopt.
+    private static Duration wachttijd(int pogingen) {
+        Duration wachttijd = BASIS_WACHTTIJD.multipliedBy(1L << Math.min(pogingen - 1, 20));
+
+        return wachttijd.compareTo(MAX_WACHTTIJD) > 0 ? MAX_WACHTTIJD : wachttijd;
     }
 }

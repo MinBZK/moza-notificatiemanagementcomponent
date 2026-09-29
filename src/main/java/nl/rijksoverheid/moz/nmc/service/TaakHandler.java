@@ -21,6 +21,18 @@ public interface TaakHandler {
      */
     TaakUitkomst voerUit(Taak taak, Lease lease);
 
+    /**
+     * De taak heeft het maximum aantal pogingen bereikt. Draait in de transactie waarin de worker de
+     * taak daarna afrondt of op mislukt zet, zodat een overgang van de notificatie en de taakrij samen
+     * committen.
+     *
+     * @return true als de handler de uitputting heeft afgehandeld en de taak af is; false laat de taak
+     *         op mislukt gaan, waar hij op beheer wacht
+     */
+    default boolean uitgeput(Taak taak) {
+        return false;
+    }
+
     /** De lease die een worker op een geclaimde taak houdt. */
     @FunctionalInterface
     interface Lease {

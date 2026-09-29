@@ -3,6 +3,7 @@ package nl.rijksoverheid.moz.nmc.client.profielservice;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.validation.Valid;
+import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
@@ -62,6 +63,10 @@ public class ProfielServiceAdapter {
 
             Log.error("Profielservice gaf status " + e.getResponse().getStatus() + " terug", e);
             throw new ProfielServiceException("Er is een fout opgetreden bij het ophalen van de contactgegevens", e);
+        } catch (ProcessingException e) {
+            // Verbindingsfout of time-out: een storing, geen uitkomst over de partij.
+            Log.error("Profielservice niet bereikbaar", e);
+            throw new ProfielServiceException("De Profielservice was niet bereikbaar", e);
         }
     }
 

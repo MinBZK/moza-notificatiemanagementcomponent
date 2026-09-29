@@ -76,7 +76,7 @@ class ControleTaakHandlerTest {
         assertEquals(TaakSoort.RECONCILIEREN, perNotificatie.get(verzondenLopend).getSoort());
         assertEquals(pogingRepository.findLaatsteVan(verzondenLopend).orElseThrow().getId().toString(),
                 perNotificatie.get(verzondenLopend).getPayload().get(VerzendTaakHandler.PAYLOAD_POGING_ID));
-        assertEquals(TaakSoort.VERZENDEN, perNotificatie.get(verzondenZonderPoging).getSoort());
+        assertTrue(!perNotificatie.containsKey(verzondenZonderPoging), "zonder herverzending valt er niets te plannen");
         assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, perNotificatie.get(bezorgd).getSoort());
         assertTrue(!perNotificatie.containsKey(terminaal), "een terminale notificatie krijgt geen taak");
         assertEquals(NotificatieFixtures.DV_ID, perNotificatie.get(aangenomen).getDvId());

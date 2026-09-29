@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -12,7 +13,9 @@ import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -31,12 +34,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
 
 // %test: 20 tokens per minuut, 5 gereserveerd voor de navraag, lease 2m.
 @QuarkusTest
 class TaakClaimerTest {
 
     private static final UUID TWEEDE_DV = UUID.fromString("00000000-0000-4000-8000-000000000002");
+
+    // Vast tijdvak voor het verzendbudget, zodat een test niet over een minuutgrens heen twee budgetten ziet.
+    @InjectMock
+    Clock klok;
 
     @Inject
     TaakClaimer taakClaimer;
@@ -49,6 +57,8 @@ class TaakClaimerTest {
 
     @BeforeEach
     void setUp() {
+        when(klok.instant()).thenReturn(Instant.parse("2030-01-01T10:00:30Z"));
+        when(klok.getZone()).thenReturn(ZoneOffset.UTC);
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
             entityManager.createNativeQuery("DELETE FROM verzendbudget").executeUpdate();

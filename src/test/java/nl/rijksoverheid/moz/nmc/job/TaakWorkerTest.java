@@ -58,6 +58,38 @@ class TaakWorkerTest {
     @AfterEach
     void resetHandler() {
         WisTestHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.afgerond());
+        WisTestHandler.BIJ_UITPUTTING.set(taak -> false);
+    }
+
+    // Ook een uitstel dat als poging telt, leidt na het maximum tot uitputting; anders blijft een
+    // handler die zijn eigen mislukking meldt eeuwig herhalen.
+    @Test
+    void verwerk_uitstelDatAlsPogingTelt_zetNaMaxPogingenOpMislukt() {
+        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
+        WisTestHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.uitgesteld(nu().minusSeconds(1), true));
+
+        taakWorker.verwerk(TaakSoort.WISSEN);
+        assertEquals(1, zoek(id).orElseThrow().getPogingen());
+        taakWorker.verwerk(TaakSoort.WISSEN);
+
+        assertEquals(TaakStatus.MISLUKT, zoek(id).orElseThrow().getStatus());
+    }
+
+    // Een handler die de uitputting afhandelt (de verzendtaak zet de notificatie op technisch-mislukt),
+    // rondt de taak af in plaats van hem op mislukt te laten wachten.
+    @Test
+    void verwerk_uitputtingDoorDeHandlerAfgehandeld_rondtDeTaakAf() {
+        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
+        WisTestHandler.GEDRAG.set((taak, lease) -> {
+            throw new IllegalStateException("gesimuleerde fout");
+        });
+        WisTestHandler.BIJ_UITPUTTING.set(taak -> true);
+
+        taakWorker.verwerk(TaakSoort.WISSEN);
+        zetDue(id, nu().minusSeconds(1));
+        taakWorker.verwerk(TaakSoort.WISSEN);
+
+        assertTrue(zoek(id).isEmpty());
     }
 
     @Test

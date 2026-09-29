@@ -49,13 +49,19 @@ public class Verzendbudget {
         this.navraagReservering = navraagReservering;
     }
 
-    /** Neemt tot {@code gevraagd} tokens uit het lopende tijdvak en geeft terug hoeveel dat er zijn. */
-    public int neem(BudgetDoel doel, int gevraagd) {
+    /**
+     * Neemt tot {@code gevraagd} tokens uit het lopende tijdvak.
+     *
+     * @return het aantal genomen tokens en het tijdvak waaruit ze komen; een teruggave gaat naar
+     *         dat tijdvak, ook als de minuut inmiddels om is
+     */
+    public Genomen neem(BudgetDoel doel, int gevraagd) {
+        OffsetDateTime tijdvak = tijdvak();
+
         if (gevraagd <= 0) {
-            return 0;
+            return new Genomen(0, tijdvak);
         }
 
-        OffsetDateTime tijdvak = tijdvak();
         int beschikbaar = ((Number) entityManager.createNativeQuery(
                         "INSERT INTO verzendbudget (notify_service, tijdvak, tokens) VALUES (?1, ?2, ?3) "
                                 + "ON CONFLICT (notify_service, tijdvak) DO UPDATE SET tokens = verzendbudget.tokens "
@@ -77,22 +83,29 @@ public class Verzendbudget {
                     .executeUpdate();
         }
 
-        return genomen;
+        return new Genomen(genomen, tijdvak);
     }
 
-    /** Geeft tokens terug die een claim wel nam maar niet gebruikte, binnen dezelfde transactie. */
-    public void geefTerug(int aantal) {
-        if (aantal <= 0) {
+    /**
+     * Geeft tokens terug die een claim wel nam maar niet gebruikte, binnen dezelfde transactie en naar
+     * het tijdvak waaruit ze kwamen. Is dat tijdvak voorbij, dan vervallen ze met het tijdvak.
+     */
+    public void geefTerug(Genomen genomen, int aantal) {
+        if (aantal <= 0 || !genomen.tijdvak().equals(tijdvak())) {
             return;
         }
 
         entityManager.createNativeQuery("UPDATE verzendbudget SET tokens = LEAST(tokens + ?3, ?4) "
                         + "WHERE notify_service = ?1 AND tijdvak = ?2")
                 .setParameter(1, notifyService)
-                .setParameter(2, tijdvak())
-                .setParameter(3, aantal)
+                .setParameter(2, genomen.tijdvak())
+                .setParameter(3, Math.min(aantal, genomen.aantal()))
                 .setParameter(4, tokensPerMinuut)
                 .executeUpdate();
+    }
+
+    /** Het aantal tokens dat een claim nam, en het tijdvak waaruit. */
+    public record Genomen(int aantal, OffsetDateTime tijdvak) {
     }
 
     private OffsetDateTime tijdvak() {

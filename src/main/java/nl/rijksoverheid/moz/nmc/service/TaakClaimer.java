@@ -60,7 +60,8 @@ public class TaakClaimer {
         }
 
         Optional<BudgetDoel> doel = soort.budgetDoel();
-        int budget = doel.map(d -> verzendbudget.neem(d, batch)).orElse(batch);
+        Optional<Verzendbudget.Genomen> genomen = doel.map(d -> verzendbudget.neem(d, batch));
+        int budget = genomen.map(Verzendbudget.Genomen::aantal).orElse(batch);
 
         if (budget == 0) {
             Log.debugf("Claim van %s uitgesteld: verzendbudget voor dit tijdvak is op", soort);
@@ -83,7 +84,7 @@ public class TaakClaimer {
             geclaimd.addAll(taakRepository.claim(soort, dvId, Math.min(perDienstverlener, ruimte), nu, leaseTot));
         }
 
-        doel.ifPresent(d -> verzendbudget.geefTerug(budget - geclaimd.size()));
+        genomen.ifPresent(g -> verzendbudget.geefTerug(g, budget - geclaimd.size()));
 
         return geclaimd;
     }

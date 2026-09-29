@@ -66,14 +66,29 @@ class VerzendbudgetTest {
     }
 
     @Test
-    void geefTerug_zetTokensTerugTotHoogstensHetBudget() {
-        neem(BudgetDoel.VERZENDEN, 10);
+    void geefTerug_zetHoogstensHetGenomenAantalTerug() {
+        Verzendbudget.Genomen genomen = QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.VERZENDEN, 10));
 
-        QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(4));
+        QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(genomen, 4));
         assertEquals(14, tokensInDatabase());
 
-        QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(100));
+        QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(genomen, 100));
         assertEquals(20, tokensInDatabase());
+    }
+
+    // Een claim die over de minuutgrens loopt, mag zijn ongebruikte tokens niet in het nieuwe
+    // tijdvak stoppen: dat zou meer verzendingen toelaten dan de limiet.
+    @Test
+    void geefTerug_naDeMinuutgrens_laatHetNieuweTijdvakOngemoeid() {
+        Verzendbudget.Genomen genomen = QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.VERZENDEN, 10));
+        when(klok.instant()).thenReturn(TIJDVAK_B);
+        assertEquals(15, neem(BudgetDoel.VERZENDEN, 15));
+
+        QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(genomen, 10));
+
+        assertEquals(5, QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager
+                .createNativeQuery("SELECT tokens FROM verzendbudget WHERE tijdvak = ?1")
+                .setParameter(1, java.time.OffsetDateTime.ofInstant(TIJDVAK_B, ZoneOffset.UTC)).getSingleResult()).intValue()));
     }
 
     @Test
@@ -86,7 +101,8 @@ class VerzendbudgetTest {
 
     @Test
     void geefTerug_nul_doetNiets() {
-        QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(0));
+        QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(
+                new Verzendbudget.Genomen(0, java.time.OffsetDateTime.ofInstant(TIJDVAK_A, ZoneOffset.UTC)), 0));
 
         assertEquals(0, QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager
                 .createNativeQuery("SELECT COUNT(*) FROM verzendbudget").getSingleResult()).intValue()));
@@ -100,7 +116,7 @@ class VerzendbudgetTest {
     }
 
     private int neem(BudgetDoel doel, int gevraagd) {
-        return QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(doel, gevraagd));
+        return QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(doel, gevraagd).aantal());
     }
 
     private int tokensInDatabase() {

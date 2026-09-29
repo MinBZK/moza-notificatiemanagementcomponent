@@ -105,6 +105,7 @@ class VerzendTaakHandlerTest {
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
+            taakRepository.getEntityManager().createNativeQuery("DELETE FROM verzendbudget").executeUpdate();
             eventRepository.deleteAll();
             notificatieRepository.deleteAll();
         });
@@ -202,6 +203,59 @@ class VerzendTaakHandlerTest {
         assertEquals(0, taak.getPogingen(), "een storing bij een externe dienst kost geen poging");
         assertNull(taak.getLeaseTot());
         assertTrue(taak.getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(1)));
+        verify(sendAMessageApi, never()).sendEmail(any());
+    }
+
+    // Een verbindingsfout of time-out is ook een storing en geen fout in het NMC: geen poging.
+    @Test
+    void centraal_profielserviceNietBereikbaar_steltUitZonderPoging() {
+        when(profielApi.apiProfielserviceV1PartijPost(any())).thenThrow(new ProcessingException("connection refused"));
+        aannameService.neemAan(centraal());
+
+        taakWorker.verwerk(TaakSoort.VERZENDEN);
+
+        Taak taak = taken().getFirst();
+        assertEquals(TaakStatus.OPEN, taak.getStatus());
+        assertEquals(0, taak.getPogingen());
+    }
+
+    // De controletaak plant een verzendtaak zonder payload; de verzendgegevens komen van de notificatie.
+    @Test
+    void verzendtaakZonderPayload_verstuurtMetDeGegevensVanDeNotificatie() {
+        when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
+        UUID id = aannameService.neemAan(decentraal());
+        UUID dvId = notificatie(id).getDvId();
+        QuarkusTransaction.requiringNew().run(() -> {
+            taakRepository.deleteAll();
+            taakRepository.persist(new Taak(TaakSoort.VERZENDEN, dvId, id, OffsetDateTime.now(ZoneOffset.UTC), null, null));
+        });
+
+        taakWorker.verwerk(TaakSoort.VERZENDEN);
+
+        assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
+        ArgumentCaptor<SendEmailRequest> verzoek = ArgumentCaptor.forClass(SendEmailRequest.class);
+        verify(sendAMessageApi).sendEmail(verzoek.capture());
+        assertEquals(TEMPLATE_ID, verzoek.getValue().getTemplateId());
+    }
+
+    // Een uitgeputte verzendtaak (%test: max-pogingen=2) zet de notificatie op technisch-mislukt, zodat
+    // de Dienstverlener een eindstatus krijgt, en de taak verdwijnt.
+    @Test
+    void uitgeputteVerzendtaak_eindigtInTechnischMislukt() {
+        UUID id = aannameService.neemAan(decentraal());
+        QuarkusTransaction.requiringNew().run(() -> taakRepository.getEntityManager()
+                .createNativeQuery("UPDATE notificatie SET template_id = NULL WHERE id = ?1").setParameter(1, id).executeUpdate());
+
+        taakWorker.verwerk(TaakSoort.VERZENDEN);
+        zetDue(taken().getFirst(), OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1));
+        taakWorker.verwerk(TaakSoort.VERZENDEN);
+
+        Notificatie notificatie = notificatie(id);
+        assertEquals(NotificatieStatus.TECHNISCH_MISLUKT, notificatie.getStatus());
+        assertEquals(Reden.TECHNISCH, notificatie.getReden());
+        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.TECHNISCH_MISLUKT),
+                overgangen(id));
+        assertEquals(List.of(), taken());
         verify(sendAMessageApi, never()).sendEmail(any());
     }
 

@@ -20,6 +20,13 @@ public class WisTestHandler implements TaakHandler {
     static final AtomicReference<BiFunction<Taak, Lease, TaakUitkomst>> GEDRAG =
             new AtomicReference<>((taak, lease) -> TaakUitkomst.afgerond());
 
+    static final AtomicReference<java.util.function.Predicate<Taak>> BIJ_UITPUTTING = new AtomicReference<>(taak -> false);
+
+    @Override
+    public boolean uitgeput(Taak taak) {
+        return BIJ_UITPUTTING.get().test(taak);
+    }
+
     @Override
     public TaakSoort soort() {
         return TaakSoort.WISSEN;
