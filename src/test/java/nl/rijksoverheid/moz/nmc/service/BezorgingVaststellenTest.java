@@ -1,10 +1,8 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
-import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
@@ -33,9 +31,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // %test: vaststellingstermijn 7 dagen, callback-venster 1 dag.
 @QuarkusTest
 class BezorgingVaststellenTest {
-
-    @InjectMock
-    ConsumentCallbackAdapter consumentCallbackAdapter;
 
     @Inject
     TaakWorker taakWorker;
@@ -142,7 +137,7 @@ class BezorgingVaststellenTest {
     private Bezorgd bezorgd(OffsetDateTime bezorgdOp) {
         UUID notifyId = UUID.randomUUID();
         Bezorgd bezorgd = QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, null);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
             overgangsfunctie.neemAan(notificatie);
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
             Poging poging = new Poging(notificatie.getId(), 1);

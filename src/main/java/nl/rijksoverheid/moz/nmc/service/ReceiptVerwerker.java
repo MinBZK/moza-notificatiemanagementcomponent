@@ -2,9 +2,7 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.event.Event;
 import jakarta.transaction.Transactional;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.OvergangUitkomst;
@@ -34,16 +32,13 @@ public class ReceiptVerwerker {
 
     private final PogingRepository pogingRepository;
     private final Overgangsfunctie overgangsfunctie;
-    private final Event<StatusUpdateOpdracht> statusUpdateEvent;
     private final TaakRepository taakRepository;
     private final Vaststellingstermijn vaststellingstermijn;
 
     public ReceiptVerwerker(PogingRepository pogingRepository, Overgangsfunctie overgangsfunctie,
-                            Event<StatusUpdateOpdracht> statusUpdateEvent, TaakRepository taakRepository,
-                            Vaststellingstermijn vaststellingstermijn) {
+                            TaakRepository taakRepository, Vaststellingstermijn vaststellingstermijn) {
         this.pogingRepository = pogingRepository;
         this.overgangsfunctie = overgangsfunctie;
-        this.statusUpdateEvent = statusUpdateEvent;
         this.taakRepository = taakRepository;
         this.vaststellingstermijn = vaststellingstermijn;
     }
@@ -130,10 +125,6 @@ public class ReceiptVerwerker {
                     vaststellingstermijn.vaststellenOp(tijdstip), null,
                     Map.of(VerzendTaakHandler.PAYLOAD_POGING_ID, poging.getId().toString())));
         }
-
-        // StatusUpdateVerzender pakt dit pas ná de commit op, zodat de Dienstverlener geen status
-        // krijgt die daarna terugrolt.
-        statusUpdateEvent.fire(StatusUpdateOpdracht.van(resultaat.event(), notificatie.getCallbackUrl()));
     }
 
     private Poging zoekPoging(UUID notifyId, String reference) {

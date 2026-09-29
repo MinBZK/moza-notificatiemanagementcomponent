@@ -372,12 +372,12 @@ class VerzendTaakHandlerTest {
 
     private static AannameOpdracht decentraal() {
         return new AannameOpdracht(Regie.DECENTRAAL, Ontvanger.email(EMAIL), null, null, TEMPLATE_ID,
-                Map.of("naam", "Voorbeeld BV"), null);
+                Map.of("naam", "Voorbeeld BV"));
     }
 
     private static AannameOpdracht centraal() {
         return new AannameOpdracht(Regie.CENTRAAL, new Ontvanger(Ontvanger.Soort.KVK, "12345678"), "Gemeente Voorbeeld",
-                "Parkeervergunning", TEMPLATE_ID, Map.of("naam", "Voorbeeld BV"), null);
+                "Parkeervergunning", TEMPLATE_ID, Map.of("naam", "Voorbeeld BV"));
     }
 
     private static PartijResponse partijMetEmail(String email) {

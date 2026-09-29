@@ -3,11 +3,8 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.event.Event;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
-import nl.rijksoverheid.moz.nmc.domain.OvergangUitkomst;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
@@ -22,14 +19,12 @@ public class BezorgingVaststellenTaakHandler implements TaakHandler {
     private final Overgangsfunctie overgangsfunctie;
     private final NotificatieRepository notificatieRepository;
     private final TaakClaimer taakClaimer;
-    private final Event<StatusUpdateOpdracht> statusUpdateEvent;
 
     public BezorgingVaststellenTaakHandler(Overgangsfunctie overgangsfunctie, NotificatieRepository notificatieRepository,
-                                           TaakClaimer taakClaimer, Event<StatusUpdateOpdracht> statusUpdateEvent) {
+                                           TaakClaimer taakClaimer) {
         this.overgangsfunctie = overgangsfunctie;
         this.notificatieRepository = notificatieRepository;
         this.taakClaimer = taakClaimer;
-        this.statusUpdateEvent = statusUpdateEvent;
     }
 
     @Override
@@ -62,7 +57,6 @@ public class BezorgingVaststellenTaakHandler implements TaakHandler {
             return;
         }
 
-        OvergangUitkomst resultaat = overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.DEFINITIEF_BEZORGD, null);
-        statusUpdateEvent.fire(StatusUpdateOpdracht.van(resultaat.event(), notificatie.getCallbackUrl()));
+        overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.DEFINITIEF_BEZORGD, null);
     }
 }

@@ -58,6 +58,8 @@ Benodigde env-vars op die deployment:
 | `HASH_PEPPER` | Keyed HMAC pepper (mag niet leeg in prod) |
 | `NMC_KEK_HUIDIGE_VERSIE` | Versie van de KEK waarmee `Sleutelbeheer` nieuwe sleutels per notificatie wrapt (geheel getal, 1 of hoger). Ontbreekt hij, dan start de app niet |
 | `NMC_KEK_VERSIE_<n>` | KEK van versie `<n>`: base64 van precies 32 random bytes (bijvoorbeeld `openssl rand -base64 32`). Die van de huidige versie is verplicht; ontbreekt hij of is hij geen 32 bytes, dan start de app niet. Bij een rotatie voeg je `NMC_KEK_VERSIE_<n+1>` toe en verhoog je `NMC_KEK_HUIDIGE_VERSIE`; laat de oude staan zolang er rijen met die `kek_versie` zijn, anders zijn die niet meer te ontsleutelen |
+| `NMC_WEBHOOK_JWT_PRIVATE_KEY` | RSA-sleutel waarmee de NMC de JWT op elke webhook-aanroep ondertekent: PKCS#8-PEM van minstens 2048 bits (`openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`). Kop- en voetregel en regelafbrekingen mogen weg, zodat de sleutel op één regel past. Ontbreekt hij of is hij ongeldig, dan start de app niet |
+| `NMC_WEBHOOK_JWT_KEY_ID` | Sleutel-id (`kid`) in de JWT-header en in `GET /api/nmc/v1/.well-known/jwks.json`. Kies bij een nieuwe sleutel een nieuwe id. Ontbreekt hij, dan start de app niet |
 | `LOGBOEKDATAVERWERKING_ENABLED` | Verwerkingenlogging (LDV). `%prod` laat 'm leeg, dus verplicht per deployomgeving. **Voorlopig `false`**; op `true` zetten zodra de ClickHouse-config hieronder werkt |
 | `LOGBOEKDATAVERWERKING_CLICKHOUSE_ENDPOINT`, `_USERNAME`, `_PASSWORD`, `_DATABASE`, `_TABLE` | ClickHouse-sink voor LDV. Alleen nodig zodra `LOGBOEKDATAVERWERKING_ENABLED=true`; nu leeg te laten |
 

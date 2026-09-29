@@ -24,8 +24,9 @@ import java.util.Optional;
 
 /**
  * Vangnet voor notificaties die zijn blijven steken: elke notificatie zonder terminale status en
- * zonder open of mislukte taak krijgt de taak die bij haar status hoort. De controletaak is een taak
- * per systeem die zichzelf na elke ronde opnieuw plant; migratie V9 zet de eerste rij.
+ * zonder open of mislukte taak krijgt de taak die bij haar status hoort, en elke dienstverlener met een
+ * webhook zonder terugkoppeltaak krijgt er een. De controletaak is een taak per systeem die zichzelf
+ * na elke ronde opnieuw plant; migratie V9 zet de eerste rij.
  */
 @ApplicationScoped
 public class ControleTaakHandler implements TaakHandler {
@@ -64,6 +65,13 @@ public class ControleTaakHandler implements TaakHandler {
 
         if (gepland > 0) {
             Log.warnf("Controletaak: %d notificatie(s) zonder taak, ontbrekende taak gepland", gepland);
+        }
+
+        int terugkoppeltaken = QuarkusTransaction.requiringNew()
+                .call(() -> taakRepository.planTerugkoppeltaken(OffsetDateTime.now(ZoneOffset.UTC)));
+
+        if (terugkoppeltaken > 0) {
+            Log.infof("Controletaak: terugkoppeltaak gepland voor %d dienstverlener(s) met een webhook", terugkoppeltaken);
         }
 
         return TaakUitkomst.uitgesteld(OffsetDateTime.now(ZoneOffset.UTC).plus(interval), false);

@@ -3,15 +3,12 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.event.Event;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLAfleverstatus;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLConfiguratieException;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendException;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
-import nl.rijksoverheid.moz.nmc.domain.OvergangUitkomst;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
@@ -45,12 +42,10 @@ public class Reconciler implements TaakHandler {
     private final TaakClaimer taakClaimer;
     private final NotifyNLVerzendAdapter verzendAdapter;
     private final Navraagschema navraagschema;
-    private final Event<StatusUpdateOpdracht> statusUpdateEvent;
     private final Duration uitstel;
 
     public Reconciler(PogingRepository pogingRepository, Overgangsfunctie overgangsfunctie, ReceiptVerwerker receiptVerwerker,
                       TaakClaimer taakClaimer, NotifyNLVerzendAdapter verzendAdapter, Navraagschema navraagschema,
-                      Event<StatusUpdateOpdracht> statusUpdateEvent,
                       @ConfigProperty(name = "nmc.taak.uitstel") Duration uitstel) {
         this.pogingRepository = pogingRepository;
         this.overgangsfunctie = overgangsfunctie;
@@ -58,7 +53,6 @@ public class Reconciler implements TaakHandler {
         this.taakClaimer = taakClaimer;
         this.verzendAdapter = verzendAdapter;
         this.navraagschema = navraagschema;
-        this.statusUpdateEvent = statusUpdateEvent;
         this.uitstel = uitstel;
     }
 
@@ -147,8 +141,7 @@ public class Reconciler implements TaakHandler {
             return;
         }
 
-        OvergangUitkomst resultaat = overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.BEZORGSTATUS_ONBEKEND, null);
-        statusUpdateEvent.fire(StatusUpdateOpdracht.van(resultaat.event(), notificatie.getCallbackUrl()));
+        overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.BEZORGSTATUS_ONBEKEND, null);
     }
 
     private record Navraag(UUID pogingId, UUID notificatieId, UUID notifyId, OffsetDateTime verzondenOp) {

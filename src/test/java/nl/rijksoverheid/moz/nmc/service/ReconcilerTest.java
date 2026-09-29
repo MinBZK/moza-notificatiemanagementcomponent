@@ -6,7 +6,6 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.GetMessageDataApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.GetOneMessageResponse;
@@ -52,9 +51,6 @@ class ReconcilerTest {
 
     @InjectMock
     NotifyNLJwtFactory notifyNLJwtFactory;
-
-    @InjectMock
-    ConsumentCallbackAdapter consumentCallbackAdapter;
 
     @Inject
     TaakWorker taakWorker;
@@ -212,7 +208,7 @@ class ReconcilerTest {
         UUID notifyId = UUID.randomUUID();
 
         return QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, null);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
             overgangsfunctie.neemAan(notificatie);
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
             Poging poging = new Poging(notificatie.getId(), 1);

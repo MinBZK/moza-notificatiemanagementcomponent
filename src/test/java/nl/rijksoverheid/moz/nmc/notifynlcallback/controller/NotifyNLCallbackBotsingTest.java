@@ -2,12 +2,9 @@ package nl.rijksoverheid.moz.nmc.notifynlcallback.controller;
 
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import io.quarkus.narayana.jta.QuarkusTransaction;
-import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
 import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
@@ -20,7 +17,6 @@ import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -36,8 +32,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 
 /**
  * Twee receipts voor dezelfde notificatie die echt tegelijk lopen. De eerste houdt de rijvergrendeling
@@ -50,9 +44,6 @@ class NotifyNLCallbackBotsingTest {
 
     @InjectSpy
     Overgangsfunctie overgangsfunctie;
-
-    @InjectMock
-    ConsumentCallbackAdapter consumentCallbackAdapter;
 
     @Inject
     NotificatieRepository notificatieRepository;
@@ -82,27 +73,25 @@ class NotifyNLCallbackBotsingTest {
     }
 
     @Test
-    void tweeOpeenvolgendeReceipts_wordenGeserialiseerdEnSturenElkEenStatusUpdate() throws Exception {
+    void tweeOpeenvolgendeReceipts_wordenGeserialiseerd() throws Exception {
         UUID notifyId = verzondenNotificatie();
 
         laatTegelijkLopen(notifyId, "delivered", "2025-01-01T12:00:01Z", "permanent-failure", "2025-01-01T12:00:02Z");
 
         assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
                 NotificatieStatus.BEZORGD, NotificatieStatus.NIET_BEZORGBAAR), overgangen(notifyId));
-        assertEquals(List.of(3L, 4L), verstuurdeVersies(2));
     }
 
     // Een herhaling door NotifyNL die binnenkomt terwijl de eerste nog loopt: de tweede ziet na het
     // wachten dat de receipt al verwerkt is en doet niets.
     @Test
-    void tweeIdentiekeReceipts_voerenEenOvergangUitEnSturenEenStatusUpdate() throws Exception {
+    void tweeIdentiekeReceipts_voerenEenOvergangUit() throws Exception {
         UUID notifyId = verzondenNotificatie();
 
         laatTegelijkLopen(notifyId, "delivered", "2025-01-01T12:00:01Z", "delivered", "2025-01-01T12:00:01Z");
 
         assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
                 NotificatieStatus.BEZORGD), overgangen(notifyId));
-        assertEquals(List.of(3L), verstuurdeVersies(1));
     }
 
     // De tweede receipt is ouder dan de eerste en las de poging al vóór hij op de vergrendeling ging
@@ -116,7 +105,6 @@ class NotifyNLCallbackBotsingTest {
 
         assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
                 NotificatieStatus.BEZORGD), overgangen(notifyId));
-        assertEquals(List.of(3L), verstuurdeVersies(1));
     }
 
     // De eerste receipt houdt na het vergrendelen een halve seconde vast; de tweede komt in die tijd
@@ -147,7 +135,7 @@ class NotifyNLCallbackBotsingTest {
     private UUID verzondenNotificatie() {
         UUID notifyId = UUID.randomUUID();
         QuarkusTransaction.requiringNew().run(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, "https://omc.example.nl/callback");
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
             overgangsfunctie.neemAan(notificatie);
             Poging poging = new Poging(notificatie.getId(), 1);
             pogingRepository.persist(poging);
@@ -163,13 +151,6 @@ class NotifyNLCallbackBotsingTest {
         return QuarkusTransaction.requiringNew().call(() -> eventRepository
                 .findByNotificatie(pogingRepository.findByNotifyId(notifyId).orElseThrow().getNotificatieId())
                 .stream().map(Event::getNaar).toList());
-    }
-
-    private List<Long> verstuurdeVersies(int aantal) {
-        ArgumentCaptor<StatusUpdateOpdracht> captor = ArgumentCaptor.forClass(StatusUpdateOpdracht.class);
-        verify(consumentCallbackAdapter, times(aantal)).stuurStatusUpdate(captor.capture());
-
-        return captor.getAllValues().stream().map(StatusUpdateOpdracht::versie).toList();
     }
 
     // Sinds de callback eerst opslaat, gebeurt de verwerking in de receipttaak; die roept deze
