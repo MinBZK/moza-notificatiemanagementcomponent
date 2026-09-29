@@ -59,7 +59,7 @@ import static org.mockito.Mockito.when;
 @QuarkusTest
 class VerzendTaakHandlerTest {
 
-    private static final String TEMPLATE_ID = "test-template-id";
+    private static final String TEMPLATE_ID = BerichtType.DEMO_TEMPLATE.getTemplateId();
     private static final String EMAIL = "burger@example.nl";
 
     @InjectMock
@@ -371,13 +371,13 @@ class VerzendTaakHandlerTest {
     }
 
     private static AannameOpdracht decentraal() {
-        return new AannameOpdracht(Regie.DECENTRAAL, Ontvanger.email(EMAIL), null, null, TEMPLATE_ID,
+        return new AannameOpdracht(Regie.DECENTRAAL, Ontvanger.email(EMAIL), null, null, BerichtType.DEMO_TEMPLATE,
                 Map.of("naam", "Voorbeeld BV"));
     }
 
     private static AannameOpdracht centraal() {
         return new AannameOpdracht(Regie.CENTRAAL, new Ontvanger(Ontvanger.Soort.KVK, "12345678"), "Gemeente Voorbeeld",
-                "Parkeervergunning", TEMPLATE_ID, Map.of("naam", "Voorbeeld BV"));
+                "Parkeervergunning", BerichtType.DEMO_TEMPLATE, Map.of("naam", "Voorbeeld BV"));
     }
 
     private static PartijResponse partijMetEmail(String email) {
