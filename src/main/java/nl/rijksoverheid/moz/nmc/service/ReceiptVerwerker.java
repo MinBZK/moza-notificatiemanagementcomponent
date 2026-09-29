@@ -11,12 +11,16 @@ import nl.rijksoverheid.moz.nmc.domain.OvergangUitkomst;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
+import nl.rijksoverheid.moz.nmc.domain.Taak;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -31,12 +35,17 @@ public class ReceiptVerwerker {
     private final PogingRepository pogingRepository;
     private final Overgangsfunctie overgangsfunctie;
     private final Event<StatusUpdateOpdracht> statusUpdateEvent;
+    private final TaakRepository taakRepository;
+    private final Vaststellingstermijn vaststellingstermijn;
 
     public ReceiptVerwerker(PogingRepository pogingRepository, Overgangsfunctie overgangsfunctie,
-                            Event<StatusUpdateOpdracht> statusUpdateEvent) {
+                            Event<StatusUpdateOpdracht> statusUpdateEvent, TaakRepository taakRepository,
+                            Vaststellingstermijn vaststellingstermijn) {
         this.pogingRepository = pogingRepository;
         this.overgangsfunctie = overgangsfunctie;
         this.statusUpdateEvent = statusUpdateEvent;
+        this.taakRepository = taakRepository;
+        this.vaststellingstermijn = vaststellingstermijn;
     }
 
     /**
@@ -80,9 +89,25 @@ public class ReceiptVerwerker {
             return;
         }
 
+        PogingStatus vorige = poging.getStatus();
+        OffsetDateTime vorigeReceipt = poging.getReceiptTijdstip();
+
         if (!poging.verwerkReceipt(uitkomst.get(), tijdstip)) {
             Log.debugf("Receipt %s voor NotifyNL-referentie %s is een herhaling of ouder dan de vastgelegde "
                     + "uitkomst en wordt genegeerd", status, notifyId);
+
+            return;
+        }
+
+        // Met een uitkomst voor de lopende poging is de navraag klaar.
+        if (vorige == PogingStatus.VERZONDEN || vorige == PogingStatus.GEPLAND) {
+            taakRepository.verwijderOpen(TaakSoort.RECONCILIEREN, notificatie.getId());
+        }
+
+        if (notificatie.getStatus() == NotificatieStatus.BEZORGD && vorige == PogingStatus.BEZORGD
+                && !vaststellingstermijn.binnen(vorigeReceipt, tijdstip)) {
+            Log.infof("Receipt %s voor notificatie %s valt na de vaststellingstermijn; alleen op de poging vastgelegd",
+                    status, notificatie.getId());
 
             return;
         }
@@ -95,6 +120,15 @@ public class ReceiptVerwerker {
                     notificatie.getId(), resultaat.van(), status, notifyId);
 
             return;
+        }
+
+        // Een overgang weg van bezorgd rondt de open vaststeltaak af; een nieuwe bezorging plant een nieuwe.
+        taakRepository.verwijderOpen(TaakSoort.BEZORGING_VASTSTELLEN, notificatie.getId());
+
+        if (overgang.naar() == NotificatieStatus.BEZORGD) {
+            taakRepository.persist(new Taak(TaakSoort.BEZORGING_VASTSTELLEN, notificatie.getDvId(), notificatie.getId(),
+                    vaststellingstermijn.vaststellenOp(tijdstip), null,
+                    Map.of(VerzendTaakHandler.PAYLOAD_POGING_ID, poging.getId().toString())));
         }
 
         // StatusUpdateVerzender pakt dit pas ná de commit op, zodat de Dienstverlener geen status

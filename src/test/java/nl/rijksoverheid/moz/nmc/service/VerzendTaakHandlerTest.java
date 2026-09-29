@@ -344,7 +344,8 @@ class VerzendTaakHandlerTest {
         assertEquals(List.of(), poging.getDuplicaatIds());
         assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
                 NotificatieStatus.BEZORGD), overgangen(id));
-        assertEquals(List.of(), taken(), "geen navraag voor een al bezorgde notificatie");
+        assertEquals(List.of(TaakSoort.BEZORGING_VASTSTELLEN), taken().stream().map(Taak::getSoort).toList(),
+                "geen navraag voor een al bezorgde notificatie, wel de vaststeltaak");
     }
 
     @Test

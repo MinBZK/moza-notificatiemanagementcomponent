@@ -8,12 +8,15 @@ import jakarta.ws.rs.WebApplicationException;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.GetMessageDataApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.GetMultipleMessagesResponse;
+import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.GetOneMessageResponse;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailRequest;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailRequestPersonalisation;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -83,6 +86,51 @@ public class NotifyNLVerzendAdapter {
         } catch (IllegalArgumentException e) {
             throw new NotifyNLVerzendException("NotifyNL gaf een ongeldig notificatie-ID terug bij het zoeken op referentie", e);
         }
+    }
+
+    /**
+     * Vraagt de afleverstatus van een verzending op, voor de navraag als de receipt uitblijft.
+     *
+     * @return leeg als NotifyNL de verzending niet (meer) kent (404)
+     */
+    public Optional<NotifyNLAfleverstatus> vraagStatusOp(@NotNull UUID notifyId) throws NotifyNLConfiguratieException, NotifyNLVerzendException {
+        autoriseer();
+
+        try {
+            GetOneMessageResponse antwoord = getMessageDataApi.getMessageData(notifyId.toString());
+
+            if (antwoord == null || antwoord.getStatus() == null) {
+                throw new NotifyNLVerzendException("NotifyNL gaf geen status terug voor " + notifyId);
+            }
+
+            return Optional.of(new NotifyNLAfleverstatus(antwoord.getStatus(),
+                    tijdstip(antwoord.getCompletedAt(), antwoord.getSentAt(), antwoord.getCreatedAt())));
+        } catch (WebApplicationException e) {
+            if (e.getResponse().getStatus() == 404) {
+                return Optional.empty();
+            }
+
+            throw new NotifyNLVerzendException("NotifyNL gaf status " + e.getResponse().getStatus() + " terug bij de navraag", e);
+        } catch (ProcessingException e) {
+            throw new NotifyNLVerzendException("NotifyNL was niet bereikbaar bij de navraag", e);
+        }
+    }
+
+    // Het eerste bruikbare tijdstip; een onleesbaar tijdstip telt als afwezig.
+    private static OffsetDateTime tijdstip(String... kandidaten) {
+        for (String kandidaat : kandidaten) {
+            if (kandidaat == null || kandidaat.isBlank()) {
+                continue;
+            }
+
+            try {
+                return OffsetDateTime.parse(kandidaat);
+            } catch (DateTimeParseException e) {
+                Log.debugf("Onleesbaar tijdstip '%s' van NotifyNL genegeerd", kandidaat);
+            }
+        }
+
+        return null;
     }
 
     private void autoriseer() throws NotifyNLConfiguratieException {

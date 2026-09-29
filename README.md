@@ -198,8 +198,8 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
   kan afronden. Na het maximum aantal mislukkingen staat een taak op `MISLUKT` en
   telt hij in de metriek `nmc_taken_mislukt`.
 - **`verzendbudget`** is een rij per Notify-service per minuut met de resterende
-  tokens; het verzenden en de navraag claimen ertegen, met een vast deel
-  gereserveerd voor de navraag.
+  tokens; het verzenden en de navraag claimen ertegen. De navraag heeft een vast
+  aandeel (`navraag_tokens`) dat het verzenden laat staan, en neemt niet meer dan dat.
 - **`bevestiging`** is per dienstverlener de feedcursor die hij zelf terugschrijft;
   hij gaat alleen vooruit.
 
@@ -398,10 +398,12 @@ Bovenstaande draait de app in **dev-mode** (`%dev`-profiel: Postgres uit
 De NMC implementeert de centraal- en decentraal-profiel happy-flows inclusief de
 asynchrone bezorgstatus en consument-callback, zoals beschreven onder
 "Geïmplementeerde functionaliteit". De aanname is asynchroon (202) met een
-verzendtaak; de navraagtaak wordt gepland maar nog niet uitgevoerd. Nog **niet**
-aanwezig:
+verzendtaak. Blijft de receipt uit, dan vraagt de navraag de status op bij NotifyNL
+(na 1, 6 en 24 uur, daarna dagelijks tot de bewaartermijn van NotifyNL; een 404 of het
+einde van die termijn geeft `bezorgstatus-onbekend`). Een `bezorgd` wordt na de
+vaststellingstermijn (7 dagen plus het callback-venster) `definitief-bezorgd`. Nog
+**niet** aanwezig:
 
-- **Navraag** bij NotifyNL en **vaststelling** van de bezorging
 - **Contactherstel** en **herverzending** (voor beide profielen)
 - Een koppeling met de **Templating Service** (het `template_id` wordt voorlopig
   bepaald door een lokale `BerichtType`-enum, niet via een externe Templating Service)

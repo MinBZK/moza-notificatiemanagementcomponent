@@ -56,13 +56,13 @@ public class VerzendTaakHandler implements TaakHandler {
     private final ProfielServiceAdapter profielServiceAdapter;
     private final NotifyNLVerzendAdapter verzendAdapter;
     private final Duration uitstel;
-    private final Duration eersteNavraag;
+    private final Navraagschema navraagschema;
 
     public VerzendTaakHandler(Overgangsfunctie overgangsfunctie, PogingRepository pogingRepository,
                               TaakRepository taakRepository, TaakClaimer taakClaimer, Sleutelbeheer sleutelbeheer,
                               ProfielServiceAdapter profielServiceAdapter, NotifyNLVerzendAdapter verzendAdapter,
-                              @ConfigProperty(name = "nmc.taak.uitstel") Duration uitstel,
-                              @ConfigProperty(name = "nmc.navraag.eerste-due") Duration eersteNavraag) {
+                              Navraagschema navraagschema,
+                              @ConfigProperty(name = "nmc.taak.uitstel") Duration uitstel) {
         this.overgangsfunctie = overgangsfunctie;
         this.pogingRepository = pogingRepository;
         this.taakRepository = taakRepository;
@@ -71,7 +71,7 @@ public class VerzendTaakHandler implements TaakHandler {
         this.profielServiceAdapter = profielServiceAdapter;
         this.verzendAdapter = verzendAdapter;
         this.uitstel = uitstel;
-        this.eersteNavraag = eersteNavraag;
+        this.navraagschema = navraagschema;
     }
 
     @Override
@@ -254,7 +254,7 @@ public class VerzendTaakHandler implements TaakHandler {
         // De navraag bewaakt de eindstatus als de receipt uitblijft; is die er al, dan is hij overbodig.
         if (notificatie.getStatus() == NotificatieStatus.VERZONDEN) {
             taakRepository.persist(new Taak(TaakSoort.RECONCILIEREN, verzending.dvId(), notificatie.getId(),
-                    nu.plus(eersteNavraag), verzending.traceId(), Map.of(PAYLOAD_POGING_ID, poging.getId().toString())));
+                    navraagschema.eerste(poging.getVerzondenOp()), verzending.traceId(), Map.of(PAYLOAD_POGING_ID, poging.getId().toString())));
         }
 
         taakClaimer.rondAf(taak);

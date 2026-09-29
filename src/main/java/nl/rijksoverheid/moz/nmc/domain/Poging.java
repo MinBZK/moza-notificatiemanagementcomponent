@@ -130,6 +130,20 @@ public class Poging {
     }
 
     /**
+     * Sluit de navraag af zonder uitkomst: NotifyNL kent de verzending niet meer. Een later
+     * binnengekomen receipt mag de poging nog corrigeren.
+     *
+     * @throws IllegalStateException als de poging niet op {@code VERZONDEN} staat
+     */
+    public void markeerOnbekend() {
+        if (status != PogingStatus.VERZONDEN) {
+            throw new IllegalStateException("Poging " + id + " staat op " + status + " en kan niet onbekend worden");
+        }
+
+        this.status = PogingStatus.ONBEKEND;
+    }
+
+    /**
      * Legt de uitkomst uit een receipt vast als die nieuwer is dan de laatst vastgelegde. Receipts
      * komen ongeordend binnen; de volgorde komt uit het tijdstip in de receipt zelf.
      *
