@@ -43,13 +43,17 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
             SELECT * FROM geclaimd ORDER BY due
             """;
 
+    // Wie het langst wacht eerst: is het budget kleiner dan het aantal dienstverleners, dan krijgen
+    // niet steeds dezelfde dienstverleners niets.
     private static final String DIENSTVERLENERS_MET_WERK_SQL = """
-            SELECT DISTINCT dv_id
+            SELECT dv_id
               FROM taak
              WHERE soort = ?1
                AND status = 'OPEN'
                AND due <= ?2
                AND (lease_tot IS NULL OR lease_tot < ?2)
+             GROUP BY dv_id
+             ORDER BY min(due)
             """;
 
     /**

@@ -216,6 +216,17 @@ class TaakClaimerTest {
         assertEquals(2, geclaimd.stream().filter(t -> TWEEDE_DV.equals(t.getDvId())).count());
     }
 
+    // Meer dienstverleners dan plek in de batch: de dienstverlener die het langst wacht gaat voor.
+    @Test
+    void claim_minderPlekDanDienstverleners_geeftVoorrangAanWieHetLangstWacht() {
+        plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        plan(TaakSoort.CONTROLE, TWEEDE_DV, nu().minusHours(3));
+
+        List<Taak> geclaimd = taakClaimer.claim(TaakSoort.CONTROLE, 1);
+
+        assertEquals(List.of(TWEEDE_DV), geclaimd.stream().map(Taak::getDvId).toList());
+    }
+
     @Test
     void claim_takenPerSysteem_zonderDienstverlener() {
         long id = plan(TaakSoort.ONDERHOUD, null, nu().minusMinutes(1));
