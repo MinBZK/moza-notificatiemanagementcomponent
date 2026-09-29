@@ -128,6 +128,23 @@ class HerverzendingTest {
         assertEquals(tweede.getId().toString(), navraag.getPayload().get(VerzendTaakHandler.PAYLOAD_POGING_ID));
     }
 
+    // Een tweede faalreceipt voor de eerste poging, zolang de herverzending wacht: bijvoorbeeld voor een
+    // duplicaat-id, of een technical-failure gevolgd door een temporary-failure.
+    @ParameterizedTest
+    @CsvSource({"temporary-failure, temporary-failure", "technical-failure, temporary-failure"})
+    void tweedeFaalreceiptVoorDeEerstePoging_plantGeenTweedeHerverzending(String eerste, String tweede) {
+        UUID id = verzonden();
+        Poging poging = laatstePoging(id);
+        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
+        receiptVerwerker.verwerk(poging.getNotifyId(), poging.getId().toString(), eerste, nu.minusMinutes(2));
+
+        receiptVerwerker.verwerk(poging.getNotifyId(), poging.getId().toString(), tweede, nu.minusMinutes(1));
+
+        assertEquals(PogingStatus.TIJDELIJK_MISLUKT, poging(poging.getId()).getStatus());
+        assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
+        assertEquals(TaakSoort.VERZENDEN, enigeTaak().getSoort());
+    }
+
     @ParameterizedTest
     @CsvSource({
             "temporary-failure, NIET_BEZORGBAAR, ONBEREIKBAAR",
