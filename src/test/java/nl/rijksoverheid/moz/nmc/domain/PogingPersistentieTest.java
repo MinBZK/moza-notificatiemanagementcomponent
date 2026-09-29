@@ -87,7 +87,7 @@ class PogingPersistentieTest {
 
     private UUID nieuweNotificatie() {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, null);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
             overgangsfunctie.neemAan(notificatie);
 
             return notificatie.getId();

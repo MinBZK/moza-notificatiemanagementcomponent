@@ -23,7 +23,7 @@ public sealed interface TaakUitkomst {
         }
     }
 
-    /** De handler heeft de rij zelf al afgerond in zijn eigen transactie; de worker doet niets meer. */
+    /** De handler heeft de rij zelf al afgerond of uitgesteld in zijn eigen transactie; de worker doet niets meer. */
     record AlAfgerond() implements TaakUitkomst {
     }
 

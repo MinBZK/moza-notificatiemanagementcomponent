@@ -14,16 +14,6 @@ import jakarta.ws.rs.core.Response;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
 import nl.rijksoverheid.moz.nmc.api.model.DecentraleNotificatieAanvraagRequest;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieAanvraagRequest;
-import jakarta.enterprise.event.Event;
-import jakarta.enterprise.event.NotificationOptions;
-import jakarta.enterprise.util.TypeLiteral;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
-
-import java.lang.annotation.Annotation;
-import java.util.concurrent.CompletionStage;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackClient;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.NotificatieStatusEvent;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLAuthorizationHolder;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
@@ -62,8 +52,6 @@ import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.lang.reflect.Proxy;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -99,19 +87,6 @@ public class NotificatieVerwerkingFuzzer {
         "created", "sending", "pending"
     };
 
-    // One shape per reject branch of CallbackUrlValidator: scheme, userinfo, IPv4- and
-    // IPv6-literal, single-label name, internal suffix, missing host, port out of range.
-    private static final String[] ONGELDIGE_CALLBACK_URLS = {
-        "http://consument.example.invalid/cb",
-        "https://user:pw@consument.example.invalid/cb",
-        "https://127.0.0.1/cb",
-        "https://[::1]/cb",
-        "https://intranet/cb",
-        "https://svc.ns.svc/cb",
-        "https:///cb",
-        "https://consument.example.invalid:99999/cb"
-    };
-
     // Same as the Quarkus mapper: unknown properties are ignored.
     private static final ObjectMapper mapper = new ObjectMapper()
             .findAndRegisterModules()
@@ -127,53 +102,12 @@ public class NotificatieVerwerkingFuzzer {
     private static int profielAntwoord;
     /** 0 = accepted, 1 = rejected, 2 = response without a notification id. */
     private static int notifyAntwoord;
-    private static boolean callbackLukt;
 
     private static final GeheugenNotificatieRepository repository = new GeheugenNotificatieRepository();
 
     private static final GeheugenPogingRepository pogingen = new GeheugenPogingRepository();
 
     private static final GeheugenOvergangsfunctie overgangsfunctie = new GeheugenOvergangsfunctie();
-
-    /**
-     * Stand-in for the CDI {@code Event} that ReceiptVerwerker fires. In production
-     * StatusUpdateVerzender observes it at AFTER_SUCCESS so the callback runs after the commit;
-     * there is no CDI container here, so this delivers straight to the adapter. That keeps the
-     * consument-callback path in reach of the fuzzer, which is the point of wiring it at all.
-     */
-    private record DirecteStatusUpdateEvent(ConsumentCallbackAdapter adapter)
-            implements Event<StatusUpdateOpdracht> {
-
-        @Override
-        public void fire(StatusUpdateOpdracht opdracht) {
-            adapter.stuurStatusUpdate(opdracht);
-        }
-
-        @Override
-        public <U extends StatusUpdateOpdracht> CompletionStage<U> fireAsync(U opdracht) {
-            throw new UnsupportedOperationException("ReceiptVerwerker fires synchronously");
-        }
-
-        @Override
-        public <U extends StatusUpdateOpdracht> CompletionStage<U> fireAsync(U opdracht, NotificationOptions options) {
-            throw new UnsupportedOperationException("ReceiptVerwerker fires synchronously");
-        }
-
-        @Override
-        public Event<StatusUpdateOpdracht> select(Annotation... qualifiers) {
-            throw new UnsupportedOperationException("No qualifiers in play");
-        }
-
-        @Override
-        public <U extends StatusUpdateOpdracht> Event<U> select(Class<U> subtype, Annotation... qualifiers) {
-            throw new UnsupportedOperationException("No qualifiers in play");
-        }
-
-        @Override
-        public <U extends StatusUpdateOpdracht> Event<U> select(TypeLiteral<U> subtype, Annotation... qualifiers) {
-            throw new UnsupportedOperationException("No qualifiers in play");
-        }
-    }
 
     private static final class VasteKekProvider implements KekProvider {
 
@@ -207,9 +141,7 @@ public class NotificatieVerwerkingFuzzer {
                 new GeheugenDienstverlenerRepository(),
                 repository,
                 new GeheugenTaakRepository());
-        ReceiptVerwerker receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
-                // No wait between callback retries.
-                new DirecteStatusUpdateEvent(new ConsumentCallbackAdapter(url -> callbackClientStandIn(), 0)));
+        ReceiptVerwerker receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie);
 
         LogboekContext logboekContext = new LogboekContext();
         HashHelper hashHelper = new HashHelper(Optional.of("fuzz-pepper-niet-voor-productie"));
@@ -227,7 +159,6 @@ public class NotificatieVerwerkingFuzzer {
         int route = data.consumeInt(0, 4);
         profielAntwoord = gewogenAntwoord(data);
         notifyAntwoord = gewogenAntwoord(data);
-        callbackLukt = data.consumeBoolean();
         boolean notificatieIsBekend = data.consumeBoolean();
 
         switch (route) {
@@ -260,17 +191,15 @@ public class NotificatieVerwerkingFuzzer {
             return;
         }
         UUID bekendeId = notificatieIsBekend ? bewaarVerzonden(melding.getId()) : null;
-        // The callback adapter absorbs a failing callback; a 5xx on this route is always a finding.
+        // A 5xx on this route is always a finding.
         roepAan(() -> callbackController.verwerkAfleverstatus(melding), true);
 
-        // A delivery receipt never deletes the notificatie, whatever the outcome of the consumer
-        // callback, and never takes it back to before the send.
+        // A delivery receipt never deletes the notificatie and never takes it back to before the send.
         if (bekendeId != null) {
             Notificatie notificatie = repository.findById(bekendeId);
 
             if (notificatie == null) {
-                throw new AssertionError("notificatie verwijderd na %s consument-callback".formatted(
-                        callbackLukt ? "geslaagde" : "mislukte"));
+                throw new AssertionError("notificatie verwijderd na een receipt");
             }
 
             if (notificatie.getStatus() == NotificatieStatus.AANGENOMEN
@@ -315,8 +244,8 @@ public class NotificatieVerwerkingFuzzer {
             if (e.getStatusCode() >= 500 && geen5xxVerwacht) {
                 // The HttpProblem carries no cause; the message names the stand-in states.
                 throw new AssertionError(
-                        "5xx voor invoer die de validatie doorkwam (profielAntwoord=%d, notifyAntwoord=%d, callbackLukt=%b)"
-                                .formatted(profielAntwoord, notifyAntwoord, callbackLukt), e);
+                        "5xx voor invoer die de validatie doorkwam (profielAntwoord=%d, notifyAntwoord=%d)"
+                                .formatted(profielAntwoord, notifyAntwoord), e);
             }
         }
     }
@@ -329,7 +258,6 @@ public class NotificatieVerwerkingFuzzer {
         body.put("dienst", data.consumeString(50));
         body.put("berichtType", data.pickValue(BERICHT_TYPES));
         body.putObject("berichtgegevens").put(data.consumeString(20), data.consumeString(50));
-        body.put("callbackUrl", callbackUrl(data));
         return body.toString();
     }
 
@@ -339,7 +267,6 @@ public class NotificatieVerwerkingFuzzer {
         body.put("emailAdres", data.consumeBoolean() ? "fuzz@example.invalid" : data.consumeString(60));
         body.put("berichtType", data.pickValue(BERICHT_TYPES));
         body.putObject("berichtgegevens").put(data.consumeString(20), data.consumeString(50));
-        body.put("callbackUrl", callbackUrl(data));
         return body.toString();
     }
 
@@ -357,19 +284,6 @@ public class NotificatieVerwerkingFuzzer {
         return body.toString();
     }
 
-    /**
-     * Half the inputs get a URL CallbackUrlValidator rejects, half one it accepts. Percent-encoding
-     * the suffix keeps scheme, host and port fixed on the accepted branch; the .invalid TLD never
-     * resolves.
-     */
-    private static String callbackUrl(FuzzedDataProvider data) {
-        if (data.consumeBoolean()) {
-            return data.pickValue(ONGELDIGE_CALLBACK_URLS);
-        }
-        return "https://consument.example.invalid/"
-                + URLEncoder.encode(data.consumeString(20), StandardCharsets.UTF_8);
-    }
-
     private static ProfielApi profielApiStandIn() {
         return standIn(ProfielApi.class, "apiProfielserviceV1PartijPost", () -> switch (profielAntwoord) {
             case 0 -> partijMetEmailadres();
@@ -384,22 +298,6 @@ public class NotificatieVerwerkingFuzzer {
             case 1 -> throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build());
             default -> new SendEmailResponse();
         });
-    }
-
-    private static ConsumentCallbackClient callbackClientStandIn() {
-        return new ConsumentCallbackClient() {
-            @Override
-            public void stuurStatusUpdate(NotificatieStatusEvent event) {
-                if (!callbackLukt) {
-                    throw new WebApplicationException(Response.status(Response.Status.BAD_GATEWAY).build());
-                }
-            }
-
-            @Override
-            public void close() {
-                // Niets te sluiten: er is geen echte HTTP-client.
-            }
-        };
     }
 
     /** Answers one operation of a generated client; every other operation throws. */
@@ -432,7 +330,7 @@ public class NotificatieVerwerkingFuzzer {
 
     /** A notificatie on VERZONDEN with one poging under the given NotifyNL id. */
     private static UUID bewaarVerzonden(UUID notifyId) {
-        Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, "https://consument.example.invalid/callback");
+        Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
         overgangsfunctie.neemAan(notificatie);
         Poging poging = new Poging(notificatie.getId(), 1);
         pogingen.persist(poging);

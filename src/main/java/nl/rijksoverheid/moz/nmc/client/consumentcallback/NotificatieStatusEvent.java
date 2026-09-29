@@ -8,7 +8,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * Eén statusovergang als CloudEvent (NL GOV profiel), gelijk in de callback en in de feed. {@code id}
+ * Eén statusovergang als CloudEvent (NL GOV profiel), gelijk in de webhook en in de feed. {@code id}
  * is het event-id uit het eventlog, zodat een Dienstverlener die beide gebruikt hetzelfde event
  * herkent.
  */

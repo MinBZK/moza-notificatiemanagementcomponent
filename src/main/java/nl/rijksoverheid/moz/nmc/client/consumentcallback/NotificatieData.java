@@ -7,7 +7,7 @@ import nl.rijksoverheid.moz.nmc.domain.Reden;
 import java.util.Objects;
 
 /**
- * Payload van het CloudEvent naar de Dienstverlener: één statusovergang. Statussen en reden gaan als
+ * Payload van het CloudEvent voor de Dienstverlener: één statusovergang. Statussen en reden gaan als
  * API-waarde over de lijn ({@code niet-bezorgbaar}).
  *
  * @param van    de status vóór de overgang

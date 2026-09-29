@@ -2,9 +2,7 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.event.Event;
 import jakarta.transaction.Transactional;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.OvergangUitkomst;
@@ -30,13 +28,10 @@ public class ReceiptVerwerker {
 
     private final PogingRepository pogingRepository;
     private final Overgangsfunctie overgangsfunctie;
-    private final Event<StatusUpdateOpdracht> statusUpdateEvent;
 
-    public ReceiptVerwerker(PogingRepository pogingRepository, Overgangsfunctie overgangsfunctie,
-                            Event<StatusUpdateOpdracht> statusUpdateEvent) {
+    public ReceiptVerwerker(PogingRepository pogingRepository, Overgangsfunctie overgangsfunctie) {
         this.pogingRepository = pogingRepository;
         this.overgangsfunctie = overgangsfunctie;
-        this.statusUpdateEvent = statusUpdateEvent;
     }
 
     /**
@@ -93,13 +88,7 @@ public class ReceiptVerwerker {
         if (!resultaat.isUitgevoerd()) {
             Log.debugf("Notificatie %s blijft op %s; receipt %s (NotifyNL-referentie %s) is op de poging vastgelegd",
                     notificatie.getId(), resultaat.van(), status, notifyId);
-
-            return;
         }
-
-        // StatusUpdateVerzender pakt dit pas ná de commit op, zodat de Dienstverlener geen status
-        // krijgt die daarna terugrolt.
-        statusUpdateEvent.fire(StatusUpdateOpdracht.van(resultaat.event(), notificatie.getCallbackUrl()));
     }
 
     // Eerst op reference (het poging-id), dan op het NotifyNL-id voor verzendingen zonder reference.

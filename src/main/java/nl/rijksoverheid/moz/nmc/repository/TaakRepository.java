@@ -56,6 +56,27 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
              ORDER BY min(due)
             """;
 
+    // De unieke index op (dv_id, soort) voor terugkoppeltaken maakt dit veilig bij gelijktijdige pods.
+    private static final String PLAN_TERUGKOPPELTAKEN_SQL = """
+            INSERT INTO taak (soort, dv_id, due, status)
+            SELECT 'TERUGKOPPELEN', d.id, ?1, 'OPEN'
+              FROM dienstverlener d
+             WHERE d.webhook_url IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM taak t WHERE t.soort = 'TERUGKOPPELEN' AND t.dv_id = d.id)
+            ON CONFLICT DO NOTHING
+            """;
+
+    /**
+     * Plant een terugkoppeltaak voor elke dienstverlener met een webhook die er nog geen heeft.
+     *
+     * @return het aantal geplande taken
+     */
+    public int planTerugkoppeltaken(OffsetDateTime due) {
+        return getEntityManager().createNativeQuery(PLAN_TERUGKOPPELTAKEN_SQL)
+                .setParameter(1, due)
+                .executeUpdate();
+    }
+
     /**
      * De dienstverleners met een taak van deze soort die aan de beurt is; {@code null} in de lijst
      * staat voor taken per systeem.
