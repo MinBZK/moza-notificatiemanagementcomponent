@@ -20,6 +20,7 @@ import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -71,25 +72,36 @@ public class ControleTaakHandler implements TaakHandler {
         List<Notificatie> zonderTaak = notificatieRepository.zonderTaak(TERMINAAL, maxPerRonde);
         OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
 
+        int gepland = 0;
+
         for (Notificatie notificatie : zonderTaak) {
-            TaakSoort soort = ontbrekendeSoort(notificatie);
-            taakRepository.persist(new Taak(soort, notificatie.getDvId(), notificatie.getId(), nu, null,
-                    soort == TaakSoort.RECONCILIEREN ? navraagPayload(notificatie.getId()) : null));
+            Optional<TaakSoort> soort = ontbrekendeSoort(notificatie);
+
+            if (soort.isEmpty()) {
+                Log.errorf("Controletaak: notificatie %s staat op %s zonder lopende poging; geen taak gepland",
+                        notificatie.getId(), notificatie.getStatus());
+                continue;
+            }
+
+            taakRepository.persist(new Taak(soort.get(), notificatie.getDvId(), notificatie.getId(), nu, null,
+                    soort.get() == TaakSoort.RECONCILIEREN ? navraagPayload(notificatie.getId()) : null));
+            gepland++;
         }
 
-        return zonderTaak.size();
+        return gepland;
     }
 
     // Aangenomen of in-verzending: verzenden (een herclaim hergebruikt de poging). Verzonden met een
-    // lopende poging: navraag; zonder lopende poging: opnieuw verzenden. Bezorgd: vaststellen.
-    private TaakSoort ontbrekendeSoort(Notificatie notificatie) {
+    // lopende poging: navraag. Bezorgd: vaststellen. Verzonden zonder lopende poging vraagt een
+    // herverzending, die er nog niet is; daarvoor wordt niets gepland, zodat de controletaak niet
+    // elke ronde een verzendtaak aanmaakt die niets kan doen.
+    private Optional<TaakSoort> ontbrekendeSoort(Notificatie notificatie) {
         return switch (notificatie.getStatus()) {
-            case AANGENOMEN, IN_VERZENDING -> TaakSoort.VERZENDEN;
+            case AANGENOMEN, IN_VERZENDING -> Optional.of(TaakSoort.VERZENDEN);
             case VERZONDEN -> pogingRepository.findLaatsteVan(notificatie.getId())
                     .filter(ControleTaakHandler::isLopend)
-                    .map(p -> TaakSoort.RECONCILIEREN)
-                    .orElse(TaakSoort.VERZENDEN);
-            case BEZORGD -> TaakSoort.BEZORGING_VASTSTELLEN;
+                    .map(p -> TaakSoort.RECONCILIEREN);
+            case BEZORGD -> Optional.of(TaakSoort.BEZORGING_VASTSTELLEN);
             default -> throw new IllegalStateException("Terminale status " + notificatie.getStatus() + " hoort hier niet");
         };
     }

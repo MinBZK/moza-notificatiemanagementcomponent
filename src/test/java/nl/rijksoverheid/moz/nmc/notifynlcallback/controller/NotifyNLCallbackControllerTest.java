@@ -80,6 +80,7 @@ class NotifyNLCallbackControllerTest {
         QuarkusTransaction.requiringNew().run(() -> {
             eventRepository.deleteAll();
             notificatieRepository.deleteAll();
+            notificatieRepository.getEntityManager().createNativeQuery("DELETE FROM verzendbudget").executeUpdate();
         });
 
         Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");

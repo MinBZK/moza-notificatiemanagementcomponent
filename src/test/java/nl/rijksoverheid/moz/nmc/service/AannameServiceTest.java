@@ -105,11 +105,11 @@ class AannameServiceTest {
             assertEquals(id, taak.getNotificatieId());
             assertEquals(NotificatieFixtures.DV_ID, taak.getDvId());
             assertFalse(taak.getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC)));
-            assertEquals(Map.of(
-                    AannameService.PAYLOAD_TEMPLATE_ID, TEMPLATE_ID,
-                    AannameService.PAYLOAD_REGIE, "CENTRAAL",
-                    AannameService.PAYLOAD_DIENSTVERLENER, "Gemeente Voorbeeld",
-                    AannameService.PAYLOAD_DIENST, "Parkeervergunning"), taak.getPayload());
+            assertEquals(Map.of(), taak.getPayload(), "de verzendgegevens staan op de notificatie");
+            assertEquals(TEMPLATE_ID, notificatie.getTemplateId());
+            assertEquals("CENTRAAL", notificatie.getRegie());
+            assertEquals("Gemeente Voorbeeld", notificatie.getDienstverlenerNaam());
+            assertEquals("Parkeervergunning", notificatie.getDienst());
             assertNull(taak.getLeaseTot());
         });
         verifyNoInteractions(profielApi, sendAMessageApi);
@@ -126,9 +126,8 @@ class AannameServiceTest {
                     sleutelbeheer.ontsleutelOntvanger(id, notificatie.getVersleuteldeGegevens()));
             assertEquals(Map.of(), sleutelbeheer.ontsleutelPersonalisation(id, notificatie.getVersleuteldeGegevens()));
 
-            Taak taak = taakRepository.listAll().getFirst();
-            assertEquals(Map.of(AannameService.PAYLOAD_TEMPLATE_ID, TEMPLATE_ID, AannameService.PAYLOAD_REGIE, "DECENTRAAL"),
-                    taak.getPayload());
+            assertEquals("DECENTRAAL", notificatie.getRegie());
+            assertNull(notificatie.getDienstverlenerNaam());
         });
         verifyNoInteractions(profielApi, sendAMessageApi);
     }

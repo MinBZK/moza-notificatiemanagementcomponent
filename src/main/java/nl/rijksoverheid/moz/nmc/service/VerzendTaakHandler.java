@@ -79,6 +79,25 @@ public class VerzendTaakHandler implements TaakHandler {
         return TaakSoort.VERZENDEN;
     }
 
+    /**
+     * Een uitgeputte verzendtaak eindigt in {@code technisch-mislukt} (ADR 0024, beslispunt 2), zodat de
+     * Dienstverlener een eindstatus krijgt. Vanuit {@code aangenomen} loopt dat via
+     * {@code in-verzending}, omdat er geen directe overgang is. Een notificatie die al verder is, houdt
+     * haar status.
+     */
+    @Override
+    public boolean uitgeput(Taak taak) {
+        Notificatie notificatie = overgangsfunctie.vergrendel(taak.getNotificatieId());
+
+        if (notificatie.getStatus() == NotificatieStatus.AANGENOMEN) {
+            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
+        }
+
+        overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.TECHNISCH_MISLUKT, Reden.TECHNISCH);
+
+        return true;
+    }
+
     // De LDV-registratie van de verzending ontbreekt nog: de @Logboek-interceptor leest de headers
     // van een REST-aanroep en werkt niet in een worker. Dat vraagt een eigen registratie-API.
     @Override
@@ -173,15 +192,17 @@ public class VerzendTaakHandler implements TaakHandler {
             }
         }
 
-        Map<String, String> payload = taak.getPayload();
+        if (notificatie.getTemplateId() == null || notificatie.getRegie() == null) {
+            throw new IllegalStateException("Notificatie " + notificatie.getId() + " heeft geen verzendgegevens");
+        }
+
         Ontvanger ontvanger = sleutelbeheer.ontsleutelOntvanger(notificatie.getId(), notificatie.getVersleuteldeGegevens());
         Map<String, String> personalisation = sleutelbeheer.ontsleutelPersonalisation(notificatie.getId(),
                 notificatie.getVersleuteldeGegevens());
 
         return new Verzending(notificatie.getId(), notificatie.getDvId(), poging.getId(), herclaim, ontvanger,
-                Regie.valueOf(payload.get(AannameService.PAYLOAD_REGIE)), payload.get(AannameService.PAYLOAD_DIENSTVERLENER),
-                payload.get(AannameService.PAYLOAD_DIENST), payload.get(AannameService.PAYLOAD_TEMPLATE_ID), personalisation,
-                taak.getTraceId());
+                Regie.valueOf(notificatie.getRegie()), notificatie.getDienstverlenerNaam(), notificatie.getDienst(),
+                notificatie.getTemplateId(), personalisation, taak.getTraceId());
     }
 
     private int volgendPogingnummer(UUID notificatieId) {

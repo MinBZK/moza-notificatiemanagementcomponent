@@ -13,8 +13,6 @@ import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -24,11 +22,6 @@ import java.util.UUID;
  */
 @ApplicationScoped
 public class AannameService {
-
-    static final String PAYLOAD_TEMPLATE_ID = "templateId";
-    static final String PAYLOAD_REGIE = "regie";
-    static final String PAYLOAD_DIENSTVERLENER = "dienstverlener";
-    static final String PAYLOAD_DIENST = "dienst";
 
     private final Overgangsfunctie overgangsfunctie;
     private final Sleutelbeheer sleutelbeheer;
@@ -61,23 +54,13 @@ public class AannameService {
         Notificatie notificatie = new Notificatie(dvId, opdracht.callbackUrl());
         notificatie.bewaarVersleuteldeGegevens(
                 sleutelbeheer.versleutel(notificatie.getId(), opdracht.ontvanger(), opdracht.berichtgegevens()));
+        // Op de notificatie en niet in de taak, zodat ook een later geplande verzendtaak kan versturen.
+        notificatie.bewaarVerzendgegevens(opdracht.templateId(), opdracht.regie().name(), opdracht.dienstverlener(),
+                opdracht.dienst());
         overgangsfunctie.neemAan(notificatie);
 
-        // Alleen verwijzingen in de payload; adres en nummer staan versleuteld op de notificatie.
-        Map<String, String> payload = new HashMap<>();
-        payload.put(PAYLOAD_TEMPLATE_ID, opdracht.templateId());
-        payload.put(PAYLOAD_REGIE, opdracht.regie().name());
-
-        if (opdracht.dienstverlener() != null) {
-            payload.put(PAYLOAD_DIENSTVERLENER, opdracht.dienstverlener());
-        }
-
-        if (opdracht.dienst() != null) {
-            payload.put(PAYLOAD_DIENST, opdracht.dienst());
-        }
-
         taakRepository.persist(new Taak(TaakSoort.VERZENDEN, dvId, notificatie.getId(),
-                OffsetDateTime.now(ZoneOffset.UTC), UUID.randomUUID().toString(), payload));
+                OffsetDateTime.now(ZoneOffset.UTC), UUID.randomUUID().toString(), null));
 
         return notificatie.getId();
     }
