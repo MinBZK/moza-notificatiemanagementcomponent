@@ -302,13 +302,16 @@ de logica die kiest tussen herverzending en contactherstel.
   `OnderhoudTaakHandler` is een taak per systeem (eerste rij uit V17) die zichzelf opnieuw
   plant; elke stap loopt in batches van `nmc.onderhoud.batch` met een eigen transactie, en
   een stap die faalt houdt de andere niet op.
-- **Het eventlog heeft bereikpartities op `xid`.** V17 maakte van de oude
-  default-partitie `event_0` (tot de eerstvolgende transactie-id) en een nieuwe, lege
-  `event_standaard`. `Partitiebeheer` maakt `event_<van>` aan zodra de lopende partitie
-  voor 80% gevuld is, en begint een nieuw bereik altijd boven de al uitgedeelde
-  transactie-ids: PostgreSQL weigert een bereik waarvoor al rijen in de default-partitie
-  staan. Liep het onderhoud achter, dan komen events in de default-partitie; die worden
-  per rij opgeruimd. Een partitie gaat weg als ze onder het watermerk ligt, haar jongste
+- **Het eventlog heeft bereikpartities op `xid`.** V18 tot en met V20 maakten van de oude
+  default-partitie `event_0` (tot de eerstvolgende transactie-id plus de Flyway-placeholder
+  `event_marge`) en een nieuwe, lege `event_standaard`, in drie transacties zodat de scan van
+  de oude partitie het schrijven niet blokkeert. `Partitiebeheer` maakt `event_<van>` aan
+  zodra de lopende partitie voor 80% gevuld is, en begint een nieuw bereik altijd boven de al
+  uitgedeelde transactie-ids: PostgreSQL weigert een bereik waarvoor al rijen in de
+  default-partitie staan. Liep het onderhoud achter, dan begint het nieuwe bereik
+  `nmc.onderhoud.partitie-marge` boven de volgende transactie-id en komen de events ertussen
+  in de default-partitie; die worden per rij opgeruimd, maar pas als er geen oudere
+  bereikpartitie meer staat. Een partitie gaat weg als ze onder het watermerk ligt, haar jongste
   event (op transactie-id) ouder is dan de bewaartermijn en geen bevestiging of
   leverpositie uit het huidige epoch, jonger dan de maximale cursorleeftijd, erin of eronder
   wijst. De leeftijd van een leverpositie is `webhookpositie.geleverd_op`, niet
@@ -520,7 +523,7 @@ en herverzend-wachttijd, per berichttype te overschrijven als
 bundel, max-mislukkingen, herpoging- en pauzewachttijd, time-out, `jwt.issuer`,
 `jwt.geldigheid`), `nmc.wissen.termijn`, `nmc.afleverbewijs.bewaartermijn` (wettelijk nog niet
 vastgesteld, dus per omgeving), `nmc.feed.max-cursorleeftijd` en `nmc.onderhoud.*` (interval,
-batch, max-batches, partitie-omvang, lock-timeout). Onder `%test` staat de lus uit, is het
+batch, max-batches, partitie-omvang, partitie-marge, lock-timeout). Onder `%test` staat de lus uit, is het
 budget klein zodat tests het uitputten, zijn batch en partities klein, en is KEK-versie 2 de
 huidige, zodat de onderhoudstaak sleutels onder versie 1 kan herwrappen.
 

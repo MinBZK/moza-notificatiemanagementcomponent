@@ -235,7 +235,8 @@ terminaal is); wissen en verwijderen varen erop.
   taak per systeem (de eerste rij komt uit migratie V17) en werkt in batches van
   `nmc.onderhoud.batch` met elk een eigen transactie:
   - maakt de volgende partitie van `event` aan zodra de lopende voor 80% is gevuld
-    (`nmc.onderhoud.partitie-omvang` transactie-ids per partitie);
+    (`nmc.onderhoud.partitie-omvang` transactie-ids per partitie, met `nmc.onderhoud.partitie-marge`
+    als afstand als het onderhoud achterliep);
   - herwrapt sleutels onder een oudere `kek_versie` met de huidige KEK, zonder de
     gegevens opnieuw te versleutelen;
   - verwijdert notificaties (met pogingen en taken) waarvan `terminaal_op` ouder is

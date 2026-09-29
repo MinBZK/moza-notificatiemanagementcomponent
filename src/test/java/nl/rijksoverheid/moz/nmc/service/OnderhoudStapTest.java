@@ -19,7 +19,6 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -66,9 +65,8 @@ class OnderhoudStapTest {
         });
 
         assertNull(QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findById(verlopen)));
-        TaakUitkomst.Uitgesteld uitgesteld = assertInstanceOf(TaakUitkomst.Uitgesteld.class, uitkomst);
-        assertFalse(uitgesteld.teltAlsPoging());
-        assertTrue(uitgesteld.due().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(59)), "na nmc.onderhoud.interval");
+        TaakUitkomst.Herpland herpland = assertInstanceOf(TaakUitkomst.Herpland.class, uitkomst);
+        assertTrue(herpland.due().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(59)), "na nmc.onderhoud.interval");
     }
 
     // Een verloren lease is geen fout in een stap: de ronde stopt en de worker laat de taak aan de
@@ -91,7 +89,9 @@ class OnderhoudStapTest {
         assertThrows(IllegalStateException.class,
                 () -> new OnderhoudTaakHandler(null, null, null, termijnen, Duration.ofHours(1), 1, 0));
         assertThrows(IllegalStateException.class,
-                () -> new Partitiebeheer(null, termijnen, 0, Duration.ofSeconds(1), 1));
+                () -> new Partitiebeheer(null, termijnen, 0, 0, Duration.ofSeconds(1), 1));
+        assertThrows(IllegalStateException.class,
+                () -> new Partitiebeheer(null, termijnen, 10, -1, Duration.ofSeconds(1), 1));
     }
 
     private static Taak taak() {

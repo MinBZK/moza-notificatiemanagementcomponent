@@ -15,6 +15,7 @@ import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -67,7 +68,7 @@ class V17MigratieTest {
             verbinding.commit();
         }
 
-        migreerTot(jdbcUrl, "17");
+        migreerTot(jdbcUrl, "20");
 
         try (Connection verbinding = DriverManager.getConnection(jdbcUrl, DB_USER, DB_PASSWORD)) {
             assertEquals(LAATSTE_OVERGANG.toInstant(), terminaalOp(verbinding, terminaal).toInstant());
@@ -84,6 +85,11 @@ class V17MigratieTest {
                     "de events staan in de eerste bereikpartitie");
             assertEquals(List.of("DEFAULT"), tekst(verbinding, "SELECT pg_get_expr(c.relpartbound, c.oid) FROM pg_class c "
                     + "WHERE c.relname = 'event_standaard'"));
+            assertEquals(List.of("true"), tekst(verbinding, "SELECT (substring(pg_get_expr(c.relpartbound, c.oid) "
+                    + "FROM 'TO \\(''(\\d+)''\\)')::bigint > pg_snapshot_xmax(pg_current_snapshot())::text::bigint + 900)::text "
+                    + "FROM pg_class c WHERE c.relname = 'event_0'"), "event_0 loopt tot boven de uitgedeelde xids plus de marge");
+            assertEquals(List.of(), tekst(verbinding, "SELECT conname::text FROM pg_constraint WHERE conname = 'event_0_bereik'"),
+                    "de hulpconstraint is na de ATTACH weg");
             assertEquals(List.of("2026-09-02 10:00:00+00"), tekst(verbinding,
                     "SELECT to_char(geleverd_op AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') || '+00' FROM webhookpositie"));
         }
@@ -113,6 +119,7 @@ class V17MigratieTest {
                 .dataSource(jdbcUrl, DB_USER, DB_PASSWORD)
                 .locations("classpath:db/migration")
                 .target(versie)
+                .placeholders(Map.of("event_marge", "1000"))
                 .load()
                 .migrate();
     }

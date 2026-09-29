@@ -81,7 +81,7 @@ public class OnderhoudTaakHandler implements TaakHandler {
         stap("default-partitie opruimen", () -> meld("event(s) uit de default-partitie verwijderd",
                 inBatches(lease, () -> partitiebeheer.ruimStandaardpartitieOp(nu, batch))));
 
-        return TaakUitkomst.uitgesteld(OffsetDateTime.now(ZoneOffset.UTC).plus(interval), false);
+        return TaakUitkomst.herpland(OffsetDateTime.now(ZoneOffset.UTC).plus(interval));
     }
 
     /**

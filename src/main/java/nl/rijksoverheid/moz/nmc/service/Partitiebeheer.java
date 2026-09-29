@@ -27,20 +27,27 @@ public class Partitiebeheer {
     private final EventPartitieRepository repository;
     private final Bewaartermijnen bewaartermijnen;
     private final long omvang;
+    private final long marge;
     private final Duration lockTimeout;
     private final int epoch;
 
     public Partitiebeheer(EventPartitieRepository repository, Bewaartermijnen bewaartermijnen,
                           @ConfigProperty(name = "nmc.onderhoud.partitie-omvang") long omvang,
+                          @ConfigProperty(name = "nmc.onderhoud.partitie-marge") long marge,
                           @ConfigProperty(name = "nmc.onderhoud.lock-timeout") Duration lockTimeout,
                           @ConfigProperty(name = "nmc.feed.cluster-epoch") int epoch) {
         if (omvang < 1) {
             throw new IllegalStateException("nmc.onderhoud.partitie-omvang moet 1 of hoger zijn, is " + omvang);
         }
 
+        if (marge < 0) {
+            throw new IllegalStateException("nmc.onderhoud.partitie-marge mag niet negatief zijn, is " + marge);
+        }
+
         this.repository = repository;
         this.bewaartermijnen = bewaartermijnen;
         this.omvang = omvang;
+        this.marge = marge;
         this.lockTimeout = lockTimeout;
         this.epoch = epoch;
     }
@@ -55,7 +62,7 @@ public class Partitiebeheer {
         return QuarkusTransaction.requiringNew().call(() -> {
             List<EventPartitie> partities = repository.bereikpartities();
             Optional<EventPartitie> volgende = volgende(partities.isEmpty() ? Optional.empty()
-                    : Optional.of(partities.getLast()), repository.volgendeXid(), omvang);
+                    : Optional.of(partities.getLast()), repository.volgendeXid(), omvang, marge);
 
             if (volgende.isPresent()) {
                 repository.zetLockTimeout(lockTimeout);
@@ -68,12 +75,13 @@ public class Partitiebeheer {
 
     /**
      * De partitie die na {@code laatste} moet komen. Is de laatste nog niet voor 80% gevuld, dan geen.
-     * Ligt de volgende transactie-id er al boven, dan begint de nieuwe daar: de default-partitie kan
-     * rijen tussen de laatste en die transactie-id hebben.
+     * Ligt de volgende transactie-id er al boven, dan begint de nieuwe {@code marge} daarboven: de
+     * default-partitie kan rijen tussen de laatste en die transactie-id hebben, en een transactie die
+     * tijdens het aanmaken een event schrijft, mag niet in het nieuwe bereik vallen.
      */
-    static Optional<EventPartitie> volgende(Optional<EventPartitie> laatste, long volgendeXid, long omvang) {
+    static Optional<EventPartitie> volgende(Optional<EventPartitie> laatste, long volgendeXid, long omvang, long marge) {
         if (laatste.isEmpty() || volgendeXid >= laatste.get().tot()) {
-            return Optional.of(EventPartitie.vanaf(volgendeXid, volgendeXid + omvang));
+            return Optional.of(EventPartitie.vanaf(volgendeXid + marge, volgendeXid + marge + omvang));
         }
 
         EventPartitie lopend = laatste.get();
@@ -132,7 +140,10 @@ public class Partitiebeheer {
      */
     public int ruimStandaardpartitieOp(OffsetDateTime nu, int maximum) {
         return QuarkusTransaction.requiringNew().call(() -> {
-            long onder = repository.watermerk();
+            // Onder de oudste bereikpartitie die er nog staat, zodat rijen daarboven niet verdwijnen
+            // terwijl een oudere partitie blijft: een verlopen cursor zou dan over het gat heen lezen.
+            long onder = Math.min(repository.watermerk(),
+                    repository.bereikpartities().stream().mapToLong(EventPartitie::van).min().orElse(Long.MAX_VALUE));
             Optional<Long> beschermd = repository.oudsteBeschermdeXid(epoch, nu, bewaartermijnen.maxCursorleeftijd());
 
             return repository.verwijderUitStandaardpartitie(bewaartermijnen.bewarenVanaf(nu),

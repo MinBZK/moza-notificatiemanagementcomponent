@@ -1,7 +1,6 @@
 -- V17: wistaak en onderhoudstaak uit ADR 0024 vervangen de retentiejob. Wistermijn en bewaartermijn
 -- lopen vanaf de terminale status (terminaal_op) in plaats van vanaf de laatste overgang, en het
--- eventlog krijgt bereikpartities die de onderhoudstaak aanmaakt en opruimt. V16 hoort bij een andere
--- story.
+-- eventlog krijgt bereikpartities die de onderhoudstaak aanmaakt en opruimt (V18 tot en met V20).
 
 -- Wanneer de notificatie terminaal werd; leeg zolang ze dat niet is. Voor bestaande terminale rijen is
 -- de laatste overgang de terminale.
@@ -41,21 +40,6 @@ ALTER TABLE dienstverlener ADD COLUMN max_cursorleeftijd interval CHECK (max_cur
 ALTER TABLE webhookpositie ADD COLUMN geleverd_op timestamp(6) with time zone;
 
 UPDATE webhookpositie SET geleverd_op = bijgewerkt_op WHERE xid IS NOT NULL;
-
--- De default-partitie wordt de eerste bereikpartitie, tot de eerstvolgende transactie-id; alle rijen
--- erin liggen daaronder. Een nieuwe, lege default-partitie vangt op wat buiten de bereiken valt. Zo
--- hoeft de onderhoudstaak bij het aanmaken van een bereik nooit rijen uit de default-partitie te
--- verplaatsen: ze begint elk nieuw bereik boven de uitgedeelde transactie-ids.
-DO $$
-DECLARE
-    tot text := pg_snapshot_xmax(pg_current_snapshot())::text;
-BEGIN
-    ALTER TABLE event DETACH PARTITION event_standaard;
-    ALTER TABLE event_standaard RENAME TO event_0;
-    EXECUTE format('ALTER TABLE event ATTACH PARTITION event_0 FOR VALUES FROM (%L) TO (%L)', '0', tot);
-    CREATE TABLE event_standaard PARTITION OF event DEFAULT;
-END;
-$$;
 
 -- De onderhoudstaak per systeem; daarna plant ze zichzelf steeds opnieuw.
 INSERT INTO taak (soort, due, status) VALUES ('ONDERHOUD', now(), 'OPEN');

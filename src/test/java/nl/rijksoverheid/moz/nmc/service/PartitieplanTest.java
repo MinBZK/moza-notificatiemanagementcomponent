@@ -15,23 +15,30 @@ class PartitieplanTest {
 
     @Test
     void volgende_zonderBereikpartitie_begintBijDeVolgendeXid() {
-        assertEquals(Optional.of(EventPartitie.vanaf(1234, 1334)), Partitiebeheer.volgende(Optional.empty(), 1234, 100));
+        assertEquals(Optional.of(EventPartitie.vanaf(1234, 1334)), Partitiebeheer.volgende(Optional.empty(), 1234, 100, 0));
     }
 
     @Test
     void volgende_onder80Procent_maaktGeenNieuwe() {
-        assertEquals(Optional.empty(), Partitiebeheer.volgende(Optional.of(LOPEND), 1799, 1000));
+        assertEquals(Optional.empty(), Partitiebeheer.volgende(Optional.of(LOPEND), 1799, 1000, 10));
     }
 
     @Test
     void volgende_op80Procent_sluitAanOpDeLopende() {
-        assertEquals(Optional.of(EventPartitie.vanaf(2000, 2500)), Partitiebeheer.volgende(Optional.of(LOPEND), 1800, 500));
+        assertEquals(Optional.of(EventPartitie.vanaf(2000, 2500)), Partitiebeheer.volgende(Optional.of(LOPEND), 1800, 500, 10));
     }
 
     @Test
     void volgende_lopendeVol_begintBovenDeUitgedeeldeXids() {
-        assertEquals(Optional.of(EventPartitie.vanaf(2000, 3000)), Partitiebeheer.volgende(Optional.of(LOPEND), 2000, 1000));
-        assertEquals(Optional.of(EventPartitie.vanaf(2345, 3345)), Partitiebeheer.volgende(Optional.of(LOPEND), 2345, 1000));
+        assertEquals(Optional.of(EventPartitie.vanaf(2000, 3000)), Partitiebeheer.volgende(Optional.of(LOPEND), 2000, 1000, 0));
+        assertEquals(Optional.of(EventPartitie.vanaf(2345, 3345)), Partitiebeheer.volgende(Optional.of(LOPEND), 2345, 1000, 0));
+    }
+
+    // Een event dat tijdens het aanmaken binnenkomt, mag niet in het nieuwe bereik vallen.
+    @Test
+    void volgende_achterstand_begintEenMargeBovenDeVolgendeXid() {
+        assertEquals(Optional.of(EventPartitie.vanaf(2400, 3400)), Partitiebeheer.volgende(Optional.of(LOPEND), 2345, 1000, 55));
+        assertEquals(Optional.of(EventPartitie.vanaf(1250, 1350)), Partitiebeheer.volgende(Optional.empty(), 1234, 100, 16));
     }
 
     @Test

@@ -74,7 +74,7 @@ public class ControleTaakHandler implements TaakHandler {
             Log.infof("Controletaak: terugkoppeltaak gepland voor %d dienstverlener(s) met een webhook", terugkoppeltaken);
         }
 
-        return TaakUitkomst.uitgesteld(OffsetDateTime.now(ZoneOffset.UTC).plus(interval), false);
+        return TaakUitkomst.herpland(OffsetDateTime.now(ZoneOffset.UTC).plus(interval));
     }
 
     private int herstelOntbrekendeTaken() {

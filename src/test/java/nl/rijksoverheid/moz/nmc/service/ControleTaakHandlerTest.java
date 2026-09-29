@@ -114,6 +114,20 @@ class ControleTaakHandlerTest {
         assertTrue(perNotificatie().get(id).getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusDays(7)));
     }
 
+    // De controletaak plant zichzelf zijn hele levensduur opnieuw; fouten verspreid over die tijd mogen
+    // niet optellen tot mislukt.
+    @Test
+    void controle_geslaagdeRonde_zetDePogingenTerug() {
+        QuarkusTransaction.requiringNew().run(() -> taakRepository.getEntityManager()
+                .createNativeQuery("UPDATE taak SET pogingen = 1 WHERE soort = 'CONTROLE'").executeUpdate());
+
+        taakWorker.verwerk(TaakSoort.CONTROLE);
+
+        Taak controle = QuarkusTransaction.requiringNew().call(() -> taakRepository.find("soort", TaakSoort.CONTROLE).singleResult());
+        assertEquals(0, controle.getPogingen());
+        assertEquals(TaakStatus.OPEN, controle.getStatus());
+    }
+
     @Test
     void controle_laatNotificatiesMetEenOpenOfMislukteTaakMetRust() {
         UUID metOpenTaak = notificatie(NotificatieStatus.AANGENOMEN, null);

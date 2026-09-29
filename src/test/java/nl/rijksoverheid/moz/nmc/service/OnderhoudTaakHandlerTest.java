@@ -267,11 +267,27 @@ class OnderhoudTaakHandlerTest {
         UUID oud = nieuwEvent(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         UUID jong = nieuwEvent(OffsetDateTime.now(ZoneOffset.UTC));
         assertEquals("event_standaard", partitieVan(oud));
+        // De lege, oudere bereikpartities gaan eerst weg; pas dan komen de rijen erboven aan de beurt.
+        partitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC));
 
         partitiebeheer.ruimStandaardpartitieOp(OffsetDateTime.now(ZoneOffset.UTC), 100);
 
         assertEquals(0, tel("SELECT count(*) FROM event WHERE notificatie_id = '" + oud + "'"));
         assertEquals(1, tel("SELECT count(*) FROM event WHERE notificatie_id = '" + jong + "'"));
+    }
+
+    // Zolang een oudere bereikpartitie staat (bijvoorbeeld omdat het verwijderen op de lock-timeout
+    // stuitte), blijven de rijen erboven: anders leest een verlopen cursor over het gat heen.
+    @Test
+    void ruimStandaardpartitieOp_oudereBereikpartitieStaatNog_laatDeRijenErbovenStaan() {
+        EventPartitie lopend = zorgVoorLopendePartitie();
+        verbruikXidsTot(lopend.tot());
+        UUID oud = nieuwEvent(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
+        assertEquals("event_standaard", partitieVan(oud));
+
+        partitiebeheer.ruimStandaardpartitieOp(OffsetDateTime.now(ZoneOffset.UTC), 100);
+
+        assertEquals(1, tel("SELECT count(*) FROM event WHERE notificatie_id = '" + oud + "'"));
     }
 
     @Test
@@ -344,6 +360,7 @@ class OnderhoudTaakHandlerTest {
         EventPartitie lopend = zorgVoorLopendePartitie();
         verbruikXidsTot(lopend.tot());
         EventPartitie partitie = partitiebeheer.maakVolgendeAan().orElseThrow();
+        verbruikXidsTot(partitie.van());
         UUID notificatieId = nieuwEvent(tijdstip);
         assertEquals(partitie.naam(), partitieVan(notificatieId));
         verbruikXidsTot(partitie.tot());

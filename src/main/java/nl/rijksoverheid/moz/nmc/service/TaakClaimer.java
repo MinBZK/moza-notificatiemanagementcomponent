@@ -112,6 +112,7 @@ public class TaakClaimer {
      *
      * @throws TaakVerlorenException als de taak inmiddels bij een andere worker ligt
      */
+    @Transactional
     public void herplanNaSucces(Taak taak, OffsetDateTime due) {
         eis(taakRepository.herplanNaSucces(taak, due), taak);
     }
