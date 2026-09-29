@@ -102,26 +102,10 @@ public class ReceiptVerwerker {
         statusUpdateEvent.fire(StatusUpdateOpdracht.van(resultaat.event(), notificatie.getCallbackUrl()));
     }
 
-    // Eerst op reference (het poging-id), dan op het NotifyNL-id voor verzendingen zonder reference.
     private Poging zoekPoging(UUID notifyId, String reference) {
-        Optional<Poging> opReference = parseUuid(reference).map(pogingRepository::findById);
-
-        return opReference
-                .or(() -> pogingRepository.findByNotifyId(notifyId))
+        return pogingRepository.zoekVoorReceipt(notifyId, reference)
                 .orElseThrow(() -> new NotificatieNietGevondenException(
                         "Geen poging gevonden voor NotifyNL-referentie " + notifyId + " (reference " + reference + ")"));
-    }
-
-    private static Optional<UUID> parseUuid(String waarde) {
-        if (waarde == null || waarde.isBlank()) {
-            return Optional.empty();
-        }
-
-        try {
-            return Optional.of(UUID.fromString(waarde.strip()));
-        } catch (IllegalArgumentException e) {
-            return Optional.empty();
-        }
     }
 
     // De tussenstatussen van NotifyNL leveren geen uitkomst op. Een onbekende status wordt op ERROR
