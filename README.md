@@ -278,7 +278,9 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
 - **`POST /notifynl-callback`**: webhook waarop NotifyNL de bezorgstatus
   (delivery receipt) van een verzending terugmeldt. Beveiligd met een bearer
   token dat geconfigureerd wordt in NotifyNL's dashboard en via
-  `notify.callback.bearer-token` in de NMC. `ReceiptVerwerker` zoekt de poging
+  `notify.callback.bearer-token` in de NMC. De controller slaat de receipt op als
+  taak (`RECEIPT_VERWERKEN`, zonder e-mailadres) en antwoordt meteen; een herhaalde
+  receipt levert geen tweede taak. De verwerking volgt in de worker. `ReceiptVerwerker` zoekt de poging
   op `reference` en anders op het NotifyNL-id, vergrendelt de notificatie en leest de poging daarna
   opnieuw, zodat twee gelijktijdige receipts elkaars uitkomst zien. Receipts komen
   at-least-once en ongeordend binnen; de volgorde komt uit het tijdstip in de
@@ -289,8 +291,9 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   een onbekende status wordt op ERROR gelogd zonder iets te wijzigen. Een
   uitgevoerde overgang staat als event in het log, en komt zo in de feed en op de
   webhook, met `sequence` het volgnummer waarop de Dienstverlener ordent. Retourneert `204`
-  op succes, ook als er niets veranderde, `401` bij een ontbrekend of ongeldig
-  bearer token, en `404` als het NotifyNL-id bij geen poging hoort. Dit endpoint heeft een eigen, losse OpenAPI-specificatie (zie
+  op succes, ook bij een herhaling of een receipt die bij geen poging hoort (die wordt
+  niet opgeslagen en geteld in `nmc.receipts.afgewezen`), en `401` bij een
+  ontbrekend of ongeldig bearer token. Dit endpoint heeft een eigen, losse OpenAPI-specificatie (zie
   hieronder), zodat het makkelijk te verwijderen is zodra de NMC publiek
   bereikbaar is en NotifyNL een echte callback-URL kan benaderen.
 

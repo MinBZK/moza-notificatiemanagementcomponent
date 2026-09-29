@@ -35,7 +35,9 @@ import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.service.NotificatieNietGevondenException;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
+import nl.rijksoverheid.moz.nmc.service.InkomendEventOpslag;
 import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.controller.NotifyNLCallbackController;
@@ -107,6 +109,10 @@ public class NotificatieVerwerkingFuzzer {
 
     private static final GeheugenPogingRepository pogingen = new GeheugenPogingRepository();
 
+    private static final GeheugenTaakRepository taken = new GeheugenTaakRepository();
+
+    private static ReceiptVerwerker receiptVerwerker;
+
     private static final GeheugenOvergangsfunctie overgangsfunctie = new GeheugenOvergangsfunctie();
 
     private static final class VasteKekProvider implements KekProvider {
@@ -140,8 +146,8 @@ public class NotificatieVerwerkingFuzzer {
                 () -> NotificatieFixtures.DV_ID,
                 new GeheugenDienstverlenerRepository(),
                 repository,
-                new GeheugenTaakRepository());
-        ReceiptVerwerker receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie);
+                taken);
+        receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie);
 
         LogboekContext logboekContext = new LogboekContext();
         HashHelper hashHelper = new HashHelper(Optional.of("fuzz-pepper-niet-voor-productie"));
@@ -149,7 +155,8 @@ public class NotificatieVerwerkingFuzzer {
 
         centraleController = new CentraleNotificatieController(aannameService, logboekContext, hashHelper, aannameLocatie);
         decentraleController = new DecentraleNotificatieController(aannameService, logboekContext, hashHelper, aannameLocatie);
-        callbackController = new NotifyNLCallbackController(receiptVerwerker);
+        callbackController = new NotifyNLCallbackController(new InkomendEventOpslag(pogingen, repository, taken,
+                mapper, new SimpleMeterRegistry()));
     }
 
     public static void fuzzerTestOneInput(FuzzedDataProvider data) {
@@ -193,6 +200,8 @@ public class NotificatieVerwerkingFuzzer {
         UUID bekendeId = notificatieIsBekend ? bewaarVerzonden(melding.getId()) : null;
         // A 5xx on this route is always a finding.
         roepAan(() -> callbackController.verwerkAfleverstatus(melding), true);
+        // The callback only stores; process what it stored, as the receipt task would.
+        taken.verwerkOpgeslagen();
 
         // A delivery receipt never deletes the notificatie and never takes it back to before the send.
         if (bekendeId != null) {
@@ -381,9 +390,33 @@ public class NotificatieVerwerkingFuzzer {
     /** Accepts the verzendtaak the aanname plans; nothing reads it back in this target. */
     private static final class GeheugenTaakRepository extends TaakRepository {
 
+        private final List<Map<String, String>> receipts = new java.util.ArrayList<>();
+
         @Override
         public void persist(Taak taak) {
             // No-op; there is no worker in this target.
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public boolean planReceipt(UUID dvId, UUID notificatieId, String payloadJson, java.time.OffsetDateTime due) {
+            try {
+                receipts.add(mapper.readValue(payloadJson, Map.class));
+            } catch (JsonProcessingException e) {
+                throw new IllegalStateException(e);
+            }
+
+            return true;
+        }
+
+        void verwerkOpgeslagen() {
+            for (Map<String, String> receipt : receipts) {
+                String tijdstip = receipt.get("tijdstip");
+                receiptVerwerker.verwerk(UUID.fromString(receipt.get("notifyId")), receipt.get("pogingId"), receipt.get("status"),
+                        tijdstip == null || tijdstip.isEmpty() ? null : java.time.OffsetDateTime.parse(tijdstip));
+            }
+
+            receipts.clear();
         }
     }
 

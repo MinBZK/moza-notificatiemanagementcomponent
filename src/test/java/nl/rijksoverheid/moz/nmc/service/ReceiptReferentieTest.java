@@ -12,6 +12,9 @@ import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.job.TaakWorker;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -42,9 +45,19 @@ class ReceiptReferentieTest {
     @Inject
     EventRepository eventRepository;
 
+    @Inject
+    InkomendEventOpslag inkomendEventOpslag;
+
+    @Inject
+    TaakWorker taakWorker;
+
+    @Inject
+    TaakRepository taakRepository;
+
     @BeforeEach
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
+            taakRepository.deleteAll();
             eventRepository.deleteAll();
             notificatieRepository.deleteAll();
         });
@@ -100,6 +113,40 @@ class ReceiptReferentieTest {
                 () -> receiptVerwerker.verwerk(UUID.randomUUID(), "geen-uuid", "delivered", null));
         assertThrows(NotificatieNietGevondenException.class,
                 () -> receiptVerwerker.verwerk(UUID.randomUUID(), UUID.randomUUID().toString(), "delivered", null));
+    }
+
+    // Via de opslag en de receipttaak: een receipt die er is voordat de worker zijn verzending
+    // committe, neemt het NotifyNL-id over en doet eerst verzonden, dan de uitkomst.
+    @Test
+    void opgeslagenReceiptVoorDeVerzendCommit_wordtDoorDeReceipttaakCorrectVerwerkt() {
+        UUID pogingId = geplandePoging();
+        UUID notifyId = UUID.randomUUID();
+
+        assertEquals(InkomendEventOpslag.Uitkomst.OPGESLAGEN,
+                inkomendEventOpslag.slaOp(notifyId, pogingId.toString(), "delivered", OffsetDateTime.now(ZoneOffset.UTC)));
+        taakWorker.verwerk(TaakSoort.RECEIPT_VERWERKEN);
+
+        Poging poging = poging(pogingId);
+        assertEquals(notifyId, poging.getNotifyId());
+        assertEquals(PogingStatus.BEZORGD, poging.getStatus());
+        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
+                NotificatieStatus.BEZORGD), overgangen(poging.getNotificatieId()));
+        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count("soort", TaakSoort.RECEIPT_VERWERKEN)));
+    }
+
+    // Is de notificatie inmiddels verwijderd, dan rondt de receipttaak af zonder iets te doen.
+    @Test
+    void receipttaakVoorEenVerwijderdePoging_rondtAf() {
+        UUID pogingId = geplandePoging();
+        inkomendEventOpslag.slaOp(UUID.randomUUID(), pogingId.toString(), "delivered", null);
+        QuarkusTransaction.requiringNew().run(() -> {
+            eventRepository.deleteAll();
+            notificatieRepository.deleteAll();
+        });
+
+        taakWorker.verwerk(TaakSoort.RECEIPT_VERWERKEN);
+
+        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count("soort", TaakSoort.RECEIPT_VERWERKEN)));
     }
 
     private UUID geplandePoging() {

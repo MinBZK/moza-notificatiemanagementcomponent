@@ -115,6 +115,24 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
         return query.getResultList();
     }
 
+    /**
+     * Plant een receipttaak, tenzij dezelfde receipt (poging, status en tijdstip) er al staat.
+     *
+     * @return false als het een herhaling was
+     */
+    public boolean planReceipt(UUID dvId, UUID notificatieId, String payloadJson, OffsetDateTime due) {
+        return getEntityManager().createNativeQuery("""
+                        INSERT INTO taak (soort, dv_id, notificatie_id, due, status, payload)
+                        VALUES ('RECEIPT_VERWERKEN', ?1, ?2, ?3, 'OPEN', CAST(?4 AS jsonb))
+                        ON CONFLICT DO NOTHING
+                        """)
+                .setParameter(1, dvId)
+                .setParameter(2, notificatieId)
+                .setParameter(3, due)
+                .setParameter(4, payloadJson)
+                .executeUpdate() == 1;
+    }
+
     /** Verlengt de lease; false als de taak inmiddels door een andere worker is geclaimd. */
     public boolean verlengLease(Taak taak, OffsetDateTime tot) {
         return wijzig("UPDATE taak SET lease_tot = ?4 WHERE soort = ?1 AND id = ?2 AND claim_epoch = ?3", taak, tot);

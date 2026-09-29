@@ -1,6 +1,6 @@
 -- V13: de webhook uit ADR 0024. De webhook-URL staat per dienstverlener in het register in plaats van
 -- per notificatie op de intake; een terugkoppeltaak per dienstverlener leest het eventlog vanaf de
--- eigen leverpositie in webhookpositie. V12 hoort bij een andere story.
+-- eigen leverpositie in webhookpositie.
 
 -- Leeg betekent: geen webhook. Leeg aantal mislukkingen betekent: de default uit de configuratie.
 ALTER TABLE dienstverlener

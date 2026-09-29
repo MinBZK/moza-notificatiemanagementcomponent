@@ -1,35 +1,36 @@
 package nl.rijksoverheid.moz.nmc.notifynlcallback.controller;
 
 import io.quarkus.logging.Log;
-import nl.rijksoverheid.moz.nmc.helper.Problems;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.NotifyNlCallbackApi;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.filter.NotifyNLCallbackBeveiligd;
-import nl.rijksoverheid.moz.nmc.service.NotificatieNietGevondenException;
-import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
+import nl.rijksoverheid.moz.nmc.service.InkomendEventOpslag;
 
 import java.time.OffsetDateTime;
 import java.util.Objects;
 import java.util.stream.Stream;
 
+/**
+ * Ontvangt delivery receipts van NotifyNL en slaat ze op; de verwerking volgt als taak. Een receipt die
+ * bij geen poging hoort krijgt ook een 2xx, zodat NotifyNL hem niet herhaalt; hij wordt geteld.
+ */
 @NotifyNLCallbackBeveiligd
 public class NotifyNLCallbackController implements NotifyNlCallbackApi {
 
-    private final ReceiptVerwerker receiptVerwerker;
+    private final InkomendEventOpslag inkomendEventOpslag;
 
-    public NotifyNLCallbackController(ReceiptVerwerker receiptVerwerker) {
-        this.receiptVerwerker = receiptVerwerker;
+    public NotifyNLCallbackController(InkomendEventOpslag inkomendEventOpslag) {
+        this.inkomendEventOpslag = inkomendEventOpslag;
     }
 
     @Override
     public void verwerkAfleverstatus(AfleverstatusRequest afleverstatusRequest) {
-        try {
-            receiptVerwerker.verwerk(afleverstatusRequest.getId(), afleverstatusRequest.getReference(),
-                    afleverstatusRequest.getStatus(), gebeurtenisTijdstip(afleverstatusRequest));
-        } catch (NotificatieNietGevondenException e) {
-            Log.warnf("NotifyNL-callback voor onbekende notificatie (notifyNlNotificatieId=%s)",
+        InkomendEventOpslag.Uitkomst uitkomst = inkomendEventOpslag.slaOp(afleverstatusRequest.getId(),
+                afleverstatusRequest.getReference(), afleverstatusRequest.getStatus(), gebeurtenisTijdstip(afleverstatusRequest));
+
+        if (uitkomst == InkomendEventOpslag.Uitkomst.ONBEKEND) {
+            Log.warnf("NotifyNL-receipt hoort bij geen poging (notifyNlNotificatieId=%s); niet opgeslagen",
                     afleverstatusRequest.getId());
-            throw Problems.notFound("Notificatie niet gevonden", e.getMessage());
         }
     }
 
