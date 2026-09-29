@@ -74,6 +74,14 @@ public class Notificatie {
     @Column
     private String dienst;
 
+    // De enum-naam van het berichttype, voor het verzendbeleid.
+    @Column(name = "bericht_type", length = 64)
+    private String berichtType;
+
+    // Na dit tijdstip wordt geen verzending of herverzending meer gestart; leeg betekent geen grens.
+    @Column(name = "geldig_tot")
+    private OffsetDateTime geldigTot;
+
     protected Notificatie() {
         // Voor JPA
     }
@@ -161,6 +169,25 @@ public class Notificatie {
 
     public String getDienst() {
         return dienst;
+    }
+
+    /** Legt het verzendbeleid vast. Alleen bij de aanname, vóór de eerste opslag. */
+    public void bewaarBeleid(String berichtType, OffsetDateTime geldigTot) {
+        this.berichtType = Objects.requireNonNull(berichtType, "berichtType is verplicht");
+        this.geldigTot = Objects.requireNonNull(geldigTot, "geldigTot is verplicht");
+    }
+
+    public String getBerichtType() {
+        return berichtType;
+    }
+
+    public OffsetDateTime getGeldigTot() {
+        return geldigTot;
+    }
+
+    /** Of op {@code nu} geen poging meer gestart mag worden. */
+    public boolean isVerlopen(OffsetDateTime nu) {
+        return geldigTot != null && !nu.isBefore(geldigTot);
     }
 
     public VersleuteldeGegevens getVersleuteldeGegevens() {

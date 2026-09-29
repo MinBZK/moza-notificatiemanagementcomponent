@@ -84,6 +84,14 @@ public final class NotificatieFixtures {
                 .executeUpdate();
     }
 
+    /** Zet geldig_tot terug, zodat er geen poging meer gestart mag worden. */
+    public static void verzetGeldigTot(EntityManager entityManager, UUID id, OffsetDateTime tijdstip) {
+        entityManager.createNativeQuery("UPDATE notificatie SET geldig_tot = ?1 WHERE id = ?2")
+                .setParameter(1, tijdstip)
+                .setParameter(2, id)
+                .executeUpdate();
+    }
+
     public static long telPogingen(EntityManager entityManager, UUID notificatieId) {
         return ((Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM poging WHERE notificatie_id = ?1")
                 .setParameter(1, notificatieId)

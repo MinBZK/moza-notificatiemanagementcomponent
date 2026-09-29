@@ -87,7 +87,8 @@ public class ControleTaakHandler implements TaakHandler {
             Optional<TaakSoort> soort = ontbrekendeSoort(notificatie);
 
             if (soort.isEmpty()) {
-                Log.errorf("Controletaak: notificatie %s staat op %s zonder lopende poging; geen taak gepland",
+                Log.errorf("Controletaak: notificatie %s staat op %s zonder lopende of herverzendbare poging; "
+                        + "geen taak gepland",
                         notificatie.getId(), notificatie.getStatus());
                 continue;
             }
@@ -102,18 +103,26 @@ public class ControleTaakHandler implements TaakHandler {
     }
 
     // Aangenomen of in-verzending: verzenden (een herclaim hergebruikt de poging). Verzonden met een
-    // lopende poging: navraag. Bezorgd: vaststellen. Verzonden zonder lopende poging vraagt een
-    // herverzending, die er nog niet is; daarvoor wordt niets gepland, zodat de controletaak niet
-    // elke ronde een verzendtaak aanmaakt die niets kan doen.
+    // lopende poging: navraag; met een geplande of herverzendbare poging: verzenden. Bezorgd: vaststellen.
+    // Verzonden zonder een van die pogingen kan niets meer doen; daarvoor wordt niets gepland, zodat de
+    // controletaak niet elke ronde een taak aanmaakt die direct afrondt.
     private Optional<TaakSoort> ontbrekendeSoort(Notificatie notificatie) {
         return switch (notificatie.getStatus()) {
             case AANGENOMEN, IN_VERZENDING -> Optional.of(TaakSoort.VERZENDEN);
-            case VERZONDEN -> pogingRepository.findLaatsteVan(notificatie.getId())
-                    .filter(ControleTaakHandler::isLopend)
-                    .map(p -> TaakSoort.RECONCILIEREN);
+            case VERZONDEN -> pogingRepository.findLaatsteVan(notificatie.getId()).flatMap(ControleTaakHandler::soortBijPoging);
             case BEZORGD -> Optional.of(TaakSoort.BEZORGING_VASTSTELLEN);
             default -> throw new IllegalStateException("Terminale status " + notificatie.getStatus() + " hoort hier niet");
         };
+    }
+
+    private static Optional<TaakSoort> soortBijPoging(Poging poging) {
+        if (isLopend(poging)) {
+            return Optional.of(TaakSoort.RECONCILIEREN);
+        }
+
+        return poging.getStatus() == PogingStatus.GEPLAND || VerzendTaakHandler.magHerverzonden(poging)
+                ? Optional.of(TaakSoort.VERZENDEN)
+                : Optional.empty();
     }
 
     private static boolean isLopend(Poging poging) {

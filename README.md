@@ -46,7 +46,6 @@ Nog **niet** geïmplementeerd, maar wel onderdeel van de visie verderop in dit
 document:
 
 - Contactherstel (fysieke post via Printstraat/Postadres, KvK/BRP/NHR-fallback)
-  en herverzending
 - Een koppeling met de **Templating Service**: het `template_id` wordt voorlopig
   bepaald door een lokale `BerichtType`-enum in de NMC, niet via een externe Templating Service
 - Een observability-koppelvlak
@@ -432,10 +431,12 @@ asynchrone bezorgstatus, de eventfeed en de webhook, zoals beschreven onder
 verzendtaak. Blijft de receipt uit, dan vraagt de navraag de status op bij NotifyNL
 (na 1, 6 en 24 uur, daarna dagelijks tot de bewaartermijn van NotifyNL; een 404 of het
 einde van die termijn geeft `bezorgstatus-onbekend`). Een `bezorgd` wordt na de
-vaststellingstermijn (7 dagen plus het callback-venster) `definitief-bezorgd`. Nog
-**niet** aanwezig:
+vaststellingstermijn (7 dagen plus het callback-venster) `definitief-bezorgd`. Een
+tijdelijke of technische fout op de eerste poging geeft één herverzending; na `geldig_tot`
+(standaard 7 dagen na de aanname, per berichttype in te stellen) wordt geen poging meer
+gestart en eindigt de notificatie in `verlopen`. Nog **niet** aanwezig:
 
-- **Contactherstel** en **herverzending** (voor beide profielen)
+- **Contactherstel** (voor beide profielen)
 - Een koppeling met de **Templating Service** (het `template_id` wordt voorlopig
   bepaald door een lokale `BerichtType`-enum, niet via een externe Templating Service)
 - **`GET /centraal/notificaties/{id}`** voor de status van één notificatie

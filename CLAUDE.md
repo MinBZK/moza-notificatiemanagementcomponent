@@ -148,6 +148,14 @@ Geïmplementeerd:
   `Reconciler` (navraag), `BezorgingVaststellenTaakHandler`, `ControleTaakHandler`,
   `TerugkoppelTaakHandler`, `WisTaakHandler` en `OnderhoudTaakHandler`; voor
   `ONGELDIG_MELDEN` is er nog geen handler.
+- **Herverzending en `geldig_tot`.** Een notificatie krijgt één herverzending: een
+  `temporary-failure` of `technical-failure` op de eerste poging plant een verzendtaak
+  na `Verzendbeleid.herverzendWachttijd`, en de claim daarvan maakt de tweede poging aan
+  (`verzonden` naar `verzonden`, met event). Op de tweede poging is een fout terminaal.
+  `geldig_tot` (aanname plus `Verzendbeleid.geldigheid` van het berichttype) begrenst het
+  starten van een poging: daarna eindigt de notificatie in `verlopen`, ook na een uitstel;
+  een poging die al bij NotifyNL ligt loopt door. `ONGELDIG_MELDEN` bestaat als taaksoort
+  maar wordt niet gepland: de Profielservice kent die operatie nog niet.
 - **Navraag en vaststellen.** De verzend-commit plant per poging een navraagtaak volgens
   `Navraagschema` (`nmc.navraag.*`); `Reconciler` vraagt de status op bij NotifyNL en
   geeft een uitkomst aan `ReceiptVerwerker`. Een 404 of het einde van de bewaartermijn
@@ -252,8 +260,8 @@ de logica die kiest tussen herverzending en contactherstel.
   tijdstip in de receipt (`completed_at`, met `sent_at` en `created_at` als terugval,
   begrensd op de eigen klok); een herhaalde of oudere receipt verandert niets. De
   poging wordt pas na het vergrendelen van de notificatie opnieuw gelezen, zodat een
-  receipt die op de vergrendeling wachtte de uitkomst van de eerste ziet. Tot er
-  herverzending is, zijn `temporary-failure` en `technical-failure` terminaal.
+  receipt die op de vergrendeling wachtte de uitkomst van de eerste ziet. Een faalreceipt
+  voor een poging die niet meer de laatste is, geeft geen overgang.
   Tussenstatussen worden genegeerd; een onbekende status wordt op ERROR gelogd en
   verandert niets.
 - **Receipttijd en registratietijd zijn gescheiden.** Het tijdstip uit de receipt staat
@@ -506,7 +514,9 @@ Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
 `nmc.dienstverlener.id` (de rij uit V8), `nmc.taak.*` (interval, batch, lease,
 max-pogingen van de worker-lus) en `nmc.verzendbudget.*` (Notify-service, tokens per
 minuut, het vaste aandeel van de navraag), `nmc.navraag.*` (momenten en bewaartermijn van
-NotifyNL), `nmc.vaststelling.*` (termijn en callback-venster), `nmc.webhook.*` (interval,
+NotifyNL), `nmc.vaststelling.*` (termijn en callback-venster), `nmc.beleid.*` (geldigheid
+en herverzend-wachttijd, per berichttype te overschrijven als
+`nmc.beleid.<berichttype>.<sleutel>`), `nmc.webhook.*` (interval,
 bundel, max-mislukkingen, herpoging- en pauzewachttijd, time-out, `jwt.issuer`,
 `jwt.geldigheid`), `nmc.wissen.termijn`, `nmc.afleverbewijs.bewaartermijn` (wettelijk nog niet
 vastgesteld, dus per omgeving), `nmc.feed.max-cursorleeftijd` en `nmc.onderhoud.*` (interval,

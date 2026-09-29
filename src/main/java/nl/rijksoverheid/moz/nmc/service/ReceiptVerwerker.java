@@ -34,13 +34,16 @@ public class ReceiptVerwerker {
     private final Overgangsfunctie overgangsfunctie;
     private final TaakRepository taakRepository;
     private final Vaststellingstermijn vaststellingstermijn;
+    private final Verzendbeleid verzendbeleid;
 
     public ReceiptVerwerker(PogingRepository pogingRepository, Overgangsfunctie overgangsfunctie,
-                            TaakRepository taakRepository, Vaststellingstermijn vaststellingstermijn) {
+                            TaakRepository taakRepository, Vaststellingstermijn vaststellingstermijn,
+                            Verzendbeleid verzendbeleid) {
         this.pogingRepository = pogingRepository;
         this.overgangsfunctie = overgangsfunctie;
         this.taakRepository = taakRepository;
         this.vaststellingstermijn = vaststellingstermijn;
+        this.verzendbeleid = verzendbeleid;
     }
 
     /**
@@ -98,17 +101,42 @@ public class ReceiptVerwerker {
             taakRepository.verwijderOpen(TaakSoort.RECONCILIEREN, notificatie.getId());
         }
 
-        // Op een bezorgde notificatie geeft een faalreceipt alleen een overgang als hij gaat over de
-        // poging waarop bezorgd rust en binnen de vaststellingstermijn valt.
+        // Op een bezorgde notificatie geeft alleen een tijdelijke of permanente fout een overgang, en alleen
+        // als hij gaat over de poging waarop bezorgd rust en binnen de vaststellingstermijn valt.
         if (notificatie.getStatus() == NotificatieStatus.BEZORGD && uitkomst.get() != PogingStatus.BEZORGD
-                && (poging.getBezorgdOp() == null || !vaststellingstermijn.binnen(poging.getBezorgdOp(), tijdstip))) {
-            Log.infof("Receipt %s voor notificatie %s valt buiten de vaststellingstermijn van de bezorging; alleen op "
-                    + "de poging vastgelegd", status, notificatie.getId());
+                && (uitkomst.get() == PogingStatus.TECHNISCH_MISLUKT || poging.getBezorgdOp() == null
+                    || !vaststellingstermijn.binnen(poging.getBezorgdOp(), tijdstip))) {
+            Log.infof("Receipt %s voor bezorgde notificatie %s geeft geen overgang (technische fout, andere poging of "
+                    + "na de vaststellingstermijn); alleen op de poging vastgelegd", status, notificatie.getId());
 
             return;
         }
 
-        Overgang overgang = Overgang.bij(uitkomst.get());
+        if (uitkomst.get() != PogingStatus.BEZORGD && !isLaatstePoging(poging)) {
+            Log.infof("Receipt %s voor poging %d van notificatie %s, die niet meer de laatste is; alleen op de poging "
+                    + "vastgelegd", status, poging.getNummer(), notificatie.getId());
+
+            return;
+        }
+
+        // Alleen een bezorging of een permanente fout mag bezorgstatus-onbekend nog corrigeren.
+        if (notificatie.getStatus() == NotificatieStatus.BEZORGSTATUS_ONBEKEND
+                && (uitkomst.get() == PogingStatus.TIJDELIJK_MISLUKT || uitkomst.get() == PogingStatus.TECHNISCH_MISLUKT)) {
+            Log.infof("Receipt %s voor notificatie %s op bezorgstatus-onbekend; alleen op de poging vastgelegd",
+                    status, notificatie.getId());
+
+            return;
+        }
+
+        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        Overgang overgang = Overgang.bij(uitkomst.get(), poging.getNummer() == 1, notificatie.isVerlopen(nu));
+
+        if (overgang.herverzending()) {
+            planHerverzending(notificatie, nu);
+
+            return;
+        }
+
         OvergangUitkomst resultaat = overgangsfunctie.voerUit(notificatie.getId(), overgang.naar(), overgang.reden());
 
         if (!resultaat.isUitgevoerd()) {
@@ -126,6 +154,30 @@ public class ReceiptVerwerker {
                     vaststellingstermijn.vaststellenOp(tijdstip), null,
                     Map.of(VerzendTaakHandler.PAYLOAD_POGING_ID, poging.getId().toString())));
         }
+    }
+
+    // De herverzendtaak maakt bij de claim de tweede poging aan. Vanuit bezorgd (een faalreceipt binnen de
+    // vaststellingstermijn) gaat de notificatie terug naar verzonden en vervalt de vaststeltaak.
+    private void planHerverzending(Notificatie notificatie, OffsetDateTime nu) {
+        if (notificatie.getStatus() != NotificatieStatus.VERZONDEN && notificatie.getStatus() != NotificatieStatus.BEZORGD) {
+            Log.infof("Notificatie %s staat op %s; geen herverzending, de receipt is op de poging vastgelegd",
+                    notificatie.getId(), notificatie.getStatus());
+
+            return;
+        }
+
+        taakRepository.verwijderOpen(TaakSoort.BEZORGING_VASTSTELLEN, notificatie.getId());
+
+        if (notificatie.getStatus() == NotificatieStatus.BEZORGD) {
+            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
+        }
+
+        taakRepository.persist(new Taak(TaakSoort.VERZENDEN, notificatie.getDvId(), notificatie.getId(),
+                nu.plus(verzendbeleid.herverzendWachttijd(notificatie.getBerichtType())), null, null));
+    }
+
+    private boolean isLaatstePoging(Poging poging) {
+        return pogingRepository.findLaatsteVan(poging.getNotificatieId()).map(p -> p.getId().equals(poging.getId())).orElse(true);
     }
 
     private Poging zoekPoging(UUID notifyId, String reference) {
@@ -161,16 +213,28 @@ public class ReceiptVerwerker {
         return tijdstip.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
     }
 
-    // Tot er herverzending is, is elke faaluitkomst terminaal.
-    private record Overgang(NotificatieStatus naar, Reden reden) {
+    // Een notificatie krijgt één herverzending, ongeacht de faalsoort: een tijdelijke of technische fout op
+    // de eerste poging plant die, of geeft verlopen na geldig_tot. Op de tweede poging is elke fout terminaal.
+    private record Overgang(NotificatieStatus naar, Reden reden, boolean herverzending) {
 
-        static Overgang bij(PogingStatus uitkomst) {
+        static Overgang bij(PogingStatus uitkomst, boolean eerstePoging, boolean verlopen) {
             return switch (uitkomst) {
-                case BEZORGD -> new Overgang(NotificatieStatus.BEZORGD, null);
-                case PERMANENT_MISLUKT, TIJDELIJK_MISLUKT -> new Overgang(NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR);
-                case TECHNISCH_MISLUKT -> new Overgang(NotificatieStatus.TECHNISCH_MISLUKT, Reden.TECHNISCH);
+                case BEZORGD -> new Overgang(NotificatieStatus.BEZORGD, null, false);
+                case PERMANENT_MISLUKT -> new Overgang(NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR, false);
+                case TIJDELIJK_MISLUKT -> eerstePoging
+                        ? herverzendingOfVerlopen(verlopen)
+                        : new Overgang(NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR, false);
+                case TECHNISCH_MISLUKT -> eerstePoging
+                        ? herverzendingOfVerlopen(verlopen)
+                        : new Overgang(NotificatieStatus.TECHNISCH_MISLUKT, Reden.TECHNISCH, false);
                 case GEPLAND, VERZONDEN, ONBEKEND -> throw new IllegalArgumentException("Geen receiptuitkomst: " + uitkomst);
             };
+        }
+
+        private static Overgang herverzendingOfVerlopen(boolean verlopen) {
+            return verlopen
+                    ? new Overgang(NotificatieStatus.VERLOPEN, Reden.VERLOPEN, false)
+                    : new Overgang(NotificatieStatus.VERZONDEN, null, true);
         }
     }
 }
