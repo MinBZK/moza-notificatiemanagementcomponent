@@ -80,7 +80,7 @@ class ControleTaakHandlerTest {
                 perNotificatie.get(verzondenLopend).getPayload().get(VerzendTaakHandler.PAYLOAD_POGING_ID));
         assertTrue(!perNotificatie.containsKey(verzondenZonderPoging), "zonder herverzending valt er niets te plannen");
         assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, perNotificatie.get(bezorgd).getSoort());
-        assertTrue(!perNotificatie.containsKey(terminaal), "een terminale notificatie krijgt geen taak");
+        assertTrue(!perNotificatie.containsKey(terminaal), "een terminale notificatie krijgt geen taak van de controletaak");
         assertEquals(NotificatieFixtures.DV_ID, perNotificatie.get(aangenomen).getDvId());
 
         Taak controle = QuarkusTransaction.requiringNew().call(() -> taakRepository
@@ -207,8 +207,9 @@ class ControleTaakHandlerTest {
         });
     }
 
+    // Zonder de wistaak die de overgangsfunctie bij elke terminale status plant.
     private Map<UUID, Taak> perNotificatie() {
-        List<Taak> taken = QuarkusTransaction.requiringNew().call(() -> taakRepository.listAll());
+        List<Taak> taken = QuarkusTransaction.requiringNew().call(() -> taakRepository.list("soort != ?1", TaakSoort.WISSEN));
         java.util.Map<UUID, Taak> map = new java.util.HashMap<>();
 
         for (Taak taak : taken) {

@@ -10,8 +10,8 @@ import java.util.UUID;
 
 /**
  * Schrijft rijen buiten Hibernate en buiten de overgangsfunctie om, voor tests die een toestand
- * willen die de applicatie zelf niet maakt: een willekeurige status met een terug- of
- * vooruitgedateerde registratietijd. Staat op één plek zodat een kolomwijziging niet door meerdere
+ * willen die de applicatie zelf niet maakt: een willekeurige status met een teruggedateerd
+ * {@code terminaal_op}. Staat op één plek zodat een kolomwijziging niet door meerdere
  * testklassen hoeft.
  * <p>
  * Elke methode verwacht een lopende transactie. De constraint trigger op {@code notificatie} eist een
@@ -25,16 +25,20 @@ public final class NotificatieFixtures {
     private NotificatieFixtures() {
     }
 
-    /** Een notificatie in de gegeven status, zonder poging. */
+    /**
+     * Een notificatie in de gegeven status, zonder poging.
+     *
+     * @param terminaalOp leeg voor een niet-terminale status
+     */
     public static void voegNotificatieToe(EntityManager entityManager, UUID id, NotificatieStatus status,
-                                          OffsetDateTime laatsteStatusUpdate) {
+                                          OffsetDateTime terminaalOp) {
         zetTriggerUit(entityManager);
-        entityManager.createNativeQuery("INSERT INTO notificatie (id, dv_id, versie, status, laatste_status_update) "
-                        + "VALUES (?1, ?2, 0, ?3, ?4)")
+        entityManager.createNativeQuery("INSERT INTO notificatie (id, dv_id, versie, status, terminaal_op) "
+                        + "VALUES (?1, ?2, 0, ?3, CAST(?4 AS timestamptz))")
                 .setParameter(1, id)
                 .setParameter(2, DV_ID)
                 .setParameter(3, status.name())
-                .setParameter(4, laatsteStatusUpdate)
+                .setParameter(4, terminaalOp)
                 .executeUpdate();
     }
 
@@ -72,9 +76,9 @@ public final class NotificatieFixtures {
                 .executeUpdate();
     }
 
-    /** Zet de registratietijd terug, zodat een notificatie buiten de bewaartermijn valt. */
-    public static void verzetLaatsteStatusUpdate(EntityManager entityManager, UUID id, OffsetDateTime tijdstip) {
-        entityManager.createNativeQuery("UPDATE notificatie SET laatste_status_update = ?1 WHERE id = ?2")
+    /** Zet het moment van de terminale status terug, zodat wistermijn of bewaartermijn verstreken is. */
+    public static void verzetTerminaalOp(EntityManager entityManager, UUID id, OffsetDateTime tijdstip) {
+        entityManager.createNativeQuery("UPDATE notificatie SET terminaal_op = ?1 WHERE id = ?2")
                 .setParameter(1, tijdstip)
                 .setParameter(2, id)
                 .executeUpdate();
@@ -92,14 +96,14 @@ public final class NotificatieFixtures {
      * {@code generate_series} levert de rijen en het id wordt uit het rijnummer afgeleid, zodat de
      * pogingen naar hetzelfde id verwijzen.
      */
-    public static void plantNotificaties(EntityManager entityManager, int aantalRijen, OffsetDateTime tijdstip,
+    public static void plantNotificaties(EntityManager entityManager, int aantalRijen, OffsetDateTime terminaalOp,
                                          NotificatieStatus status, int aantalPogingen) {
         String idExpressie = "('00000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid";
         QuarkusTransaction.requiringNew().run(() -> {
             zetTriggerUit(entityManager);
-            entityManager.createNativeQuery("INSERT INTO notificatie (id, dv_id, versie, status, laatste_status_update) "
+            entityManager.createNativeQuery("INSERT INTO notificatie (id, dv_id, versie, status, terminaal_op) "
                             + "SELECT " + idExpressie + ", ?4, 0, ?3, ?1 FROM generate_series(1, ?2) AS g")
-                    .setParameter(1, tijdstip)
+                    .setParameter(1, terminaalOp)
                     .setParameter(4, DV_ID)
                     .setParameter(2, aantalRijen)
                     .setParameter(3, status.name())
@@ -109,7 +113,7 @@ public final class NotificatieFixtures {
                 entityManager.createNativeQuery("INSERT INTO poging (id, notificatie_id, nummer, status, notify_id, verzonden_op) "
                                 + "SELECT gen_random_uuid(), " + idExpressie + ", ?3, ?4, gen_random_uuid(), ?1 "
                                 + "FROM generate_series(1, ?2) AS g")
-                        .setParameter(1, tijdstip)
+                        .setParameter(1, terminaalOp)
                         .setParameter(2, aantalRijen)
                         .setParameter(3, nummer)
                         .setParameter(4, PogingStatus.VERZONDEN.name())

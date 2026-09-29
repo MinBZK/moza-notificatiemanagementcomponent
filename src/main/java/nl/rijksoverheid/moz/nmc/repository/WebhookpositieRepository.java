@@ -25,14 +25,23 @@ public class WebhookpositieRepository {
              WHERE dv_id = ?1
             """;
 
+    // geleverd_op verschuift alleen als de positie verschuift: de leeftijd van de leverpositie, waarop
+    // het opruimen van het eventlog let, telt vanaf de laatste levering en niet vanaf een mislukking.
     private static final String BEWAAR_SQL = """
-            INSERT INTO webhookpositie (dv_id, epoch, xid, event_id, mislukkingen, gepauzeerd_tot, bijgewerkt_op)
+            INSERT INTO webhookpositie (dv_id, epoch, xid, event_id, mislukkingen, gepauzeerd_tot, bijgewerkt_op,
+                                        geleverd_op)
             VALUES (?1, CAST(?2 AS integer), CAST(CAST(?3 AS text) AS xid8), CAST(?4 AS bigint), ?5,
-                    CAST(?6 AS timestamptz), ?7)
+                    CAST(?6 AS timestamptz), ?7, CASE WHEN ?3 IS NULL THEN NULL ELSE CAST(?7 AS timestamptz) END)
             ON CONFLICT (dv_id) DO UPDATE
                SET epoch = EXCLUDED.epoch, xid = EXCLUDED.xid, event_id = EXCLUDED.event_id,
                    mislukkingen = EXCLUDED.mislukkingen, gepauzeerd_tot = EXCLUDED.gepauzeerd_tot,
-                   bijgewerkt_op = EXCLUDED.bijgewerkt_op
+                   bijgewerkt_op = EXCLUDED.bijgewerkt_op,
+                   geleverd_op = CASE
+                       WHEN (webhookpositie.epoch, webhookpositie.xid, webhookpositie.event_id)
+                            IS NOT DISTINCT FROM (EXCLUDED.epoch, EXCLUDED.xid, EXCLUDED.event_id)
+                       THEN webhookpositie.geleverd_op
+                       ELSE EXCLUDED.geleverd_op
+                   END
             """;
 
     private final EntityManager entityManager;

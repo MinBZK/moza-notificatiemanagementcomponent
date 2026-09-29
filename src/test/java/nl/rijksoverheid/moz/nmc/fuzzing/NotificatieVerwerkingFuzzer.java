@@ -450,7 +450,7 @@ public class NotificatieVerwerkingFuzzer {
         private long volgendEventId = 1;
 
         GeheugenOvergangsfunctie() {
-            super(null, null);
+            super(null, null, null, null);
         }
 
         @Override

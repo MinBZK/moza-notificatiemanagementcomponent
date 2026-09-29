@@ -145,8 +145,9 @@ Geïmplementeerd:
   verzenden en de navraag binnen het `verzendbudget` per Notify-service per minuut.
   `TaakWorker` draait per soort een `@Scheduled`-ronde en geeft elke taak aan de
   `TaakHandler` van die soort. Handlers: `VerzendTaakHandler`, `ReceiptTaakHandler`,
-  `Reconciler` (navraag), `BezorgingVaststellenTaakHandler`, `ControleTaakHandler` en `TerugkoppelTaakHandler`; de
-  overige soorten worden gepland maar nog niet uitgevoerd.
+  `Reconciler` (navraag), `BezorgingVaststellenTaakHandler`, `ControleTaakHandler`,
+  `TerugkoppelTaakHandler`, `WisTaakHandler` en `OnderhoudTaakHandler`; voor
+  `ONGELDIG_MELDEN` is er nog geen handler.
 - **Navraag en vaststellen.** De verzend-commit plant per poging een navraagtaak volgens
   `Navraagschema` (`nmc.navraag.*`); `Reconciler` vraagt de status op bij NotifyNL en
   geeft een uitkomst aan `ReceiptVerwerker`. Een 404 of het einde van de bewaartermijn
@@ -166,6 +167,11 @@ Geïmplementeerd:
   base64url van `epoch:xid:eventId`; een ander epoch (`nmc.feed.cluster-epoch`) of een
   positie onder het oudste event geeft 410. `PUT .../wijzigingen/bevestiging` schrijft
   `bevestiging`, alleen vooruit. De aanroeplimiet (`Aanroeplimiet`) telt per pod.
+- **Wissen en onderhoud.** Elke overgang naar een terminale status plant een
+  `WISSEN`-taak op `terminaal_op` plus `nmc.wissen.termijn`; `WisTaakHandler` wist dan de
+  gewrapte sleutel. `OnderhoudTaakHandler` maakt eventpartities aan en ruimt ze op,
+  herwrapt sleutels na een KEK-rotatie en verwijdert notificaties na
+  `nmc.afleverbewijs.bewaartermijn`. Zie de integratie-aanname hieronder.
 
 Beide intakes gaan via `AannameService`: notificatie op `aangenomen` met event 0, de
 versleutelde payload en een verzendtaak in één transactie; het quotum per
@@ -227,13 +233,11 @@ de logica die kiest tussen herverzending en contactherstel.
   testkeuze: dat maakt van een implementatiedetail een belofte aan elke aanroeper.
   Package-private mag wel, het blijft binnen het package en de compiler bewaakt het, en
   bij zo'n seam staat een comment met de reden. Moet je meer dan een handvol leden openen,
-  haal er dan een klasse uit (zoals `RetentieBatch`) in plaats van de bestaande verder open
-  te zetten. Reflectie om private leden te bereiken is geen alternatief.
-- **Queries staan in een repository, niet in een entiteit of een service.** De JPQL van
-  de retentiejob staat als `@NamedQuery` op `Notificatie`, want JPA kent geen andere plek
-  en Hibernate controleert ze daar bij het opstarten; uitvoeren gebeurt uitsluitend in
-  `NotificatieRepository`. Entiteiten krijgen geen finders en geen native SQL, en
-  `getEntityManager()` verlaat de repository niet. Tests mogen wél rechtstreeks SQL
+  haal er dan een klasse uit in plaats van de bestaande verder open te zetten. Reflectie
+  om private leden te bereiken is geen alternatief.
+- **Queries staan in een repository, niet in een entiteit of een service.** Entiteiten
+  krijgen geen finders en geen native SQL, en `getEntityManager()` verlaat de repository
+  niet. Tests mogen wél rechtstreeks SQL
   schrijven wanneer ze een toestand nodig hebben die de overgangsfunctie niet maakt; die
   statements staan gebundeld in `NotificatieFixtures`, die de trigger voor de eigen
   transactie uitzet.
@@ -254,7 +258,7 @@ de logica die kiest tussen herverzending en contactherstel.
   verandert niets.
 - **Receipttijd en registratietijd zijn gescheiden.** Het tijdstip uit de receipt staat
   op `poging.receipt_tijdstip` en is het tijdstip voor het afleverbewijs; `event.tijdstip`
-  en `notificatie.laatste_status_update` staan op de eigen klok.
+  en `notificatie.terminaal_op` staan op de eigen klok.
 - **De webhook leest het eventlog; er is geen push per overgang.** Een
   `TERUGKOPPELEN`-taak per dienstverlener (`notificatie_id` leeg) plant zichzelf steeds
   opnieuw. De eerste plant `ControleTaakHandler`, dus een nieuwe `webhook_url` gaat
@@ -278,14 +282,31 @@ de logica die kiest tussen herverzending en contactherstel.
   de feed leest hem met native SQL via `xid::text::bigint`, omdat `xid8` geen cast naar
   `bigint` kent. Om dezelfde reden is `webhookpositie`, net als `bevestiging`, geen
   entity maar native SQL in een repository.
-- **`NotificatieRetentieScheduler` ruimt verlopen notificaties op**, in batches met een
-  eigen transactie per batch, `notificatie.retentie.bewaartermijn` na de laatste overgang
-  (`laatste_status_update`) en los van de status en van de levering aan de
-  Dienstverlener. De batch claimt met `FOR UPDATE SKIP LOCKED`, omdat er in
-  productie minimaal drie pods draaien. De pogingen gaan mee via de foreignkey; de events
-  blijven staan. Een notificatie die verloopt zonder uitkomst (niet terminaal en niet
-  `BEZORGD`) wordt apart op WARN gemeld voordat de rij weggaat. Dit is een tussenstand:
-  de wistaak en onderhoudstaak uit ADR 0024 vervangen deze job.
+- **Wissen is een wistaak, verwijderen een onderhoudstaak.** `Notificatie.pasOvergangToe`
+  zet `terminaal_op` bij een terminale status en maakt het leeg daarbuiten.
+  `Overgangsfunctie` plant bij elke terminale overgang de `WISSEN`-taak (een upsert op de
+  unieke index voor open taken, dus een latere terminale overgang verzet hem) en verwijdert
+  hem bij een overgang terug naar niet-terminaal (`bezorgstatus-onbekend` naar `bezorgd`).
+  `WisTaakHandler` vergrendelt de notificatie, toetst status en `terminaal_op` opnieuw en
+  wist met native SQL in `NotificatieRepository`, zonder versie en event. De versleutelde
+  kolommen en `kek_versie` staan daarom op `updatable = false`: een overgang op een eerder
+  geladen entity schrijft een gewiste of geherwrapte sleutel anders terug.
+  `OnderhoudTaakHandler` is een taak per systeem (eerste rij uit V17) die zichzelf opnieuw
+  plant; elke stap loopt in batches van `nmc.onderhoud.batch` met een eigen transactie, en
+  een stap die faalt houdt de andere niet op.
+- **Het eventlog heeft bereikpartities op `xid`.** V17 maakte van de oude
+  default-partitie `event_0` (tot de eerstvolgende transactie-id) en een nieuwe, lege
+  `event_standaard`. `Partitiebeheer` maakt `event_<van>` aan zodra de lopende partitie
+  voor 80% gevuld is, en begint een nieuw bereik altijd boven de al uitgedeelde
+  transactie-ids: PostgreSQL weigert een bereik waarvoor al rijen in de default-partitie
+  staan. Liep het onderhoud achter, dan komen events in de default-partitie; die worden
+  per rij opgeruimd. Een partitie gaat weg als ze onder het watermerk ligt, haar jongste
+  event (op transactie-id) ouder is dan de bewaartermijn en geen bevestiging of
+  leverpositie uit het huidige epoch, jonger dan de maximale cursorleeftijd, erin of eronder
+  wijst. De leeftijd van een leverpositie is `webhookpositie.geleverd_op`, niet
+  `bijgewerkt_op`, dat ook bij een mislukte levering verschuift. Het verwijderen toetst
+  opnieuw onder `LOCK TABLE event IN ACCESS EXCLUSIVE MODE` met `nmc.onderhoud.lock-timeout`.
+  De partitienaam komt in DDL; `EventPartitie` laat alleen `event_<getal>` toe.
 
 ## Technische stack
 
@@ -443,7 +464,15 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
   `CONCURRENTLY` kan niet in een transactie, dus zo'n statement krijgt een eigen migratie
   met `-- flyway:executeInTransaction=false`. Faalt de bouw halverwege, dan blijft er een
   `INVALID` index achter die handmatig gedropt moet worden. `V3__notificatie_retentie.sql`
-  doet het bewust zonder: die index is er vóór de eerste productiedata.
+  doet het bewust zonder: die index is er vóór de eerste productiedata. V17 ook, omdat de
+  retentiejob het register tot dan op zeven dagen hield.
+- **De databaserol heeft timeouts** (V17): `statement_timeout` 30s, `transaction_timeout`
+  1min en `idle_in_transaction_session_timeout` 30s, per database gezet met `ALTER ROLE`.
+  Ze gelden ook voor Flyway. Een migratie die langer kan duren zet ze voor de eigen
+  transactie uit met `SET LOCAL statement_timeout = 0` en `SET LOCAL transaction_timeout = 0`.
+- **Een `UPDATE` op `notificatie` in een migratie zet deferred triggercontroles klaar**, en
+  zolang die openstaan weigert PostgreSQL DDL op die tabel ("pending trigger events"). Zet
+  na zo'n update `SET CONSTRAINTS notificatie_overgang IMMEDIATE`, zoals V17 doet.
 - **Houd de migratie en de entity gelijk.** In elk profiel staat
   `schema-management.strategy=validate`: wijkt een entity af van het gemigreerde
   schema, dan start de applicatie niet, en de testsuite dus ook niet.
@@ -455,7 +484,7 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
   van losse strings. De `hibernate-processor` genereert dat; hij staat expliciet in
   `annotationProcessorPaths` omdat classpath-processors sinds JDK 23 niet meer
   vanzelf draaien.
-- Schrijf kolomnamen in de migratie met underscores (`laatste_status_update`) en
+- Schrijf kolomnamen in de migratie met underscores (`terminaal_op`) en
   zet ze met `@Column(name = ...)` expliciet op de entity.
 
 ## Configuratie en secrets
@@ -477,10 +506,13 @@ Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
 `nmc.dienstverlener.id` (de rij uit V8), `nmc.taak.*` (interval, batch, lease,
 max-pogingen van de worker-lus) en `nmc.verzendbudget.*` (Notify-service, tokens per
 minuut, het vaste aandeel van de navraag), `nmc.navraag.*` (momenten en bewaartermijn van
-NotifyNL), `nmc.vaststelling.*` (termijn en callback-venster) en `nmc.webhook.*` (interval,
+NotifyNL), `nmc.vaststelling.*` (termijn en callback-venster), `nmc.webhook.*` (interval,
 bundel, max-mislukkingen, herpoging- en pauzewachttijd, time-out, `jwt.issuer`,
-`jwt.geldigheid`). Onder `%test` staat de lus uit en is het budget klein, zodat tests
-het uitputten.
+`jwt.geldigheid`), `nmc.wissen.termijn`, `nmc.afleverbewijs.bewaartermijn` (wettelijk nog niet
+vastgesteld, dus per omgeving), `nmc.feed.max-cursorleeftijd` en `nmc.onderhoud.*` (interval,
+batch, max-batches, partitie-omvang, lock-timeout). Onder `%test` staat de lus uit, is het
+budget klein zodat tests het uitputten, zijn batch en partities klein, en is KEK-versie 2 de
+huidige, zodat de onderhoudstaak sleutels onder versie 1 kan herwrappen.
 
 Lokaal horen ze in een niet-ingecheckte `src/main/resources/application-dev.properties`,
 nooit in `application.properties`. Onder `%test` staan dummywaarden.

@@ -90,7 +90,7 @@ class VersleuteldeOpslagIntegratieTest {
         assertNotNull(rij.get("ontvanger_versleuteld"));
         assertNotNull(rij.get("personalisation_versleuteld"));
         assertNotNull(rij.get("sleutel_gewrapt"));
-        assertEquals("1", new String(rij.get("kek_versie"), StandardCharsets.UTF_8));
+        assertEquals("2", new String(rij.get("kek_versie"), StandardCharsets.UTF_8));
         // Controle op de zoekmethode zelf: het template-id staat wél leesbaar op de rij.
         String templateId = BerichtType.vanNaam("Stuurgroep Agenda").getTemplateId();
         assertTrue(bevat(rij.get("template_id"), templateId.getBytes(StandardCharsets.UTF_8)));
