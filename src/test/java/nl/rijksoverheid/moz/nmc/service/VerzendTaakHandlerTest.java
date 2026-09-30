@@ -427,7 +427,7 @@ class VerzendTaakHandlerTest {
         taakWorker.verwerk(TaakSoort.VERZENDEN);
 
         assertEquals(NotificatieStatus.BEZORGD, notificatie(id).getStatus());
-        assertEquals(List.of(), taken());
+        assertEquals(List.of(TaakSoort.BEZORGING_VASTSTELLEN), taken().stream().map(Taak::getSoort).toList());
     }
 
     @Test

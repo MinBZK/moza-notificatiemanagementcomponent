@@ -166,12 +166,13 @@ public class Poging {
             return false;
         }
 
-        this.status = uitkomst;
-        this.receiptTijdstip = tijdstip;
-
-        if (uitkomst == PogingStatus.BEZORGD && bezorgdOp == null) {
+        // Een bezorging na een fout begint een nieuwe vaststellingstermijn.
+        if (uitkomst == PogingStatus.BEZORGD && (bezorgdOp == null || status != PogingStatus.BEZORGD)) {
             this.bezorgdOp = tijdstip;
         }
+
+        this.status = uitkomst;
+        this.receiptTijdstip = tijdstip;
 
         return true;
     }
