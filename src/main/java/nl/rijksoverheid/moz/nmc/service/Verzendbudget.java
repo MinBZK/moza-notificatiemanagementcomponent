@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
@@ -19,6 +20,7 @@ import java.time.temporal.ChronoUnit;
  * Loopt in de transactie van de claim: de {@code INSERT ... ON CONFLICT DO UPDATE} vergrendelt de
  * rij, zodat twee gelijktijdige claims elkaars tokens niet dubbel nemen.
  */
+@Startup
 @ApplicationScoped
 @Transactional(Transactional.TxType.MANDATORY)
 public class Verzendbudget {
