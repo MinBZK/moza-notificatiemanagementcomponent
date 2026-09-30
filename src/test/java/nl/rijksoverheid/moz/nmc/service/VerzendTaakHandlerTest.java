@@ -242,9 +242,11 @@ class VerzendTaakHandlerTest {
     // de Dienstverlener een eindstatus krijgt, en de taak verdwijnt.
     @Test
     void uitgeputteVerzendtaak_eindigtInTechnischMislukt() {
+        when(sendAMessageApi.sendEmail(any()))
+                .thenThrow(new WebApplicationException(Response.status(Response.Status.FORBIDDEN).build()));
+        when(getMessageDataApi.getMultipleMessagesStatus(any(), any(), any(), any(), any()))
+                .thenThrow(new WebApplicationException(Response.status(Response.Status.FORBIDDEN).build()));
         UUID id = aannameService.neemAan(decentraal());
-        QuarkusTransaction.requiringNew().run(() -> taakRepository.getEntityManager()
-                .createNativeQuery("UPDATE notificatie SET template_id = NULL WHERE id = ?1").setParameter(1, id).executeUpdate());
 
         taakWorker.verwerk(TaakSoort.VERZENDEN);
         zetDue(taken().getFirst(), OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1));
@@ -256,13 +258,74 @@ class VerzendTaakHandlerTest {
         assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.TECHNISCH_MISLUKT),
                 overgangen(id));
         assertEquals(List.of(), taken());
+    }
+
+    // Een notificatie van vóór de takentabel heeft geen verzendgegevens; ze eindigt meteen, zonder
+    // pogingen te verbruiken.
+    @Test
+    void notificatieZonderVerzendgegevens_eindigtMeteenInTechnischMislukt() {
+        UUID id = aannameService.neemAan(decentraal());
+        QuarkusTransaction.requiringNew().run(() -> taakRepository.getEntityManager()
+                .createNativeQuery("UPDATE notificatie SET template_id = NULL WHERE id = ?1").setParameter(1, id).executeUpdate());
+
+        taakWorker.verwerk(TaakSoort.VERZENDEN);
+
+        Notificatie notificatie = notificatie(id);
+        assertEquals(NotificatieStatus.TECHNISCH_MISLUKT, notificatie.getStatus());
+        assertEquals(Reden.TECHNISCH, notificatie.getReden());
+        assertEquals(List.of(), taken());
+        verify(sendAMessageApi, never()).sendEmail(any());
+    }
+
+    // Een 400 die niet over het adres gaat (hier de team-key) ligt aan het NMC: die kost een poging en
+    // eindigt na het maximum in technisch-mislukt, niet in niet-bezorgbaar.
+    @Test
+    void notifyWeigertHetVerzoekOmEenAndereReden_kostEenPoging() {
+        when(sendAMessageApi.sendEmail(any()))
+                .thenThrow(new WebApplicationException(Response.status(400).entity("{\"errors\":[{\"error\":\"BadRequestError\",\"message\":\"Can't send to this recipient using a team-only API key\"}],\"status_code\":400}").build()));
+        UUID id = aannameService.neemAan(decentraal());
+
+        taakWorker.verwerk(TaakSoort.VERZENDEN);
+
+        assertEquals(NotificatieStatus.IN_VERZENDING, notificatie(id).getStatus());
+        assertEquals(1, taken().getFirst().getPogingen());
+    }
+
+    // Een 400 op de zoekvraag bij een herclaim zegt niets over het adres.
+    @Test
+    void herclaimZoekvraagGeeft400_isGeenAdresafwijzing() {
+        when(sendAMessageApi.sendEmail(any()))
+                .thenThrow(new WebApplicationException(Response.status(Response.Status.SERVICE_UNAVAILABLE).build()));
+        when(getMessageDataApi.getMultipleMessagesStatus(any(), any(), any(), any(), any()))
+                .thenThrow(new WebApplicationException(Response.status(400).entity("{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}],\"status_code\":400}").build()));
+        UUID id = aannameService.neemAan(decentraal());
+        taakWorker.verwerk(TaakSoort.VERZENDEN);
+        zetDue(taken().getFirst(), OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1));
+
+        taakWorker.verwerk(TaakSoort.VERZENDEN);
+
+        assertEquals(NotificatieStatus.IN_VERZENDING, notificatie(id).getStatus());
+        assertEquals(1, taken().getFirst().getPogingen());
+    }
+
+    // Tijdens een uitrol kent een oude pod de nieuwe KEK-versie niet; dat kost de notificatie geen poging.
+    @Test
+    void kekVersieNietGeconfigureerd_steltUitZonderPoging() {
+        UUID id = aannameService.neemAan(decentraal());
+        QuarkusTransaction.requiringNew().run(() -> taakRepository.getEntityManager()
+                .createNativeQuery("UPDATE notificatie SET kek_versie = 99 WHERE id = ?1").setParameter(1, id).executeUpdate());
+
+        taakWorker.verwerk(TaakSoort.VERZENDEN);
+
+        assertEquals(NotificatieStatus.AANGENOMEN, notificatie(id).getStatus());
+        assertEquals(0, taken().getFirst().getPogingen());
         verify(sendAMessageApi, never()).sendEmail(any());
     }
 
     @Test
     void notifyWeigertHetAdres_eindigtInNietBezorgbaarMetOnbereikbaar() {
         when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build()));
+                .thenThrow(new WebApplicationException(Response.status(400).entity("{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}],\"status_code\":400}").build()));
         UUID id = aannameService.neemAan(decentraal());
 
         taakWorker.verwerk(TaakSoort.VERZENDEN);
