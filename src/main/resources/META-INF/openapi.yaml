@@ -218,7 +218,7 @@ paths:
       summary: Statusovergangen lezen vanaf een cursor
       description: |
         Geeft de statusovergangen van de notificaties van de Dienstverlener terug als
-        CloudEvents (NL GOV profiel), in commitvolgorde, vanaf de meegegeven cursor. Zonder
+        CloudEvents (NL GOV profiel), op volgorde van transactie-id, vanaf de meegegeven cursor. Zonder
         cursor begint de pagina bij het oudste beschikbare event. Elk antwoord draagt de
         cursor voor de volgende pagina; een lege pagina betekent dat er op dit moment niets
         nieuws is.
@@ -584,7 +584,7 @@ components:
     WijzigingenPagina:
       type: object
       description: >-
-        Eén pagina uit de eventfeed. `events` zijn de CloudEvents in commitvolgorde; `cursor`
+        Eén pagina uit de eventfeed. `events` zijn de CloudEvents op volgorde van transactie-id; `cursor`
         is de positie ná het laatste event van deze pagina, mee te geven bij de volgende aanroep
         en terug te schrijven als bevestiging. Bij een lege pagina is `cursor` gelijk aan de
         meegegeven cursor en ontbreekt hij als er nog geen event is.
