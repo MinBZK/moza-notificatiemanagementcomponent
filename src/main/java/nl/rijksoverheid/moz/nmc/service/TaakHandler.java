@@ -33,6 +33,15 @@ public interface TaakHandler {
         return false;
     }
 
+    /**
+     * Een periodieke taak heeft één rij per systeem en plant zichzelf opnieuw. Na het maximum aantal
+     * pogingen gaat hij niet op mislukt, want niets maakt hem opnieuw aan: de worker plant hem met de
+     * langste wachttijd opnieuw in.
+     */
+    default boolean periodiek() {
+        return false;
+    }
+
     /** De lease die een worker op een geclaimde taak houdt. */
     @FunctionalInterface
     interface Lease {

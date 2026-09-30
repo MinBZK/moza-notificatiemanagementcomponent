@@ -152,6 +152,9 @@ public class TaakWorker {
 
     private void voerUit(TaakHandler handler, Taak taak) {
         try {
+            // De batch deelt één lease; een taak waar de worker pas laat aan toekomt, kan intussen door
+            // een andere worker geclaimd zijn en wordt dan overgeslagen.
+            taakClaimer.verleng(taak);
             TaakUitkomst uitkomst = handler.voerUit(taak, () -> taakClaimer.verleng(taak));
 
             switch (uitkomst) {
@@ -195,6 +198,15 @@ public class TaakWorker {
 
     // De handler krijgt de kans de uitputting af te handelen, in dezelfde transactie als de taakrij.
     private void putUit(TaakHandler handler, Taak taak, RuntimeException fout) {
+        if (handler.periodiek()) {
+            OffsetDateTime due = OffsetDateTime.now(ZoneOffset.UTC).plus(wachttijd(maxPogingen));
+            taakClaimer.stelUit(taak, due, false);
+            Log.errorf(fout, "Periodieke taak %s/%d faalt na %d pogingen; opnieuw op %s",
+                    taak.getSoort(), taak.getId(), maxPogingen, due);
+
+            return;
+        }
+
         boolean afgehandeld = QuarkusTransaction.requiringNew().call(() -> {
             if (handler.uitgeput(taak)) {
                 taakClaimer.rondAf(taak);
