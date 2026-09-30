@@ -159,9 +159,11 @@ gegenereerde interface geen `Response` teruggeeft. `VerzendTaakHandler` doet in 
 eerste transactie `aangenomen` naar `in-verzending` met een geplande poging, roept
 daarbuiten de Profielservice (bij centrale regie) en NotifyNL aan met het poging-id
 als `reference`, en doet in een tweede transactie `in-verzending` naar `verzonden`
-met een navraagtaak. Een 400 of 422 van NotifyNL en een partij zonder adres zijn
-terminaal (`niet-bezorgbaar`); een storing stelt de taak uit zonder poging. Een
-herclaim zoekt eerst op `reference`. `ControleTaakHandler` plant zichzelf opnieuw
+met een navraagtaak. Een `ValidationError` van NotifyNL op `email_address` en een
+partij zonder adres zijn terminaal (`niet-bezorgbaar`). Een andere 4xx, behalve
+429, ligt aan het NMC en kost een poging; 429, 5xx, een verbindingsfout en een
+ontbrekende KEK-versie stellen de taak uit zonder poging. Een herclaim zoekt eerst
+op `reference`. `ControleTaakHandler` plant zichzelf opnieuw
 en geeft een notificatie zonder taak de taak die bij haar status hoort. De
 verzendtaak schrijft nog geen LDV-registratie: de `@Logboek`-interceptor werkt alleen
 binnen een REST-aanroep.

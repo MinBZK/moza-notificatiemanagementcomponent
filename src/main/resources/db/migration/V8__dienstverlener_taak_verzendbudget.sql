@@ -14,6 +14,9 @@ INSERT INTO dienstverlener (id, oin, naam)
 VALUES ('00000000-0000-4000-8000-000000000001', '00000000000000000000', 'Geconfigureerde dienstverlener');
 
 ALTER TABLE notificatie ADD COLUMN dv_id uuid REFERENCES dienstverlener(id);
+-- De update zet deferred triggercontroles klaar (zelfde versie en status, dus die slagen), en zolang die
+-- openstaan weigert PostgreSQL DDL op notificatie.
+SET CONSTRAINTS notificatie_overgang IMMEDIATE;
 UPDATE notificatie SET dv_id = '00000000-0000-4000-8000-000000000001' WHERE dv_id IS NULL;
 ALTER TABLE notificatie ALTER COLUMN dv_id SET NOT NULL;
 
