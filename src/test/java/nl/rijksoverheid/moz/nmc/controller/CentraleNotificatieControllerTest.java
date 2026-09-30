@@ -119,6 +119,23 @@ class CentraleNotificatieControllerTest {
     }
 
     @Test
+    void notificatieVersturen_leegIdentificatieNummer_retourneert400() {
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "identificatieType": "KVK",
+                          "identificatieNummer": " ",
+                          "dienstverlener": "Gemeente Voorbeeld",
+                          "berichtType": "Stuurgroep Agenda"
+                        }
+                        """)
+                .when().post(PAD)
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
     void notificatieVersturen_onbekendBerichtType_retourneert400() {
         given()
                 .contentType(ContentType.JSON)

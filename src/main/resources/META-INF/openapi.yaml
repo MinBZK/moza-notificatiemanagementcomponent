@@ -346,6 +346,7 @@ components:
         identificatieNummer:
           type: string
           minLength: 1
+          pattern: '^.*\S.*$'
           description: BSN-, KVK- of RSIN-nummer van de ontvanger
         dienstverlener:
           type: string
