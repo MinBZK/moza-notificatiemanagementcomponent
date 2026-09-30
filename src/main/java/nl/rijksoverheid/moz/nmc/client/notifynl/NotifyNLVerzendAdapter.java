@@ -1,10 +1,14 @@
 package nl.rijksoverheid.moz.nmc.client.notifynl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.GetMessageDataApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.GetMultipleMessagesResponse;
@@ -22,6 +26,8 @@ import java.util.UUID;
 public class NotifyNLVerzendAdapter {
 
     private static final String BEARER_PREFIX = "Bearer ";
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final SendAMessageApi sendAMessageApi;
     private final GetMessageDataApi getMessageDataApi;
@@ -111,10 +117,48 @@ public class NotifyNLVerzendAdapter {
         try {
             return sendAMessageApi.sendEmail(notifyRequest);
         } catch (WebApplicationException e) {
-            throw new NotifyNLVerzendException("NotifyNL gaf status " + e.getResponse().getStatus() + " terug", e);
+            throw new NotifyNLVerzendException("NotifyNL gaf status " + e.getResponse().getStatus() + " terug", e,
+                    isAdresAfwijzing(e.getResponse()));
         } catch (ProcessingException e) {
             // Verbindingsfout of time-out: geen antwoord, dus ook geen status.
             throw new NotifyNLVerzendException("NotifyNL was niet bereikbaar", e);
+        }
+    }
+
+    // NotifyNL geeft een 400 voor meer dan het adres (onbekend template, ontbrekende personalisatie,
+    // een ontvanger buiten de team-key). Alleen een ValidationError op email_address gaat over het adres.
+    static boolean isAdresAfwijzing(Response response) {
+        if (response.getStatus() != 400) {
+            return false;
+        }
+
+        String body = foutBody(response);
+
+        if (body == null) {
+            return false;
+        }
+
+        try {
+            JsonNode fouten = OBJECT_MAPPER.readTree(body).path("errors");
+
+            for (JsonNode fout : fouten) {
+                if ("ValidationError".equals(fout.path("error").asText())
+                        && fout.path("message").asText().startsWith("email_address")) {
+                    return true;
+                }
+            }
+
+            return false;
+        } catch (JsonProcessingException e) {
+            return false;
+        }
+    }
+
+    private static String foutBody(Response response) {
+        try {
+            return response.readEntity(String.class);
+        } catch (RuntimeException e) {
+            return response.getEntity() instanceof String tekst ? tekst : null;
         }
     }
 

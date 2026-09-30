@@ -20,7 +20,7 @@ import java.util.function.Function;
  * <p>
  * Eager bij het opstarten, zodat een ontbrekende of ongeldige KEK de applicatie niet laat starten. Alle
  * versies van 1 tot en met {@value #MAX_VERSIE} worden gelezen, ook die boven de huidige: na het
- * terugzetten van de huidige versie blijven rijen onder een hogere versie leesbaar.
+ * terugzetten van de huidige versie blijven rijen onder een hogere versie leesbaar, zolang die versie geconfigureerd blijft.
  */
 @Startup
 @ApplicationScoped

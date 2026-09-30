@@ -59,6 +59,24 @@ class TaakWorkerTest {
     void resetHandler() {
         WisTestHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.afgerond());
         WisTestHandler.BIJ_UITPUTTING.set(taak -> false);
+        WisTestHandler.PERIODIEK.set(false);
+    }
+
+    @Test
+    void verwerk_periodiekeTaakUitgeput_blijftOpenEnWordtOpnieuwGepland() {
+        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
+        WisTestHandler.PERIODIEK.set(true);
+        WisTestHandler.GEDRAG.set((taak, lease) -> {
+            throw new IllegalStateException("database weg");
+        });
+
+        taakWorker.verwerk(TaakSoort.WISSEN);
+        zetDue(id, nu().minusSeconds(1));
+        taakWorker.verwerk(TaakSoort.WISSEN);
+
+        Taak taak = zoek(id).orElseThrow();
+        assertEquals(TaakStatus.OPEN, taak.getStatus());
+        assertTrue(taak.getDue().isAfter(nu()));
     }
 
     // Ook een uitstel dat als poging telt, leidt na het maximum tot uitputting; anders blijft een
@@ -188,6 +206,28 @@ class TaakWorkerTest {
         taakWorker.verwerk(TaakSoort.WISSEN);
 
         assertTrue(zoek(id).isPresent(), "de afronding van de oude worker is geweigerd");
+    }
+
+    // Terwijl de worker de eerste taak van de batch uitvoert, claimt een andere worker de tweede.
+    @Test
+    void verwerk_latereTaakInDeBatchGeclaimdDoorAndereWorker_slaatDieOver() {
+        long eerste = plan(TaakSoort.WISSEN, nu().minusMinutes(2));
+        long tweede = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
+        AtomicInteger uitgevoerd = new AtomicInteger();
+        WisTestHandler.GEDRAG.set((taak, lease) -> {
+            uitgevoerd.incrementAndGet();
+            QuarkusTransaction.requiringNew().run(() -> entityManager
+                    .createNativeQuery("UPDATE taak SET claim_epoch = claim_epoch + 1 WHERE id = ?1")
+                    .setParameter(1, tweede).executeUpdate());
+
+            return TaakUitkomst.afgerond();
+        });
+
+        taakWorker.verwerk(TaakSoort.WISSEN);
+
+        assertEquals(1, uitgevoerd.get());
+        assertTrue(zoek(eerste).isEmpty());
+        assertEquals(0, zoek(tweede).orElseThrow().getPogingen());
     }
 
     @Test
