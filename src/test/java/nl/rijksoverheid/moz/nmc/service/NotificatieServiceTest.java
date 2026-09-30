@@ -12,6 +12,7 @@ import nl.rijksoverheid.moz.nmc.controller.IdentificatieType;
 import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
@@ -54,6 +55,9 @@ class NotificatieServiceTest {
 
     @Inject
     EventRepository eventRepository;
+
+    @Inject
+    Sleutelbeheer sleutelbeheer;
 
     @BeforeEach
     void setUp() {
@@ -139,6 +143,32 @@ class NotificatieServiceTest {
         assertEquals(resultaat.getId(),
                 QuarkusTransaction.requiringNew().call(() -> pogingRepository.findByNotifyId(notifyId).orElseThrow().getNotificatieId()));
         verifyNoInteractions(profielServiceAdapter);
+    }
+
+    @Test
+    void verstuurDecentraal_bewaartOntvangerEnPersonalisationVersleuteld() throws Exception {
+        when(verzendAdapter.verstuurEmail(any(), any(), any())).thenReturn(UUID.randomUUID());
+
+        Notificatie resultaat = service.verstuurDecentraal(
+                new DecentraleNotificatieVersturenOpdracht("burger@example.nl", TEST_TEMPLATE_ID, Map.of("naam", "Voorbeeld BV"), null));
+
+        assertEquals(Ontvanger.email("burger@example.nl"),
+                sleutelbeheer.ontsleutelOntvanger(resultaat.getId(), resultaat.getVersleuteldeGegevens()));
+        assertEquals(Map.of("naam", "Voorbeeld BV"),
+                sleutelbeheer.ontsleutelPersonalisation(resultaat.getId(), resultaat.getVersleuteldeGegevens()));
+    }
+
+    // Bij centrale regie komt het adres uit de Profielservice en wordt het niet opgeslagen; op de rij staat
+    // het identificerend nummer, waarmee de verzending het adres opnieuw kan ophalen.
+    @Test
+    void versturen_bewaartHetIdentificerendNummerEnNietHetAdresUitDeProfielservice() throws Exception {
+        when(profielServiceAdapter.zoekEmailAdres(any())).thenReturn("burger@example.nl");
+        when(verzendAdapter.verstuurEmail(any(), any(), any())).thenReturn(UUID.randomUUID());
+
+        Notificatie resultaat = service.versturen(opdracht(null));
+
+        assertEquals(new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
+                sleutelbeheer.ontsleutelOntvanger(resultaat.getId(), resultaat.getVersleuteldeGegevens()));
     }
 
     private NotificatieVersturenOpdracht opdracht(String callbackUrl) {
