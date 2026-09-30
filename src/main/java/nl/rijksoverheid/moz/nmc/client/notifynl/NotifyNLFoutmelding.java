@@ -32,6 +32,13 @@ final class NotifyNLFoutmelding {
             return String.join("; ", fouten);
         }
 
+        // TIJDELIJK: toont de korte platte-tekstmelding van de gateway voor NotifyNL. Weghalen vóór de merge.
+        String type = response.getHeaderString(HttpHeaders.CONTENT_TYPE);
+
+        if (body != null && body.length() <= 100 && type != null && type.startsWith("text/plain")) {
+            return "melding van een tussenliggende server: \"" + schoon(body) + "\"";
+        }
+
         return "geen foutformaat van NotifyNL (type " + response.getHeaderString(HttpHeaders.CONTENT_TYPE)
                 + ", " + (body == null ? 0 : body.length()) + " tekens, server "
                 + response.getHeaderString("Server") + ")";
