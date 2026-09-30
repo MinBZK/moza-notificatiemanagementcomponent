@@ -6,6 +6,7 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.service.TaakHandler;
 import nl.rijksoverheid.moz.nmc.service.TaakUitkomst;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
@@ -22,6 +23,13 @@ public class TestTaakHandler implements TaakHandler {
             new AtomicReference<>((taak, lease) -> TaakUitkomst.afgerond());
 
     static final AtomicReference<java.util.function.Predicate<Taak>> BIJ_UITPUTTING = new AtomicReference<>(taak -> false);
+
+    static final AtomicBoolean PERIODIEK = new AtomicBoolean();
+
+    @Override
+    public boolean periodiek() {
+        return PERIODIEK.get();
+    }
 
     @Override
     public boolean uitgeput(Taak taak) {

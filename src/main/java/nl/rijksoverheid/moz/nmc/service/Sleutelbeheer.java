@@ -159,7 +159,7 @@ public class Sleutelbeheer {
 
     private SecretKey kek(int versie) {
         return kekProvider.kek(versie)
-                .orElseThrow(() -> new OntsleutelenMisluktException("KEK-versie " + versie + " is niet geconfigureerd"));
+                .orElseThrow(() -> new KekOntbreektException("KEK-versie " + versie + " is niet geconfigureerd"));
     }
 
     private byte[] versleutelVeld(SecretKey sleutel, byte[] aad, byte[] platteTekst) throws GeneralSecurityException {

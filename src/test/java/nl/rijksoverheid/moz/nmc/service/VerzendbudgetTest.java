@@ -131,6 +131,7 @@ class VerzendbudgetTest {
         assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, klok, "x", 0, 0));
         assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, klok, "x", 10, 10));
         assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, klok, "x", 10, -1));
+        assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, klok, "x", 10, 0));
     }
 
     private int neem(BudgetDoel doel, int gevraagd) {

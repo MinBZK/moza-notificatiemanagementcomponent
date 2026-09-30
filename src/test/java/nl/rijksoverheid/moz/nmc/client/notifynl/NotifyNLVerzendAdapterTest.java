@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -88,6 +89,39 @@ class NotifyNLVerzendAdapterTest {
 
         assertThrows(NotifyNLVerzendException.class,
                 () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
+    }
+
+    @Test
+    void verstuurEmail_validationErrorOpHetAdres_isAdresafwijzing() {
+        Mockito.when(sendAMessageApi.sendEmail(any())).thenThrow(new WebApplicationException(fout(400, "{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}],\"status_code\":400}")));
+
+        NotifyNLVerzendException e = assertThrows(NotifyNLVerzendException.class,
+                () -> adapter.verstuurEmail("geen-adres", TEST_TEMPLATE_ID, Map.of()));
+
+        assertTrue(e.adresAfgewezen());
+    }
+
+    // Een team-key weigert elke ontvanger buiten de whitelist met een 400; dat ligt niet aan het adres.
+    @Test
+    void verstuurEmail_andere400_isGeenAdresafwijzing() {
+        Mockito.when(sendAMessageApi.sendEmail(any())).thenThrow(new WebApplicationException(fout(400, "{\"errors\":[{\"error\":\"BadRequestError\",\"message\":\"Can't send to this recipient using a team-only API key\"}],\"status_code\":400}")));
+
+        NotifyNLVerzendException e = assertThrows(NotifyNLVerzendException.class,
+                () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
+
+        assertFalse(e.adresAfgewezen());
+        assertEquals(Optional.of(400), e.status());
+    }
+
+    @Test
+    void isAdresAfwijzing_zonderBodyOngeldigeBodyOfAndereStatus_isGeenAdresafwijzing() {
+        assertFalse(NotifyNLVerzendAdapter.isAdresAfwijzing(Response.status(400).build()));
+        assertFalse(NotifyNLVerzendAdapter.isAdresAfwijzing(fout(400, "geen json")));
+        assertFalse(NotifyNLVerzendAdapter.isAdresAfwijzing(fout(403, "{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}],\"status_code\":400}")));
+    }
+
+    private static Response fout(int status, String body) {
+        return Response.status(status).entity(body).build();
     }
 
     @Test

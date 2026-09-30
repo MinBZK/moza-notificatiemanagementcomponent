@@ -76,6 +76,14 @@ public class Reconciler implements TaakHandler {
         try {
             afleverstatus = verzendAdapter.vraagStatusOp(navraag.notifyId());
         } catch (NotifyNLConfiguratieException | NotifyNLVerzendException e) {
+            // Ook een navraag die blijft mislukken houdt op bij het einde van de bewaartermijn van NotifyNL.
+            if (navraagschema.volgende(navraag.verzondenOp(), OffsetDateTime.now(ZoneOffset.UTC)).isEmpty()) {
+                Log.warnf(e, "Navraag voor poging %s (NotifyNL-id %s) blijft mislukken en de bewaartermijn is "
+                        + "verstreken; bezorgstatus onbekend", navraag.pogingId(), navraag.notifyId());
+
+                return sluitAf(taak, navraag);
+            }
+
             Log.warnf(e, "Navraag bij NotifyNL voor poging %s mislukt; uitgesteld", navraag.pogingId());
 
             return TaakUitkomst.uitgesteld(OffsetDateTime.now(ZoneOffset.UTC).plus(uitstel), false);
@@ -102,6 +110,11 @@ public class Reconciler implements TaakHandler {
 
         Log.warnf("Geen afleverstatus voor poging %s (NotifyNL-id %s): %s; bezorgstatus onbekend", navraag.pogingId(),
                 navraag.notifyId(), afleverstatus.isEmpty() ? "NotifyNL kent de verzending niet" : "bewaartermijn verstreken");
+
+        return sluitAf(taak, navraag);
+    }
+
+    private TaakUitkomst sluitAf(Taak taak, Navraag navraag) {
         QuarkusTransaction.requiringNew().run(() -> {
             taakClaimer.rondAf(taak);
             sluitAfZonderUitkomst(navraag);

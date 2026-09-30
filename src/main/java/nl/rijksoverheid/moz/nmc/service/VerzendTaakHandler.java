@@ -108,7 +108,17 @@ public class VerzendTaakHandler implements TaakHandler {
     // van een REST-aanroep en werkt niet in een worker. Dat vraagt een eigen registratie-API.
     @Override
     public TaakUitkomst voerUit(Taak taak, Lease lease) {
-        Verzending verzending = QuarkusTransaction.requiringNew().call(() -> bereidVoor(taak));
+        Verzending verzending;
+
+        try {
+            verzending = QuarkusTransaction.requiringNew().call(() -> bereidVoor(taak));
+        } catch (KekOntbreektException e) {
+            // Tijdens een uitrol kent een oude pod de nieuwe KEK nog niet; een pod die hem wel kent pakt
+            // de taak later op.
+            Log.errorf("%s; verzendtaak voor notificatie %s uitgesteld", e.getMessage(), taak.getNotificatieId());
+
+            return uitgesteld();
+        }
 
         if (verzending == null) {
             return TaakUitkomst.alAfgerond();
@@ -146,14 +156,21 @@ public class VerzendTaakHandler implements TaakHandler {
         } catch (NotifyNLConfiguratieException e) {
             Log.errorf(e, "NotifyNL-configuratie ongeldig; verzendtaak voor notificatie %s uitgesteld", verzending.notificatieId());
 
-            return uitgesteld();
+            return uitgesteldAlsPoging();
         } catch (NotifyNLVerzendException e) {
-            // Een 4xx over het adres is een uitkomst van deze poging; 401, 403, 429, 5xx en een
-            // verbindingsfout betreffen de aanroep en kosten de notificatie geen poging.
-            if (e.status().filter(VerzendTaakHandler::isAdresfout).isPresent()) {
+            if (e.adresAfgewezen()) {
                 Log.warnf("NotifyNL weigert het adres van notificatie %s (%s)", verzending.notificatieId(), e.getMessage());
 
                 return rondAfAls(taak, verzending, NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR);
+            }
+
+            // Een andere 4xx ligt aan het verzoek of de key van het NMC en kost een poging, zodat de
+            // notificatie na het maximum op technisch-mislukt eindigt. 429, 5xx en een verbindingsfout
+            // liggen aan NotifyNL en kosten geen poging.
+            if (e.status().filter(VerzendTaakHandler::isFoutVanHetNmc).isPresent()) {
+                Log.errorf(e, "NotifyNL weigert het verzoek voor notificatie %s; verzendtaak uitgesteld", verzending.notificatieId());
+
+                return uitgesteldAlsPoging();
             }
 
             Log.warnf(e, "NotifyNL niet beschikbaar voor notificatie %s; verzendtaak uitgesteld", verzending.notificatieId());
@@ -220,8 +237,13 @@ public class VerzendTaakHandler implements TaakHandler {
             }
         }
 
+        // Een notificatie van vóór de takentabel heeft geen verzendgegevens en is niet te verzenden.
         if (notificatie.getTemplateId() == null || notificatie.getRegie() == null) {
-            throw new IllegalStateException("Notificatie " + notificatie.getId() + " heeft geen verzendgegevens");
+            Log.warnf("Notificatie %s heeft geen verzendgegevens; technisch-mislukt", notificatie.getId());
+            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.TECHNISCH_MISLUKT, Reden.TECHNISCH);
+            taakClaimer.rondAf(taak);
+
+            return null;
         }
 
         Ontvanger ontvanger = sleutelbeheer.ontsleutelOntvanger(notificatie.getId(), notificatie.getVersleuteldeGegevens());
@@ -325,10 +347,12 @@ public class VerzendTaakHandler implements TaakHandler {
         return TaakUitkomst.uitgesteld(OffsetDateTime.now(ZoneOffset.UTC).plus(uitstel), false);
     }
 
-    // 400 en 422: NotifyNL keurt het verzoek af, in de praktijk het adres. 401, 403 en 429 zijn de
-    // aanroep of het budget, en 5xx is NotifyNL zelf.
-    private static boolean isAdresfout(int status) {
-        return status == 400 || status == 422;
+    private TaakUitkomst uitgesteldAlsPoging() {
+        return TaakUitkomst.uitgesteld(OffsetDateTime.now(ZoneOffset.UTC).plus(uitstel), true);
+    }
+
+    private static boolean isFoutVanHetNmc(int status) {
+        return status >= 400 && status < 500 && status != 429;
     }
 
     private record Verzending(UUID notificatieId, UUID dvId, UUID pogingId, boolean herclaim, boolean verlopen,

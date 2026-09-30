@@ -4,6 +4,10 @@
 
 ALTER TABLE notificatie ADD COLUMN aangenomen_op timestamp(6) with time zone;
 
+-- De updates zetten deferred triggercontroles klaar (zelfde versie en status, dus die slagen), en
+-- zolang die openstaan weigert PostgreSQL DDL op notificatie.
+SET CONSTRAINTS notificatie_overgang IMMEDIATE;
+
 UPDATE notificatie n
    SET aangenomen_op = e.tijdstip
   FROM event e

@@ -7,6 +7,6 @@ package nl.rijksoverheid.moz.nmc.domain;
 public enum BudgetDoel {
     /** Verzenden bij NotifyNL; mag de reservering voor de navraag niet aanspreken. */
     VERZENDEN,
-    /** Statussen opvragen bij NotifyNL; mag alle resterende tokens gebruiken. */
+    /** Statussen opvragen bij NotifyNL; alleen uit het gereserveerde aandeel. */
     NAVRAAG
 }

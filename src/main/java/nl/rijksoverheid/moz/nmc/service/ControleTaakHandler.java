@@ -55,6 +55,11 @@ public class ControleTaakHandler implements TaakHandler {
     }
 
     @Override
+    public boolean periodiek() {
+        return true;
+    }
+
+    @Override
     public TaakSoort soort() {
         return TaakSoort.CONTROLE;
     }

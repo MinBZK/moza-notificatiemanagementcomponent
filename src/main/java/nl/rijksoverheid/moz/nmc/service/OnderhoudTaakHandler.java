@@ -59,6 +59,11 @@ public class OnderhoudTaakHandler implements TaakHandler {
     }
 
     @Override
+    public boolean periodiek() {
+        return true;
+    }
+
+    @Override
     public TaakSoort soort() {
         return TaakSoort.ONDERHOUD;
     }
