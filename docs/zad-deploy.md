@@ -52,7 +52,8 @@ Benodigde env-vars op die deployment:
 | `QUARKUS_DATASOURCE_USERNAME`, `QUARKUS_DATASOURCE_PASSWORD` | Datasource-credentials (managed Postgres) |
 | `QUARKUS_DATASOURCE_JDBC_URL` | JDBC-url naar de managed Postgres |
 | `QUARKUS_FLYWAY_MIGRATE_AT_START` = `true` | Container draait prod-profiel waar dit `false` is; zonder migraties faalt boot op `schema-management=validate` |
-| `NOTIFY_API_KEY`, `NOTIFY_TEMPLATE_ID` | NotifyNL-integratie |
+| `NOTIFY_API_KEY` | NotifyNL-integratie. De templates staan per berichttype in `BerichtType` |
+| `NOTIFY_CALLBACK_BEARER_TOKEN` | Token dat NotifyNL meestuurt op de receipt-callback; gelijk aan het token in het dashboard van NotifyNL ("API integration" → "Callbacks"). Ontbreekt hij, dan start de app niet |
 | `QUARKUS_REST_CLIENT_NOTIFY_URL` | NotifyNL-endpoint; `application.properties` heeft geen default (leeg buiten `%test`), dus verplicht per deployomgeving |
 | `QUARKUS_REST_CLIENT_PROFIELSERVICE_URL` | Profielservice-endpoint; idem, geen default, verplicht per deployomgeving |
 | `HASH_PEPPER` | Keyed HMAC pepper (mag niet leeg in prod) |
@@ -62,6 +63,7 @@ Benodigde env-vars op die deployment:
 | `NMC_WISSEN_TERMIJN`, `NMC_FEED_MAX_CURSORLEEFTIJD` | Optioneel, default `7d` en `30d`. Wistermijn van de sleutel na de terminale status, en de leeftijd waarna een bevestiging of leverpositie het opruimen van het eventlog niet meer tegenhoudt (per dienstverlener te overschrijven met `dienstverlener.max_cursorleeftijd`) |
 | `NMC_WEBHOOK_JWT_PRIVATE_KEY` | RSA-sleutel waarmee de NMC de JWT op elke webhook-aanroep ondertekent: PKCS#8-PEM van minstens 2048 bits (`openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`). Kop- en voetregel en regelafbrekingen mogen weg, zodat de sleutel op één regel past. Ontbreekt hij of is hij ongeldig, dan start de app niet |
 | `NMC_WEBHOOK_JWT_KEY_ID` | Sleutel-id (`kid`) in de JWT-header en in `GET /api/nmc/v1/.well-known/jwks.json`. Kies bij een nieuwe sleutel een nieuwe id. Ontbreekt hij, dan start de app niet |
+| `NMC_FEED_CLUSTER_EPOCH` | Optioneel, default `1`. Epoch in de cursor van de eventfeed. Beheer verhoogt hem na een herstel uit back-up of een promotie waarbij de transactie-id-reeks niet doorloopt, op alle pods tegelijk; een cursor met een ander epoch krijgt 410 |
 | `LOGBOEKDATAVERWERKING_ENABLED` | Verwerkingenlogging (LDV). `%prod` laat 'm leeg, dus verplicht per deployomgeving. **Voorlopig `false`**; op `true` zetten zodra de ClickHouse-config hieronder werkt |
 | `LOGBOEKDATAVERWERKING_CLICKHOUSE_ENDPOINT`, `_USERNAME`, `_PASSWORD`, `_DATABASE`, `_TABLE` | ClickHouse-sink voor LDV. Alleen nodig zodra `LOGBOEKDATAVERWERKING_ENABLED=true`; nu leeg te laten |
 

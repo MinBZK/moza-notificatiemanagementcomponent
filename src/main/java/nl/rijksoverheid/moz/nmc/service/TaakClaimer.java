@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.logging.Log;
+import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
@@ -27,6 +28,7 @@ import java.util.UUID;
  * het claim-epoch en gooit {@link TaakVerlorenException} als een andere worker de taak inmiddels
  * heeft, zodat de transactie van de aanroeper terugrolt.
  */
+@Startup
 @ApplicationScoped
 public class TaakClaimer {
 
@@ -92,6 +94,15 @@ public class TaakClaimer {
     /** Verlengt de lease met de geconfigureerde duur, gerekend vanaf nu. */
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public void verleng(Taak taak) {
+        eis(taakRepository.verlengLease(taak, OffsetDateTime.now(ZoneOffset.UTC).plus(lease)), taak);
+    }
+
+    /**
+     * Verlengt de lease in de transactie van de aanroeper, zodat die alleen commit zolang deze worker de
+     * taak heeft.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    public void eisClaim(Taak taak) {
         eis(taakRepository.verlengLease(taak, OffsetDateTime.now(ZoneOffset.UTC).plus(lease)), taak);
     }
 

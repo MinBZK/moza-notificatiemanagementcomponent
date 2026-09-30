@@ -128,6 +128,26 @@ class HerverzendingTest {
         assertEquals(tweede.getId().toString(), navraag.getPayload().get(VerzendTaakHandler.PAYLOAD_POGING_ID));
     }
 
+    // Terwijl de herverzending buiten een transactie loopt, meldt NotifyNL alsnog een bezorging van de
+    // eerste poging; de weigering van de tweede daarna overschrijft die niet.
+    @Test
+    void bezorgingVanDeEerstePogingTijdensDeHerverzending_gaatVoorDeWeigering() {
+        UUID id = verzonden();
+        Poging eerste = laatstePoging(id);
+        OffsetDateTime fout = OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(2);
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure", fout);
+        when(sendAMessageApi.sendEmail(any())).thenAnswer(a -> {
+            receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "delivered", fout.plusMinutes(1));
+
+            throw new WebApplicationException(Response.status(400).entity("{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}]}").build());
+        });
+        maakDue();
+
+        taakWorker.verwerk(TaakSoort.VERZENDEN);
+
+        assertEquals(NotificatieStatus.BEZORGD, notificatie(id).getStatus());
+    }
+
     // Een tweede faalreceipt voor de eerste poging, zolang de herverzending wacht: bijvoorbeeld voor een
     // duplicaat-id, of een technical-failure gevolgd door een temporary-failure.
     @ParameterizedTest
