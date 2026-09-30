@@ -5,6 +5,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import org.hibernate.query.NativeQuery;
+import org.hibernate.type.StandardBasicTypes;
 
 import java.time.OffsetDateTime;
 import java.util.Collection;
@@ -14,43 +15,84 @@ import java.util.UUID;
 @ApplicationScoped
 public class NotificatieRepository implements PanacheRepositoryBase<Notificatie, UUID> {
 
-    // Native SQL omdat JPQL geen lock-clausule met SKIP LOCKED kent. Zie
-    // RetentieBatch#verwijder voor waarom die clausule er staat. %s is leeg of de
-    // uitsluiting hieronder, zodat beide varianten maar één keer beschreven staan.
-    private static final String CLAIM_VERLOPEN_SQL = """
-            SELECT id
+    // SKIP LOCKED: een notificatie die een overgang of een andere pod vasthoudt, komt een volgende
+    // ronde aan de beurt. Pogingen en taken gaan mee via ON DELETE CASCADE.
+    private static final String VERWIJDER_NA_BEWAARTERMIJN_SQL = """
+            DELETE FROM notificatie
+             WHERE id IN (SELECT id
+                            FROM notificatie
+                           WHERE terminaal_op < ?1
+                           ORDER BY terminaal_op
+                           FETCH FIRST ?2 ROWS ONLY
+                             FOR UPDATE SKIP LOCKED)
+            """;
+
+    // Op id, zodat een rij waarvan de oude KEK ontbreekt de ronde niet blokkeert: de volgende batch
+    // begint erachter.
+    private static final String HERWRAP_KANDIDATEN_SQL = """
+            SELECT id, sleutel_gewrapt, kek_versie
               FROM notificatie
-             WHERE laatste_status_update <= ?1%s
-             ORDER BY laatste_status_update
-             FETCH FIRST ?2 ROWS ONLY
+             WHERE kek_versie < ?1
+               AND sleutel_gewrapt IS NOT NULL
+               AND id > ?2
+             ORDER BY id
+             FETCH FIRST ?3 ROWS ONLY
                FOR UPDATE SKIP LOCKED
             """;
 
-    // Slaat rijen over die in een eerdere batch mislukten; zie de batchlus in de scheduler.
-    private static final String UITSLUITING_SQL = "\n   AND id NOT IN (?3)";
+    // Native SQL zonder de versie: wissen en herwrappen zijn geen overgang en schrijven geen event.
+    private static final String WIS_SLEUTEL_SQL =
+            "UPDATE notificatie SET sleutel_gewrapt = NULL, kek_versie = NULL WHERE id = ?1";
+
+    private static final String ZET_SLEUTEL_SQL =
+            "UPDATE notificatie SET sleutel_gewrapt = ?2, kek_versie = ?3 WHERE id = ?1";
 
     /**
-     * Claimt tot {@code maximum} verlopen notificaties met {@code FOR UPDATE SKIP LOCKED} en geeft
-     * hun ids terug. De rijen blijven vergrendeld tot de transactie eindigt, zodat een gelijktijdige
-     * statuswijziging erop blokkeert en ze tussen claim en verwijdering niet kunnen veranderen.
+     * Verwijdert tot {@code maximum} notificaties die vóór {@code grens} terminaal werden, met hun
+     * pogingen en taken.
      *
-     * @param uitgesloten ids die overgeslagen moeten worden; leeg laten als er niets uit te sluiten is
+     * @return het aantal verwijderde notificaties
+     */
+    public int verwijderTerminaalVoor(OffsetDateTime grens, int maximum) {
+        return getEntityManager().createNativeQuery(VERWIJDER_NA_BEWAARTERMIJN_SQL)
+                .setParameter(1, grens)
+                .setParameter(2, maximum)
+                .executeUpdate();
+    }
+
+    /**
+     * Vergrendelt tot {@code maximum} notificaties met een sleutel onder een oudere KEK-versie dan
+     * {@code huidigeVersie}, met een id na {@code naId}, op volgorde van id.
      */
     @SuppressWarnings("unchecked")
-    public List<UUID> claimVerlopen(OffsetDateTime grens, int maximum, List<UUID> uitgesloten) {
-        // addScalar legt het resultaattype vast op UUID, los van wat de driver voor een uuid-kolom kiest.
-        NativeQuery<UUID> query = getEntityManager()
-                .createNativeQuery(CLAIM_VERLOPEN_SQL.formatted(uitgesloten.isEmpty() ? "" : UITSLUITING_SQL))
+    public List<GewrapteSleutel> vergrendelOudeSleutels(int huidigeVersie, UUID naId, int maximum) {
+        List<Object[]> rijen = getEntityManager().createNativeQuery(HERWRAP_KANDIDATEN_SQL)
                 .unwrap(NativeQuery.class)
                 .addScalar("id", UUID.class)
-                .setParameter(1, grens)
-                .setParameter(2, maximum);
+                .addScalar("sleutel_gewrapt", StandardBasicTypes.BINARY)
+                .addScalar("kek_versie", StandardBasicTypes.INTEGER)
+                .setParameter(1, huidigeVersie)
+                .setParameter(2, naId)
+                .setParameter(3, maximum)
+                .getResultList();
 
-        if (!uitgesloten.isEmpty()) {
-            query.setParameter(3, uitgesloten);
-        }
+        return rijen.stream().map(rij -> new GewrapteSleutel((UUID) rij[0], (byte[]) rij[1], (Integer) rij[2])).toList();
+    }
 
-        return query.getResultList();
+    /** Wist de gewrapte sleutel en de KEK-versie, zonder de versie van de notificatie te verhogen. */
+    public void wisSleutel(UUID notificatieId) {
+        getEntityManager().createNativeQuery(WIS_SLEUTEL_SQL)
+                .setParameter(1, notificatieId)
+                .executeUpdate();
+    }
+
+    /** Vervangt de gewrapte sleutel, zonder de versie van de notificatie te verhogen. */
+    public void zetSleutel(UUID notificatieId, byte[] sleutelGewrapt, int kekVersie) {
+        getEntityManager().createNativeQuery(ZET_SLEUTEL_SQL)
+                .setParameter(1, notificatieId)
+                .setParameter(2, sleutelGewrapt)
+                .setParameter(3, kekVersie)
+                .executeUpdate();
     }
 
     /** Het aantal notificaties dat deze dienstverlener sinds {@code vanaf} heeft aangeboden. */
@@ -66,35 +108,9 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
         return getEntityManager()
                 .createQuery("SELECT n FROM Notificatie n WHERE n.status NOT IN :terminaal "
                         + "AND NOT EXISTS (SELECT t.id FROM Taak t WHERE t.notificatieId = n.id) "
-                        + "ORDER BY n.laatsteStatusUpdate", Notificatie.class)
+                        + "ORDER BY n.aangenomenOp", Notificatie.class)
                 .setParameter("terminaal", terminaal)
                 .setMaxResults(limiet)
                 .getResultList();
-    }
-
-    /**
-     * De gegevens die de retentiejob per notificatie meldt, oudste eerst.
-     * <p>
-     * Een JPQL-constructorexpressie en geen kolommen uit de native query hierboven: de expressie
-     * noemt de recordcomponenten op type, zodat een verkeerde ariteit of een niet-passend type een
-     * fout op de query zelf geeft in plaats van een {@code ClassCastException} verderop. De
-     * {@code ORDER BY} staat er omdat {@code IN} geen volgorde garandeert.
-     */
-    public List<Kandidaat> zoekKandidaten(List<UUID> ids) {
-        return getEntityManager()
-                .createNamedQuery(Notificatie.ZOEK_KANDIDATEN, Kandidaat.class)
-                .setParameter("ids", ids)
-                .getResultList();
-    }
-
-    /**
-     * Verwijdert de opgegeven notificaties. De pogingen gaan mee via {@code ON DELETE CASCADE}; de
-     * events blijven staan, het eventlog wordt per partitie opgeruimd.
-     */
-    public int verwijderOpId(List<UUID> ids) {
-        return getEntityManager()
-                .createNamedQuery(Notificatie.VERWIJDER_OP_ID)
-                .setParameter("ids", ids)
-                .executeUpdate();
     }
 }

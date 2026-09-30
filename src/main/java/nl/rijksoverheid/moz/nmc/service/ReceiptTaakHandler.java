@@ -41,7 +41,7 @@ public class ReceiptTaakHandler implements TaakHandler {
         String tijdstip = payload.get(InkomendEventOpslag.PAYLOAD_TIJDSTIP);
 
         QuarkusTransaction.requiringNew().run(() -> {
-            // De notificatie kan inmiddels door de retentie zijn verwijderd; dan valt er niets te verwerken.
+            // De notificatie kan inmiddels na de bewaartermijn zijn verwijderd; dan valt er niets te verwerken.
             if (pogingRepository.findById(UUID.fromString(pogingId)) == null) {
                 Log.infof("Receipt voor poging %s die niet meer bestaat; taak %d afgerond", pogingId, taak.getId());
             } else {

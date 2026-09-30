@@ -197,7 +197,8 @@ class BezorgingVaststellenTest {
         return QuarkusTransaction.requiringNew().call(() -> pogingRepository.findById(id));
     }
 
+    // Zonder de wistaak die elke terminale status krijgt; die staat in WisTaakHandlerTest.
     private List<Taak> taken() {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.listAll());
+        return QuarkusTransaction.requiringNew().call(() -> taakRepository.list("soort != ?1", TaakSoort.WISSEN));
     }
 }
