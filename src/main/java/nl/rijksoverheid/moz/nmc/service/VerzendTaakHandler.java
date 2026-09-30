@@ -98,7 +98,7 @@ public class VerzendTaakHandler implements TaakHandler {
         if (notificatie.getStatus() == NotificatieStatus.AANGENOMEN) {
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
         } else if (pogingRepository.findLaatsteVan(notificatie.getId())
-                .filter(p -> p.getStatus() == PogingStatus.GEPLAND).isEmpty()) {
+                .filter(p -> isInVerzending(notificatie, p)).isEmpty()) {
             Log.infof("Notificatie %s staat inmiddels op %s; uitgeputte verzendtaak afgerond zonder overgang",
                     notificatie.getId(), notificatie.getStatus());
 
@@ -355,9 +355,9 @@ public class VerzendTaakHandler implements TaakHandler {
             Poging poging = pogingRepository.findById(verzending.pogingId());
             pogingRepository.herlaad(poging);
 
-            // Kwam er tussen de twee transacties een receipt binnen, dan is de poging niet meer gepland
-            // en gaat die uitkomst voor.
-            if (poging.getStatus() == PogingStatus.GEPLAND) {
+            // Kwam er tussen de twee transacties een receipt binnen, voor deze poging of bij een
+            // herverzending een bezorging van de eerste, dan gaat die uitkomst voor.
+            if (isInVerzending(notificatie, poging)) {
                 overgangsfunctie.voerUit(notificatie.getId(), naar, reden);
             } else {
                 Log.infof("Notificatie %s staat inmiddels op %s; uitkomst %s van de verzendtaak niet toegepast",
@@ -368,6 +368,12 @@ public class VerzendTaakHandler implements TaakHandler {
         });
 
         return TaakUitkomst.alAfgerond();
+    }
+
+    private static boolean isInVerzending(Notificatie notificatie, Poging poging) {
+        return poging.getStatus() == PogingStatus.GEPLAND
+                && (notificatie.getStatus() == NotificatieStatus.IN_VERZENDING
+                    || notificatie.getStatus() == NotificatieStatus.VERZONDEN);
     }
 
     private TaakUitkomst uitgesteld() {
