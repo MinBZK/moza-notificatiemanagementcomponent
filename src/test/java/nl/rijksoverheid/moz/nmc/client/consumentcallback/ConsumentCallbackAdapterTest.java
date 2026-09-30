@@ -259,11 +259,11 @@ class ConsumentCallbackAdapterTest {
     // wordt opgeslokt. Vanuit de constructor valt dezelfde fout nog binnen de transactie.
     @Test
     void opdracht_zonderNotificatieIdNieuweStatusOfTijdstip_weigert() {
-        assertThrows(NullPointerException.class, () -> new StatusUpdateOpdracht(null,
+        assertThrows(NullPointerException.class, () -> new StatusUpdateOpdracht(7L, null,
                 "https://omc.example.nl/callback", 1L, NotificatieStatus.VERZONDEN, NotificatieStatus.BEZORGD, null, OffsetDateTime.parse("2026-01-15T10:00:00Z")));
-        assertThrows(NullPointerException.class, () -> new StatusUpdateOpdracht(UUID.randomUUID(),
+        assertThrows(NullPointerException.class, () -> new StatusUpdateOpdracht(7L, UUID.randomUUID(),
                 "https://omc.example.nl/callback", 1L, NotificatieStatus.VERZONDEN, null, null, OffsetDateTime.parse("2026-01-15T10:00:00Z")));
-        assertThrows(NullPointerException.class, () -> new StatusUpdateOpdracht(UUID.randomUUID(),
+        assertThrows(NullPointerException.class, () -> new StatusUpdateOpdracht(7L, UUID.randomUUID(),
                 "https://omc.example.nl/callback", 1L, NotificatieStatus.VERZONDEN, NotificatieStatus.BEZORGD, null, null));
     }
 
@@ -271,7 +271,7 @@ class ConsumentCallbackAdapterTest {
     // geen callback geconfigureerd en vraagt de status zelf op.
     @Test
     void opdracht_zonderCallbackUrl_isToegestaan() {
-        assertDoesNotThrow(() -> new StatusUpdateOpdracht(UUID.randomUUID(), null, 1L,
+        assertDoesNotThrow(() -> new StatusUpdateOpdracht(7L, UUID.randomUUID(), null, 1L,
                 NotificatieStatus.VERZONDEN, NotificatieStatus.BEZORGD, null, OffsetDateTime.parse("2026-01-15T10:00:00Z")));
     }
 
@@ -280,7 +280,7 @@ class ConsumentCallbackAdapterTest {
     }
 
     private static StatusUpdateOpdracht opdracht(String callbackUrl) {
-        return new StatusUpdateOpdracht(UUID.randomUUID(), callbackUrl, 3L,
+        return new StatusUpdateOpdracht(7L, UUID.randomUUID(), callbackUrl, 3L,
                 NotificatieStatus.VERZONDEN, NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR, OffsetDateTime.parse("2026-01-15T10:00:00Z"));
     }
 }
