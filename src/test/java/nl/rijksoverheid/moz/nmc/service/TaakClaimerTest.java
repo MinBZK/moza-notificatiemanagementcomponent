@@ -173,6 +173,17 @@ class TaakClaimerTest {
         assertTrue(zoek(id).getLeaseTot().isAfter(nu().plusMinutes(1)));
     }
 
+    @Test
+    void eisClaim_naEenClaimDoorEenAndereWorker_gooitTaakVerlorenException() {
+        long id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        Taak taak = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
+        QuarkusTransaction.requiringNew().run(() -> entityManager
+                .createNativeQuery("UPDATE taak SET claim_epoch = claim_epoch + 1 WHERE id = ?1")
+                .setParameter(1, id).executeUpdate());
+
+        assertThrows(TaakVerlorenException.class, () -> QuarkusTransaction.requiringNew().run(() -> taakClaimer.eisClaim(taak)));
+    }
+
     // Twee workers op dezelfde achterstand krijgen elk een deel en nooit dezelfde taak.
     @Test
     void claim_tweeGelijktijdigeWorkers_claimenNooitDezelfdeTaak() throws Exception {
