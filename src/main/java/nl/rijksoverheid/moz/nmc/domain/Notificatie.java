@@ -56,6 +56,10 @@ public class Notificatie {
     @Column(name = "laatste_status_update", nullable = false)
     private OffsetDateTime laatsteStatusUpdate;
 
+    // Het quotum per dienstverlener telt op dit tijdstip.
+    @Column(name = "aangenomen_op", nullable = false, updatable = false)
+    private OffsetDateTime aangenomenOp;
+
     @Column(name = "ontvanger_versleuteld")
     private byte[] ontvangerVersleuteld;
 
@@ -68,6 +72,19 @@ public class Notificatie {
     @Column(name = "kek_versie")
     private Integer kekVersie;
 
+    // Wat elke verzendtaak nodig heeft; geen persoonsgegevens.
+    @Column(name = "template_id", length = 64)
+    private String templateId;
+
+    @Column(length = 16)
+    private String regie;
+
+    @Column(name = "dienstverlener_naam")
+    private String dienstverlenerNaam;
+
+    @Column
+    private String dienst;
+
     protected Notificatie() {
         // Voor JPA
     }
@@ -77,6 +94,11 @@ public class Notificatie {
         this.id = UUID.randomUUID();
         this.dvId = Objects.requireNonNull(dvId, "dvId is verplicht");
         this.callbackUrl = callbackUrl;
+        this.aangenomenOp = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+    }
+
+    public OffsetDateTime getAangenomenOp() {
+        return aangenomenOp;
     }
 
     public UUID getId() {
@@ -123,6 +145,35 @@ public class Notificatie {
         this.personalisationVersleuteld = gegevens.personalisationVersleuteld();
         this.sleutelGewrapt = gegevens.sleutelGewrapt();
         this.kekVersie = gegevens.kekVersie();
+    }
+
+    /**
+     * Legt vast hoe de notificatie verstuurd wordt. Alleen bij de aanname, vóór de eerste opslag.
+     *
+     * @param regie          {@code CENTRAAL} of {@code DECENTRAAL}
+     * @param dienstverlener de naam voor de Profielservice-lookup; leeg bij decentrale regie
+     */
+    public void bewaarVerzendgegevens(String templateId, String regie, String dienstverlener, String dienst) {
+        this.templateId = Objects.requireNonNull(templateId, "templateId is verplicht");
+        this.regie = Objects.requireNonNull(regie, "regie is verplicht");
+        this.dienstverlenerNaam = dienstverlener;
+        this.dienst = dienst;
+    }
+
+    public String getTemplateId() {
+        return templateId;
+    }
+
+    public String getRegie() {
+        return regie;
+    }
+
+    public String getDienstverlenerNaam() {
+        return dienstverlenerNaam;
+    }
+
+    public String getDienst() {
+        return dienst;
     }
 
     public VersleuteldeGegevens getVersleuteldeGegevens() {
