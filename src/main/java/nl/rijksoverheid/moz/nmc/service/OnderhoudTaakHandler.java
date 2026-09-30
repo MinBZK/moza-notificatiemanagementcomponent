@@ -30,18 +30,21 @@ import java.util.function.IntSupplier;
 @ApplicationScoped
 public class OnderhoudTaakHandler implements TaakHandler {
 
+    private static final Duration VERZENDBUDGET_BEWAREN = Duration.ofHours(1);
+
     private static final UUID LAAGSTE_ID = new UUID(0, 0);
 
     private final Partitiebeheer partitiebeheer;
     private final NotificatieRepository notificatieRepository;
     private final Sleutelbeheer sleutelbeheer;
+    private final Verzendbudget verzendbudget;
     private final Bewaartermijnen bewaartermijnen;
     private final Duration interval;
     private final int batch;
     private final int maxBatches;
 
     public OnderhoudTaakHandler(Partitiebeheer partitiebeheer, NotificatieRepository notificatieRepository,
-                                Sleutelbeheer sleutelbeheer, Bewaartermijnen bewaartermijnen,
+                                Sleutelbeheer sleutelbeheer, Bewaartermijnen bewaartermijnen, Verzendbudget verzendbudget,
                                 @ConfigProperty(name = "nmc.onderhoud.interval") Duration interval,
                                 @ConfigProperty(name = "nmc.onderhoud.batch") int batch,
                                 @ConfigProperty(name = "nmc.onderhoud.max-batches") int maxBatches) {
@@ -53,6 +56,7 @@ public class OnderhoudTaakHandler implements TaakHandler {
         this.notificatieRepository = notificatieRepository;
         this.sleutelbeheer = sleutelbeheer;
         this.bewaartermijnen = bewaartermijnen;
+        this.verzendbudget = verzendbudget;
         this.interval = interval;
         this.batch = batch;
         this.maxBatches = maxBatches;
@@ -85,6 +89,8 @@ public class OnderhoudTaakHandler implements TaakHandler {
         lease.verleng();
         stap("default-partitie opruimen", () -> meld("event(s) uit de default-partitie verwijderd",
                 inBatches(lease, () -> partitiebeheer.ruimStandaardpartitieOp(nu, batch))));
+        stap("verzendbudget opruimen", () -> meld("tijdvak(ken) van het verzendbudget verwijderd",
+                QuarkusTransaction.requiringNew().call(() -> verzendbudget.ruimOpVoor(nu.minus(VERZENDBUDGET_BEWAREN)))));
 
         return TaakUitkomst.herpland(OffsetDateTime.now(ZoneOffset.UTC).plus(interval));
     }

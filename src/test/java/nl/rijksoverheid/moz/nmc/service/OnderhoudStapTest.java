@@ -85,9 +85,9 @@ class OnderhoudStapTest {
         Bewaartermijnen termijnen = new Bewaartermijnen(Duration.ofDays(1), Duration.ofDays(2), Duration.ofDays(3));
 
         assertThrows(IllegalStateException.class,
-                () -> new OnderhoudTaakHandler(null, null, null, termijnen, Duration.ofHours(1), 0, 1));
+                () -> new OnderhoudTaakHandler(null, null, null, termijnen, null, Duration.ofHours(1), 0, 1));
         assertThrows(IllegalStateException.class,
-                () -> new OnderhoudTaakHandler(null, null, null, termijnen, Duration.ofHours(1), 1, 0));
+                () -> new OnderhoudTaakHandler(null, null, null, termijnen, null, Duration.ofHours(1), 1, 0));
         assertThrows(IllegalStateException.class,
                 () -> new Partitiebeheer(null, termijnen, 0, 0, Duration.ofSeconds(1), 1));
         assertThrows(IllegalStateException.class,

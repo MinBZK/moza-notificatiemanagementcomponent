@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
@@ -13,6 +14,7 @@ import java.time.OffsetDateTime;
  * opruimen van het eventlog niet meer tegen; het register kan die leeftijd per dienstverlener afwijkend
  * vastleggen.
  */
+@Startup
 @ApplicationScoped
 public class Bewaartermijnen {
 

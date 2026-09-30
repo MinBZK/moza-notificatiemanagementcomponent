@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import nl.rijksoverheid.moz.nmc.repository.EventPartitie;
 import nl.rijksoverheid.moz.nmc.repository.EventPartitieRepository;
@@ -21,6 +22,7 @@ import java.util.Optional;
  * Een partitie gaat pas weg als ze helemaal onder het watermerk ligt, haar jongste event ouder is dan de
  * bewaartermijn van het afleverbewijs en geen geldige bevestiging of leverpositie erin of eronder wijst.
  */
+@Startup
 @ApplicationScoped
 public class Partitiebeheer {
 
