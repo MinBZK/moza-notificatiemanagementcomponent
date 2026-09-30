@@ -148,6 +148,8 @@ class EventfeedControllerTest {
     @Test
     void bevestiging_zonderOfMetOngeldigeCursor_geeft400_enVervallen_geeft410() {
         given().contentType(ContentType.JSON).body("{\"cursor\": \" \"}").when().put(BEVESTIGING).then().statusCode(400);
+        given().contentType(ContentType.JSON).when().put(BEVESTIGING).then().statusCode(400);
+        given().contentType(ContentType.JSON).body("null").when().put(BEVESTIGING).then().statusCode(400);
         given().contentType(ContentType.JSON).body("{\"cursor\": \"geen cursor !\"}").when().put(BEVESTIGING).then().statusCode(400);
         given().contentType(ContentType.JSON).body("{\"cursor\": \"" + new Cursor(2, 1, 1).codeer() + "\"}")
                 .when().put(BEVESTIGING)
