@@ -39,8 +39,8 @@ public class Verzendbudget {
             throw new IllegalStateException("nmc.verzendbudget.tokens-per-minuut moet 1 of hoger zijn, is " + tokensPerMinuut);
         }
 
-        if (navraagReservering < 0 || navraagReservering >= tokensPerMinuut) {
-            throw new IllegalStateException("nmc.verzendbudget.navraag-reservering moet tussen 0 en "
+        if (navraagReservering < 1 || navraagReservering >= tokensPerMinuut) {
+            throw new IllegalStateException("nmc.verzendbudget.navraag-reservering moet tussen 1 en "
                     + tokensPerMinuut + " liggen, is " + navraagReservering);
         }
 

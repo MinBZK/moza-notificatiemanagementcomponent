@@ -165,6 +165,19 @@ class ReconcilerTest {
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(verzonden.notificatieId()).getStatus());
     }
 
+    // Een navraag die blijft mislukken (hier een ingetrokken key) houdt ook op bij de bewaartermijn.
+    @Test
+    void navraag_storingNaDeBewaartermijn_leidtTotBezorgstatusOnbekend() {
+        Verzonden verzonden = verzonden(OffsetDateTime.now(ZoneOffset.UTC).minusDays(8));
+        when(getMessageDataApi.getMessageData(verzonden.notifyId().toString()))
+                .thenThrow(new WebApplicationException(Response.status(403).build()));
+
+        taakWorker.verwerk(TaakSoort.RECONCILIEREN);
+
+        assertEquals(NotificatieStatus.BEZORGSTATUS_ONBEKEND, notificatie(verzonden.notificatieId()).getStatus());
+        assertTrue(taken().isEmpty());
+    }
+
     @Test
     void navraag_pogingMetUitkomst_rondtAfZonderOpvraag() {
         Verzonden verzonden = verzonden(OffsetDateTime.now(ZoneOffset.UTC).minusHours(2));
