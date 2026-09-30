@@ -38,6 +38,7 @@ import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.service.InkomendEventOpslag;
 import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
 import nl.rijksoverheid.moz.nmc.service.Vaststellingstermijn;
+import nl.rijksoverheid.moz.nmc.service.Verzendbeleid;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
@@ -139,6 +140,8 @@ public class NotificatieVerwerkingFuzzer {
         // Application logging off. The AssertionError in roepAan names the stand-in states.
         Logger.getLogger("").setLevel(Level.OFF);
 
+        Verzendbeleid verzendbeleid = new Verzendbeleid(java.time.Duration.ofDays(7), java.time.Duration.ofHours(1),
+                org.eclipse.microprofile.config.ConfigProvider.getConfig());
         // The intake no longer calls the Profielservice or NotifyNL; those stand-ins belong to the
         // verzendtaak, which is outside this target.
         AannameService aannameService = new AannameService(
@@ -147,9 +150,10 @@ public class NotificatieVerwerkingFuzzer {
                 () -> NotificatieFixtures.DV_ID,
                 new GeheugenDienstverlenerRepository(),
                 repository,
-                taken);
+                taken,
+                verzendbeleid);
         receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
-                taken, new Vaststellingstermijn(java.time.Duration.ofDays(7), java.time.Duration.ofDays(1)));
+                taken, new Vaststellingstermijn(java.time.Duration.ofDays(7), java.time.Duration.ofDays(1)), verzendbeleid);
 
         LogboekContext logboekContext = new LogboekContext();
         HashHelper hashHelper = new HashHelper(Optional.of("fuzz-pepper-niet-voor-productie"));

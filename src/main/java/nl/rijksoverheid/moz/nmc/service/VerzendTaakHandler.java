@@ -39,6 +39,11 @@ import java.util.UUID;
  * transactie de overgang naar {@code verzonden}, het NotifyNL-id op de poging, de navraagtaak en het
  * afronden van de verzendtaak. De HTTP-aanroep naar NotifyNL valt nooit binnen een transactie.
  * <p>
+ * Dezelfde taak doet de herverzending: vanuit {@code verzonden} na een tijdelijke of technische fout op de
+ * eerste poging maakt de claim de tweede poging aan ({@code verzonden} naar {@code verzonden}). Na
+ * {@code geldig_tot} wordt geen poging meer gestart en eindigt de notificatie in {@code verlopen}; een
+ * poging die al bij NotifyNL ligt loopt door.
+ * <p>
  * Een fout over het adres of de partij is terminaal; een storing bij NotifyNL of de Profielservice
  * stelt de taak uit zonder dat het de notificatie een poging kost. Een herclaim na een verlopen lease
  * hergebruikt de poging en zoekt eerst op {@code reference}, zodat een al aangeboden e-mail niet nog
@@ -93,7 +98,7 @@ public class VerzendTaakHandler implements TaakHandler {
         if (notificatie.getStatus() == NotificatieStatus.AANGENOMEN) {
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
         } else if (pogingRepository.findLaatsteVan(notificatie.getId())
-                .filter(p -> p.getStatus() == PogingStatus.GEPLAND).isEmpty()) {
+                .filter(p -> isInVerzending(notificatie, p)).isEmpty()) {
             Log.infof("Notificatie %s staat inmiddels op %s; uitgeputte verzendtaak afgerond zonder overgang",
                     notificatie.getId(), notificatie.getStatus());
 
@@ -136,6 +141,9 @@ public class VerzendTaakHandler implements TaakHandler {
 
             if (alAangeboden.isPresent()) {
                 notifyId = alAangeboden.get();
+            } else if (verzending.verlopen()) {
+                // Het uitstel na een storing liep voorbij geldig_tot, en de poging ligt niet bij NotifyNL.
+                return rondAfAls(taak, verzending, NotificatieStatus.VERLOPEN, Reden.VERLOPEN);
             } else {
                 String emailAdres = emailAdres(verzending);
 
@@ -200,28 +208,47 @@ public class VerzendTaakHandler implements TaakHandler {
     private Verzending bereidVoor(Taak taak) {
         taakClaimer.eisClaim(taak);
         Notificatie notificatie = overgangsfunctie.vergrendel(taak.getNotificatieId());
+        Optional<Poging> laatste = pogingRepository.findLaatsteVan(notificatie.getId());
+        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
         Poging poging;
         boolean herclaim;
 
         switch (notificatie.getStatus()) {
             case AANGENOMEN -> {
+                if (notificatie.isVerlopen(nu)) {
+                    return verloop(taak, notificatie);
+                }
+
                 overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
                 poging = new Poging(notificatie.getId(), volgendPogingnummer(notificatie.getId()));
                 pogingRepository.persist(poging);
                 herclaim = false;
             }
             case IN_VERZENDING -> {
-                poging = pogingRepository.findLaatsteVan(notificatie.getId())
-                        .orElseThrow(() -> new IllegalStateException(
-                                "Notificatie " + notificatie.getId() + " staat op in-verzending zonder poging"));
+                poging = laatste.orElseThrow(() -> new IllegalStateException(
+                        "Notificatie " + notificatie.getId() + " staat op in-verzending zonder poging"));
                 herclaim = true;
             }
-            default -> {
-                Log.infof("Notificatie %s staat op %s; verzendtaak %d afgerond zonder verzending",
-                        notificatie.getId(), notificatie.getStatus(), taak.getId());
-                taakClaimer.rondAf(taak);
+            case VERZONDEN -> {
+                // Een herverzending: de tweede poging, of bij een herclaim de al geplande.
+                if (laatste.filter(p -> p.getStatus() == PogingStatus.GEPLAND).isPresent()) {
+                    poging = laatste.get();
+                    herclaim = true;
+                } else if (laatste.filter(VerzendTaakHandler::magHerverzonden).isPresent()) {
+                    if (notificatie.isVerlopen(nu)) {
+                        return verloop(taak, notificatie);
+                    }
 
-                return null;
+                    overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
+                    poging = new Poging(notificatie.getId(), volgendPogingnummer(notificatie.getId()));
+                    pogingRepository.persist(poging);
+                    herclaim = false;
+                } else {
+                    return rondAfZonderVerzending(taak, notificatie);
+                }
+            }
+            default -> {
+                return rondAfZonderVerzending(taak, notificatie);
             }
         }
 
@@ -238,9 +265,33 @@ public class VerzendTaakHandler implements TaakHandler {
         Map<String, String> personalisation = sleutelbeheer.ontsleutelPersonalisation(notificatie.getId(),
                 notificatie.getVersleuteldeGegevens());
 
-        return new Verzending(notificatie.getId(), notificatie.getDvId(), poging.getId(), herclaim, ontvanger,
+        return new Verzending(notificatie.getId(), notificatie.getDvId(), poging.getId(), herclaim,
+                herclaim && notificatie.isVerlopen(nu), ontvanger,
                 Regie.valueOf(notificatie.getRegie()), notificatie.getDienstverlenerNaam(), notificatie.getDienst(),
                 notificatie.getTemplateId(), personalisation, taak.getTraceId());
+    }
+
+    // Eén herverzending in totaal: alleen na een tijdelijke of technische fout op de eerste poging.
+    static boolean magHerverzonden(Poging poging) {
+        return poging.getNummer() == 1
+                && (poging.getStatus() == PogingStatus.TIJDELIJK_MISLUKT || poging.getStatus() == PogingStatus.TECHNISCH_MISLUKT);
+    }
+
+    private Verzending verloop(Taak taak, Notificatie notificatie) {
+        Log.infof("Notificatie %s is verlopen (geldig tot %s); geen verzending gestart", notificatie.getId(),
+                notificatie.getGeldigTot());
+        overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERLOPEN, Reden.VERLOPEN);
+        taakClaimer.rondAf(taak);
+
+        return null;
+    }
+
+    private Verzending rondAfZonderVerzending(Taak taak, Notificatie notificatie) {
+        Log.infof("Notificatie %s staat op %s; verzendtaak %d afgerond zonder verzending",
+                notificatie.getId(), notificatie.getStatus(), taak.getId());
+        taakClaimer.rondAf(taak);
+
+        return null;
     }
 
     private int volgendPogingnummer(UUID notificatieId) {
@@ -304,9 +355,9 @@ public class VerzendTaakHandler implements TaakHandler {
             Poging poging = pogingRepository.findById(verzending.pogingId());
             pogingRepository.herlaad(poging);
 
-            // Kwam er tussen de twee transacties een receipt binnen, dan is de poging niet meer gepland
-            // en gaat die uitkomst voor.
-            if (poging.getStatus() == PogingStatus.GEPLAND) {
+            // Kwam er tussen de twee transacties een receipt binnen, voor deze poging of bij een
+            // herverzending een bezorging van de eerste, dan gaat die uitkomst voor.
+            if (isInVerzending(notificatie, poging)) {
                 overgangsfunctie.voerUit(notificatie.getId(), naar, reden);
             } else {
                 Log.infof("Notificatie %s staat inmiddels op %s; uitkomst %s van de verzendtaak niet toegepast",
@@ -317,6 +368,12 @@ public class VerzendTaakHandler implements TaakHandler {
         });
 
         return TaakUitkomst.alAfgerond();
+    }
+
+    private static boolean isInVerzending(Notificatie notificatie, Poging poging) {
+        return poging.getStatus() == PogingStatus.GEPLAND
+                && (notificatie.getStatus() == NotificatieStatus.IN_VERZENDING
+                    || notificatie.getStatus() == NotificatieStatus.VERZONDEN);
     }
 
     private TaakUitkomst uitgesteld() {
@@ -331,8 +388,8 @@ public class VerzendTaakHandler implements TaakHandler {
         return status >= 400 && status < 500 && status != 429;
     }
 
-    private record Verzending(UUID notificatieId, UUID dvId, UUID pogingId, boolean herclaim, Ontvanger ontvanger,
-                              Regie regie, String dienstverlener, String dienst, String templateId,
+    private record Verzending(UUID notificatieId, UUID dvId, UUID pogingId, boolean herclaim, boolean verlopen,
+                              Ontvanger ontvanger, Regie regie, String dienstverlener, String dienst, String templateId,
                               Map<String, String> personalisation, String traceId) {
     }
 }
