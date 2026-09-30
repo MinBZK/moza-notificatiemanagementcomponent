@@ -411,6 +411,51 @@ class VerzendTaakHandlerTest {
                 "geen navraag voor een al bezorgde notificatie, wel de vaststeltaak");
     }
 
+    // Een bezorging van een eerdere aanbieding komt binnen terwijl de worker buiten een transactie wacht;
+    // de weigering daarna overschrijft die niet.
+    @Test
+    void receiptTussenDeTransacties_gaatVoorDeUitkomstVanDeVerzendtaak() {
+        UUID notifyId = UUID.randomUUID();
+        when(sendAMessageApi.sendEmail(any())).thenAnswer(aanroep -> {
+            SendEmailRequest verzoek = aanroep.getArgument(0);
+            receiptVerwerker.verwerk(notifyId, verzoek.getReference(), "delivered", OffsetDateTime.now(ZoneOffset.UTC));
+
+            throw new WebApplicationException(Response.status(400).entity("{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}]}").build());
+        });
+        UUID id = aannameService.neemAan(decentraal());
+
+        taakWorker.verwerk(TaakSoort.VERZENDEN);
+
+        assertEquals(NotificatieStatus.BEZORGD, notificatie(id).getStatus());
+        assertEquals(List.of(), taken());
+    }
+
+    @Test
+    void centraal_profielserviceWeigertHetNummer_eindigtInNietBezorgbaarMetGeenContactgegevens() {
+        when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenThrow(new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build()));
+        UUID id = aannameService.neemAan(centraal());
+
+        taakWorker.verwerk(TaakSoort.VERZENDEN);
+
+        Notificatie notificatie = notificatie(id);
+        assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie.getStatus());
+        assertEquals(Reden.GEEN_CONTACTGEGEVENS, notificatie.getReden());
+    }
+
+    // 403 ligt aan de aanroep van het NMC: dat kost een poging, zodat de notificatie niet eindeloos wacht.
+    @Test
+    void centraal_profielserviceWeigertDeAanroep_kostEenPoging() {
+        when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenThrow(new WebApplicationException(Response.status(Response.Status.FORBIDDEN).build()));
+        UUID id = aannameService.neemAan(centraal());
+
+        taakWorker.verwerk(TaakSoort.VERZENDEN);
+
+        assertEquals(NotificatieStatus.IN_VERZENDING, notificatie(id).getStatus());
+        assertEquals(1, taken().getFirst().getPogingen());
+    }
+
     @Test
     void notificatieInmiddelsGeannuleerd_rondtDeTaakAfZonderVerzending() {
         UUID id = aannameService.neemAan(decentraal());

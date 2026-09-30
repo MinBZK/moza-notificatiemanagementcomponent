@@ -41,7 +41,7 @@ public class EventRepository implements PanacheRepositoryBase<Event, Long> {
     }
 
     /**
-     * De events van deze dienstverlener ná de positie {@code (xid, eventId)}, in commitvolgorde, tot
+     * De events van deze dienstverlener ná de positie {@code (xid, eventId)}, op volgorde van transactie-id, tot
      * {@code maximum} stuks. Met {@code (0, 0)} begint het lezen bij het oudste beschikbare event.
      */
     @SuppressWarnings("unchecked")
