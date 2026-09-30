@@ -145,7 +145,17 @@ Geïmplementeerd:
   verzenden en de navraag binnen het `verzendbudget` per Notify-service per minuut.
   `TaakWorker` draait per soort een `@Scheduled`-ronde en geeft elke taak aan de
   `TaakHandler` van die soort. Handlers: `VerzendTaakHandler`, `ReceiptTaakHandler`,
-  `ControleTaakHandler` en `TerugkoppelTaakHandler`; de overige soorten worden gepland maar nog niet uitgevoerd.
+  `Reconciler` (navraag), `BezorgingVaststellenTaakHandler`, `ControleTaakHandler` en `TerugkoppelTaakHandler`; de
+  overige soorten worden gepland maar nog niet uitgevoerd.
+- **Navraag en vaststellen.** De verzend-commit plant per poging een navraagtaak volgens
+  `Navraagschema` (`nmc.navraag.*`); `Reconciler` vraagt de status op bij NotifyNL en
+  geeft een uitkomst aan `ReceiptVerwerker`. Een 404 of het einde van de bewaartermijn
+  van NotifyNL zet de poging op `ONBEKEND` en de notificatie op `bezorgstatus-onbekend`.
+  Een verwerkte receipt rondt de navraag af. `delivered` plant een vaststeltaak op het
+  tijdstip uit de receipt plus `Vaststellingstermijn` (`nmc.vaststelling.*`); een
+  faalreceipt binnen de termijn rondt die af, een faalreceipt met een tijdstip daarna
+  wordt alleen op de poging vastgelegd. De termijn loopt vanaf `poging.bezorgd_op`, dat een
+  latere faalreceipt niet overschrijft.
 - **Eén geconfigureerde dienstverlener.** `dienstverlener` heeft één rij uit de
   migratie; `DvProvider` levert die `dv_id`, die op elke notificatie en elk event
   staat. Tokenvalidatie per dienstverlener vervangt later alleen de provider.
@@ -468,8 +478,9 @@ starten als ze ontbreken**:
 Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
 `nmc.dienstverlener.id` (de rij uit V8), `nmc.taak.*` (interval, batch, lease,
 max-pogingen van de worker-lus) en `nmc.verzendbudget.*` (Notify-service, tokens per
-minuut, reservering voor de navraag), `nmc.webhook.*` (interval, bundel,
-max-mislukkingen, herpoging- en pauzewachttijd, time-out, `jwt.issuer`,
+minuut, het vaste aandeel van de navraag), `nmc.navraag.*` (momenten en bewaartermijn van
+NotifyNL), `nmc.vaststelling.*` (termijn en callback-venster) en `nmc.webhook.*` (interval,
+bundel, max-mislukkingen, herpoging- en pauzewachttijd, time-out, `jwt.issuer`,
 `jwt.geldigheid`). Onder `%test` staat de lus uit en is het budget klein, zodat tests
 het uitputten.
 
