@@ -69,7 +69,8 @@ public class NotifyNLVerzendAdapter {
         try {
             return sendAMessageApi.sendEmail(notifyRequest);
         } catch (WebApplicationException e) {
-            throw new NotifyNLVerzendException("NotifyNL gaf status " + e.getResponse().getStatus() + " terug", e);
+            throw new NotifyNLVerzendException("NotifyNL gaf status " + e.getResponse().getStatus() + " terug: "
+                    + NotifyNLFoutmelding.beschrijf(e.getResponse()), e);
         }
     }
 
