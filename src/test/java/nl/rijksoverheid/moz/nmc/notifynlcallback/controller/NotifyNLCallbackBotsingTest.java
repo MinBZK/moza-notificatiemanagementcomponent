@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.notifynlcallback.controller;
 
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
@@ -145,7 +146,7 @@ class NotifyNLCallbackBotsingTest {
     private UUID verzondenNotificatie() {
         UUID notifyId = UUID.randomUUID();
         QuarkusTransaction.requiringNew().run(() -> {
-            Notificatie notificatie = new Notificatie("https://omc.example.nl/callback");
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, "https://omc.example.nl/callback");
             overgangsfunctie.neemAan(notificatie);
             Poging poging = new Poging(notificatie.getId(), 1);
             pogingRepository.persist(poging);

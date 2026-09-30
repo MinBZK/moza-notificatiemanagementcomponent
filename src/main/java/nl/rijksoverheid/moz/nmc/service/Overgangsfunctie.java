@@ -96,7 +96,7 @@ public class Overgangsfunctie {
     // Status en reden komen van de rij, zodat het event nooit afwijkt van wat er vastligt; bij een
     // herverzending wordt de reden van de aanroeper niet op de rij gezet.
     private Event schrijfEvent(Notificatie notificatie, NotificatieStatus van) {
-        Event event = new Event(notificatie.getId(), notificatie.getVersie(), van,
+        Event event = new Event(notificatie.getDvId(), notificatie.getId(), notificatie.getVersie(), van,
                 notificatie.getStatus(), notificatie.getReden());
         eventRepository.persist(event);
 

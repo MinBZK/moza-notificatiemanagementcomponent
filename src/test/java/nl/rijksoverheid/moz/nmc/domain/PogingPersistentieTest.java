@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -86,7 +87,7 @@ class PogingPersistentieTest {
 
     private UUID nieuweNotificatie() {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(null);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, null);
             overgangsfunctie.neemAan(notificatie);
 
             return notificatie.getId();
