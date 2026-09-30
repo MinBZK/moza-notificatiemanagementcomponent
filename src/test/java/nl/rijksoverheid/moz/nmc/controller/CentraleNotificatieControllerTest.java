@@ -91,15 +91,16 @@ class CentraleNotificatieControllerTest {
                 .statusCode(202);
     }
 
+    // callbackUrl staat niet meer in het contract; een aanroeper die hem nog meestuurt, krijgt geen
+    // fout, en de URL wordt nergens gebruikt.
     @Test
-    void notificatieVersturen_ongeldigeCallbackUrl_retourneert400() {
+    void notificatieVersturen_metVervallenCallbackUrl_retourneert202() {
         given()
                 .contentType(ContentType.JSON)
                 .body(aanvraag("Stuurgroep Agenda", "\"callbackUrl\": \"http://127.0.0.1/cb\","))
                 .when().post(PAD)
                 .then()
-                .statusCode(400)
-                .body("violations", notNullValue());
+                .statusCode(202);
     }
 
     @Test

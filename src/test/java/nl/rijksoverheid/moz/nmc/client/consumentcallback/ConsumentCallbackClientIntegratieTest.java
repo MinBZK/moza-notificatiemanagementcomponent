@@ -8,6 +8,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
+import nl.rijksoverheid.moz.nmc.testhelper.WebhookOntvanger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -15,8 +16,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.net.URL;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,13 +26,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * De echte rest-client tegen een echt HTTP-endpoint: welke antwoorden als mislukt tellen, en welk
- * Content-Type de Dienstverlener ontvangt.
+ * De echte rest-client tegen een echt HTTP-endpoint: welke antwoorden als mislukt tellen, en wat de
+ * webhook van de Dienstverlener ontvangt.
  */
 @QuarkusTest
 class ConsumentCallbackClientIntegratieTest {
 
-    @TestHTTPResource("/test/consument-callback")
+    @TestHTTPResource("/test/webhook")
     URL ontvanger;
 
     @Inject
@@ -44,96 +43,86 @@ class ConsumentCallbackClientIntegratieTest {
 
     @BeforeEach
     void setUp() {
-        ConsumentCallbackTestEndpoint.ONTVANGEN_CONTENT_TYPES.clear();
-        ConsumentCallbackTestEndpoint.ONTVANGEN_BODIES.clear();
+        WebhookOntvanger.AANROEPEN.clear();
     }
 
     @Test
-    void antwoord2xx_teltAlsAfgeleverd() {
+    void antwoord2xx_teltAlsAfgeleverdMetHeaders() {
         try (ConsumentCallbackClient client = clientFactory.maakClient(ontvanger + "/204")) {
-            assertDoesNotThrow(() -> client.stuurStatusUpdate(event()));
+            assertDoesNotThrow(() -> client.lever("Bearer jwt", "cursor-1", List.of(event(UUID.randomUUID()))));
         }
+
+        WebhookOntvanger.Aanroep aanroep = WebhookOntvanger.AANROEPEN.getFirst();
+        assertEquals("Bearer jwt", aanroep.autorisatie());
+        assertEquals("cursor-1", aanroep.cursor());
     }
 
-    // Een redirect wordt niet gevolgd (dat zou CallbackUrlValidator omzeilen) en mag dus ook niet
-    // stil als afgeleverd tellen.
+    // Een redirect wordt niet gevolgd (dat zou de URL-validatie omzeilen) en mag dus ook niet stil als
+    // afgeleverd tellen.
     @ParameterizedTest
     @ValueSource(ints = {301, 302, 307, 400, 500})
     void antwoordBuiten2xx_gooitWebApplicationException(int status) {
         try (ConsumentCallbackClient client = clientFactory.maakClient(ontvanger + "/" + status)) {
             WebApplicationException fout = assertThrows(WebApplicationException.class,
-                    () -> client.stuurStatusUpdate(event()));
+                    () -> client.lever("Bearer jwt", "cursor", List.of(event(UUID.randomUUID()))));
 
             assertEquals(status, fout.getResponse().getStatus());
         }
+
+        assertEquals(1, WebhookOntvanger.AANROEPEN.size());
     }
 
     @Test
     void contentType_isWatDeGepubliceerdeSpecBelooft() throws Exception {
         try (ConsumentCallbackClient client = clientFactory.maakClient(ontvanger + "/204")) {
-            client.stuurStatusUpdate(event());
+            client.lever("Bearer jwt", "cursor", List.of(event(UUID.randomUUID())));
         }
 
-        String verzonden = ConsumentCallbackTestEndpoint.ONTVANGEN_CONTENT_TYPES.getFirst();
-        for (String beloofd : beloofdeContentTypes()) {
-            assertEquals(beloofd, verzonden.split(";")[0].trim());
-        }
+        JsonNode content = objectMapper.readTree(given().queryParam("format", "JSON")
+                        .when().get("/q/openapi")
+                        .then().statusCode(200)
+                        .extract().asString())
+                .path("paths").path("/api/nmc/v1/notificaties/wijzigingen").path("get").path("callbacks")
+                .path("webhook").path("{webhookUrl}").path("post").path("requestBody").path("content");
+        assertEquals(1, content.size(), "precies één mediatype verwacht voor de webhook");
+        String verzonden = WebhookOntvanger.AANROEPEN.getFirst().contentType();
+        assertEquals(content.fieldNames().next(), verzonden.split(";")[0].trim());
     }
 
     // Wat de rest-client echt over de lijn stuurt, niet wat een losse ObjectMapper ervan maakt.
     @Test
-    void verzondenBody_isHetCloudEventUitDeSpec() throws Exception {
+    void verzondenBody_isEenArrayVanCloudEventsUitDeSpec() throws Exception {
         UUID notificatieId = UUID.randomUUID();
         try (ConsumentCallbackClient client = clientFactory.maakClient(ontvanger + "/204")) {
-            client.stuurStatusUpdate(event(notificatieId, NotificatieStatus.TECHNISCH_MISLUKT));
+            client.lever("Bearer jwt", "cursor", List.of(event(notificatieId), event(UUID.randomUUID())));
         }
 
-        JsonNode body = objectMapper.readTree(ConsumentCallbackTestEndpoint.ONTVANGEN_BODIES.getFirst());
-        assertEquals("1.0", body.path("specversion").asText());
-        assertTrue(body.path("time").isTextual(), "time hoort een ISO-8601-string te zijn, geen getal");
-        assertDoesNotThrow(() -> OffsetDateTime.parse(body.path("time").asText()));
-        assertEquals(notificatieId.toString(), body.path("subject").asText());
-        assertTrue(body.path("sequence").isTextual(), "sequence hoort een string te zijn");
-        assertEquals("3", body.path("sequence").asText());
-        assertEquals("verzonden", body.path("data").path("van").asText());
-        assertEquals("technisch-mislukt", body.path("data").path("naar").asText());
-        assertEquals("technisch", body.path("data").path("reden").asText());
+        JsonNode body = objectMapper.readTree(WebhookOntvanger.AANROEPEN.getFirst().body());
+        assertTrue(body.isArray());
+        assertEquals(2, body.size());
+        JsonNode eerste = body.get(0);
+        assertEquals("1.0", eerste.path("specversion").asText());
+        assertTrue(eerste.path("time").isTextual(), "time hoort een ISO-8601-string te zijn, geen getal");
+        assertDoesNotThrow(() -> OffsetDateTime.parse(eerste.path("time").asText()));
+        assertEquals(notificatieId.toString(), eerste.path("subject").asText());
+        assertTrue(eerste.path("sequence").isTextual(), "sequence hoort een string te zijn");
+        assertEquals("3", eerste.path("sequence").asText());
+        assertEquals("verzonden", eerste.path("data").path("van").asText());
+        assertEquals("technisch-mislukt", eerste.path("data").path("naar").asText());
+        assertEquals("technisch", eerste.path("data").path("reden").asText());
     }
 
-    // Een geweigerde verbinding is een transportfout: de adapter herhaalt, gooit niet en geeft op.
+    // Een geweigerde verbinding is een transportfout: de levering is mislukt, niet het NMC.
     @Test
-    void geweigerdeVerbinding_wordtAlsTransportfoutAfgehandeld() {
-        ConsumentCallbackAdapter adapter = new ConsumentCallbackAdapter(clientFactory, 0L);
+    void geweigerdeVerbinding_wordtEenLeveringException() {
+        ConsumentCallbackAdapter adapter = new ConsumentCallbackAdapter(clientFactory);
 
-        assertDoesNotThrow(() -> adapter.stuurStatusUpdate(new StatusUpdateOpdracht(7L, UUID.randomUUID(),
-                "http://localhost:1/callback", 3L, NotificatieStatus.VERZONDEN, NotificatieStatus.BEZORGD, null, OffsetDateTime.parse("2026-01-15T10:00:00Z"))));
+        assertThrows(WebhookLeveringException.class,
+                () -> adapter.lever("http://localhost:1/webhook", "Bearer jwt", "cursor", List.of(event(UUID.randomUUID()))));
     }
 
-    private List<String> beloofdeContentTypes() throws Exception {
-        JsonNode spec = objectMapper.readTree(given().queryParam("format", "JSON")
-                .when().get("/q/openapi")
-                .then().statusCode(200)
-                .extract().asString());
-        List<String> typen = new ArrayList<>();
-        for (String pad : List.of("/api/nmc/v1/centraal/notificaties", "/api/nmc/v1/decentraal/notificaties")) {
-            JsonNode content = spec.path("paths").path(pad).path("post").path("callbacks").path("statusupdate")
-                    .path("{$request.body#/callbackUrl}").path("post").path("requestBody").path("content");
-            assertEquals(1, content.size(), "precies één mediatype verwacht voor de callback op " + pad);
-            typen.add(content.fieldNames().next());
-        }
-
-        return typen;
-    }
-
-    private static NotificatieStatusEvent event() {
-        return event(UUID.randomUUID(), NotificatieStatus.BEZORGD);
-    }
-
-    private static NotificatieStatusEvent event(UUID id, NotificatieStatus naar) {
-        return new NotificatieStatusEvent("1.0", "7",
-                "nl.overheid.moz.notificatie.status." + naar.toApiValue(),
-                "/api/nmc/v1/notificaties/" + id, id.toString(), OffsetDateTime.now(ZoneOffset.UTC),
-                "application/json", "3", "Integer",
-                new NotificatieData(NotificatieStatus.VERZONDEN, naar, Reden.TECHNISCH, 3L));
+    private static NotificatieStatusEvent event(UUID id) {
+        return NotificatieStatusEvent.van(7L, id, 3L, NotificatieStatus.VERZONDEN, NotificatieStatus.TECHNISCH_MISLUKT,
+                Reden.TECHNISCH, OffsetDateTime.parse("2026-01-15T10:00:00Z"));
     }
 }

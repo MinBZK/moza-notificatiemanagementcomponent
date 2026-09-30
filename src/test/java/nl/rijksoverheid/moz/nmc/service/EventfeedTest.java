@@ -153,6 +153,29 @@ class EventfeedTest {
         assertThrows(CursorVervallenException.class, () -> eventfeed.lees(NotificatieFixtures.DV_ID, new Cursor(1, 1, 1), null));
     }
 
+    // Na een herstel uit back-up zegt een oude positie niets meer; de webhook begint opnieuw.
+    @Test
+    void leesVoorWebhook_positieUitEenAnderEpoch_begintBijHetOudsteEvent() {
+        long eerste = schrijfEvent(NotificatieFixtures.DV_ID);
+        long tweede = schrijfEvent(NotificatieFixtures.DV_ID);
+
+        EventPagina pagina = eventfeed.leesVoorWebhook(NotificatieFixtures.DV_ID, new Cursor(2, Long.MAX_VALUE, 1), 50);
+
+        assertEquals(List.of(eerste, tweede), ids(pagina));
+        assertEquals(1, pagina.cursor().epoch());
+    }
+
+    // Onder het oudste event is alles al opgeruimd: verder lezen mist niets, dus geen 410 zoals de feed.
+    @Test
+    void leesVoorWebhook_positieOnderHetOudsteEvent_leestGewoonVerder() {
+        long eerste = schrijfEvent(NotificatieFixtures.DV_ID);
+        Cursor na = eventfeed.leesVoorWebhook(NotificatieFixtures.DV_ID, new Cursor(1, 1, 1), 1).cursor();
+        long tweede = schrijfEvent(NotificatieFixtures.DV_ID);
+
+        assertEquals(eerste, na.eventId());
+        assertEquals(List.of(tweede), ids(eventfeed.leesVoorWebhook(NotificatieFixtures.DV_ID, na, 50)));
+    }
+
     @Test
     void bevestig_gaatAlleenVooruit() {
         schrijfEvent(NotificatieFixtures.DV_ID);

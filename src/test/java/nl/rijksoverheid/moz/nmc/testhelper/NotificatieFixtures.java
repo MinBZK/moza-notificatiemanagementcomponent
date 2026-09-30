@@ -26,14 +26,13 @@ public final class NotificatieFixtures {
     }
 
     /** Een notificatie in de gegeven status, zonder poging. */
-    public static void voegNotificatieToe(EntityManager entityManager, UUID id, String callbackUrl,
-                                          NotificatieStatus status, OffsetDateTime laatsteStatusUpdate) {
+    public static void voegNotificatieToe(EntityManager entityManager, UUID id, NotificatieStatus status,
+                                          OffsetDateTime laatsteStatusUpdate) {
         zetTriggerUit(entityManager);
-        entityManager.createNativeQuery("INSERT INTO notificatie (id, dv_id, versie, callback_url, status, laatste_status_update) "
-                        + "VALUES (?1, ?5, 0, ?2, ?3, ?4)")
+        entityManager.createNativeQuery("INSERT INTO notificatie (id, dv_id, versie, status, laatste_status_update) "
+                        + "VALUES (?1, ?2, 0, ?3, ?4)")
                 .setParameter(1, id)
-                .setParameter(5, DV_ID)
-                .setParameter(2, callbackUrl)
+                .setParameter(2, DV_ID)
                 .setParameter(3, status.name())
                 .setParameter(4, laatsteStatusUpdate)
                 .executeUpdate();

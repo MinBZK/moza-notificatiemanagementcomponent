@@ -51,7 +51,7 @@ public class AannameService {
         toetsQuotum(dvId);
 
         // De versleutelde gegevens gaan vóór de aanname op de entity, zodat de insert ze meeneemt.
-        Notificatie notificatie = new Notificatie(dvId, opdracht.callbackUrl());
+        Notificatie notificatie = new Notificatie(dvId);
         notificatie.bewaarVersleuteldeGegevens(
                 sleutelbeheer.versleutel(notificatie.getId(), opdracht.ontvanger(), opdracht.berichtgegevens()));
         // Op de notificatie en niet in de taak, zodat ook een later geplande verzendtaak kan versturen.

@@ -41,9 +41,6 @@ public class Notificatie {
     @Column(name = "dv_id", nullable = false, updatable = false)
     private UUID dvId;
 
-    @Column(name = "callback_url", length = 2048)
-    private String callbackUrl;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private NotificatieStatus status;
@@ -90,10 +87,9 @@ public class Notificatie {
     }
 
     /** Een nieuwe notificatie, nog zonder status; {@code Overgangsfunctie#neemAan} slaat hem op. */
-    public Notificatie(UUID dvId, String callbackUrl) {
+    public Notificatie(UUID dvId) {
         this.id = UUID.randomUUID();
         this.dvId = Objects.requireNonNull(dvId, "dvId is verplicht");
-        this.callbackUrl = callbackUrl;
         this.aangenomenOp = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
     }
 
@@ -111,10 +107,6 @@ public class Notificatie {
 
     public long getVersie() {
         return versie;
-    }
-
-    public String getCallbackUrl() {
-        return callbackUrl;
     }
 
     public NotificatieStatus getStatus() {

@@ -9,8 +9,6 @@ import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;
 
 import java.time.OffsetDateTime;
 import java.util.HashSet;
@@ -23,7 +21,6 @@ import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.verify;
 
 /**
  * Serialiseert het CloudEvent met de ObjectMapper van Quarkus, die ook de rest-client gebruikt, en
@@ -82,7 +79,7 @@ class CloudEventContractTest {
         return verschil;
     }
 
-    // Een overgang zonder reden, zoals naar bezorgd, is de meest voorkomende callback. Een expliciete
+    // Een overgang zonder reden, zoals naar bezorgd, komt het vaakst voor. Een expliciete
     // null voor reden zou geen waarde uit de Reden-enum zijn en de validatie bij de Dienstverlener breken.
     @org.junit.jupiter.api.Test
     void cloudEvent_zonderReden_laatHetVeldWegEnVoldoetAanHetSchema() throws Exception {
@@ -101,13 +98,7 @@ class CloudEventContractTest {
     }
 
     private static NotificatieStatusEvent verstuurdEvent(NotificatieStatus naar, Reden reden) {
-        ConsumentCallbackClient client = Mockito.mock(ConsumentCallbackClient.class);
-        new ConsumentCallbackAdapter(url -> client, 0L).stuurStatusUpdate(new StatusUpdateOpdracht(7L, UUID.randomUUID(),
-                "https://omc.example.nl/callback", 3L, NotificatieStatus.VERZONDEN, naar, reden, OffsetDateTime.parse("2026-01-15T10:00:00Z")));
-
-        ArgumentCaptor<NotificatieStatusEvent> captor = ArgumentCaptor.forClass(NotificatieStatusEvent.class);
-        verify(client).stuurStatusUpdate(captor.capture());
-
-        return captor.getValue();
+        return NotificatieStatusEvent.van(7L, UUID.randomUUID(), 3L, NotificatieStatus.VERZONDEN, naar, reden,
+                OffsetDateTime.parse("2026-01-15T10:00:00Z"));
     }
 }

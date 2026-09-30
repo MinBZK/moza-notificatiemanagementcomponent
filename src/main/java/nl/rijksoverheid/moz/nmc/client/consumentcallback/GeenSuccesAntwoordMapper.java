@@ -18,7 +18,7 @@ public class GeenSuccesAntwoordMapper implements ResponseExceptionMapper<WebAppl
 
     @Override
     public WebApplicationException toThrowable(Response response) {
-        return new WebApplicationException("Consument-callback antwoordde met HTTP " + response.getStatus(), response);
+        return new WebApplicationException("Webhook antwoordde met HTTP " + response.getStatus(), response);
     }
 
     // Vóór de standaardmapper, zodat een 4xx of 5xx dezelfde melding krijgt als een 3xx.

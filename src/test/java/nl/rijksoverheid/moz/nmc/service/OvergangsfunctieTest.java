@@ -58,7 +58,7 @@ class OvergangsfunctieTest {
     @Test
     void neemAan_nieuweNotificatie_staatOpAangenomenMetEventNul() {
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, null);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
             overgangsfunctie.neemAan(notificatie);
 
             return notificatie.getId();
@@ -218,7 +218,7 @@ class OvergangsfunctieTest {
     // staat daarvoor in die transactie uit (replica-rol).
     private UUID aangenomenNotificatieMetStatus(NotificatieStatus status) {
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, null);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
             overgangsfunctie.neemAan(notificatie);
 
             return notificatie.getId();
