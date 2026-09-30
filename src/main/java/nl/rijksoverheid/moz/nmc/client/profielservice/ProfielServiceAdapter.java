@@ -57,8 +57,12 @@ public class ProfielServiceAdapter {
         try {
             return profielApi.apiProfielserviceV1PartijPost(partijRequest);
         } catch (WebApplicationException e) {
-            if (e.getResponse().getStatus() == Response.Status.NOT_FOUND.getStatusCode()) {
-                throw new PartijNietGevondenException("Geen partij gevonden met de opgegeven identificatie");
+            int status = e.getResponse().getStatus();
+
+            // 400, 404 en 422 gaan over de partij: een onbekend of ongeldig nummer.
+            if (status == 400 || status == 404 || status == 422) {
+                throw new PartijNietGevondenException("Geen partij gevonden met de opgegeven identificatie (status "
+                        + status + ")");
             }
 
             Log.error("Profielservice gaf status " + e.getResponse().getStatus() + " terug", e);
