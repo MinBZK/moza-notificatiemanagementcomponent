@@ -97,6 +97,12 @@ public class VerzendTaakHandler implements TaakHandler {
 
         if (notificatie.getStatus() == NotificatieStatus.AANGENOMEN) {
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
+        } else if (pogingRepository.findLaatsteVan(notificatie.getId())
+                .filter(p -> p.getStatus() == PogingStatus.GEPLAND).isEmpty()) {
+            Log.infof("Notificatie %s staat inmiddels op %s; uitgeputte verzendtaak afgerond zonder overgang",
+                    notificatie.getId(), notificatie.getStatus());
+
+            return true;
         }
 
         overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.TECHNISCH_MISLUKT, Reden.TECHNISCH);
@@ -150,6 +156,14 @@ public class VerzendTaakHandler implements TaakHandler {
                         verzending.pogingId().toString());
             }
         } catch (ProfielServiceException e) {
+            // 401 en 403 liggen aan de aanroep van het NMC en kosten een poging; de rest is een storing.
+            if (e.status().filter(s -> s == 401 || s == 403).isPresent()) {
+                Log.errorf(e, "Profielservice weigert de aanroep voor notificatie %s; verzendtaak uitgesteld",
+                        verzending.notificatieId());
+
+                return uitgesteldAlsPoging();
+            }
+
             Log.warnf(e, "Profielservice niet beschikbaar voor notificatie %s; verzendtaak uitgesteld", verzending.notificatieId());
 
             return uitgesteld();
@@ -192,6 +206,7 @@ public class VerzendTaakHandler implements TaakHandler {
      * @return null als de taak is afgerond zonder verzending
      */
     private Verzending bereidVoor(Taak taak) {
+        taakClaimer.eisClaim(taak);
         Notificatie notificatie = overgangsfunctie.vergrendel(taak.getNotificatieId());
         Optional<Poging> laatste = pogingRepository.findLaatsteVan(notificatie.getId());
         OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
@@ -336,7 +351,19 @@ public class VerzendTaakHandler implements TaakHandler {
 
     private TaakUitkomst rondAfAls(Taak taak, Verzending verzending, NotificatieStatus naar, Reden reden) {
         QuarkusTransaction.requiringNew().run(() -> {
-            overgangsfunctie.voerUit(verzending.notificatieId(), naar, reden);
+            Notificatie notificatie = overgangsfunctie.vergrendel(verzending.notificatieId());
+            Poging poging = pogingRepository.findById(verzending.pogingId());
+            pogingRepository.herlaad(poging);
+
+            // Kwam er tussen de twee transacties een receipt binnen, dan is de poging niet meer gepland
+            // en gaat die uitkomst voor.
+            if (poging.getStatus() == PogingStatus.GEPLAND) {
+                overgangsfunctie.voerUit(notificatie.getId(), naar, reden);
+            } else {
+                Log.infof("Notificatie %s staat inmiddels op %s; uitkomst %s van de verzendtaak niet toegepast",
+                        notificatie.getId(), notificatie.getStatus(), naar);
+            }
+
             taakClaimer.rondAf(taak);
         });
 

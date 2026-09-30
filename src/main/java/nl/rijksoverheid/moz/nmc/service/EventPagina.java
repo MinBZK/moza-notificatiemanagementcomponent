@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * Eén pagina uit de feed.
  *
- * @param events de events in commitvolgorde
+ * @param events de events op volgorde van transactie-id
  * @param cursor de positie ná het laatste event; bij een lege pagina de meegegeven cursor, en null
  *               als er nog geen cursor was
  */

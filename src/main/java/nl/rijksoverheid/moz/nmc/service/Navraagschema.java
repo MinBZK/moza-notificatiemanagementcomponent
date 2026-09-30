@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
@@ -12,6 +13,7 @@ import java.util.Optional;
  * Wanneer de afleverstatus van een poging wordt nagevraagd: op de geconfigureerde momenten na de
  * verzending, daarna dagelijks, en als laatste op het einde van de bewaartermijn van NotifyNL.
  */
+@Startup
 @ApplicationScoped
 public class Navraagschema {
 
