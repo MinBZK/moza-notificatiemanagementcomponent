@@ -80,6 +80,12 @@ public class TerugkoppelTaakHandler implements TaakHandler {
         this.pauzeWachttijd = pauzeWachttijd;
     }
 
+    // Eén rij per dienstverlener; de controletaak maakt hem niet opnieuw aan zolang er een rij staat.
+    @Override
+    public boolean periodiek() {
+        return true;
+    }
+
     @Override
     public TaakSoort soort() {
         return TaakSoort.TERUGKOPPELEN;
