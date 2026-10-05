@@ -12,8 +12,8 @@ import java.util.List;
 /**
  * Vat een foutrespons van NotifyNL samen voor de log. Uit het foutformaat van NotifyNL
  * ({@code {"errors":[{"error":..., "message":...}]}}) komen alleen {@code error} en {@code message}; die
- * noemen het veld, niet de waarde. Een andere body, bijvoorbeeld van een gateway ervoor, wordt niet
- * gelogd: dan alleen het type, de omvang en de {@code Server}-header.
+ * noemen het veld, niet de waarde. Van een andere body, bijvoorbeeld van een gateway ervoor, gaat alleen
+ * een korte platte-tekstmelding mee; anders alleen het type, de omvang en de {@code Server}-header.
  */
 final class NotifyNLFoutmelding {
 
@@ -32,7 +32,7 @@ final class NotifyNLFoutmelding {
             return String.join("; ", fouten);
         }
 
-        // TIJDELIJK: toont de korte platte-tekstmelding van de gateway voor NotifyNL. Weghalen vóór de merge.
+        // Een korte platte-tekstmelding van een gateway vóór NotifyNL gaat mee; nog te besluiten of dat zo blijft.
         String type = response.getHeaderString(HttpHeaders.CONTENT_TYPE);
 
         if (body != null && body.length() <= 100 && type != null && type.startsWith("text/plain")) {
