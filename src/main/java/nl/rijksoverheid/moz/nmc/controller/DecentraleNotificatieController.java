@@ -71,7 +71,7 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
                 Ontvanger.email(request.getEmailAdres()),
                 null,
                 null,
-                BerichtType.vanNaam(request.getBerichtType()).getTemplateId(),
+                BerichtType.vanNaam(request.getBerichtType()),
                 request.getBerichtgegevens());
     }
 }

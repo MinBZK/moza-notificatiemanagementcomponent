@@ -29,16 +29,18 @@ public class AannameService {
     private final DienstverlenerRepository dienstverlenerRepository;
     private final NotificatieRepository notificatieRepository;
     private final TaakRepository taakRepository;
+    private final Verzendbeleid verzendbeleid;
 
     public AannameService(Overgangsfunctie overgangsfunctie, Sleutelbeheer sleutelbeheer, DvProvider dvProvider,
                           DienstverlenerRepository dienstverlenerRepository, NotificatieRepository notificatieRepository,
-                          TaakRepository taakRepository) {
+                          TaakRepository taakRepository, Verzendbeleid verzendbeleid) {
         this.overgangsfunctie = overgangsfunctie;
         this.sleutelbeheer = sleutelbeheer;
         this.dvProvider = dvProvider;
         this.dienstverlenerRepository = dienstverlenerRepository;
         this.notificatieRepository = notificatieRepository;
         this.taakRepository = taakRepository;
+        this.verzendbeleid = verzendbeleid;
     }
 
     /**
@@ -55,8 +57,10 @@ public class AannameService {
         notificatie.bewaarVersleuteldeGegevens(
                 sleutelbeheer.versleutel(notificatie.getId(), opdracht.ontvanger(), opdracht.berichtgegevens()));
         // Op de notificatie en niet in de taak, zodat ook een later geplande verzendtaak kan versturen.
-        notificatie.bewaarVerzendgegevens(opdracht.templateId(), opdracht.regie().name(), opdracht.dienstverlener(),
-                opdracht.dienst());
+        notificatie.bewaarVerzendgegevens(opdracht.berichtType().getTemplateId(), opdracht.regie().name(),
+                opdracht.dienstverlener(), opdracht.dienst());
+        notificatie.bewaarBeleid(opdracht.berichtType().name(),
+                OffsetDateTime.now(ZoneOffset.UTC).plus(verzendbeleid.geldigheid(opdracht.berichtType())));
         overgangsfunctie.neemAan(notificatie);
 
         taakRepository.persist(new Taak(TaakSoort.VERZENDEN, dvId, notificatie.getId(),
