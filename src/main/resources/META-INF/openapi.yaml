@@ -328,9 +328,9 @@ components:
         type:
           type: string
           description: >-
-            `nl.overheid.moz.notificatie.status.` gevolgd door de nieuwe status, bijvoorbeeld
-            `nl.overheid.moz.notificatie.status.bezorgd`.
-          example: nl.overheid.moz.notificatie.status.bezorgd
+            `nl.mijnoverheidzakelijk.nmc.notificatie.status.` gevolgd door de nieuwe status, bijvoorbeeld
+            `nl.mijnoverheidzakelijk.nmc.notificatie.status.bezorgd`.
+          example: nl.mijnoverheidzakelijk.nmc.notificatie.status.bezorgd
         source:
           type: string
           format: uri-reference

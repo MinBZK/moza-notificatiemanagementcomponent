@@ -12,7 +12,7 @@ import java.util.Objects;
  *
  * @param van    de status vóór de overgang
  * @param naar   de status na de overgang
- * @param reden  de reden bij een terminale status, anders null
+ * @param reden  de reden bij een eindstatus, anders null
  * @param versie het volgnummer van de overgang, gelijk aan {@code sequence} in de envelop
  */
 // Een leeg veld gaat niet als null over de lijn: het contract kent van en reden alleen als enumwaarde.

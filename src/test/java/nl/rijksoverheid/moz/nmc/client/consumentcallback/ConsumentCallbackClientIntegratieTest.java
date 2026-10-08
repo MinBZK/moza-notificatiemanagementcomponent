@@ -131,7 +131,7 @@ class ConsumentCallbackClientIntegratieTest {
 
     private static NotificatieStatusEvent event(UUID id, NotificatieStatus naar) {
         return new NotificatieStatusEvent("1.0", UUID.randomUUID(),
-                "nl.overheid.moz.notificatie.status." + naar.toApiValue(),
+                "nl.mijnoverheidzakelijk.nmc.notificatie.status." + naar.toApiValue(),
                 "/api/nmc/v1/notificaties/" + id, id.toString(), OffsetDateTime.now(ZoneOffset.UTC),
                 "application/json", "3", "Integer",
                 new NotificatieData(NotificatieStatus.VERZONDEN, naar, Reden.TECHNISCH, 3L));

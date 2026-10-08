@@ -26,7 +26,7 @@ public class ConsumentCallbackAdapter {
 
     private static final int MAX_POGINGEN = 3;
 
-    private static final String TYPE_PREFIX = "nl.overheid.moz.notificatie.status.";
+    private static final String TYPE_PREFIX = "nl.mijnoverheidzakelijk.nmc.notificatie.status.";
 
     // Begrenst het aflopen van een eventueel kringvormige oorzakenketen.
     private static final int MAX_OORZAAKDIEPTE = 20;
@@ -42,14 +42,15 @@ public class ConsumentCallbackAdapter {
 
     // Een fout aan de kant van de Dienstverlener wordt hier gelogd en niet gegooid. Elke andere fout
     // ontsnapt naar StatusUpdateVerzender, die hem op ERROR logt.
-    public void stuurStatusUpdate(StatusUpdateOpdracht opdracht) {
-        if (opdracht.callbackUrl() == null) {
-            Log.infof("Geen callback-URL geconfigureerd voor notificatie %s — statusupdate niet verstuurd", opdracht.notificatieId());
+    public void stuurStatusUpdate(StatusUpdateOpdracht statusUpdateOpdracht) {
+        if (statusUpdateOpdracht.callbackUrl() == null) {
+            Log.infof("Geen callback-URL geconfigureerd voor notificatie %s — statusupdate niet verstuurd",
+                    statusUpdateOpdracht.notificatieId());
 
             return;
         }
 
-        String callbackUrl = opdracht.callbackUrl();
+        String callbackUrl = statusUpdateOpdracht.callbackUrl();
         ConsumentCallbackClient client;
         try {
             client = clientFactory.maakClient(callbackUrl);
@@ -57,7 +58,7 @@ public class ConsumentCallbackAdapter {
             // Buiten de retry-lus: een client die niet te bouwen is, faalt permanent. Andere
             // RuntimeExceptions ontsnappen bewust naar StatusUpdateVerzender.
             Log.errorf(e, "Callback-client kon niet worden gebouwd voor notificatie %s (url=%s) — "
-                    + "statusupdate niet verstuurd", opdracht.notificatieId(), callbackUrl);
+                    + "statusupdate niet verstuurd", statusUpdateOpdracht.notificatieId(), callbackUrl);
 
             return;
         }
@@ -65,35 +66,36 @@ public class ConsumentCallbackAdapter {
         NotificatieStatusEvent event = new NotificatieStatusEvent(
                 "1.0",
                 UUID.randomUUID(),
-                TYPE_PREFIX + opdracht.naar().toApiValue(),
-                "/api/nmc/v1/notificaties/" + opdracht.notificatieId(),
-                opdracht.notificatieId().toString(),
-                opdracht.tijdstip(),
+                TYPE_PREFIX + statusUpdateOpdracht.naar().toApiValue(),
+                "/api/nmc/v1/notificaties/" + statusUpdateOpdracht.notificatieId(),
+                statusUpdateOpdracht.notificatieId().toString(),
+                statusUpdateOpdracht.tijdstip(),
                 "application/json",
                 // De sequence-extensie van CloudEvents schrijft een string voor.
-                String.valueOf(opdracht.versie()),
+                String.valueOf(statusUpdateOpdracht.versie()),
                 "Integer",
-                new NotificatieData(opdracht.van(), opdracht.naar(), opdracht.reden(), opdracht.versie()));
+                new NotificatieData(statusUpdateOpdracht.van(), statusUpdateOpdracht.naar(),
+                        statusUpdateOpdracht.reden(), statusUpdateOpdracht.versie()));
 
         try {
-            verstuurMetHerpogingen(client, event, opdracht);
+            verstuurMetHerpogingen(client, event, statusUpdateOpdracht);
         } finally {
-            sluit(client, opdracht);
+            sluit(client, statusUpdateOpdracht);
         }
     }
 
     // Een fout bij het sluiten zegt niets over de aflevering; doorgooien zou een afgeleverde update
     // in StatusUpdateVerzender als verloren laten melden.
-    private static void sluit(ConsumentCallbackClient client, StatusUpdateOpdracht opdracht) {
+    private static void sluit(ConsumentCallbackClient client, StatusUpdateOpdracht statusUpdateOpdracht) {
         try {
             client.close();
         } catch (RuntimeException e) {
-            Log.warnf(e, "Callback-client voor notificatie %s niet netjes gesloten", opdracht.notificatieId());
+            Log.warnf(e, "Callback-client voor notificatie %s niet netjes gesloten", statusUpdateOpdracht.notificatieId());
         }
     }
 
     private void verstuurMetHerpogingen(ConsumentCallbackClient client, NotificatieStatusEvent event,
-                                        StatusUpdateOpdracht opdracht) {
+                                        StatusUpdateOpdracht statusUpdateOpdracht) {
         long wachtMs = initieleWachtMs;
         for (int poging = 1; ; poging++) {
             RuntimeException fout;
@@ -107,7 +109,7 @@ public class ConsumentCallbackAdapter {
                 // De rest-client pakt elke fout in als ProcessingException, ook een fout in de NMC zelf;
                 // alleen een transportfout ligt aan de Dienstverlener.
                 if (heeftOorzaak(e, InterruptedException.class)) {
-                    meldOnderbroken(e, opdracht, poging);
+                    meldOnderbroken(e, statusUpdateOpdracht, poging);
 
                     return;
                 }
@@ -125,18 +127,19 @@ public class ConsumentCallbackAdapter {
             if (poging == MAX_POGINGEN) {
                 Log.errorf(fout, "Consument-callback naar %s mislukt na %d pogingen — statusupdate %s voor "
                         + "notificatie %s niet afgeleverd aan de Dienstverlener; er volgt geen automatische "
-                        + "herpoging", opdracht.callbackUrl(), MAX_POGINGEN, opdracht.naar(), opdracht.notificatieId());
+                        + "herpoging", statusUpdateOpdracht.callbackUrl(), MAX_POGINGEN, statusUpdateOpdracht.naar(),
+                        statusUpdateOpdracht.notificatieId());
 
                 return;
             }
 
             Log.warnf(fout, "Consument-callback naar %s voor notificatie %s (status %s) mislukt (poging %d/%d) "
-                    + "— nieuwe poging na %dms", opdracht.callbackUrl(), opdracht.notificatieId(),
-                    opdracht.naar(), poging, MAX_POGINGEN, wachtMs);
+                    + "— nieuwe poging na %dms", statusUpdateOpdracht.callbackUrl(), statusUpdateOpdracht.notificatieId(),
+                    statusUpdateOpdracht.naar(), poging, MAX_POGINGEN, wachtMs);
             try {
                 Thread.sleep(wachtMs);
             } catch (InterruptedException e) {
-                meldOnderbroken(e, opdracht, poging);
+                meldOnderbroken(e, statusUpdateOpdracht, poging);
 
                 return;
             }
@@ -145,10 +148,11 @@ public class ConsumentCallbackAdapter {
     }
 
     // ERROR: de statusupdate is hiermee definitief verloren.
-    private static void meldOnderbroken(Exception e, StatusUpdateOpdracht opdracht, int poging) {
+    private static void meldOnderbroken(Exception e, StatusUpdateOpdracht statusUpdateOpdracht, int poging) {
         Thread.currentThread().interrupt();
         Log.errorf(e, "Consument-callback naar %s onderbroken bij poging %d — statusupdate %s voor notificatie %s "
-                + "niet afgeleverd", opdracht.callbackUrl(), poging, opdracht.naar(), opdracht.notificatieId());
+                + "niet afgeleverd", statusUpdateOpdracht.callbackUrl(), poging, statusUpdateOpdracht.naar(),
+                statusUpdateOpdracht.notificatieId());
     }
 
     @SafeVarargs
