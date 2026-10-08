@@ -123,8 +123,8 @@ public class Notificatie {
      * Zet status en reden. Alleen voor Overgangsfunctie, die de rij vergrendelt, de overgang toetst en
      * het event schrijft.
      */
-    public void pasOvergangToe(NotificatieStatus naar, Reden reden) {
-        this.status = Objects.requireNonNull(naar, "naar is verplicht");
+    public void pasOvergangToe(NotificatieStatus status, Reden reden) {
+        this.status = Objects.requireNonNull(status, "status is verplicht");
         this.reden = reden;
     }
 
