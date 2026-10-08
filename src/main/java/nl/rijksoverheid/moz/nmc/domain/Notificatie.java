@@ -4,7 +4,6 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.NamedQuery;
 import jakarta.persistence.Version;
@@ -28,8 +27,9 @@ public class Notificatie {
     public static final String ZOEK_KANDIDATEN = "Notificatie.zoekKandidaten";
     public static final String VERWIJDER_OP_ID = "Notificatie.verwijderOpId";
 
+    // Toegekend bij het aanmaken en niet bij de persist: de versleutelde velden zijn aan deze id
+    // gebonden en worden vóór de eerste opslag gezet.
     @Id
-    @GeneratedValue
     private UUID id;
 
     // Loopt per overgang met één op en is het volgnummer van het bijbehorende event; een
@@ -52,12 +52,25 @@ public class Notificatie {
     @Column(name = "laatste_status_update", nullable = false)
     private OffsetDateTime laatsteStatusUpdate;
 
+    @Column(name = "ontvanger_versleuteld")
+    private byte[] ontvangerVersleuteld;
+
+    @Column(name = "personalisation_versleuteld")
+    private byte[] personalisationVersleuteld;
+
+    @Column(name = "sleutel_gewrapt")
+    private byte[] sleutelGewrapt;
+
+    @Column(name = "kek_versie")
+    private Integer kekVersie;
+
     protected Notificatie() {
         // Voor JPA
     }
 
     /** Een nieuwe notificatie, nog zonder status; {@code Overgangsfunctie#neemAan} slaat hem op. */
     public Notificatie(String callbackUrl) {
+        this.id = UUID.randomUUID();
         this.callbackUrl = callbackUrl;
     }
 
@@ -93,5 +106,17 @@ public class Notificatie {
         this.status = Objects.requireNonNull(status, "status is verplicht");
         this.reden = reden;
         this.laatsteStatusUpdate = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+    }
+
+    public void bewaarVersleuteldeGegevens(VersleuteldeGegevens gegevens) {
+        Objects.requireNonNull(gegevens, "gegevens is verplicht");
+        this.ontvangerVersleuteld = gegevens.ontvangerVersleuteld();
+        this.personalisationVersleuteld = gegevens.personalisationVersleuteld();
+        this.sleutelGewrapt = gegevens.sleutelGewrapt();
+        this.kekVersie = gegevens.kekVersie();
+    }
+
+    public VersleuteldeGegevens getVersleuteldeGegevens() {
+        return new VersleuteldeGegevens(ontvangerVersleuteld, personalisationVersleuteld, sleutelGewrapt, kekVersie);
     }
 }

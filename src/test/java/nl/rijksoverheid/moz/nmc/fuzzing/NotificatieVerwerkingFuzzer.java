@@ -48,9 +48,13 @@ import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.controller.NotifyNLCallbackController;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.service.KekProvider;
 import nl.rijksoverheid.moz.nmc.service.NotificatieService;
+import nl.rijksoverheid.moz.nmc.service.Sleutelbeheer;
 import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
 
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
 import java.net.URLEncoder;
@@ -166,6 +170,21 @@ public class NotificatieVerwerkingFuzzer {
         }
     }
 
+    private static final class VasteKekProvider implements KekProvider {
+
+        private static final SecretKey KEK = new SecretKeySpec(new byte[32], "AES");
+
+        @Override
+        public int huidigeVersie() {
+            return 1;
+        }
+
+        @Override
+        public Optional<SecretKey> kek(int versie) {
+            return versie == 1 ? Optional.of(KEK) : Optional.empty();
+        }
+    }
+
     private static final CentraleNotificatieController centraleController;
     private static final DecentraleNotificatieController decentraleController;
     private static final NotifyNLCallbackController callbackController;
@@ -179,7 +198,8 @@ public class NotificatieVerwerkingFuzzer {
                 new NotifyNLVerzendAdapter(notifyApiStandIn(), new NotifyNLJwtFactory(),
                         new NotifyNLAuthorizationHolder(), Optional.of(API_KEY)),
                 pogingen,
-                overgangsfunctie);
+                overgangsfunctie,
+                new Sleutelbeheer(new VasteKekProvider(), new ObjectMapper()));
         ReceiptVerwerker receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
                 // No wait between callback retries.
                 new DirecteStatusUpdateEvent(new ConsumentCallbackAdapter(url -> callbackClientStandIn(), 0)));
@@ -511,13 +531,10 @@ public class NotificatieVerwerkingFuzzer {
     /** In-memory stand-in for the Panache repository; column constraints are not enforced. */
     private static final class GeheugenNotificatieRepository extends NotificatieRepository {
 
-        private static final Field ID_VELD = idVeld();
-
         private final Map<UUID, Notificatie> opgeslagen = new HashMap<>();
 
         @Override
         public void persist(Notificatie notificatie) {
-            zetId(notificatie, new UUID(0, opgeslagen.size() + 1L));
             opgeslagen.put(notificatie.getId(), notificatie);
         }
 
@@ -538,25 +555,6 @@ public class NotificatieVerwerkingFuzzer {
         @Override
         public Notificatie findById(UUID id) {
             return opgeslagen.get(id);
-        }
-
-        private static void zetId(Notificatie notificatie, UUID id) {
-            try {
-                ID_VELD.set(notificatie, id);
-            } catch (IllegalAccessException e) {
-                throw new IllegalStateException(e);
-            }
-        }
-
-        private static Field idVeld() {
-            try {
-                // JPA assigns the generated id on persist; the entity has no setter for it.
-                Field veld = Notificatie.class.getDeclaredField("id");
-                veld.setAccessible(true);
-                return veld;
-            } catch (NoSuchFieldException e) {
-                throw new IllegalStateException(e);
-            }
         }
     }
 }
