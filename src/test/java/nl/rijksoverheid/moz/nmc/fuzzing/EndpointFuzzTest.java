@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.fuzzing;
 
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -90,7 +91,7 @@ public class EndpointFuzzTest {
             eventRepository.deleteAll();
             notificatieRepository.deleteAll();
             for (UUID referentie : BEKENDE_NOTIFY_REFERENTIES) {
-                Notificatie notificatie = new Notificatie(null);
+                Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, null);
                 overgangsfunctie.neemAan(notificatie);
                 Poging poging = new Poging(notificatie.getId(), 1);
                 pogingRepository.persist(poging);

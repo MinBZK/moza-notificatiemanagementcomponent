@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
@@ -210,7 +211,7 @@ class ReceiptVerwerkerTest {
     private UUID verzondenNotificatie(String callbackUrl) {
         UUID notifyId = UUID.randomUUID();
         QuarkusTransaction.requiringNew().run(() -> {
-            Notificatie notificatie = new Notificatie(callbackUrl);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, callbackUrl);
             overgangsfunctie.neemAan(notificatie);
             Poging poging = new Poging(notificatie.getId(), 1);
             pogingRepository.persist(poging);
