@@ -12,12 +12,12 @@ public enum NotificatieStatus {
     AANGENOMEN,
     IN_VERZENDING,
     VERZONDEN,
-    // Niet terminaal: NotifyNL kan tot zeven dagen na delivered nog een faalreceipt sturen.
+    // Geen eindstatus: NotifyNL kan tot zeven dagen na delivered nog een faalreceipt sturen.
     BEZORGD,
     DEFINITIEF_BEZORGD,
     NIET_BEZORGBAAR,
     TECHNISCH_MISLUKT,
-    // Terminaal, maar een later binnengekomen receipt mag hem nog corrigeren.
+    // Eindstatus, maar een later binnengekomen receipt mag hem nog corrigeren.
     BEZORGSTATUS_ONBEKEND,
     VERLOPEN,
     GEANNULEERD;
