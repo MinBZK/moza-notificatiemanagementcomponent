@@ -158,7 +158,7 @@ class CentraleNotificatieControllerTest {
                 .then()
                 .statusCode(429)
                 .contentType("application/problem+json")
-                .body("type", equalTo("https://mijnoverheidzakelijk.nl/problemen/quotum-overschreden"));
+                .body("type", equalTo("https://mijnoverheidzakelijk.nl/nmc/problemen/quotum-overschreden"));
     }
 
     private static String aanvraag(String berichtType, String extraVeld) {

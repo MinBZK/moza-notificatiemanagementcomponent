@@ -262,6 +262,9 @@
                             </configOptions>
                             <importMappings>
                                 <importMapping>IdentificatieType=nl.rijksoverheid.moz.nmc.controller.IdentificatieType</importMapping>
+                                <!-- De feed levert hetzelfde CloudEvent als de callback; het record daarvan is
+                                     de ene bron voor beide. -->
+                                <importMapping>NotificatieStatusEvent=nl.rijksoverheid.moz.nmc.client.consumentcallback.NotificatieStatusEvent</importMapping>
                             </importMappings>
                             <generateSupportingFiles>false</generateSupportingFiles>
                             <generateApiTests>false</generateApiTests>
