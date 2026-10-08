@@ -11,12 +11,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
 /**
- * Handler voor de soort WISSEN in de testsuite; er is nog geen echte. Het gedrag is per test in te
+ * Handler voor de soort ONGELDIG_MELDEN in de testsuite; er is nog geen echte, en de worker staat
+ * maar één handler per soort toe. Het gedrag is per test in te
  * stellen. De worker-lus staat in tests uit, dus deze handler draait alleen als een test een ronde
  * aanroept.
  */
 @ApplicationScoped
-public class WisTestHandler implements TaakHandler {
+public class TestTaakHandler implements TaakHandler {
 
     static final AtomicReference<BiFunction<Taak, Lease, TaakUitkomst>> GEDRAG =
             new AtomicReference<>((taak, lease) -> TaakUitkomst.afgerond());
@@ -37,7 +38,7 @@ public class WisTestHandler implements TaakHandler {
 
     @Override
     public TaakSoort soort() {
-        return TaakSoort.WISSEN;
+        return TaakSoort.ONGELDIG_MELDEN;
     }
 
     @Override

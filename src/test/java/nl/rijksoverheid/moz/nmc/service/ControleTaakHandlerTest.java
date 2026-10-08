@@ -81,7 +81,7 @@ class ControleTaakHandlerTest {
         assertEquals(TaakSoort.VERZENDEN, perNotificatie.get(verzondenZonderPoging).getSoort(),
                 "een geplande poging zonder NotifyNL-id is een herverzending in uitvoering");
         assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, perNotificatie.get(bezorgd).getSoort());
-        assertTrue(!perNotificatie.containsKey(terminaal), "een terminale notificatie krijgt geen taak");
+        assertTrue(!perNotificatie.containsKey(terminaal), "een terminale notificatie krijgt geen taak van de controletaak");
         assertEquals(NotificatieFixtures.DV_ID, perNotificatie.get(aangenomen).getDvId());
 
         Taak controle = QuarkusTransaction.requiringNew().call(() -> taakRepository
@@ -112,6 +112,20 @@ class ControleTaakHandlerTest {
         taakWorker.verwerk(TaakSoort.CONTROLE);
 
         assertTrue(perNotificatie().get(id).getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusDays(7)));
+    }
+
+    // De controletaak plant zichzelf zijn hele levensduur opnieuw; fouten verspreid over die tijd mogen
+    // niet optellen tot mislukt.
+    @Test
+    void controle_geslaagdeRonde_zetDePogingenTerug() {
+        QuarkusTransaction.requiringNew().run(() -> taakRepository.getEntityManager()
+                .createNativeQuery("UPDATE taak SET pogingen = 1 WHERE soort = 'CONTROLE'").executeUpdate());
+
+        taakWorker.verwerk(TaakSoort.CONTROLE);
+
+        Taak controle = QuarkusTransaction.requiringNew().call(() -> taakRepository.find("soort", TaakSoort.CONTROLE).singleResult());
+        assertEquals(0, controle.getPogingen());
+        assertEquals(TaakStatus.OPEN, controle.getStatus());
     }
 
     @Test
@@ -208,8 +222,9 @@ class ControleTaakHandlerTest {
         });
     }
 
+    // Zonder de wistaak die de overgangsfunctie bij elke terminale status plant.
     private Map<UUID, Taak> perNotificatie() {
-        List<Taak> taken = QuarkusTransaction.requiringNew().call(() -> taakRepository.listAll());
+        List<Taak> taken = QuarkusTransaction.requiringNew().call(() -> taakRepository.list("soort != ?1", TaakSoort.WISSEN));
         java.util.Map<UUID, Taak> map = new java.util.HashMap<>();
 
         for (Taak taak : taken) {

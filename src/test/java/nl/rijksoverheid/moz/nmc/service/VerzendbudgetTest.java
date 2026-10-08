@@ -65,6 +65,20 @@ class VerzendbudgetTest {
     }
 
     @Test
+    void ruimOpVoor_verwijdertAlleenOudereTijdvakken() {
+        neem(BudgetDoel.VERZENDEN, 1);
+        when(klok.instant()).thenReturn(TIJDVAK_B);
+        neem(BudgetDoel.VERZENDEN, 1);
+
+        int verwijderd = QuarkusTransaction.requiringNew()
+                .call(() -> verzendbudget.ruimOpVoor(TIJDVAK_B.atOffset(ZoneOffset.UTC)));
+
+        assertEquals(1, verwijderd);
+        assertEquals(1, ((Number) QuarkusTransaction.requiringNew().call(() -> entityManager
+                .createNativeQuery("SELECT COUNT(*) FROM verzendbudget").getSingleResult())).intValue());
+    }
+
+    @Test
     void geefTerug_navraag_komtTerugInHetAandeelVanDeNavraag() {
         Verzendbudget.Genomen genomen = QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.NAVRAAG, 5));
 

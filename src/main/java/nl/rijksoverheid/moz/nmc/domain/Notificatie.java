@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
-import jakarta.persistence.NamedQuery;
 import jakarta.persistence.Version;
 
 import java.time.OffsetDateTime;
@@ -14,18 +13,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
 
-// De queries staan als @NamedQuery en niet in de repository, omdat Hibernate ze dan bij het opstarten
-// controleert in plaats van bij de eerste aanroep — die valt voor de retentiejob midden in de nacht.
-// JPA kent geen andere plek dan de entiteit; uitvoeren gebeurt uitsluitend in NotificatieRepository.
-@NamedQuery(name = Notificatie.ZOEK_KANDIDATEN,
-        query = "SELECT new nl.rijksoverheid.moz.nmc.repository.Kandidaat(n.id, n.status, n.laatsteStatusUpdate) "
-                + "FROM Notificatie n WHERE n.id IN :ids ORDER BY n.laatsteStatusUpdate")
-@NamedQuery(name = Notificatie.VERWIJDER_OP_ID, query = "DELETE FROM Notificatie n WHERE n.id IN :ids")
 @Entity
 public class Notificatie {
-
-    public static final String ZOEK_KANDIDATEN = "Notificatie.zoekKandidaten";
-    public static final String VERWIJDER_OP_ID = "Notificatie.verwijderOpId";
 
     // Toegekend bij het aanmaken en niet bij de persist: de versleutelde velden zijn aan deze id
     // gebonden en worden vóór de eerste opslag gezet.
@@ -49,24 +38,27 @@ public class Notificatie {
     @Column(length = 32)
     private Reden reden;
 
-    // Tijdstip van de laatste statuswijziging op de eigen klok.
-    @Column(name = "laatste_status_update", nullable = false)
-    private OffsetDateTime laatsteStatusUpdate;
+    // Tijdstip van de laatste overgang naar een terminale status, op de eigen klok; leeg zolang de
+    // status niet terminaal is. Wistermijn en bewaartermijn lopen vanaf hier.
+    @Column(name = "terminaal_op")
+    private OffsetDateTime terminaalOp;
 
     // Het quotum per dienstverlener telt op dit tijdstip.
     @Column(name = "aangenomen_op", nullable = false, updatable = false)
     private OffsetDateTime aangenomenOp;
 
-    @Column(name = "ontvanger_versleuteld")
+    // Niet updatable: wissen en herwrappen wijzigen deze kolommen met native SQL zonder de versie op
+    // te hogen, en een overgang mag ze daarna niet met een eerder gelezen waarde terugschrijven.
+    @Column(name = "ontvanger_versleuteld", updatable = false)
     private byte[] ontvangerVersleuteld;
 
-    @Column(name = "personalisation_versleuteld")
+    @Column(name = "personalisation_versleuteld", updatable = false)
     private byte[] personalisationVersleuteld;
 
-    @Column(name = "sleutel_gewrapt")
+    @Column(name = "sleutel_gewrapt", updatable = false)
     private byte[] sleutelGewrapt;
 
-    @Column(name = "kek_versie")
+    @Column(name = "kek_versie", updatable = false)
     private Integer kekVersie;
 
     // Wat elke verzendtaak nodig heeft; geen persoonsgegevens.
@@ -125,8 +117,9 @@ public class Notificatie {
         return reden;
     }
 
-    public OffsetDateTime getLaatsteStatusUpdate() {
-        return laatsteStatusUpdate;
+    /** Wanneer de notificatie terminaal werd; leeg zolang de status niet terminaal is. */
+    public OffsetDateTime getTerminaalOp() {
+        return terminaalOp;
     }
 
     /**
@@ -136,7 +129,9 @@ public class Notificatie {
     public void pasOvergangToe(NotificatieStatus status, Reden reden) {
         this.status = Objects.requireNonNull(status, "status is verplicht");
         this.reden = reden;
-        this.laatsteStatusUpdate = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        this.terminaalOp = naar.isTerminaal()
+                ? OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS)
+                : null;
     }
 
     public void bewaarVersleuteldeGegevens(VersleuteldeGegevens gegevens) {

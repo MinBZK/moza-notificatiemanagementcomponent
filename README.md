@@ -24,9 +24,10 @@ asynchrone bezorgstatus:
    statusovergang uit; elke overgang is een event in het eventlog. De Dienstverlener
    leest die events als **CloudEvents NL GOV** uit de eventfeed, en heeft hij in het
    register een webhook, dan levert een terugkoppeltaak dezelfde events daarheen. Het
-   slagen van die levering heeft geen invloed op wat de NMC vastlegt. Een retentiejob
-   verwijdert de notificatie pas nadat `notificatie.retentie.bewaartermijn` (zie
-   `application.properties`) verstreken is sinds de laatste statusovergang.
+   slagen van die levering heeft geen invloed op wat de NMC vastlegt. Een wistaak
+   wist de sleutel van de notificatie `nmc.wissen.termijn` na de terminale status;
+   de onderhoudstaak verwijdert de notificatie na `nmc.afleverbewijs.bewaartermijn`
+   (zie `application.properties`).
 
 Dit is het **centraal profiel**-scenario (zie "De twee assen" hieronder),
 waarbij de NMC zelf de contactgegevens opzoekt.
@@ -154,7 +155,8 @@ Geïmplementeerde componenten zijn vetgedrukt; de rest is toekomstig ontwerp.
 | **Terugkoppeltaak** | Taakhandler (`TerugkoppelTaakHandler`, `WebhookDispatcher`) | Levert per dienstverlener de events vanaf de leverpositie als CloudEvents-batch aan de webhook uit het register, met een ondertekende bearer-JWT. |
 | **Consument-callback-adapter** | Webhook-client (CloudEvents NL GOV) | Doet de POST naar de webhook: één poging, zonder herhaling. |
 | **Verzendverwerker** | Worker (`TaakWorker`, `TaakClaimer`) | Claimt taken uit de takentabel met `SKIP LOCKED`, verdeeld over dienstverleners en binnen het verzendbudget, en geeft ze aan de handler per soort. |
-| **notificatiedatabase** | PostgreSQL | Slaat notificaties met hun status, de verzendpogingen, het eventlog, de takentabel, het verzendbudget en het dienstverlenerregister op; een retentiejob verwijdert notificaties `notificatie.retentie.bewaartermijn` na de laatste overgang. |
+| **Wistaak en onderhoudstaak** | Taakhandlers (`WisTaakHandler`, `OnderhoudTaakHandler`, `Partitiebeheer`) | Wissen de sleutel per notificatie na de wistermijn; maken en verwijderen eventpartities, herwrappen sleutels na een KEK-rotatie en verwijderen notificaties na de bewaartermijn van het afleverbewijs. |
+| **notificatiedatabase** | PostgreSQL | Slaat notificaties met hun status, de verzendpogingen, het eventlog, de takentabel, het verzendbudget en het dienstverlenerregister op. |
 | **Decentrale-regie-API** | REST (controller) | Inbound endpoint voor het decentraal profiel: intake op het meegegeven e-mailadres, zonder Profielservice-lookup. |
 | Adres-adapter | Client | Haalt een postadres op bij KvK Handelsregister of BRP als fallback bij contactherstel. |
 | Contactherstel-coordinator | Component | Coördineert de contactherselstroom bij onbereikbaarheid; initieert een nieuwe verzendpoging via een ander kanaal en meldt dit aan de Contactherstel-dienst. |
@@ -185,7 +187,8 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
   zodat het per partitie kan worden opgeruimd.
 - **`dienstverlener`** is het register uit de onboarding; nu één rij uit de
   migratie, waarvan `dv_id` op elke notificatie en elk event staat. De optionele
-  `webhook_url` en `webhook_max_mislukkingen` zet beheer; een registratie-API is er nog niet.
+  `webhook_url`, `webhook_max_mislukkingen` en `max_cursorleeftijd` zet beheer; een
+  registratie-API is er nog niet.
 - **`taak`** draagt de bijwerkingen (verzenden, receipts verwerken, navraag,
   vaststellen, terugkoppelen, ongeldig melden, wissen, controle, onderhoud) met
   `due` als timer, een lease, een claim-epoch en een pogingenteller; per soort
@@ -214,30 +217,41 @@ gelijk aan `Overgangsregels`.
 Twee tijdstippen blijven uit elkaar: het tijdstip uit de receipt
 (`completed_at`, met `sent_at` en `created_at` als terugval) staat op de poging
 en bepaalt de volgorde van receipts; het tijdstip op het event is de
-registratietijd op de eigen klok. `laatste_status_update` op `notificatie` is het
-tijdstip van de laatste statuswijziging; de retentiejob selecteert erop.
+registratietijd op de eigen klok. `terminaal_op` op `notificatie` is het tijdstip
+van de laatste overgang naar een terminale status (leeg zolang de status niet
+terminaal is); wissen en verwijderen varen erop.
 
-Die retentiejob (`NotificatieRetentieScheduler`) verwijdert een `Notificatie`
-met zijn pogingen zodra die laatste statuswijziging ouder is dan de
-geconfigureerde `notificatie.retentie.bewaartermijn` (zie
-`application.properties`), ongeacht de status; de events blijven staan. De
-termijn staat op **7 dagen**, conform de afspraak met de Belastingdienst, en
-heeft geen default in de code: is hij niet gezet, dan faalt de applicatie bij
-het opstarten. De job draait dagelijks om 03:00 Europese/Amsterdamse tijd
-(`notificatie.retentie.cron`) en verwijdert in begrensde batches, elk geclaimd
-met `FOR UPDATE SKIP LOCKED`, zodat meerdere pods de achterstand onder elkaar
-verdelen. Een notificatie die verloopt zonder uitkomst (niet terminaal en niet
-`bezorgd`) wordt per notificatie op WARN gemeld, in dezelfde transactie als de
-verwijdering. De regel gebruikt `key=value` zodat er een dashboard op te bouwen
-is:
+### Wissen en bewaren
 
-```
-Retentiejob: notificatie verlopen zonder eindstatus notificatieId=... status=VERZONDEN laatsteStatusUpdate=...
-```
+- **Wistaak.** Elke overgang naar een terminale status plant via `Overgangsfunctie`
+  een `WISSEN`-taak op `terminaal_op` plus `nmc.wissen.termijn` (7 dagen), of verzet
+  de open wistaak daarheen; een correctie van `bezorgstatus-onbekend` naar `bezorgd`
+  verwijdert hem. `WisTaakHandler` bepaalt de termijn opnieuw onder de
+  rijvergrendeling en zet dan `sleutel_gewrapt` en `kek_versie` op leeg, zonder
+  overgang en zonder de versie te verhogen. Daarna zijn ontvanger en personalisation
+  niet meer te ontsleutelen en is de rij pseudoniem. Uit back-ups verdwijnt de
+  sleutel pas met het verlopen van die back-ups.
+- **Onderhoudstaak.** `OnderhoudTaakHandler` draait elk `nmc.onderhoud.interval` als
+  taak per systeem (de eerste rij komt uit migratie V17) en werkt in batches van
+  `nmc.onderhoud.batch` met elk een eigen transactie:
+  - maakt de volgende partitie van `event` aan zodra de lopende voor 80% is gevuld
+    (`nmc.onderhoud.partitie-omvang` transactie-ids per partitie, met `nmc.onderhoud.partitie-marge`
+    als afstand als het onderhoud achterliep);
+  - herwrapt sleutels onder een oudere `kek_versie` met de huidige KEK, zonder de
+    gegevens opnieuw te versleutelen;
+  - verwijdert notificaties (met pogingen en taken) waarvan `terminaal_op` ouder is
+    dan `nmc.afleverbewijs.bewaartermijn`;
+  - verwijdert eventpartities waarvan het jongste event ouder is dan die termijn en
+    waar geen bevestiging of leverpositie meer in of onder wijst. Een cursor ouder
+    dan de maximale cursorleeftijd (`dienstverlener.max_cursorleeftijd`, anders
+    `nmc.feed.max-cursorleeftijd`) telt niet mee; de dienstverlener krijgt daarna 410
+    en begint opnieuw bij het oudste event.
 
-De detailregels zijn begrensd op 100 per run; het totaal in de afsluitende
-samenvatting is dat niet. De job is een tussenstand: de wistaak en
-onderhoudstaak uit ADR 0024 vervangen hem.
+De wettelijke bewaartermijn van het afleverbewijs is nog niet vastgesteld; tot die
+tijd is `nmc.afleverbewijs.bewaartermijn` een configuratiewaarde per omgeving, met
+365 dagen als default. De databaserol heeft sinds V17 een `statement_timeout`,
+`transaction_timeout` en `idle_in_transaction_session_timeout`, omdat elke lopende
+schrijftransactie het watermerk van de feed vasthoudt.
 
 ## API
 

@@ -92,6 +92,28 @@ public class Sleutelbeheer {
         return leesJson(json, PERSONALISATION_TYPE, "personalisation");
     }
 
+    /**
+     * Wrapt de sleutel van een notificatie opnieuw met de huidige KEK. De versleutelde gegevens blijven
+     * ongewijzigd, want de sleutel zelf verandert niet.
+     *
+     * @return de nieuw gewrapte sleutel; de KEK-versie is {@link #huidigeKekVersie()}
+     * @throws SleutelGewistException     als de sleutel gewist is
+     * @throws OntsleutelenMisluktException als de oude KEK-versie ontbreekt of niet bij de sleutel past
+     */
+    public byte[] herwrap(UUID notificatieId, byte[] sleutelGewrapt, int kekVersie) {
+        SecretKey sleutel = pakUit(notificatieId, new VersleuteldeGegevens(null, null, sleutelGewrapt, kekVersie));
+
+        try {
+            return wrap(notificatieId, sleutel, kekProvider.huidigeVersie());
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Herwrappen van de sleutel mislukt", e);
+        }
+    }
+
+    public int huidigeKekVersie() {
+        return kekProvider.huidigeVersie();
+    }
+
     byte[] wrap(UUID notificatieId, SecretKey sleutel, int kekVersie) throws GeneralSecurityException {
         return versleutelVeld(kek(kekVersie), aadSleutel(kekVersie, notificatieId), sleutel.getEncoded());
     }

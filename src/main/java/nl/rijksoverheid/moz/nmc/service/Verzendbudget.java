@@ -116,6 +116,17 @@ public class Verzendbudget {
     }
 
     /** Het aantal tokens dat een claim nam, uit welk tijdvak en voor welk doel. */
+    /**
+     * Verwijdert de rijen van tijdvakken vóór {@code grens}; hun tokens zijn met het tijdvak vervallen.
+     *
+     * @return het aantal verwijderde rijen
+     */
+    public int ruimOpVoor(OffsetDateTime grens) {
+        return entityManager.createNativeQuery("DELETE FROM verzendbudget WHERE tijdvak < ?1")
+                .setParameter(1, grens)
+                .executeUpdate();
+    }
+
     public record Genomen(int aantal, OffsetDateTime tijdvak, BudgetDoel doel) {
     }
 
