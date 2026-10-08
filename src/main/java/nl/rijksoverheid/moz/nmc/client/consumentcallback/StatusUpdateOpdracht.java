@@ -17,14 +17,14 @@ import java.util.UUID;
  * @param tijdstip wanneer de overgang is vastgelegd, op de klok van de NMC
  */
 public record StatusUpdateOpdracht(UUID notificatieId, String callbackUrl, long versie,
-                                   NotificatieStatus van, NotificatieStatus naar, Reden reden,
+                                   NotificatieStatus vorigeStatus, NotificatieStatus nieuweStatus, Reden reden,
                                    OffsetDateTime tijdstip) {
 
     public StatusUpdateOpdracht {
         // Hier controleren en niet pas bij het versturen: in de AFTER_SUCCESS-observer zou een NPE ná
         // de commit afgaan, waar de transactiemanager hem opslokt.
         Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
-        Objects.requireNonNull(naar, "naar is verplicht");
+        Objects.requireNonNull(nieuweStatus, "nieuweStatus is verplicht");
         Objects.requireNonNull(tijdstip, "tijdstip is verplicht");
         // callbackUrl mag bewust null zijn: de Dienstverlener heeft dan geen callback geconfigureerd.
     }

@@ -90,12 +90,12 @@ class ReceiptVerwerkerTest {
         assertEquals(naar, notificatie(notifyId).getStatus());
         assertEquals(reden, notificatie(notifyId).getReden());
 
-        StatusUpdateOpdracht opdracht = verstuurdeOpdrachten(1).getFirst();
-        assertEquals(NotificatieStatus.VERZONDEN, opdracht.van());
-        assertEquals(naar, opdracht.naar());
-        assertEquals(reden, opdracht.reden());
-        assertEquals(3, opdracht.versie());
-        assertEquals("https://omc.example.nl/callback", opdracht.callbackUrl());
+        StatusUpdateOpdracht statusUpdateOpdracht = verstuurdeOpdrachten(1).getFirst();
+        assertEquals(NotificatieStatus.VERZONDEN, statusUpdateOpdracht.vorigeStatus());
+        assertEquals(naar, statusUpdateOpdracht.nieuweStatus());
+        assertEquals(reden, statusUpdateOpdracht.reden());
+        assertEquals(3, statusUpdateOpdracht.versie());
+        assertEquals("https://omc.example.nl/callback", statusUpdateOpdracht.callbackUrl());
     }
 
     @Test
