@@ -21,7 +21,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Vangnet voor notificaties die zijn blijven steken: elke notificatie zonder terminale status en
@@ -39,16 +38,18 @@ public class ControleTaakHandler implements TaakHandler {
     private final NotificatieRepository notificatieRepository;
     private final PogingRepository pogingRepository;
     private final TaakRepository taakRepository;
+    private final Vaststellingstermijn vaststellingstermijn;
     private final Duration interval;
     private final int maxPerRonde;
 
     public ControleTaakHandler(NotificatieRepository notificatieRepository, PogingRepository pogingRepository,
-                               TaakRepository taakRepository,
+                               TaakRepository taakRepository, Vaststellingstermijn vaststellingstermijn,
                                @ConfigProperty(name = "nmc.controle.interval") Duration interval,
                                @ConfigProperty(name = "nmc.controle.max-per-ronde") int maxPerRonde) {
         this.notificatieRepository = notificatieRepository;
         this.pogingRepository = pogingRepository;
         this.taakRepository = taakRepository;
+        this.vaststellingstermijn = vaststellingstermijn;
         this.interval = interval;
         this.maxPerRonde = maxPerRonde;
     }
@@ -96,8 +97,9 @@ public class ControleTaakHandler implements TaakHandler {
                 continue;
             }
 
-            taakRepository.persist(new Taak(soort.get(), notificatie.getDvId(), notificatie.getId(), nu, null,
-                    soort.get() == TaakSoort.RECONCILIEREN ? navraagPayload(notificatie.getId()) : null));
+            Optional<Poging> laatste = pogingRepository.findLaatsteVan(notificatie.getId());
+            taakRepository.persist(new Taak(soort.get(), notificatie.getDvId(), notificatie.getId(),
+                    due(soort.get(), laatste, nu), null, soort.get() == TaakSoort.VERZENDEN ? null : pogingPayload(laatste)));
             gepland++;
         }
 
@@ -124,9 +126,15 @@ public class ControleTaakHandler implements TaakHandler {
                 && (poging.getStatus() == PogingStatus.VERZONDEN || poging.getStatus() == PogingStatus.ONBEKEND);
     }
 
-    private Map<String, String> navraagPayload(UUID notificatieId) {
-        return pogingRepository.findLaatsteVan(notificatieId)
-                .map(p -> Map.of(VerzendTaakHandler.PAYLOAD_POGING_ID, p.getId().toString()))
-                .orElse(Map.of());
+    // De vaststeltaak houdt de termijn vanaf de bezorging aan, ook als hij hier opnieuw wordt gepland;
+    // zonder bekend bezorgtijdstip loopt de termijn vanaf nu, zodat hij nooit te vroeg vaststelt.
+    private OffsetDateTime due(TaakSoort soort, Optional<Poging> laatste, OffsetDateTime nu) {
+        return soort == TaakSoort.BEZORGING_VASTSTELLEN
+                ? vaststellingstermijn.vaststellenOp(laatste.map(Poging::getBezorgdOp).orElse(nu))
+                : nu;
+    }
+
+    private static Map<String, String> pogingPayload(Optional<Poging> laatste) {
+        return laatste.map(p -> Map.of(VerzendTaakHandler.PAYLOAD_POGING_ID, p.getId().toString())).orElse(Map.of());
     }
 }

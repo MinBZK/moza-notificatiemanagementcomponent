@@ -37,6 +37,7 @@ import nl.rijksoverheid.moz.nmc.service.NotificatieNietGevondenException;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.service.InkomendEventOpslag;
 import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
+import nl.rijksoverheid.moz.nmc.service.Vaststellingstermijn;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
@@ -147,7 +148,8 @@ public class NotificatieVerwerkingFuzzer {
                 new GeheugenDienstverlenerRepository(),
                 repository,
                 taken);
-        receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie);
+        receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
+                taken, new Vaststellingstermijn(java.time.Duration.ofDays(7), java.time.Duration.ofDays(1)));
 
         LogboekContext logboekContext = new LogboekContext();
         HashHelper hashHelper = new HashHelper(Optional.of("fuzz-pepper-niet-voor-productie"));
@@ -407,6 +409,11 @@ public class NotificatieVerwerkingFuzzer {
             }
 
             return true;
+        }
+
+        @Override
+        public long verwijderOpen(nl.rijksoverheid.moz.nmc.domain.TaakSoort soort, UUID notificatieId) {
+            return 0;
         }
 
         void verwerkOpgeslagen() {

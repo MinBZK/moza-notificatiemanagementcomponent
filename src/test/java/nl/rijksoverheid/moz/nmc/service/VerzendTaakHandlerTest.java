@@ -407,7 +407,8 @@ class VerzendTaakHandlerTest {
         assertEquals(List.of(), poging.getDuplicaatIds());
         assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
                 NotificatieStatus.BEZORGD), overgangen(id));
-        assertEquals(List.of(), taken(), "geen navraag voor een al bezorgde notificatie");
+        assertEquals(List.of(TaakSoort.BEZORGING_VASTSTELLEN), taken().stream().map(Taak::getSoort).toList(),
+                "geen navraag voor een al bezorgde notificatie, wel de vaststeltaak");
     }
 
     // Een bezorging van een eerdere aanbieding komt binnen terwijl de worker buiten een transactie wacht;
@@ -426,7 +427,7 @@ class VerzendTaakHandlerTest {
         taakWorker.verwerk(TaakSoort.VERZENDEN);
 
         assertEquals(NotificatieStatus.BEZORGD, notificatie(id).getStatus());
-        assertEquals(List.of(), taken());
+        assertEquals(List.of(TaakSoort.BEZORGING_VASTSTELLEN), taken().stream().map(Taak::getSoort).toList());
     }
 
     @Test
