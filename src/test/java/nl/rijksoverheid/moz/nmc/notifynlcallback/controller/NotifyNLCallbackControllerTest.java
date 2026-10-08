@@ -7,8 +7,6 @@ import io.quarkus.test.junit.mockito.InjectSpy;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
@@ -29,7 +27,6 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 import java.time.OffsetDateTime;
@@ -43,7 +40,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
 
 @QuarkusTest
 class NotifyNLCallbackControllerTest {
@@ -55,6 +51,16 @@ class NotifyNLCallbackControllerTest {
     // Moet overeenkomen met %test.notify.callback.bearer-token in application.properties
     private static final String CALLBACK_BEARER_TOKEN = "test-callback-token-niet-voor-productie";
 
+    private static final String AANVRAAG = """
+            {
+              "identificatieType": "KVK",
+              "identificatieNummer": "12345678",
+              "dienstverlener": "Gemeente Voorbeeld",
+              "dienst": "Parkeervergunning",
+              "berichtType": "Stuurgroep Agenda"
+            }
+            """;
+
     @InjectMock
     @RestClient
     ProfielApi profielApi;
@@ -65,9 +71,6 @@ class NotifyNLCallbackControllerTest {
 
     @InjectMock
     NotifyNLJwtFactory notifyNLJwtFactory;
-
-    @InjectMock
-    ConsumentCallbackAdapter consumentCallbackAdapter;
 
     @Inject
     TaakWorker taakWorker;
@@ -105,7 +108,7 @@ class NotifyNLCallbackControllerTest {
 
     @Test
     void verwerkAfleverstatus_gelukt_retourneert204EnZetDeNotificatieOpBezorgd() {
-        UUID notifyNlId = verstuurNotificatie(null);
+        UUID notifyNlId = verstuurNotificatie();
 
         stuurDeliveryReceipt(deliveryReceipt(notifyNlId, "delivered"));
 
@@ -127,7 +130,7 @@ class NotifyNLCallbackControllerTest {
     // De receipt ligt vast voordat hij verwerkt wordt, zonder het e-mailadres uit het veld `to`.
     @Test
     void verwerkAfleverstatus_slaatDeReceiptOpZonderEmailadres() {
-        UUID notifyNlId = verstuurNotificatie(null);
+        UUID notifyNlId = verstuurNotificatie();
 
         stuurDeliveryReceiptZonderVerwerking(deliveryReceipt(notifyNlId, "delivered"));
 
@@ -141,7 +144,7 @@ class NotifyNLCallbackControllerTest {
     // NotifyNL herhaalt een receipt bij elke niet-2xx; dezelfde receipt levert één taak op.
     @Test
     void verwerkAfleverstatus_herhaaldeReceipt_levertEenTaak() {
-        UUID notifyNlId = verstuurNotificatie(null);
+        UUID notifyNlId = verstuurNotificatie();
         String receipt = deliveryReceipt(notifyNlId, "delivered");
 
         stuurDeliveryReceiptZonderVerwerking(receipt);
@@ -153,7 +156,7 @@ class NotifyNLCallbackControllerTest {
     // Een fout in de verwerking kost de receipt niet: de taak blijft staan en slaagt bij een volgende ronde.
     @Test
     void verwerkAfleverstatus_foutInDeVerwerking_verliestDeReceiptNiet() {
-        UUID notifyNlId = verstuurNotificatie(null);
+        UUID notifyNlId = verstuurNotificatie();
         stuurDeliveryReceiptZonderVerwerking(deliveryReceipt(notifyNlId, "delivered"));
         Mockito.doThrow(new IllegalStateException("gesimuleerde storing")).doCallRealMethod()
                 .when(receiptVerwerker).verwerk(any(), any(), any(), any());
@@ -195,22 +198,21 @@ class NotifyNLCallbackControllerTest {
     }
 
     // Een status die de NMC niet kent krijgt 204, zodat NotifyNL niet blijft herhalen, maar verandert
-    // niets en gaat niet naar de Dienstverlener.
+    // niets.
     @Test
-    void verwerkAfleverstatus_onbekendeStatus_retourneert204ZonderStatusupdate() {
-        UUID notifyNlId = verstuurNotificatie("https://omc.example.com/callback");
+    void verwerkAfleverstatus_onbekendeStatus_retourneert204ZonderOvergang() {
+        UUID notifyNlId = verstuurNotificatie();
 
         stuurDeliveryReceipt(deliveryReceipt(notifyNlId, "some-unknown-status"));
 
         assertEquals(NotificatieStatus.VERZONDEN, status(notifyNlId));
-        Mockito.verify(consumentCallbackAdapter, never()).stuurStatusUpdate(any());
     }
 
     // completed_at is het tijdstip van déze status en bepaalt de volgorde van receipts; het moment
     // van verwerken hoort er niet in.
     @Test
     void verwerkAfleverstatus_legtCompletedAtVastOpDePoging() {
-        UUID notifyNlId = verstuurNotificatie(null);
+        UUID notifyNlId = verstuurNotificatie();
 
         stuurDeliveryReceipt(deliveryReceipt(notifyNlId, "delivered"));
 
@@ -222,7 +224,7 @@ class NotifyNLCallbackControllerTest {
     // Geen van de tijdstipvelden is verplicht; een 400 zou de receipt na vijf herhalingen kosten.
     @Test
     void verwerkAfleverstatus_receiptZonderTijdstippen_wordtVerwerktOpDeEigenKlok() {
-        UUID notifyNlId = verstuurNotificatie(null);
+        UUID notifyNlId = verstuurNotificatie();
         OffsetDateTime voorCallback = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
         stuurDeliveryReceipt("""
@@ -233,40 +235,13 @@ class NotifyNLCallbackControllerTest {
         assertFalse(poging(notifyNlId).getReceiptTijdstip().isBefore(voorCallback));
     }
 
-    @Test
-    void verwerkAfleverstatus_metCallbackUrl_stuurtDeOvergangNaarDeDienstverlener() {
-        UUID notifyNlId = verstuurNotificatie("https://omc.example.com/callback");
-
-        stuurDeliveryReceipt(deliveryReceipt(notifyNlId, "delivered"));
-
-        ArgumentCaptor<StatusUpdateOpdracht> captor = ArgumentCaptor.forClass(StatusUpdateOpdracht.class);
-        Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(captor.capture());
-        assertEquals("https://omc.example.com/callback", captor.getValue().callbackUrl());
-        assertEquals(NotificatieStatus.BEZORGD, captor.getValue().naar());
-        assertEquals(3, captor.getValue().versie());
-    }
-
-    // De statusupdate naar de Dienstverlener staat los van het vastleggen: mislukt die, dan krijgt
-    // NotifyNL alsnog 204 en blijft de overgang staan.
-    @Test
-    void verwerkAfleverstatus_mislukteConsumentCallback_geeftTochTweehonderdvierEnBewaartDeOvergang() {
-        UUID notifyNlId = verstuurNotificatie("https://omc.example.com/callback");
-        Mockito.doThrow(new IllegalStateException("consument onbereikbaar"))
-                .when(consumentCallbackAdapter).stuurStatusUpdate(any());
-
-        stuurDeliveryReceipt(deliveryReceipt(notifyNlId, "delivered"));
-
-        assertEquals(NotificatieStatus.BEZORGD, status(notifyNlId));
-        Mockito.reset(consumentCallbackAdapter);
-    }
-
-    private UUID verstuurNotificatie(String callbackUrl) {
+    private UUID verstuurNotificatie() {
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(notifyNlId.toString()));
 
         given()
                 .contentType(ContentType.JSON)
-                .body(aanvraag(callbackUrl))
+                .body(AANVRAAG)
                 .when().post("/api/nmc/v1/centraal/notificaties")
                 .then().statusCode(202);
         // De verzending is asynchroon: de verzendtaak zet de poging op het NotifyNL-id uit de mock.
@@ -299,23 +274,6 @@ class NotifyNLCallbackControllerTest {
         return QuarkusTransaction.requiringNew().call(() ->
                 notificatieRepository.findById(pogingRepository.findByNotifyId(notifyNlId).orElseThrow().getNotificatieId())
                         .getStatus());
-    }
-
-    private static String aanvraag(String callbackUrl) {
-        String callbackPart = callbackUrl != null
-                ? """
-                , "callbackUrl": "%s"
-                """.formatted(callbackUrl)
-                : "";
-        return """
-                {
-                  "identificatieType": "KVK",
-                  "identificatieNummer": "12345678",
-                  "dienstverlener": "Gemeente Voorbeeld",
-                  "dienst": "Parkeervergunning",
-                  "berichtType": "Stuurgroep Agenda"%s
-                }
-                """.formatted(callbackPart);
     }
 
     private static String deliveryReceipt(UUID notifyNlId, String status) {

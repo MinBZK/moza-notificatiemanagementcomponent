@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import nl.rijksoverheid.moz.nmc.domain.Bevestiging;
@@ -62,7 +63,29 @@ public class Eventfeed {
 
         valideer(cursor);
 
-        int grootte = limiet == null ? maxPagina : Math.min(limiet, maxPagina);
+        return leesVanaf(dvId, cursor, limiet == null ? maxPagina : Math.min(limiet, maxPagina));
+    }
+
+    /**
+     * De volgende pagina na de leverpositie van de webhook, onder hetzelfde watermerk als de feed.
+     * Een positie uit een ander epoch begint opnieuw bij het oudste beschikbare event; een positie
+     * onder het oudste event leest gewoon verder, want wat daaronder lag is al opgeruimd.
+     *
+     * @param positie het laatst geleverde event, of null als er nog niets is geleverd
+     */
+    @Transactional
+    public EventPagina leesVoorWebhook(UUID dvId, Cursor positie, int limiet) {
+        if (positie != null && positie.epoch() != epoch) {
+            Log.warnf("Webhookpositie van dienstverlener %s komt uit cluster-epoch %d; het huidige is %d. "
+                    + "De levering begint opnieuw bij het oudste beschikbare event", dvId, positie.epoch(), epoch);
+
+            return leesVanaf(dvId, null, Math.min(limiet, maxPagina));
+        }
+
+        return leesVanaf(dvId, positie, Math.min(limiet, maxPagina));
+    }
+
+    private EventPagina leesVanaf(UUID dvId, Cursor cursor, int grootte) {
         long xid = cursor == null ? 0 : cursor.xid();
         long eventId = cursor == null ? 0 : cursor.eventId();
         List<EventMetXid> regels = eventRepository.leesVanafPositie(dvId, xid, eventId, grootte);

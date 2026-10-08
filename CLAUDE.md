@@ -18,7 +18,7 @@ De grens tussen Nederlands en Engels loopt door de code heen:
 - **Vast technisch idioom blijft Engels.** Adapter, filter, retry, callback,
   factory, repository. Vertalen maakt die termen minder herkenbaar, niet meer.
 - **Testnamen beschrijven het gedrag in het Nederlands**, in de vorm
-  `methode_situatie_verwachting`: `stuurStatusUpdate_allePogingenMislukt_retourneertFalse`,
+  `methode_situatie_verwachting`: `lever_geen2xx_gooitLeveringExceptionNaEenAanroep`,
   `interneHostnaam_wordtGeweigerd`.
 
 ## Wat de NMC is
@@ -130,9 +130,12 @@ Geïmplementeerd:
   overgang. `Overgangsfunctie` is de enige schrijver van de status; een deferred
   databasetrigger weigert een nieuwe versie zonder event of een niet-toegestane
   overgang.
-- **Statusupdate naar de aanroeper.** Heeft het verzoek een `callbackUrl`, dan
-  stuurt `ConsumentCallbackAdapter` bij elke overgang die op een receipt volgt een
-  CloudEvent naar die URL: maximaal drie pogingen met oplopende wachttijd.
+- **Webhook als terugkoppeltaak.** Heeft een dienstverlener een `webhook_url` in het
+  register, dan levert één `TERUGKOPPELEN`-taak per dienstverlener
+  (`TerugkoppelTaakHandler`) de events na `webhookpositie` onder het watermerk van de
+  feed als CloudEvents-batch aan die URL (`WebhookDispatcher`, `ConsumentCallbackAdapter`),
+  met de header `Nmc-Cursor` en een RS256-bearer-JWT (`WebhookSleutel`; publieke sleutel
+  op `GET /api/nmc/v1/.well-known/jwks.json`). Zie de integratie-aanname hieronder.
 - **Adresselectie in de Profielservice-respons** (`ProfielServiceAdapter`): eerst
   een e-mailadres met exact de scope Dienstverlener + dienst, dan een met alleen
   de Dienstverlener als scope, dan het default-adres, dan een adres zonder scopes.
@@ -141,8 +144,8 @@ Geïmplementeerd:
   `FOR UPDATE SKIP LOCKED`, verdeeld over de dienstverleners met werk en voor het
   verzenden en de navraag binnen het `verzendbudget` per Notify-service per minuut.
   `TaakWorker` draait per soort een `@Scheduled`-ronde en geeft elke taak aan de
-  `TaakHandler` van die soort. Handlers: `VerzendTaakHandler`,
-  `ReceiptTaakHandler` en `ControleTaakHandler`; de overige soorten worden gepland maar nog niet uitgevoerd.
+  `TaakHandler` van die soort. Handlers: `VerzendTaakHandler`, `ReceiptTaakHandler`,
+  `ControleTaakHandler` en `TerugkoppelTaakHandler`; de overige soorten worden gepland maar nog niet uitgevoerd.
 - **Eén geconfigureerde dienstverlener.** `dienstverlener` heeft één rij uit de
   migratie; `DvProvider` levert die `dv_id`, die op elke notificatie en elk event
   staat. Tokenvalidatie per dienstverlener vervangt later alleen de provider.
@@ -166,8 +169,9 @@ met een navraagtaak. Een `ValidationError` van NotifyNL op `email_address` en ee
 partij zonder adres zijn terminaal (`niet-bezorgbaar`). Een andere 4xx, behalve
 429, ligt aan het NMC en kost een poging; 429, 5xx, een verbindingsfout en een
 ontbrekende KEK-versie stellen de taak uit zonder poging. Een herclaim zoekt eerst
-op `reference`. `ControleTaakHandler` plant zichzelf opnieuw
-en geeft een notificatie zonder taak de taak die bij haar status hoort. De
+op `reference`. `ControleTaakHandler` plant zichzelf opnieuw, geeft een notificatie
+zonder taak de taak die bij haar status hoort en plant een terugkoppeltaak voor
+elke dienstverlener met een webhook die er nog geen heeft. De
 verzendtaak schrijft nog geen LDV-registratie: de `@Logboek`-interceptor werkt alleen
 binnen een REST-aanroep.
 
@@ -243,20 +247,33 @@ de logica die kiest tussen herverzending en contactherstel.
 - **Receipttijd en registratietijd zijn gescheiden.** Het tijdstip uit de receipt staat
   op `poging.receipt_tijdstip` en is het tijdstip voor het afleverbewijs; `event.tijdstip`
   en `notificatie.laatste_status_update` staan op de eigen klok.
-- **De statusupdate naar de Dienstverlener gaat pas ná de commit.**
-  `ReceiptVerwerker` vuurt bij een uitgevoerde overgang een `StatusUpdateOpdracht` af;
-  `StatusUpdateVerzender` pakt die op bij `AFTER_SUCCESS` en roept
-  `ConsumentCallbackAdapter` aan. Faalt de commit, bijvoorbeeld op de trigger, dan gaat
-  er niets uit. De observer is bewust een eigen bean: in tests wordt de adapter met
-  `@InjectMock` vervangen, en een observer-methode op een mock wordt nooit aangeroepen.
-- **Callback en feed leveren hetzelfde CloudEvent.** `NotificatieStatusEvent.van` bouwt
-  beide; `id` is het event-id uit het eventlog, zodat een Dienstverlener een event uit de
-  callback in de feed herkent. `xid` staat niet op de entity `Event`: de feed leest hem
-  met native SQL via `xid::text::bigint`, omdat `xid8` geen cast naar `bigint` kent.
+- **De webhook leest het eventlog; er is geen push per overgang.** Een
+  `TERUGKOPPELEN`-taak per dienstverlener (`notificatie_id` leeg) plant zichzelf steeds
+  opnieuw. De eerste plant `ControleTaakHandler`, dus een nieuwe `webhook_url` gaat
+  binnen `nmc.controle.interval` leveren; een unieke index houdt het op één taak per
+  dienstverlener, zodat met de claim nooit twee pods tegelijk aan dezelfde
+  dienstverlener leveren. Per ronde: lees in een transactie register, positie en
+  events (`Eventfeed.leesVoorWebhook`, een positie uit een ander epoch begint bij het
+  oudste event), verleng de lease, POST buiten de transactie, en zet in één transactie
+  met `TaakClaimer.stelUit` (epoch-getoetst) de positie vooruit of de mislukking vast.
+  Een mislukte levering is een externe fout en kost de taak geen poging. Wachttijd:
+  `nmc.webhook.herpoging-wachttijd` verdubbeld per mislukking; vanaf
+  `webhook_max_mislukkingen` (default `nmc.webhook.max-mislukkingen`) is de webhook
+  gepauzeerd met `nmc.webhook.pauze-wachttijd` verdubbeld per verdere mislukking, tot
+  ten hoogste een dag. Een ongeldige URL (`WebhookUrlControle`, via
+  `CallbackUrlValidator`) pauzeert direct, zonder aanroep, met een ERROR. Een `2xx` is
+  geen bevestiging; die blijft de feedcursor. Zonder `webhook_url` rondt de taak af.
+  In tests laat `LokaleWebhookUrlControle` (`@Mock`) de http-URL van `WebhookOntvanger`
+  op localhost toe.
+- **Webhook en feed leveren hetzelfde CloudEvent.** `NotificatieStatusEvent.van` bouwt
+  beide; `id` is het event-id uit het eventlog. `xid` staat niet op de entity `Event`:
+  de feed leest hem met native SQL via `xid::text::bigint`, omdat `xid8` geen cast naar
+  `bigint` kent. Om dezelfde reden is `webhookpositie`, net als `bevestiging`, geen
+  entity maar native SQL in een repository.
 - **`NotificatieRetentieScheduler` ruimt verlopen notificaties op**, in batches met een
   eigen transactie per batch, `notificatie.retentie.bewaartermijn` na de laatste overgang
-  (`laatste_status_update`) en los van de status en van of de callback naar de
-  Dienstverlener slaagde. De batch claimt met `FOR UPDATE SKIP LOCKED`, omdat er in
+  (`laatste_status_update`) en los van de status en van de levering aan de
+  Dienstverlener. De batch claimt met `FOR UPDATE SKIP LOCKED`, omdat er in
   productie minimaal drie pods draaien. De pogingen gaan mee via de foreignkey; de events
   blijven staan. Een notificatie die verloopt zonder uitkomst (niet terminaal en niet
   `BEZORGD`) wordt apart op WARN gemeld voordat de rij weggaat. Dit is een tussenstand:
@@ -269,7 +286,7 @@ de logica die kiest tussen herverzending en contactherstel.
 - **API:** contract-first uit `META-INF/openapi.yaml` en
   `META-INF/notifynl-callback-openapi.yaml`, Quarkus REST + Jackson
 - **Uitgaande clients:** quarkus-openapi-generator voor Profielservice en
-  NotifyNL; een dynamisch gebouwde REST-client voor de callback naar de aanroeper
+  NotifyNL; een dynamisch gebouwde REST-client voor de webhook van de dienstverlener
 - **Persistentie:** PostgreSQL 18 + Hibernate ORM Panache + Flyway; in tests een embedded PostgreSQL (Zonky)
 - **Test:** JUnit 5, REST-assured, Mockito, Jazzer (fuzzing)
 - **Fouten:** RFC 9457 `application/problem+json` via quarkus-http-problem
@@ -278,7 +295,7 @@ de logica die kiest tussen herverzending en contactherstel.
 - **Health:** smallrye-health op `/q/health`; readiness bevat een datasource-check
 
 Packages zijn **technisch** ingedeeld: `controller/`, `service/`, `domain/`,
-`repository/`, `client/<systeem>/`, `helper/`, `validation/`. De uitzondering is
+`repository/`, `client/<systeem>/`, `helper/`. De uitzondering is
 `notifynlcallback/`, dat een eigen `controller/` en `filter/` heeft omdat het uit
 een eigen contract komt. Volg die indeling.
 
@@ -309,9 +326,10 @@ bewaakt hier geen test dat.
 Aandachtspunten in de contracten:
 
 - **Validatie die de generator niet kan uitdrukken** gaat via
-  `x-field-extra-annotation`. `callbackUrl` heeft `format: uri` en wordt daarmee
-  een `java.net.URI`, waar Hibernate Validator geen `@Size` voor heeft (HV000030);
-  daarom `@ValidCallbackUrl`, die `CallbackUrlValidator` aanroept.
+  `x-field-extra-annotation`. Let op bij `format: uri`: dat wordt een `java.net.URI`,
+  waar Hibernate Validator geen `@Size` voor heeft (HV000030).
+- **De webhook staat als callback bij `GET .../wijzigingen`**, met als sleutel
+  `{webhookUrl}`: OpenAPI 3.0 kent geen losse webhooks, en de URL komt uit het register.
 - **`IdentificatieType`** is via `importMappings` gekoppeld aan de bestaande enum
   in `controller/`, zodat er geen tweede klasse ontstaat.
 - **De lijst geldige berichttypes staat op twee plekken**: in de `description` van
@@ -352,8 +370,8 @@ PostgreSQL 18 als kindproces van de test-JVM (Zonky) en geeft url en credentials
 Quarkus door; Flyway migreert die database bij het opstarten en `validate` controleert
 het schema tegen de entities. Elke `@QuarkusTest` deelt die ene database, dus een test
 ruimt zijn eigen rijen op. Tests die zonder Quarkus tegen de migraties werken
-(`V2MigratieTest`) starten hun eigen embedded PostgreSQL. Profielservice, NotifyNL en de
-callback naar de aanroeper worden gemockt.
+(`V2MigratieTest`) starten hun eigen embedded PostgreSQL. Profielservice en NotifyNL
+worden gemockt; de webhook levert aan het testendpoint `WebhookOntvanger`.
 
 Dev-mode draait standaard op poort 8080, en `%dev.quarkus.rest-client.profielservice.url`
 wijst óók naar `http://localhost:8080`. Draai je een echte Profielservice lokaal,
@@ -444,12 +462,16 @@ starten als ze ontbreken**:
 | `hash.pepper` | `HashHelper`: HMAC-SHA-256 om BSN/KVK/RSIN en e-mailadressen te pseudonimiseren voor het logboek |
 | `nmc.kek.huidige-versie` | `ConfigKekProvider`: KEK-versie waarmee `Sleutelbeheer` nieuwe sleutels per notificatie wrapt |
 | `nmc.kek.versie.<n>` | `ConfigKekProvider`: KEK per versie, base64 van 32 bytes; die van de huidige versie is verplicht, oudere zolang er rijen met die `kek_versie` zijn |
+| `nmc.webhook.jwt.private-key` | `WebhookSleutel`: RSA-sleutel (PKCS#8-PEM, minstens 2048 bits, kop en regelafbrekingen mogen weg) voor de JWT op de webhook |
+| `nmc.webhook.jwt.key-id` | `WebhookSleutel`: `kid` in de JWT-header en in de JWKS |
 
 Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
 `nmc.dienstverlener.id` (de rij uit V8), `nmc.taak.*` (interval, batch, lease,
 max-pogingen van de worker-lus) en `nmc.verzendbudget.*` (Notify-service, tokens per
-minuut, reservering voor de navraag). Onder `%test` staat de lus uit en is het budget
-klein, zodat tests het uitputten.
+minuut, reservering voor de navraag), `nmc.webhook.*` (interval, bundel,
+max-mislukkingen, herpoging- en pauzewachttijd, time-out, `jwt.issuer`,
+`jwt.geldigheid`). Onder `%test` staat de lus uit en is het budget klein, zodat tests
+het uitputten.
 
 Lokaal horen ze in een niet-ingecheckte `src/main/resources/application-dev.properties`,
 nooit in `application.properties`. Onder `%test` staan dummywaarden.
@@ -481,10 +503,10 @@ als de Quarkus-BOM zelf een veilige versie levert.
 - **Logboek:** een controllermethode met `@Logboek` moet de betrokkene zetten
   vóór de interceptor afrondt: `logboekContext.setDataSubjectId(...)` met een
   waarde uit `HashHelper`, nooit het ruwe BSN/KVK/RSIN of e-mailadres.
-- **Callback-URL's** gaan door `CallbackUrlValidator` (via `@ValidCallbackUrl`) en
-  daarna door `CallbackUrlValidator.normaliseer`: de uitgaande REST-client
-  vergelijkt het scheme hoofdlettergevoelig. De validator is een denylist op vorm
-  en geen volledige SSRF-bescherming; zie de javadoc.
+- **Webhook-URL's** gaan vóór elke levering door `CallbackUrlValidator` en
+  `CallbackUrlValidator.normaliseer` (via `WebhookUrlControle`): de uitgaande
+  REST-client vergelijkt het scheme hoofdlettergevoelig. De validator is een denylist
+  op vorm en geen volledige SSRF-bescherming; zie de javadoc.
 
 ### Witregels rond `if`-statements
 

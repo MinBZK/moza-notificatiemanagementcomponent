@@ -51,7 +51,6 @@ class VersleuteldeOpslagIntegratieTest {
     private static final Map<String, String> PERSONALISATION = Map.of(
             "naam", "Vertrouwelijke Holding BV",
             "zaaknummer", "ZAAK-2026-000123");
-    private static final String CALLBACK_URL = "https://aanroeper.example.nl/status";
     private static final String KVK_NUMMER = "90004321";
 
     @InjectMock
@@ -92,8 +91,9 @@ class VersleuteldeOpslagIntegratieTest {
         assertNotNull(rij.get("personalisation_versleuteld"));
         assertNotNull(rij.get("sleutel_gewrapt"));
         assertEquals("1", new String(rij.get("kek_versie"), StandardCharsets.UTF_8));
-        // Controle op de zoekmethode zelf: de callback-URL staat wél leesbaar op de rij.
-        assertTrue(bevat(rij.get("callback_url"), CALLBACK_URL.getBytes(StandardCharsets.UTF_8)));
+        // Controle op de zoekmethode zelf: het template-id staat wél leesbaar op de rij.
+        String templateId = BerichtType.vanNaam("Stuurgroep Agenda").getTemplateId();
+        assertTrue(bevat(rij.get("template_id"), templateId.getBytes(StandardCharsets.UTF_8)));
 
         List<String> geheimen = new ArrayList<>(List.of(EMAIL));
         geheimen.addAll(PERSONALISATION.values());
@@ -161,8 +161,7 @@ class VersleuteldeOpslagIntegratieTest {
                 .body(Map.of(
                         "emailAdres", EMAIL,
                         "berichtType", "Stuurgroep Agenda",
-                        "berichtgegevens", PERSONALISATION,
-                        "callbackUrl", CALLBACK_URL))
+                        "berichtgegevens", PERSONALISATION))
                 .when().post("/api/nmc/v1/decentraal/notificaties")
                 .then()
                 .statusCode(202)

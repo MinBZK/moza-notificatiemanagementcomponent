@@ -56,6 +56,27 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
              ORDER BY min(due)
             """;
 
+    // De unieke index op (dv_id, soort) voor terugkoppeltaken maakt dit veilig bij gelijktijdige pods.
+    private static final String PLAN_TERUGKOPPELTAKEN_SQL = """
+            INSERT INTO taak (soort, dv_id, due, status)
+            SELECT 'TERUGKOPPELEN', d.id, ?1, 'OPEN'
+              FROM dienstverlener d
+             WHERE d.webhook_url IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM taak t WHERE t.soort = 'TERUGKOPPELEN' AND t.dv_id = d.id)
+            ON CONFLICT DO NOTHING
+            """;
+
+    /**
+     * Plant een terugkoppeltaak voor elke dienstverlener met een webhook die er nog geen heeft.
+     *
+     * @return het aantal geplande taken
+     */
+    public int planTerugkoppeltaken(OffsetDateTime due) {
+        return getEntityManager().createNativeQuery(PLAN_TERUGKOPPELTAKEN_SQL)
+                .setParameter(1, due)
+                .executeUpdate();
+    }
+
     /**
      * De dienstverleners met een taak van deze soort die aan de beurt is; {@code null} in de lijst
      * staat voor taken per systeem.
@@ -131,6 +152,15 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
     public boolean stelUit(Taak taak, OffsetDateTime due, boolean teltAlsPoging) {
         return wijzig("UPDATE taak SET lease_tot = NULL, due = ?4, pogingen = pogingen + ?5 "
                 + "WHERE soort = ?1 AND id = ?2 AND claim_epoch = ?3", taak, due, teltAlsPoging ? 1 : 0);
+    }
+
+    /**
+     * Plant de taak opnieuw op {@code due} na een geslaagde ronde en zet de pogingen terug; false als
+     * de taak inmiddels door een andere worker is geclaimd.
+     */
+    public boolean herplanNaSucces(Taak taak, OffsetDateTime due) {
+        return wijzig("UPDATE taak SET lease_tot = NULL, due = ?4, pogingen = 0 "
+                + "WHERE soort = ?1 AND id = ?2 AND claim_epoch = ?3", taak, due);
     }
 
     /** Zet de taak op mislukt en geeft de lease vrij; false als een andere worker hem inmiddels claimde. */

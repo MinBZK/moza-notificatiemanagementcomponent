@@ -1,10 +1,8 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
-import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
 import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
@@ -31,9 +29,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /** De koppeling van een receipt aan de poging via {@code reference}, het poging-id. */
 @QuarkusTest
 class ReceiptReferentieTest {
-
-    @InjectMock
-    ConsumentCallbackAdapter consumentCallbackAdapter;
 
     @Inject
     ReceiptVerwerker receiptVerwerker;
@@ -156,7 +151,7 @@ class ReceiptReferentieTest {
 
     private UUID geplandePoging() {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, null);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
             overgangsfunctie.neemAan(notificatie);
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
             Poging poging = new Poging(notificatie.getId(), 1);

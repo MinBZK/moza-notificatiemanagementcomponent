@@ -57,7 +57,7 @@ class DecentraleNotificatieControllerTest {
     void decentraleNotificatieVersturen_happyFlow_retourneert202EnBewaartHetAdresVersleuteld() {
         String id = given()
                 .contentType(ContentType.JSON)
-                .body(aanvraag("burger@example.nl", "Stuurgroep Agenda", "\"callbackUrl\": \"https://omc.example.nl/cb\","))
+                .body(aanvraag("burger@example.nl", "Stuurgroep Agenda", ""))
                 .when().post(PAD)
                 .then()
                 .statusCode(202)
@@ -68,23 +68,11 @@ class DecentraleNotificatieControllerTest {
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie notificatie = notificatieRepository.findById(UUID.fromString(id));
             assertEquals(NotificatieStatus.AANGENOMEN, notificatie.getStatus());
-            assertEquals("https://omc.example.nl/cb", notificatie.getCallbackUrl());
             assertEquals(Ontvanger.email("burger@example.nl"),
                     sleutelbeheer.ontsleutelOntvanger(notificatie.getId(), notificatie.getVersleuteldeGegevens()));
             assertEquals(TaakSoort.VERZENDEN, taakRepository.listAll().getFirst().getSoort());
         });
         verifyNoInteractions(sendAMessageApi);
-    }
-
-    @Test
-    void decentraleNotificatieVersturen_ongeldigeCallbackUrl_retourneert400() {
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag("burger@example.nl", "Stuurgroep Agenda", "\"callbackUrl\": \"http://127.0.0.1/cb\","))
-                .when().post(PAD)
-                .then()
-                .statusCode(400)
-                .body("violations", notNullValue());
     }
 
     @Test
