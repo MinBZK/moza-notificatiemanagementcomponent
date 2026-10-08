@@ -115,10 +115,11 @@ ook alleen een identificatie doorgeven en de NMC de regie laten.
 
 Geïmplementeerd:
 
-- `POST /api/nmc/v1/centraal/notificaties`: zoekt via de Profielservice het
-  e-mailadres op en verstuurt via NotifyNL.
-- `POST /api/nmc/v1/decentraal/notificaties`: de aanroeper levert het e-mailadres
-  zelf; geen Profielservice-lookup.
+- `POST /api/nmc/v1/centraal/notificaties`: neemt een notificatie aan op een
+  identificerend nummer en antwoordt 202 met `Location`; de verzendtaak haalt het
+  e-mailadres later op bij de Profielservice.
+- `POST /api/nmc/v1/decentraal/notificaties`: idem met een e-mailadres van de
+  aanroeper; geen Profielservice-lookup.
 - `POST /api/nmc/v1/notifynl-callback`: ontvangt de afleverstatus van NotifyNL,
   beveiligd met een bearer token (`NotifyNLCallbackAuthFilter`).
 - **Statusmodel uit ADR 0024.** `notificatie` draagt de status en een versie,
@@ -137,16 +138,28 @@ Geïmplementeerd:
   `FOR UPDATE SKIP LOCKED`, verdeeld over de dienstverleners met werk en voor het
   verzenden en de navraag binnen het `verzendbudget` per Notify-service per minuut.
   `TaakWorker` draait per soort een `@Scheduled`-ronde en geeft elke taak aan de
-  `TaakHandler` van die soort. Er zijn nog geen handlers: de tabel blijft leeg tot de
-  aannamestory de verzendtaak plant.
+  `TaakHandler` van die soort. Handlers: `VerzendTaakHandler` en
+  `ControleTaakHandler`; de overige soorten worden gepland maar nog niet uitgevoerd.
 - **Eén geconfigureerde dienstverlener.** `dienstverlener` heeft één rij uit de
   migratie; `DvProvider` levert die `dv_id`, die op elke notificatie en elk event
   staat. Tokenvalidatie per dienstverlener vervangt later alleen de provider.
 
-Beide create-flows delen `NotificatieService.verstuurNaarEmail(...)`: aannemen,
-een poging aanmaken, naar `in-verzending`, versturen bij NotifyNL en naar
-`verzonden`, alles nog synchroon in één transactie. De centrale flow doet eerst de
-Profielservice-lookup.
+Beide intakes gaan via `AannameService`: notificatie op `aangenomen` met event 0, de
+versleutelde payload en een verzendtaak in één transactie; het quotum per
+dienstverlener per dag (`dienstverlener.quotum_per_dag`) geeft 429.
+`AannameResponseFilter` maakt van het antwoord een 202 met `Location`, omdat de
+gegenereerde interface geen `Response` teruggeeft. `VerzendTaakHandler` doet in een
+eerste transactie `aangenomen` naar `in-verzending` met een geplande poging, roept
+daarbuiten de Profielservice (bij centrale regie) en NotifyNL aan met het poging-id
+als `reference`, en doet in een tweede transactie `in-verzending` naar `verzonden`
+met een navraagtaak. Een `ValidationError` van NotifyNL op `email_address` en een
+partij zonder adres zijn terminaal (`niet-bezorgbaar`). Een andere 4xx, behalve
+429, ligt aan het NMC en kost een poging; 429, 5xx, een verbindingsfout en een
+ontbrekende KEK-versie stellen de taak uit zonder poging. Een herclaim zoekt eerst
+op `reference`. `ControleTaakHandler` plant zichzelf opnieuw
+en geeft een notificatie zonder taak de taak die bij haar status hoort. De
+verzendtaak schrijft nog geen LDV-registratie: de `@Logboek`-interceptor werkt alleen
+binnen een REST-aanroep.
 
 Nog niet gebouwd: een endpoint om de status op te vragen, contactherstel, de
 Templating Service-koppeling (templates staan als vaste NotifyNL-template-IDs in

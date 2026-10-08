@@ -8,13 +8,16 @@ asynchrone bezorgstatus:
 1. Een Dienstverlener (rechtstreeks, of via een OMC) roept
    `POST /api/nmc/v1/centraal/notificaties` aan met een identificatie (BSN/KVK/RSIN),
    dienstverlener/dienst, berichttype, optionele berichtgegevens en optioneel een `callbackUrl`.
-2. De NMC haalt synchroon de contactgegevens op bij de **Profielservice** op
-   basis van die identificatie.
-3. De NMC verstuurt synchroon een e-mail via **NotifyNL**
-   (`POST /v2/notifications/email`) en verwacht hierop direct een `201`.
-4. De NMC slaat de notificatie en de verzendpoging op (PostgreSQL), met de
-   status `verzonden` en de eventuele `callbackUrl`, en retourneert een
-   `notificatieId` aan de aanroeper.
+2. De NMC slaat de notificatie (status `aangenomen`, versleutelde ontvanger en
+   berichtgegevens) en een verzendtaak op in één transactie en antwoordt `202` met
+   het `notificatieId` en een `Location`.
+3. Een worker claimt de verzendtaak, haalt de contactgegevens op bij de
+   **Profielservice** en verstuurt de e-mail via **NotifyNL**
+   (`POST /v2/notifications/email`) met het id van de verzendpoging als
+   `reference`. De notificatie gaat via `in-verzending` naar `verzonden`.
+4. Is er geen partij of geen e-mailadres, of weigert NotifyNL het adres, dan eindigt
+   de notificatie in `niet-bezorgbaar`. Een storing bij de Profielservice of NotifyNL
+   stelt de taak uit.
 5. NotifyNL roept asynchroon `POST /api/nmc/v1/notifynl-callback` aan met de
    bezorgstatus (delivery receipt).
 6. De NMC legt de uitkomst op de verzendpoging vast, voert de bijbehorende
@@ -149,7 +152,8 @@ Geïmplementeerde componenten zijn vetgedrukt; de rest is toekomstig ontwerp.
 |---|---|---|
 | **Centrale-regie-API** | REST (controller) | Inbound endpoint voor het centraal profiel: intake op identificerend nummer; NMC resolvet zelf de contactgegevens via de Profielservice. |
 | **Afleverstatus-callback** | REST (controller) | Webhook waarop NotifyNL delivery receipts meldt. |
-| **Notificatie-orchestrator** | Service | Coördineert contactgegevens ophalen, opslag in de database, versturen en statusverwerking. |
+| **Aanname** | Service (`AannameService`) | Legt notificatie, eerste event en verzendtaak vast in één transactie en dwingt het quotum per Dienstverlener af. |
+| **Verzendtaak** | Taakhandler (`VerzendTaakHandler`) | Haalt bij centrale regie het adres op, verstuurt via NotifyNL met het poging-id als `reference` en voert de overgangen uit. |
 | **Profielservice-adapter** | Client | Haalt contactvoorkeur op bij de Profielservice en kan een e-mailadres invalideren. |
 | **Verzendadapter** | Client (bearer-JWT) | Verstuurt berichten via NotifyNL (`template_id` + `personalisation`). |
 | **Consument-callback-adapter** | Webhook-client (CloudEvents NL GOV) | Stuurt de afleverstatus asynchroon terug naar de aanroeper via de opgegeven `callbackUrl`. |
@@ -177,7 +181,8 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
   oploopt.
 - **`poging`** is één verzending bij NotifyNL: nummer, status (de uitkomst uit de
   receipts), het NotifyNL-id en het tijdstip uit de laatst verwerkte receipt. Een
-  receipt komt via het NotifyNL-id bij de poging terecht.
+  receipt komt via `reference` (het poging-id) bij de poging terecht, en anders via
+  het NotifyNL-id.
 - **`event`** is het eventlog: één rij per overgang met van, naar, reden, het
   registratietijdstip en een volgnummer dat gelijk is aan de versie van de
   notificatie na de overgang. Elke rij draagt de transactie-id, zodat een latere
@@ -237,23 +242,20 @@ onderhoudstaak uit ADR 0024 vervangen hem.
 
 De huidige endpoints zitten onder `/api/nmc/v1`:
 
-- **`POST /centraal/notificaties`**: haalt contactgegevens op bij de Profielservice,
-  verstuurt de e-mail via NotifyNL, slaat de notificatie op en retourneert een
-  `notificatieId`. Optioneel kan een `callbackUrl` worden meegegeven voor
-  asynchrone statusupdates. Retourneert `200` op succes, `400` als er geen
-  partij of e-mailadres gevonden wordt of als de `callbackUrl` ongeldig is, en
-  `500` bij een Profielservice-fout of wanneer NotifyNL de verzending niet
-  accepteert.
-- **`POST /decentraal/notificaties`**: verstuurt de e-mail rechtstreeks naar het
-  meegegeven e-mailadres (geen Profielservice-lookup), slaat de notificatie op en
-  retourneert een `notificatieId`. Optioneel kan een `callbackUrl` worden meegegeven.
-  Retourneert `200` op succes, `400` bij een onbekend berichttype, een ongeldig
-  e-mailadres of een ongeldige `callbackUrl`, en `500` als het versturen mislukt.
+- **`POST /centraal/notificaties`**: neemt de notificatie aan op een identificerend
+  nummer; de verzendtaak haalt later het adres op bij de Profielservice. Optioneel
+  kan een `callbackUrl` worden meegegeven voor asynchrone statusupdates.
+  Retourneert `202` met `notificatieId` en `Location`, `400` bij een onbekend
+  berichttype of een ongeldige `callbackUrl`, en `429` als het quotum van de
+  Dienstverlener voor vandaag bereikt is.
+- **`POST /decentraal/notificaties`**: idem voor een meegegeven e-mailadres (geen
+  Profielservice-lookup). Retourneert `202`, `400` bij een onbekend berichttype,
+  een ongeldig e-mailadres of een ongeldige `callbackUrl`, en `429` bij het quotum.
 - **`POST /notifynl-callback`**: webhook waarop NotifyNL de bezorgstatus
   (delivery receipt) van een verzending terugmeldt. Beveiligd met een bearer
   token dat geconfigureerd wordt in NotifyNL's dashboard en via
   `notify.callback.bearer-token` in de NMC. `ReceiptVerwerker` zoekt de poging
-  op het NotifyNL-id, vergrendelt de notificatie en leest de poging daarna
+  op `reference` en anders op het NotifyNL-id, vergrendelt de notificatie en leest de poging daarna
   opnieuw, zodat twee gelijktijdige receipts elkaars uitkomst zien. Receipts komen
   at-least-once en ongeordend binnen; de volgorde komt uit het tijdstip in de
   receipt, begrensd op de eigen klok, en een herhaalde of oudere receipt verandert
@@ -382,11 +384,11 @@ Bovenstaande draait de app in **dev-mode** (`%dev`-profiel: Postgres uit
 
 De NMC implementeert de centraal- en decentraal-profiel happy-flows inclusief de
 asynchrone bezorgstatus en consument-callback, zoals beschreven onder
-"Geïmplementeerde functionaliteit". De takentabel en de worker-lus uit ADR 0024
-staan, maar er zijn nog geen taakhandlers: de aanname plant nog geen verzendtaak en
-verstuurt synchroon. Nog **niet** aanwezig:
+"Geïmplementeerde functionaliteit". De aanname is asynchroon (202) met een
+verzendtaak; de navraagtaak wordt gepland maar nog niet uitgevoerd. Nog **niet**
+aanwezig:
 
-- **Asynchrone aanname (202)** met verzendtaak, navraag en vaststelling
+- **Navraag** bij NotifyNL en **vaststelling** van de bezorging
 - **Contactherstel** en **herverzending** (voor beide profielen)
 - Een koppeling met de **Templating Service** (het `template_id` wordt voorlopig
   bepaald door een lokale `BerichtType`-enum, niet via een externe Templating Service)
