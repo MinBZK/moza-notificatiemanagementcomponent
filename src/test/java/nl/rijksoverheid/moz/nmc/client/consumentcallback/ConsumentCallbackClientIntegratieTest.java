@@ -95,8 +95,8 @@ class ConsumentCallbackClientIntegratieTest {
         assertEquals(notificatieId.toString(), body.path("subject").asText());
         assertTrue(body.path("sequence").isTextual(), "sequence hoort een string te zijn");
         assertEquals("3", body.path("sequence").asText());
-        assertEquals("verzonden", body.path("data").path("van").asText());
-        assertEquals("technisch-mislukt", body.path("data").path("naar").asText());
+        assertEquals("verzonden", body.path("data").path("vorigeStatus").asText());
+        assertEquals("technisch-mislukt", body.path("data").path("nieuweStatus").asText());
         assertEquals("technisch", body.path("data").path("reden").asText());
     }
 

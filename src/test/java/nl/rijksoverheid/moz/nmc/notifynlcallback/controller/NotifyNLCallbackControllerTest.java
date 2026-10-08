@@ -173,7 +173,7 @@ class NotifyNLCallbackControllerTest {
         ArgumentCaptor<StatusUpdateOpdracht> captor = ArgumentCaptor.forClass(StatusUpdateOpdracht.class);
         Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(captor.capture());
         assertEquals("https://omc.example.com/callback", captor.getValue().callbackUrl());
-        assertEquals(NotificatieStatus.BEZORGD, captor.getValue().naar());
+        assertEquals(NotificatieStatus.BEZORGD, captor.getValue().nieuweStatus());
         assertEquals(3, captor.getValue().versie());
     }
 

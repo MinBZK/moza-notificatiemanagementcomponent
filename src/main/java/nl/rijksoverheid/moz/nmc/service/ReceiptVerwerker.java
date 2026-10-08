@@ -68,7 +68,7 @@ public class ReceiptVerwerker {
             return;
         }
 
-        Overgang overgang = Overgang.bij(uitkomst.get());
+        Overgang overgang = Overgang.bepaal(uitkomst.get());
         OvergangUitkomst resultaat = overgangsfunctie.voerUit(notificatie.getId(), overgang.status(), overgang.reden());
 
         if (!resultaat.isUitgevoerd()) {
@@ -113,7 +113,7 @@ public class ReceiptVerwerker {
     // Tot er herverzending is, leidt elke faaluitkomst tot een eindstatus.
     private record Overgang(NotificatieStatus status, Reden reden) {
 
-        static Overgang bij(PogingStatus uitkomst) {
+        static Overgang bepaal(PogingStatus uitkomst) {
             return switch (uitkomst) {
                 case BEZORGD -> new Overgang(NotificatieStatus.BEZORGD, null);
                 case PERMANENT_MISLUKT, TIJDELIJK_MISLUKT -> new Overgang(NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR);

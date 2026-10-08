@@ -91,8 +91,8 @@ class ReceiptVerwerkerTest {
         assertEquals(reden, notificatie(notifyId).getReden());
 
         StatusUpdateOpdracht statusUpdateOpdracht = verstuurdeOpdrachten(1).getFirst();
-        assertEquals(NotificatieStatus.VERZONDEN, statusUpdateOpdracht.van());
-        assertEquals(naar, statusUpdateOpdracht.naar());
+        assertEquals(NotificatieStatus.VERZONDEN, statusUpdateOpdracht.vorigeStatus());
+        assertEquals(naar, statusUpdateOpdracht.nieuweStatus());
         assertEquals(reden, statusUpdateOpdracht.reden());
         assertEquals(3, statusUpdateOpdracht.versie());
         assertEquals("https://omc.example.nl/callback", statusUpdateOpdracht.callbackUrl());

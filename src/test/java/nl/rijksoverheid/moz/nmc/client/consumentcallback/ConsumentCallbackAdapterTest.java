@@ -216,8 +216,8 @@ class ConsumentCallbackAdapterTest {
         assertEquals(OffsetDateTime.parse("2026-01-15T10:00:00Z"), event.time());
         assertEquals("3", event.sequence());
         assertEquals("Integer", event.sequencetype());
-        assertEquals(NotificatieStatus.VERZONDEN, event.data().van());
-        assertEquals(NotificatieStatus.NIET_BEZORGBAAR, event.data().naar());
+        assertEquals(NotificatieStatus.VERZONDEN, event.data().vorigeStatus());
+        assertEquals(NotificatieStatus.NIET_BEZORGBAAR, event.data().nieuweStatus());
         assertEquals(Reden.ONBEREIKBAAR, event.data().reden());
         assertEquals(3L, event.data().versie());
     }
