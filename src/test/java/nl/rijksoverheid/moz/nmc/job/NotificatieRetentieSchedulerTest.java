@@ -629,7 +629,7 @@ class NotificatieRetentieSchedulerTest {
         // Met een completed_at die zelf al buiten de bewaartermijn valt: de gebeurtenistijd komt van
         // de klok van NotifyNL en mag de bewaartermijn niet bepalen. Vaart de retentiejob er toch op,
         // dan verdwijnt deze notificatie terwijl er zojuist nog een receipt over binnenkwam.
-        receiptVerwerker.verwerk(notifyId, "delivered", OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
+        receiptVerwerker.verwerk(notifyId, null, "delivered", OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
 
         scheduler.verwijderVerlopenNotificaties();
 

@@ -139,7 +139,7 @@ class VersleuteldeOpslagIntegratieTest {
                         "berichtgegevens", PERSONALISATION))
                 .when().post("/api/nmc/v1/centraal/notificaties")
                 .then()
-                .statusCode(200)
+                .statusCode(202)
                 .extract().path("notificatieId");
         UUID id = UUID.fromString(notificatieId);
 
@@ -165,7 +165,7 @@ class VersleuteldeOpslagIntegratieTest {
                         "callbackUrl", CALLBACK_URL))
                 .when().post("/api/nmc/v1/decentraal/notificaties")
                 .then()
-                .statusCode(200)
+                .statusCode(202)
                 .extract().path("notificatieId");
 
         return UUID.fromString(id);

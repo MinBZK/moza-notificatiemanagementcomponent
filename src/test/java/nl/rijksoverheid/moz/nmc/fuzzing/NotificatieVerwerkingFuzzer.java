@@ -33,6 +33,7 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
+import nl.rijksoverheid.moz.nmc.controller.AannameLocatie;
 import nl.rijksoverheid.moz.nmc.controller.CentraleNotificatieController;
 import nl.rijksoverheid.moz.nmc.controller.DecentraleNotificatieController;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
@@ -50,7 +51,11 @@ import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.controller.NotifyNLCallbackController;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.service.KekProvider;
-import nl.rijksoverheid.moz.nmc.service.NotificatieService;
+import nl.rijksoverheid.moz.nmc.service.AannameService;
+import nl.rijksoverheid.moz.nmc.repository.DienstverlenerRepository;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.domain.Dienstverlener;
+import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.service.Sleutelbeheer;
 import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
 
@@ -194,23 +199,25 @@ public class NotificatieVerwerkingFuzzer {
         // Application logging off. The AssertionError in roepAan names the stand-in states.
         Logger.getLogger("").setLevel(Level.OFF);
 
-        NotificatieService service = new NotificatieService(
-                new ProfielServiceAdapter(profielApiStandIn()),
-                new NotifyNLVerzendAdapter(notifyApiStandIn(), new NotifyNLJwtFactory(),
-                        new NotifyNLAuthorizationHolder(), Optional.of(API_KEY)),
-                pogingen,
+        // The intake no longer calls the Profielservice or NotifyNL; those stand-ins belong to the
+        // verzendtaak, which is outside this target.
+        AannameService aannameService = new AannameService(
                 overgangsfunctie,
                 new Sleutelbeheer(new VasteKekProvider(), new ObjectMapper()),
-                () -> NotificatieFixtures.DV_ID);
+                () -> NotificatieFixtures.DV_ID,
+                new GeheugenDienstverlenerRepository(),
+                repository,
+                new GeheugenTaakRepository());
         ReceiptVerwerker receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
                 // No wait between callback retries.
                 new DirecteStatusUpdateEvent(new ConsumentCallbackAdapter(url -> callbackClientStandIn(), 0)));
 
         LogboekContext logboekContext = new LogboekContext();
         HashHelper hashHelper = new HashHelper(Optional.of("fuzz-pepper-niet-voor-productie"));
+        AannameLocatie aannameLocatie = new AannameLocatie();
 
-        centraleController = new CentraleNotificatieController(service, logboekContext, hashHelper);
-        decentraleController = new DecentraleNotificatieController(service, logboekContext, hashHelper);
+        centraleController = new CentraleNotificatieController(aannameService, logboekContext, hashHelper, aannameLocatie);
+        decentraleController = new DecentraleNotificatieController(aannameService, logboekContext, hashHelper, aannameLocatie);
         callbackController = new NotifyNLCallbackController(receiptVerwerker);
     }
 
@@ -237,14 +244,14 @@ public class NotificatieVerwerkingFuzzer {
         NotificatieAanvraagRequest aanvraag = lees(json, NotificatieAanvraagRequest.class);
         if (aanvraag != null) {
             roepAan(() -> centraleController.notificatieVersturen(aanvraag),
-                    profielAntwoord == 0 && notifyAntwoord == 0);
+                    true);
         }
     }
 
     private static void decentraal(String json) {
         DecentraleNotificatieAanvraagRequest aanvraag = lees(json, DecentraleNotificatieAanvraagRequest.class);
         if (aanvraag != null) {
-            roepAan(() -> decentraleController.decentraleNotificatieVersturen(aanvraag), notifyAntwoord == 0);
+            roepAan(() -> decentraleController.decentraleNotificatieVersturen(aanvraag), true);
         }
     }
 
@@ -472,12 +479,45 @@ public class NotificatieVerwerkingFuzzer {
         }
 
         @Override
+        public Poging findById(UUID id) {
+            return opgeslagen.get(id);
+        }
+
+        @Override
+        public Optional<Poging> findLaatsteVan(UUID notificatieId) {
+            return opgeslagen.values().stream()
+                    .filter(p -> notificatieId.equals(p.getNotificatieId()))
+                    .max(java.util.Comparator.comparingInt(Poging::getNummer));
+        }
+
+        @Override
         public void herlaad(Poging poging) {
             // No-op; the in-memory copy is the only copy.
         }
 
         void leegmaken() {
             opgeslagen.clear();
+        }
+    }
+
+    /** Accepts the verzendtaak the aanname plans; nothing reads it back in this target. */
+    private static final class GeheugenTaakRepository extends TaakRepository {
+
+        @Override
+        public void persist(Taak taak) {
+            // No-op; there is no worker in this target.
+        }
+    }
+
+    /** One dienstverlener without a quotum, like the row from the migration. */
+    private static final class GeheugenDienstverlenerRepository extends DienstverlenerRepository {
+
+        private final Dienstverlener dienstverlener = new Dienstverlener() {
+        };
+
+        @Override
+        public Dienstverlener findById(UUID id) {
+            return dienstverlener;
         }
     }
 
