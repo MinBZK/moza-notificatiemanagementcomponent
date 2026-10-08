@@ -1,7 +1,7 @@
 package nl.rijksoverheid.moz.nmc.job;
 
 import io.quarkus.logging.Log;
-import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.repository.Kandidaat;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 
@@ -71,9 +71,9 @@ class RetentieBatch {
         }
 
         List<Kandidaat> alle = notificatieRepository.zoekKandidaten(ids);
-        onbekend = (int) alle.stream().filter(kandidaat -> kandidaat.status() == StatusWaarde.ONBEKEND).count();
+        onbekend = (int) alle.stream().filter(kandidaat -> kandidaat.status() == NotificatieStatus.BEZORGSTATUS_ONBEKEND).count();
         List<Kandidaat> kandidaten = alle.stream()
-                .filter(kandidaat -> !kandidaat.status().isDefinitief())
+                .filter(kandidaat -> !heeftUitkomst(kandidaat.status()))
                 .toList();
         zonderEindstatus = kandidaten.size();
         gemeld = Math.min(zonderEindstatus, meldbudget);
@@ -110,7 +110,7 @@ class RetentieBatch {
         return zonderEindstatus;
     }
 
-    /** Verwijderd met status ONBEKEND: definitief, maar de NMC kende de uitkomst nooit. */
+    /** Verwijderd met status bezorgstatus-onbekend: een eindstatus, maar de NMC kende de uitkomst nooit. */
     int onbekend() {
         return onbekend;
     }
@@ -126,11 +126,13 @@ class RetentieBatch {
     // WARN en geen ERROR: verlopen zonder eindstatus is informatie, geen storing in de NMC. Key=value
     // zodat er een dashboard op te bouwen is zonder vrije tekst te parsen; er is geen JSON-logging.
     private static void meld(Kandidaat kandidaat) {
-        // Een lege externalReference is een andere diagnose dan een gevulde: dan is de notificatie
-        // nooit bij NotifyNL aangeboden, in plaats van wel aangeboden zonder uitkomst.
-        Log.warnf("Retentiejob: notificatie verlopen zonder eindstatus notificatieId=%s "
-                + "notifyNlReferentie=%s status=%s laatsteStatusUpdate=%s", kandidaat.id(),
-                kandidaat.externalReference() != null ? kandidaat.externalReference() : "geen",
-                kandidaat.status(), kandidaat.laatsteStatusUpdate());
+        Log.warnf("Retentiejob: notificatie verlopen zonder eindstatus notificatieId=%s status=%s laatsteStatusUpdate=%s",
+                kandidaat.id(), kandidaat.status(), kandidaat.laatsteStatusUpdate());
+    }
+
+    // Bezorgd telt hier als uitkomst: de vaststeltaak die hem definitief maakt bestaat nog niet, en
+    // elke bezorgde notificatie melden zou het meldbudget vullen met wat geen storing is.
+    private static boolean heeftUitkomst(NotificatieStatus status) {
+        return status.isEindstatus() || status == NotificatieStatus.BEZORGD;
     }
 }

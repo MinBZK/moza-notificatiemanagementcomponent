@@ -3,12 +3,10 @@ package nl.rijksoverheid.moz.nmc.repository;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
-import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
 import org.hibernate.query.NativeQuery;
 
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -28,10 +26,6 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
 
     // Slaat rijen over die in een eerdere batch mislukten; zie de batchlus in de scheduler.
     private static final String UITSLUITING_SQL = "\n   AND id NOT IN (?3)";
-
-    public Optional<Notificatie> findByExternalReference(UUID externalReference) {
-        return find(Notificatie_.EXTERNAL_REFERENCE, externalReference).singleResultOptional();
-    }
 
     /**
      * Claimt tot {@code maximum} verlopen notificaties met {@code FOR UPDATE SKIP LOCKED} en geeft
@@ -73,11 +67,8 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
     }
 
     /**
-     * Verwijdert de opgegeven notificaties en hun statusgeschiedenis.
-     * <p>
-     * JPQL en geen native SQL, zodat Hibernate de {@code notificatie_status}-rijen zelf opruimt; de
-     * {@code ON DELETE CASCADE} op de foreignkey blijft het vangnet voor verwijderingen die Hibernate
-     * omzeilen.
+     * Verwijdert de opgegeven notificaties. De pogingen gaan mee via {@code ON DELETE CASCADE}; de
+     * events blijven staan, het eventlog wordt per partitie opgeruimd.
      */
     public int verwijderOpId(List<UUID> ids) {
         return getEntityManager()
