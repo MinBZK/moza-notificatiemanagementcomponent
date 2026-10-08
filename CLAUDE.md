@@ -124,8 +124,7 @@ Geïmplementeerd:
 - **Statusmodel uit ADR 0024.** `notificatie` draagt de status en een versie,
   `poging` de uitkomst per verzending, `event` het eventlog met één rij per
   overgang. `Overgangsfunctie` is de enige schrijver van de status; een deferred
-  databasetrigger weigert een nieuwe versie zonder event of een niet-toegestane
-  overgang.
+  databasetrigger weigert een nieuwe versie zonder event.
 - **Statusupdate naar de aanroeper.** Heeft het verzoek een `callbackUrl`, dan
   stuurt `ConsumentCallbackAdapter` bij elke overgang die op een receipt volgt een
   CloudEvent naar die URL: maximaal drie pogingen met oplopende wachttijd.
@@ -165,18 +164,18 @@ de logica die kiest tussen herverzending en contactherstel.
   verhoogt de versie met precies één en schrijft het event, in de transactie van de
   aanroeper. De deferred constraint trigger `notificatie_overgang` (V5) bewaakt ook
   schrijvers buiten Hibernate, maar controleert minder: een nieuwe rij begint op
-  `AANGENOMEN`, en een nieuwe versie moet een toegestane overgang zijn met in dezelfde
-  transactie een event met die versie als volgnummer. Een stap van precies één en de
-  vergrendeling dwingt hij niet af. Let op: elke update van een
-  `notificatie`-rij via Hibernate verhoogt `@Version` en vraagt dus een event. Een
-  schrijver die geen overgang doet (bijvoorbeeld het wissen van een sleutel) moet
-  de versie buiten beschouwing laten. In tests zet je de trigger uit met
+  `AANGENOMEN`, de status verandert alleen met een nieuwe versie, en een nieuwe versie
+  heeft in dezelfde transactie een event met die versie als volgnummer. Welke overgang
+  toegestaan is, een stap van precies één en de vergrendeling dwingt hij niet af. Let
+  op: elke update van een `notificatie`-rij via Hibernate verhoogt `@Version` en
+  vraagt dus een event. Een schrijver die geen overgang doet (bijvoorbeeld het wissen
+  van een sleutel) moet de versie buiten beschouwing laten. In tests zet je de trigger uit met
   `SET LOCAL session_replication_role = replica`; de databasefout van een deferred
   trigger zit bij de commit als suppressed exception onder de `RollbackException`.
 - **Statussen.** `NotificatieStatus` (tien waarden, levenscyclus) en `PogingStatus`
   (zeven waarden, uitkomst per verzending) staan als `CHECK`-constraint in V4; een
   nieuwe waarde vraagt dus ook een migratie, en voor `NotificatieStatus` een regel in
-  `toegestane_overgang` en `Overgangsregels`. In de API en het CloudEvent gaan
+  `Overgangsregels`. In de API en het CloudEvent gaan
   statussen en redenen als kebab-case (`toApiValue`).
 - **Een test rekt zichtbaarheid hooguit op tot package-private.** `public` is nooit een
   testkeuze: dat maakt van een implementatiedetail een belofte aan elke aanroeper.
@@ -203,7 +202,7 @@ de logica die kiest tussen herverzending en contactherstel.
   begrensd op de eigen klok); een herhaalde of oudere receipt verandert niets. De
   poging wordt pas na het vergrendelen van de notificatie opnieuw gelezen, zodat een
   receipt die op de vergrendeling wachtte de uitkomst van de eerste ziet. Tot er
-  herverzending is, zijn `temporary-failure` en `technical-failure` terminaal.
+  herverzending is, leiden `temporary-failure` en `technical-failure` tot een eindstatus.
   Tussenstatussen worden genegeerd; een onbekende status wordt op ERROR gelogd en
   verandert niets.
 - **Receipttijd en registratietijd zijn gescheiden.** Het tijdstip uit de receipt staat
@@ -220,7 +219,7 @@ de logica die kiest tussen herverzending en contactherstel.
   (`laatste_status_update`) en los van de status en van of de callback naar de
   Dienstverlener slaagde. De batch claimt met `FOR UPDATE SKIP LOCKED`, omdat er in
   productie minimaal drie pods draaien. De pogingen gaan mee via de foreignkey; de events
-  blijven staan. Een notificatie die verloopt zonder uitkomst (niet terminaal en niet
+  blijven staan. Een notificatie die verloopt zonder uitkomst (geen eindstatus en niet
   `BEZORGD`) wordt apart op WARN gemeld voordat de rij weggaat. Dit is een tussenstand:
   de wistaak en onderhoudstaak uit ADR 0024 vervangen deze job.
 

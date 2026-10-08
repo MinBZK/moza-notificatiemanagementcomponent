@@ -187,10 +187,9 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
 notificatierij (`SELECT ... FOR UPDATE`), toetst de overgang aan
 `Overgangsregels` en schrijft in dezelfde transactie het event. Een deferred
 databasetrigger dwingt dat af voor elke schrijver, ook buiten Hibernate om: een
-nieuwe rij begint op `aangenomen`, een nieuwe versie moet een toegestane overgang
-zijn en in dezelfde transactie een event met die versie als volgnummer hebben.
-De toegestane paren staan in de tabel `toegestane_overgang`; een test houdt die
-gelijk aan `Overgangsregels`.
+nieuwe rij begint op `aangenomen`, de status verandert alleen met een nieuwe versie,
+en een nieuwe versie heeft in dezelfde transactie een event met die versie als
+volgnummer. Welke overgangen toegestaan zijn, staat alleen in `Overgangsregels`.
 
 Twee tijdstippen blijven uit elkaar: het tijdstip uit de receipt
 (`completed_at`, met `sent_at` en `created_at` als terugval) staat op de poging
@@ -207,7 +206,7 @@ heeft geen default in de code: is hij niet gezet, dan faalt de applicatie bij
 het opstarten. De job draait dagelijks om 03:00 Europese/Amsterdamse tijd
 (`notificatie.retentie.cron`) en verwijdert in begrensde batches, elk geclaimd
 met `FOR UPDATE SKIP LOCKED`, zodat meerdere pods de achterstand onder elkaar
-verdelen. Een notificatie die verloopt zonder uitkomst (niet terminaal en niet
+verdelen. Een notificatie die verloopt zonder uitkomst (geen eindstatus en niet
 `bezorgd`) wordt per notificatie op WARN gemeld, in dezelfde transactie als de
 verwijdering. De regel gebruikt `key=value` zodat er een dashboard op te bouwen
 is:
