@@ -29,7 +29,7 @@ public class StatusUpdateVerzender {
             // com.arjuna.*, dus hier zelf op ERROR. Gooien heeft geen zin: de transactie is al gecommit.
             Log.errorf(e, "Statusupdate voor notificatie %s (status %s) kon niet verstuurd worden door "
                     + "een fout in de NMC zelf — dit treft waarschijnlijk alle consument-callbacks",
-                    opdracht.notificatieId(), opdracht.status());
+                    opdracht.notificatieId(), opdracht.naar());
         }
     }
 }

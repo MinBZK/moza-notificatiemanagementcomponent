@@ -49,20 +49,18 @@ paths:
             post:
               summary: Statusupdate (CloudEvents NL GOV)
               description: |
-                De NMC stuurt deze callback zodra NotifyNL de bezorgstatus terugmeldt,
-                en alleen als bij de aanvraag een `callbackUrl` is meegegeven. De
-                callback gaat pas uit nadat de status is vastgelegd.
+                De NMC stuurt deze callback bij elke statusovergang die volgt op een
+                delivery receipt van NotifyNL, en alleen als bij de aanvraag een
+                `callbackUrl` is meegegeven. De callback gaat pas uit nadat de overgang is
+                vastgelegd.
 
                 De NMC doet maximaal drie pogingen met oplopende tussenpozen. Slagen
                 die geen van alle, dan wordt de statusupdate niet opnieuw aangeboden;
                 de Dienstverlener kan de status dan alleen nog zelf opvragen (nog niet beschikbaar).
 
-                Alleen een herhaling van de huidige status levert geen callback op. Ná een
-                uitkomst kan wél een andere uitkomst volgen — NotifyNL kan na een bezorging
-                alsnog een fout melden — en die wordt dan ook doorgegeven, ook als die status
-                eerder al voorbijkwam (bijvoorbeeld `delivered`, `permanent-failure`, weer
-                `delivered`). De laatst ontvangen status is de meest recente melding, niet
-                per definitie de eindtoestand.
+                Callbacks kunnen in een andere volgorde aankomen dan de overgangen
+                plaatsvonden. `sequence` loopt per notificatie op; verwerk per `subject`
+                op `sequence` en negeer een lager volgnummer na een hoger.
               requestBody:
                 required: true
                 content:
@@ -127,20 +125,18 @@ paths:
             post:
               summary: Statusupdate (CloudEvents NL GOV)
               description: |
-                De NMC stuurt deze callback zodra NotifyNL de bezorgstatus terugmeldt,
-                en alleen als bij de aanvraag een `callbackUrl` is meegegeven. De
-                callback gaat pas uit nadat de status is vastgelegd.
+                De NMC stuurt deze callback bij elke statusovergang die volgt op een
+                delivery receipt van NotifyNL, en alleen als bij de aanvraag een
+                `callbackUrl` is meegegeven. De callback gaat pas uit nadat de overgang is
+                vastgelegd.
 
                 De NMC doet maximaal drie pogingen met oplopende tussenpozen. Slagen
                 die geen van alle, dan wordt de statusupdate niet opnieuw aangeboden;
                 de Dienstverlener kan de status dan alleen nog zelf opvragen (nog niet beschikbaar).
 
-                Alleen een herhaling van de huidige status levert geen callback op. Ná een
-                uitkomst kan wél een andere uitkomst volgen — NotifyNL kan na een bezorging
-                alsnog een fout melden — en die wordt dan ook doorgegeven, ook als die status
-                eerder al voorbijkwam (bijvoorbeeld `delivered`, `permanent-failure`, weer
-                `delivered`). De laatst ontvangen status is de meest recente melding, niet
-                per definitie de eindtoestand.
+                Callbacks kunnen in een andere volgorde aankomen dan de overgangen
+                plaatsvonden. `sequence` loopt per notificatie op; verwerk per `subject`
+                op `sequence` en negeer een lager volgnummer na een hoger.
               requestBody:
                 required: true
                 content:
@@ -235,27 +231,12 @@ components:
             Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
             terugstuurt zodra de bezorgstatus bekend is.
 
-            De statusupdate is een CloudEvent met in `data` het `notificatieId` en een
-            `status`. Mogelijke waarden, met hun betekenis:
-
-            | Waarde | Betekenis |
-            |---|---|
-            | `delivered` | Bezorgd |
-            | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
-            | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
-            | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
-            | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
-
-            `created` en `sending` komen in een statusupdate niet voor.
-
-            `onbekend` zegt niets over de notificatie zelf: er is wél een terugmelding
-            ontvangen, maar die viel buiten de statussen die dit component kent.
-
-            Alleen een herhaling van de huidige status levert geen statusupdate op. Ná een
-            uitkomst kan wél een andere uitkomst volgen, bijvoorbeeld een fout na een
-            bezorging, en ook een status die eerder al voorbijkwam. Dat geldt voor
-            `onbekend` net zo. De NMC doet maximaal drie pogingen en biedt daarna niet
-            opnieuw aan.
+            De statusupdate is een CloudEvent per statusovergang, met `subject` de
+            notificatie-id, `sequence` het volgnummer van de overgang en in `data` de
+            statussen `van` en `naar`, de `reden` en de `versie`. De statussen staan
+            beschreven bij het schema `NotificatieStatus`. Verwerk per `subject` op
+            `sequence`: callbacks kunnen in een andere volgorde aankomen. De NMC doet
+            maximaal drie pogingen en biedt daarna niet opnieuw aan.
 
             Weglaten als de Dienstverlener geen statusupdates wil ontvangen.
             Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
@@ -300,27 +281,12 @@ components:
             Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
             terugstuurt zodra de bezorgstatus bekend is.
 
-            De statusupdate is een CloudEvent met in `data` het `notificatieId` en een
-            `status`. Mogelijke waarden, met hun betekenis:
-
-            | Waarde | Betekenis |
-            |---|---|
-            | `delivered` | Bezorgd |
-            | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
-            | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
-            | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
-            | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
-
-            `created` en `sending` komen in een statusupdate niet voor.
-
-            `onbekend` zegt niets over de notificatie zelf: er is wél een terugmelding
-            ontvangen, maar die viel buiten de statussen die dit component kent.
-
-            Alleen een herhaling van de huidige status levert geen statusupdate op. Ná een
-            uitkomst kan wél een andere uitkomst volgen, bijvoorbeeld een fout na een
-            bezorging, en ook een status die eerder al voorbijkwam. Dat geldt voor
-            `onbekend` net zo. De NMC doet maximaal drie pogingen en biedt daarna niet
-            opnieuw aan.
+            De statusupdate is een CloudEvent per statusovergang, met `subject` de
+            notificatie-id, `sequence` het volgnummer van de overgang en in `data` de
+            statussen `van` en `naar`, de `reden` en de `versie`. De statussen staan
+            beschreven bij het schema `NotificatieStatus`. Verwerk per `subject` op
+            `sequence`: callbacks kunnen in een andere volgorde aankomen. De NMC doet
+            maximaal drie pogingen en biedt daarna niet opnieuw aan.
             Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
             tekens, zonder gebruikersinfo) wordt geaccepteerd; IP-adressen en interne
             hostnamen worden geweigerd (400).
@@ -338,15 +304,18 @@ components:
     NotificatieStatusEvent:
       type: object
       description: >-
-        Statusupdate als CloudEvent (NL GOV profiel). De envelop volgt CloudEvents 1.0;
-        de bezorgstatus zelf staat in `data`.
+        Statusovergang als CloudEvent (NL GOV profiel). De envelop volgt CloudEvents 1.0;
+        de overgang zelf staat in `data`.
       required:
         - specversion
         - id
         - type
         - source
+        - subject
         - time
         - datacontenttype
+        - sequence
+        - sequencetype
         - data
       properties:
         specversion:
@@ -358,70 +327,107 @@ components:
           description: Unieke identificatie van dit event, niet van de notificatie
         type:
           type: string
-          example: nl.rijksoverheid.moz.nmc.notificatie.status
+          description: >-
+            `nl.overheid.moz.notificatie.status.` gevolgd door de nieuwe status, bijvoorbeeld
+            `nl.overheid.moz.notificatie.status.bezorgd`.
+          example: nl.overheid.moz.notificatie.status.bezorgd
         source:
           type: string
           format: uri-reference
           example: /api/nmc/v1/notificaties/3f1a...
         subject:
           type: string
-          example: notificatie/3f1a...
+          description: De notificatie-id die bij de aanvraag is teruggegeven
+          example: 3f1a...
         time:
           type: string
           format: date-time
-          description: Tijdstip waarop de NMC dit event verstuurde
+          description: Tijdstip waarop de NMC de statusovergang vastlegde
         datacontenttype:
           type: string
           example: application/json
+        sequence:
+          type: string
+          pattern: '^[0-9]+$'
+          description: >-
+            Volgnummer van de overgang, per notificatie oplopend, als string volgens de
+            sequence-extensie van CloudEvents. Gelijk aan `data.versie`.
+        sequencetype:
+          type: string
+          enum:
+            - Integer
         data:
           $ref: '#/components/schemas/NotificatieStatusData'
 
     NotificatieStatusData:
       type: object
+      description: >-
+        Eén statusovergang. `van` ontbreekt bij het eerste event van een notificatie en
+        `reden` ontbreekt bij een overgang zonder reden, zoals naar `bezorgd`.
       required:
-        - notificatieId
-        - status
+        - naar
+        - versie
       properties:
-        notificatieId:
-          type: string
-          format: uuid
-          description: De NMC-interne referentie die bij de aanvraag is teruggegeven
-        status:
+        van:
           $ref: '#/components/schemas/NotificatieStatus'
+        naar:
+          $ref: '#/components/schemas/NotificatieStatus'
+        reden:
+          $ref: '#/components/schemas/Reden'
+        versie:
+          type: integer
+          format: int64
+          description: Het volgnummer van de overgang, gelijk aan `sequence` in de envelop
 
     NotificatieStatus:
       type: string
       description: |
-        Bezorgstatus van de notificatie.
-
-        De eerste zes waarden komen overeen met het delivery-receiptmodel van
-        NotifyNL voor e-mail. `onbekend` is een waarde van de NMC zelf.
+        Status van de notificatie.
 
         | Waarde | Betekenis |
         |---|---|
-        | `created` | Door de NMC vastgelegd, nog niet aangeboden bij NotifyNL |
-        | `sending` | Aangeboden bij NotifyNL, nog geen uitkomst |
-        | `delivered` | Bezorgd |
-        | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
-        | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
-        | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
-        | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
+        | `aangenomen` | Door de NMC vastgelegd, nog niet aangeboden bij NotifyNL |
+        | `in-verzending` | Wordt aangeboden bij NotifyNL |
+        | `verzonden` | Aangeboden bij NotifyNL, nog geen uitkomst |
+        | `bezorgd` | Bezorgd; NotifyNL kan tot zeven dagen daarna nog een fout melden |
+        | `definitief-bezorgd` | Bezorgd en niet herroepen binnen de vaststellingstermijn |
+        | `niet-bezorgbaar` | Niet bezorgd; zie `reden` |
+        | `technisch-mislukt` | Niet bezorgd door een storing aan de verzendkant |
+        | `bezorgstatus-onbekend` | NotifyNL heeft geen uitkomst gemeld; een latere melding kan dit nog corrigeren |
+        | `verlopen` | Niet meer verzonden omdat de geldigheid verstreek |
+        | `geannuleerd` | Geannuleerd vóór de verzending |
 
-        `onbekend` betekent niet dat er iets mis is met de notificatie zelf: de NMC
-        heeft wél een terugmelding ontvangen, maar die viel buiten de statussen die
-        dit component kent. Dat gebeurt bijvoorbeeld als NotifyNL zijn vocabulaire
-        uitbreidt of als er een ander kanaal dan e-mail in het spel komt. De melding
-        wordt vastgelegd en de NMC logt hem, zodat de waarde alsnog toegevoegd kan
-        worden. Net als elke andere uitkomst kan `onbekend` nog door een andere
-        uitkomst gevolgd worden.
+        `aangenomen`, `in-verzending`, `verzonden` en `bezorgd` zijn geen eindstatus.
       enum:
-        - created
-        - sending
-        - delivered
-        - temporary-failure
-        - permanent-failure
-        - technical-failure
-        - onbekend
+        - aangenomen
+        - in-verzending
+        - verzonden
+        - bezorgd
+        - definitief-bezorgd
+        - niet-bezorgbaar
+        - technisch-mislukt
+        - bezorgstatus-onbekend
+        - verlopen
+        - geannuleerd
+
+    Reden:
+      type: string
+      description: |
+        Reden bij een status waarin de notificatie niet bezorgd is.
+
+        | Waarde | Betekenis |
+        |---|---|
+        | `onbereikbaar` | Het adres bestaat niet of de ontvanger is niet bereikbaar |
+        | `geen-contactgegevens` | Geen bruikbaar adres voor de opgegeven partij |
+        | `verlopen` | De geldigheid van de notificatie verstreek |
+        | `geannuleerd` | De Dienstverlener heeft geannuleerd |
+        | `technisch` | Een storing aan de verzendkant |
+      enum:
+        - onbereikbaar
+        - geen-contactgegevens
+        - verlopen
+        - geannuleerd
+        - technisch
 
     Problem:
       type: object

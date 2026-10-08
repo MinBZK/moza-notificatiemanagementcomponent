@@ -2,67 +2,63 @@ package nl.rijksoverheid.moz.nmc.testhelper;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.persistence.EntityManager;
-import nl.rijksoverheid.moz.nmc.domain.StatusRegistratie;
-import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.UUID;
 
 /**
- * Schrijft rijen buiten Hibernate om, voor tests die juist een toestand willen die Notificatie zelf
- * niet kan maken. Staat op één plek zodat een kolomwijziging niet door meerdere testklassen hoeft.
+ * Schrijft rijen buiten Hibernate en buiten de overgangsfunctie om, voor tests die een toestand
+ * willen die de applicatie zelf niet maakt: een willekeurige status met een terug- of
+ * vooruitgedateerde registratietijd. Staat op één plek zodat een kolomwijziging niet door meerdere
+ * testklassen hoeft.
+ * <p>
+ * Elke methode verwacht een lopende transactie. De constraint trigger op {@code notificatie} eist een
+ * event per versie; de inserts hier zetten hem voor de eigen transactie uit.
  */
 public final class NotificatieFixtures {
 
     private NotificatieFixtures() {
     }
 
-    /** Een notificatie met één statusregel op volgnummer 0, zoals de V2-backfill hem achterlaat. */
-    public static void voegNotificatieMetEenStatusregelToe(EntityManager entityManager, UUID id, UUID externalReference,
-                                                           StatusWaarde status, OffsetDateTime tijdstip) {
-        voegNotificatieToe(entityManager, id, externalReference, null,
-                List.of(StatusRegistratie.opEigenKlok(status, tijdstip)));
-    }
-
-    /**
-     * Een notificatie met een bewust terug- of vooruitgedateerde geschiedenis, die
-     * {@code Notificatie#registreerStatus} niet kan maken: die stempelt altijd de eigen klok van nu.
-     * De kopie op {@code notificatie} volgt het laatste record, net als in productie.
-     */
-    public static void voegNotificatieToe(EntityManager entityManager, UUID id, UUID externalReference,
-                                          String callbackUrl, List<StatusRegistratie> geschiedenis) {
-        StatusRegistratie laatste = geschiedenis.getLast();
-        entityManager.createNativeQuery("INSERT INTO notificatie (id, versie, external_reference, callback_url, "
-                        + "laatste_status, laatste_status_update) VALUES (?1, 0, ?2, ?3, ?4, ?5)")
+    /** Een notificatie in de gegeven status, zonder poging. */
+    public static void voegNotificatieToe(EntityManager entityManager, UUID id, String callbackUrl,
+                                          NotificatieStatus status, OffsetDateTime laatsteStatusUpdate) {
+        zetTriggerUit(entityManager);
+        entityManager.createNativeQuery("INSERT INTO notificatie (id, versie, callback_url, status, laatste_status_update) "
+                        + "VALUES (?1, 0, ?2, ?3, ?4)")
                 .setParameter(1, id)
-                .setParameter(2, externalReference)
-                .setParameter(3, callbackUrl)
-                .setParameter(4, laatste.status().name())
-                .setParameter(5, laatste.geregistreerd())
-                .executeUpdate();
-
-        for (int volgnummer = 0; volgnummer < geschiedenis.size(); volgnummer++) {
-            StatusRegistratie record = geschiedenis.get(volgnummer);
-            voegStatusregelToe(entityManager, id, volgnummer, record.status(), record.tijdstip());
-        }
-    }
-
-    public static int voegStatusregelToe(EntityManager entityManager, UUID notificatieId, int volgnummer,
-                                         StatusWaarde status, OffsetDateTime tijdstip) {
-        return entityManager.createNativeQuery("INSERT INTO notificatie_status (notificatie_id, volgnummer, status, "
-                        + "tijdstip, geregistreerd) VALUES (?1, ?2, ?3, ?4, ?4)")
-                .setParameter(1, notificatieId)
-                .setParameter(2, volgnummer)
+                .setParameter(2, callbackUrl)
                 .setParameter(3, status.name())
-                .setParameter(4, tijdstip)
+                .setParameter(4, laatsteStatusUpdate)
                 .executeUpdate();
     }
 
-    public static void verwijderStatusregel(EntityManager entityManager, UUID notificatieId, int volgnummer) {
-        entityManager.createNativeQuery("DELETE FROM notificatie_status WHERE notificatie_id = ?1 AND volgnummer = ?2")
-                .setParameter(1, notificatieId)
-                .setParameter(2, volgnummer)
+    /** Een poging bij een bestaande notificatie, met het NotifyNL-id waarop een receipt binnenkomt. */
+    public static void voegPogingToe(EntityManager entityManager, UUID notificatieId, int nummer, UUID notifyId,
+                                     PogingStatus status, OffsetDateTime verzondenOp) {
+        entityManager.createNativeQuery("INSERT INTO poging (id, notificatie_id, nummer, status, notify_id, verzonden_op) "
+                        + "VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
+                .setParameter(1, UUID.randomUUID())
+                .setParameter(2, notificatieId)
+                .setParameter(3, nummer)
+                .setParameter(4, status.name())
+                .setParameter(5, notifyId)
+                .setParameter(6, verzondenOp)
+                .executeUpdate();
+    }
+
+    /** Een event met een eigen tijdstip, los van de registratietijd op de notificatie. */
+    public static void voegEventToe(EntityManager entityManager, UUID notificatieId, long volgnummer,
+                                    NotificatieStatus van, NotificatieStatus naar, OffsetDateTime tijdstip) {
+        entityManager.createNativeQuery("INSERT INTO event (tijdstip, notificatie_id, volgnummer, van, naar) "
+                        + "VALUES (?1, ?2, ?3, ?4, ?5)")
+                .setParameter(1, tijdstip)
+                .setParameter(2, notificatieId)
+                .setParameter(3, volgnummer)
+                .setParameter(4, van != null ? van.name() : null)
+                .setParameter(5, naar.name())
                 .executeUpdate();
     }
 
@@ -80,42 +76,46 @@ public final class NotificatieFixtures {
                 .executeUpdate();
     }
 
-    public static long telStatusregels(EntityManager entityManager, UUID notificatieId) {
-        return ((Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM notificatie_status "
-                        + "WHERE notificatie_id = ?1")
+    public static long telPogingen(EntityManager entityManager, UUID notificatieId) {
+        return ((Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM poging WHERE notificatie_id = ?1")
                 .setParameter(1, notificatieId)
                 .getSingleResult()).longValue();
     }
 
     /**
-     * Plant in één statement {@code aantalRijen} notificaties met dezelfde statusreeks, voor tests die
-     * meer rijen nodig hebben dan een batch groot is.
-     * <p>
-     * {@code generate_series} levert de rijen en het id wordt uit het rijnummer afgeleid, zodat beide
-     * tabellen naar hetzelfde id verwijzen. De laatst meegegeven status geldt als de huidige, want
-     * deze fixture slaat {@code Notificatie#registreerStatus} bewust over.
+     * Plant in één statement {@code aantalRijen} notificaties in dezelfde status, met per notificatie
+     * {@code aantalPogingen} pogingen, voor tests die meer rijen nodig hebben dan een batch groot is.
+     * {@code generate_series} levert de rijen en het id wordt uit het rijnummer afgeleid, zodat de
+     * pogingen naar hetzelfde id verwijzen.
      */
     public static void plantNotificaties(EntityManager entityManager, int aantalRijen, OffsetDateTime tijdstip,
-                                         StatusWaarde... statussen) {
+                                         NotificatieStatus status, int aantalPogingen) {
         String idExpressie = "('00000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid";
-        StatusWaarde laatsteStatus = statussen[statussen.length - 1];
         QuarkusTransaction.requiringNew().run(() -> {
-            entityManager.createNativeQuery("INSERT INTO notificatie (id, laatste_status, laatste_status_update) "
-                            + "SELECT " + idExpressie + ", ?3, ?1 FROM generate_series(1, ?2) AS g")
+            zetTriggerUit(entityManager);
+            entityManager.createNativeQuery("INSERT INTO notificatie (id, versie, status, laatste_status_update) "
+                            + "SELECT " + idExpressie + ", 0, ?3, ?1 FROM generate_series(1, ?2) AS g")
                     .setParameter(1, tijdstip)
                     .setParameter(2, aantalRijen)
-                    .setParameter(3, laatsteStatus.name())
+                    .setParameter(3, status.name())
                     .executeUpdate();
-            for (int volgnummer = 0; volgnummer < statussen.length; volgnummer++) {
-                entityManager.createNativeQuery("INSERT INTO notificatie_status (notificatie_id, volgnummer, status, "
-                                + "tijdstip, geregistreerd) SELECT " + idExpressie + ", ?3, ?4, ?1, ?1 "
+
+            for (int nummer = 1; nummer <= aantalPogingen; nummer++) {
+                entityManager.createNativeQuery("INSERT INTO poging (id, notificatie_id, nummer, status, notify_id, verzonden_op) "
+                                + "SELECT gen_random_uuid(), " + idExpressie + ", ?3, ?4, gen_random_uuid(), ?1 "
                                 + "FROM generate_series(1, ?2) AS g")
                         .setParameter(1, tijdstip)
                         .setParameter(2, aantalRijen)
-                        .setParameter(3, volgnummer)
-                        .setParameter(4, statussen[volgnummer].name())
+                        .setParameter(3, nummer)
+                        .setParameter(4, PogingStatus.VERZONDEN.name())
                         .executeUpdate();
             }
         });
+    }
+
+    // Alleen voor de lopende transactie; een insert met een andere status dan AANGENOMEN en zonder
+    // event komt anders niet door de constraint trigger.
+    private static void zetTriggerUit(EntityManager entityManager) {
+        entityManager.createNativeQuery("SET LOCAL session_replication_role = replica").executeUpdate();
     }
 }

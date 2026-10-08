@@ -3,7 +3,8 @@ package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
-import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.net.ConnectException;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
@@ -207,13 +209,17 @@ class ConsumentCallbackAdapterTest {
         NotificatieStatusEvent event = captor.getValue();
         assertNotNull(event.id());
         assertEquals("1.0", event.specversion());
-        assertEquals("nl.rijksoverheid.moz.nmc.notificatie.status", event.type());
+        assertEquals("nl.overheid.moz.notificatie.status.niet-bezorgbaar", event.type());
         assertEquals("application/json", event.datacontenttype());
         assertNotNull(event.source());
-        assertNotNull(event.subject());
-        assertNotNull(event.time());
-        assertEquals(opdracht.notificatieId(), event.data().notificatieId());
-        assertEquals(StatusWaarde.DELIVERED, event.data().status());
+        assertEquals(opdracht.notificatieId().toString(), event.subject());
+        assertEquals(OffsetDateTime.parse("2026-01-15T10:00:00Z"), event.time());
+        assertEquals("3", event.sequence());
+        assertEquals("Integer", event.sequencetype());
+        assertEquals(NotificatieStatus.VERZONDEN, event.data().van());
+        assertEquals(NotificatieStatus.NIET_BEZORGBAAR, event.data().naar());
+        assertEquals(Reden.ONBEREIKBAAR, event.data().reden());
+        assertEquals(3L, event.data().versie());
     }
 
     @Test
@@ -252,18 +258,21 @@ class ConsumentCallbackAdapterTest {
     // opdracht op in een AFTER_SUCCESS-observer, waar een NPE ná de commit door de transactiemanager
     // wordt opgeslokt. Vanuit de constructor valt dezelfde fout nog binnen de transactie.
     @Test
-    void opdracht_zonderNotificatieIdOfStatus_weigert() {
-        assertThrows(NullPointerException.class,
-                () -> new StatusUpdateOpdracht(null, "https://omc.example.nl/callback", StatusWaarde.DELIVERED));
-        assertThrows(NullPointerException.class,
-                () -> new StatusUpdateOpdracht(UUID.randomUUID(), "https://omc.example.nl/callback", null));
+    void opdracht_zonderNotificatieIdNieuweStatusOfTijdstip_weigert() {
+        assertThrows(NullPointerException.class, () -> new StatusUpdateOpdracht(null,
+                "https://omc.example.nl/callback", 1L, NotificatieStatus.VERZONDEN, NotificatieStatus.BEZORGD, null, OffsetDateTime.parse("2026-01-15T10:00:00Z")));
+        assertThrows(NullPointerException.class, () -> new StatusUpdateOpdracht(UUID.randomUUID(),
+                "https://omc.example.nl/callback", 1L, NotificatieStatus.VERZONDEN, null, null, OffsetDateTime.parse("2026-01-15T10:00:00Z")));
+        assertThrows(NullPointerException.class, () -> new StatusUpdateOpdracht(UUID.randomUUID(),
+                "https://omc.example.nl/callback", 1L, NotificatieStatus.VERZONDEN, NotificatieStatus.BEZORGD, null, null));
     }
 
     // Een lege callbackUrl is geen fout maar een betekenisdragende waarde: de Dienstverlener heeft
     // geen callback geconfigureerd en vraagt de status zelf op.
     @Test
     void opdracht_zonderCallbackUrl_isToegestaan() {
-        assertDoesNotThrow(() -> new StatusUpdateOpdracht(UUID.randomUUID(), null, StatusWaarde.DELIVERED));
+        assertDoesNotThrow(() -> new StatusUpdateOpdracht(UUID.randomUUID(), null, 1L,
+                NotificatieStatus.VERZONDEN, NotificatieStatus.BEZORGD, null, OffsetDateTime.parse("2026-01-15T10:00:00Z")));
     }
 
     private static ProcessingException transportfout() {
@@ -271,6 +280,7 @@ class ConsumentCallbackAdapterTest {
     }
 
     private static StatusUpdateOpdracht opdracht(String callbackUrl) {
-        return new StatusUpdateOpdracht(UUID.randomUUID(), callbackUrl, StatusWaarde.DELIVERED);
+        return new StatusUpdateOpdracht(UUID.randomUUID(), callbackUrl, 3L,
+                NotificatieStatus.VERZONDEN, NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR, OffsetDateTime.parse("2026-01-15T10:00:00Z"));
     }
 }
