@@ -38,8 +38,8 @@ public record NotificatieStatus(
 
         // Normaliseren naar UTC en afkappen op microseconden, zodat de waarde hier gelijk is aan de
         // waarde die uit de database terugkomt. PostgreSQL levert een timestamptz altijd als UTC
-        // terug terwijl H2 de offset bewaart, en OffsetDateTime#equals eist dezelfde offset; de
-        // kolommen zijn timestamp(6), dus de nanoseconden van OffsetDateTime#now overleven niet.
+        // terug en OffsetDateTime#equals eist dezelfde offset; de kolommen zijn timestamp(6), dus
+        // de nanoseconden van OffsetDateTime#now overleven niet.
         tijdstip = tijdstip.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
         geregistreerd = geregistreerd.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
     }
