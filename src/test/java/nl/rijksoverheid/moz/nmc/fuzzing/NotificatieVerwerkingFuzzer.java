@@ -55,6 +55,7 @@ import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
