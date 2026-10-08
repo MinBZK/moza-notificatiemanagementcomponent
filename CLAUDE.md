@@ -131,6 +131,16 @@ Geïmplementeerd:
 - **Adresselectie in de Profielservice-respons** (`ProfielServiceAdapter`): eerst
   een e-mailadres met exact de scope Dienstverlener + dienst, dan een met alleen
   de Dienstverlener als scope, dan het default-adres, dan een adres zonder scopes.
+- **Takentabel en worker-lus.** `taak` (per soort gepartitioneerd) draagt de
+  bijwerkingen met `due` als timer; `TaakClaimer` claimt per ronde met
+  `FOR UPDATE SKIP LOCKED`, verdeeld over de dienstverleners met werk en voor het
+  verzenden en de navraag binnen het `verzendbudget` per Notify-service per minuut.
+  `TaakWorker` draait per soort een `@Scheduled`-ronde en geeft elke taak aan de
+  `TaakHandler` van die soort. Er zijn nog geen handlers: de tabel blijft leeg tot de
+  aannamestory de verzendtaak plant.
+- **Eén geconfigureerde dienstverlener.** `dienstverlener` heeft één rij uit de
+  migratie; `DvProvider` levert die `dv_id`, die op elke notificatie en elk event
+  staat. Tokenvalidatie per dienstverlener vervangt later alleen de provider.
 
 Beide create-flows delen `NotificatieService.verstuurNaarEmail(...)`: aannemen,
 een poging aanmaken, naar `in-verzending`, versturen bij NotifyNL en naar
@@ -365,7 +375,11 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
 - **Expand/contract bij een kolomwijziging.** Voeg eerst de nieuwe kolom toe, vul hem
   in dezelfde migratie uit de oude, en laat de `DROP COLUMN` pas volgen als niets hem
   meer leest. V4 (expand), V5 (overstap en backfill) en V6 (contract) doen dat voor de
-  overstap naar het statusmodel uit ADR 0024.
+  overstap naar het statusmodel uit ADR 0024; V8 voegt `dienstverlener`, `taak` en
+  `verzendbudget` toe en maakt `dv_id` op `notificatie` en `event` verplicht.
+- **Gepartitioneerde tabellen (`event`, `taak`) hebben de partitiesleutel in de primary
+  key.** Een query op `taak` noemt daarom altijd de `soort`, anders zoekt PostgreSQL in
+  elke partitie; een nieuwe `TaakSoort` vraagt een migratie met een nieuwe partitie.
 - **SQL is PostgreSQL 18.** Dev, test en prod draaien hetzelfde dialect, dus
   PostgreSQL-eigen SQL is toegestaan en draait ook in de tests.
 - **Een index op een gevulde tabel gaat met `CREATE INDEX CONCURRENTLY`.** Een gewone
@@ -401,6 +415,12 @@ starten als ze ontbreken**:
 | `hash.pepper` | `HashHelper`: HMAC-SHA-256 om BSN/KVK/RSIN en e-mailadressen te pseudonimiseren voor het logboek |
 | `nmc.kek.huidige-versie` | `ConfigKekProvider`: KEK-versie waarmee `Sleutelbeheer` nieuwe sleutels per notificatie wrapt |
 | `nmc.kek.versie.<n>` | `ConfigKekProvider`: KEK per versie, base64 van 32 bytes; die van de huidige versie is verplicht, oudere zolang er rijen met die `kek_versie` zijn |
+
+Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
+`nmc.dienstverlener.id` (de rij uit V8), `nmc.taak.*` (interval, batch, lease,
+max-pogingen van de worker-lus) en `nmc.verzendbudget.*` (Notify-service, tokens per
+minuut, reservering voor de navraag). Onder `%test` staat de lus uit en is het budget
+klein, zodat tests het uitputten.
 
 Lokaal horen ze in een niet-ingecheckte `src/main/resources/application-dev.properties`,
 nooit in `application.properties`. Onder `%test` staan dummywaarden.

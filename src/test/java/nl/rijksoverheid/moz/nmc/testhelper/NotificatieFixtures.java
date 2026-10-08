@@ -19,6 +19,9 @@ import java.util.UUID;
  */
 public final class NotificatieFixtures {
 
+    /** De dienstverlener uit migratie V8 en {@code nmc.dienstverlener.id} onder {@code %test}. */
+    public static final UUID DV_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
+
     private NotificatieFixtures() {
     }
 
@@ -26,9 +29,10 @@ public final class NotificatieFixtures {
     public static void voegNotificatieToe(EntityManager entityManager, UUID id, String callbackUrl,
                                           NotificatieStatus status, OffsetDateTime laatsteStatusUpdate) {
         zetTriggerUit(entityManager);
-        entityManager.createNativeQuery("INSERT INTO notificatie (id, versie, callback_url, status, laatste_status_update) "
-                        + "VALUES (?1, 0, ?2, ?3, ?4)")
+        entityManager.createNativeQuery("INSERT INTO notificatie (id, dv_id, versie, callback_url, status, laatste_status_update) "
+                        + "VALUES (?1, ?5, 0, ?2, ?3, ?4)")
                 .setParameter(1, id)
+                .setParameter(5, DV_ID)
                 .setParameter(2, callbackUrl)
                 .setParameter(3, status.name())
                 .setParameter(4, laatsteStatusUpdate)
@@ -52,9 +56,10 @@ public final class NotificatieFixtures {
     /** Een event met een eigen tijdstip, los van de registratietijd op de notificatie. */
     public static void voegEventToe(EntityManager entityManager, UUID notificatieId, long volgnummer,
                                     NotificatieStatus van, NotificatieStatus naar, OffsetDateTime tijdstip) {
-        entityManager.createNativeQuery("INSERT INTO event (tijdstip, notificatie_id, volgnummer, van, naar) "
-                        + "VALUES (?1, ?2, ?3, ?4, ?5)")
+        entityManager.createNativeQuery("INSERT INTO event (tijdstip, dv_id, notificatie_id, volgnummer, van, naar) "
+                        + "VALUES (?1, ?6, ?2, ?3, ?4, ?5)")
                 .setParameter(1, tijdstip)
+                .setParameter(6, DV_ID)
                 .setParameter(2, notificatieId)
                 .setParameter(3, volgnummer)
                 .setParameter(4, van != null ? van.name() : null)
@@ -93,9 +98,10 @@ public final class NotificatieFixtures {
         String idExpressie = "('00000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid";
         QuarkusTransaction.requiringNew().run(() -> {
             zetTriggerUit(entityManager);
-            entityManager.createNativeQuery("INSERT INTO notificatie (id, versie, status, laatste_status_update) "
-                            + "SELECT " + idExpressie + ", 0, ?3, ?1 FROM generate_series(1, ?2) AS g")
+            entityManager.createNativeQuery("INSERT INTO notificatie (id, dv_id, versie, status, laatste_status_update) "
+                            + "SELECT " + idExpressie + ", ?4, 0, ?3, ?1 FROM generate_series(1, ?2) AS g")
                     .setParameter(1, tijdstip)
+                    .setParameter(4, DV_ID)
                     .setParameter(2, aantalRijen)
                     .setParameter(3, status.name())
                     .executeUpdate();
