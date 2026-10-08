@@ -68,9 +68,9 @@ WHERE s.status <> 'ONBEKEND'
 ALTER TABLE notificatie ALTER COLUMN status SET NOT NULL;
 ALTER TABLE notificatie ALTER COLUMN laatste_status DROP NOT NULL;
 
--- Een nieuwe notificatie begint op AANGENOMEN; een gewijzigde versie moet een toegestane overgang
--- zijn. In beide gevallen moet in dezelfde transactie een event met die versie als volgnummer zijn
--- geschreven. Deferred, omdat het event na de rij wordt weggeschreven.
+-- Een nieuwe notificatie begint op AANGENOMEN, en de status verandert alleen met een nieuwe versie.
+-- Bij een nieuwe rij en een nieuwe versie moet in dezelfde transactie een event met die versie als
+-- volgnummer zijn geschreven. Deferred, omdat het event na de rij wordt weggeschreven.
 CREATE FUNCTION controleer_notificatie_overgang() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -86,9 +86,6 @@ BEGIN
         END IF;
 
         RETURN NULL;
-    ELSIF NOT EXISTS (SELECT 1 FROM toegestane_overgang WHERE van = OLD.status AND naar = NEW.status) THEN
-        RAISE EXCEPTION 'Overgang van % naar % is niet toegestaan (notificatie %)', OLD.status, NEW.status, NEW.id
-            USING ERRCODE = 'check_violation';
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM event

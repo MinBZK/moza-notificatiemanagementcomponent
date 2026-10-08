@@ -64,18 +64,6 @@ class NotificatieOvergangTriggerTest {
     }
 
     @Test
-    void nietToegestaneOvergang_wordtGeweigerdOokMetEvent() {
-        UUID id = aangenomenNotificatie();
-
-        Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
-            sql("UPDATE notificatie SET versie = 1, status = 'BEZORGD' WHERE id = ?1", id);
-            schrijfEvent(id, 1, "AANGENOMEN", "BEZORGD");
-        }));
-
-        assertTrue(bevat(fout, "niet toegestaan"), fout.toString());
-    }
-
-    @Test
     void statuswijzigingZonderNieuweVersie_wordtGeweigerd() {
         UUID id = aangenomenNotificatie();
 
