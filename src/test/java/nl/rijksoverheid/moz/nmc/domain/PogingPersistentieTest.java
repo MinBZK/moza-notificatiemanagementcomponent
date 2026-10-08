@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -52,6 +53,21 @@ class PogingPersistentieTest {
             assertNull(herladen.getNotifyId());
             assertNull(herladen.getVerzondenOp());
             assertNull(herladen.getReceiptTijdstip());
+        });
+    }
+
+    // Het id gaat als reference mee naar NotifyNL, dus het moet er direct na persist zijn, vóór de flush.
+    @Test
+    void poging_naPersist_heeftEenIdZonderFlush() {
+        UUID notificatieId = nieuweNotificatie();
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            Poging poging = new Poging(notificatieId, 1);
+            assertNull(poging.getId());
+
+            pogingRepository.persist(poging);
+
+            assertNotNull(poging.getId());
         });
     }
 
