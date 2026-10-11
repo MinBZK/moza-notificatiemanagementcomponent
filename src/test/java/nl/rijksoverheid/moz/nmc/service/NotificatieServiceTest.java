@@ -144,7 +144,7 @@ class NotificatieServiceTest {
     }
 
     @Test
-    void verstuurDecentraal_bewaartOntvangerEnPersonalisationVersleuteld() throws Exception {
+    void verstuurDecentraal_metPersonalisation_bewaartOntvangerEnPersonalisationVersleuteld() throws Exception {
         when(verzendAdapter.verstuurEmail(any(), any(), any())).thenReturn(UUID.randomUUID());
 
         Notificatie resultaat = service.verstuurDecentraal(
@@ -159,7 +159,7 @@ class NotificatieServiceTest {
     // Bij centrale regie komt het adres uit de Profielservice en wordt het niet opgeslagen; op de rij staat
     // het identificerend nummer, waarmee de verzending het adres opnieuw kan ophalen.
     @Test
-    void versturen_bewaartHetIdentificerendNummerEnNietHetAdresUitDeProfielservice() throws Exception {
+    void versturen_centraleRegie_bewaartAlleenHetIdentificerendNummer() throws Exception {
         when(profielServiceAdapter.zoekEmailAdres(any())).thenReturn("burger@example.nl");
         when(verzendAdapter.verstuurEmail(any(), any(), any())).thenReturn(UUID.randomUUID());
 

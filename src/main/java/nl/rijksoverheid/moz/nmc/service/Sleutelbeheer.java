@@ -94,10 +94,12 @@ public class Sleutelbeheer {
         return leesJson(json, PERSONALISATION_TYPE, "personalisation");
     }
 
+    // Package-private zodat SleutelbeheerTest de gewrapte sleutel los kan toetsen.
     byte[] wrap(UUID notificatieId, SecretKey sleutel, int kekVersie) throws GeneralSecurityException {
         return versleutelVeld(kek(kekVersie), aadSleutel(kekVersie, notificatieId), sleutel.getEncoded());
     }
 
+    // Package-private zodat SleutelbeheerTest het uitpakken los kan toetsen.
     SecretKey pakUit(UUID notificatieId, VersleuteldeGegevens gegevens) {
         Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
         Objects.requireNonNull(gegevens, "gegevens is verplicht");
@@ -179,7 +181,7 @@ public class Sleutelbeheer {
         return personalisation != null ? personalisation : Map.of();
     }
 
-    // Zonder de Jackson-fout als oorzaak, om dezelfde reden als bij het lezen.
+    // Zonder de Jackson-fout als oorzaak, voor het geval de melding de waarde bevat.
     private byte[] serialiseer(Object waarde) {
         try {
             return objectMapper.writeValueAsBytes(waarde);
