@@ -23,21 +23,23 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Versleutelt ontvanger en personalisation van een notificatie met een eigen AES-256-GCM-sleutel per
- * notificatie. Die sleutel wordt met de huidige KEK gewrapt, ook met AES-256-GCM, en samen met de
- * KEK-versie op de rij bewaard. Het wissen van de gewrapte sleutel maakt de gegevens onleesbaar.
+ * Encrypts the ontvanger and personalisation of a notificatie with its own AES-256-GCM key per
+ * notificatie. That key is wrapped with the current KEK, also using AES-256-GCM, and stored on the row
+ * together with the KEK version. Erasing the wrapped key makes the data unreadable.
  * <p>
- * Ciphertext is {@code IV (12 bytes) || versleutelde gegevens || tag (16 bytes)}. Als associated data
- * gaan de veldnaam en de notificatie-id mee ({@code ontvanger:<id>}, {@code personalisation:<id>}), bij de
- * gewrapte sleutel ook de KEK-versie ({@code sleutel:<kek_versie>:<id>}). Zo gaat een waarde niet open in
- * een ander veld, op een andere rij of onder een andere KEK-versie.
+ * Ciphertext is {@code IV (12 bytes) || encrypted data || tag (16 bytes)}. The associated data is the
+ * field name and the notificatie id ({@code ontvanger:<id>}, {@code personalisation:<id>}), plus the KEK
+ * version for the wrapped key ({@code sleutel:<kek_versie>:<id>}). A value therefore does not decrypt in
+ * another field, on another row or under another KEK version.
  */
 @ApplicationScoped
 public class Sleutelbeheer {
 
     private static final String GCM = "AES/GCM/NoPadding";
     private static final int SLEUTEL_BITS = 256;
+    // Random nonce per encryption, stored in front of the ciphertext.
     private static final int IV_BYTES = 12;
+    // Integrity check appended to the ciphertext; decryption fails if the data or AAD was changed.
     private static final int TAG_BITS = 128;
     private static final TypeReference<Map<String, String>> PERSONALISATION_TYPE = new TypeReference<>() {
     };
@@ -54,8 +56,8 @@ public class Sleutelbeheer {
     }
 
     /**
-     * @param personalisation null wordt als een lege map versleuteld; NotifyNL krijgt in beide gevallen
-     *        een lege personalisation
+     * @param personalisation null is encrypted as an empty map; NotifyNL receives an empty
+     *        personalisation in both cases
      */
     public VersleuteldeGegevens versleutel(UUID notificatieId, Ontvanger ontvanger, Map<String, String> personalisation) {
         Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
@@ -126,7 +128,7 @@ public class Sleutelbeheer {
         return ("sleutel:" + kekVersie + ":" + notificatieId).getBytes(StandardCharsets.UTF_8);
     }
 
-    // Zonder de Jackson-fout als oorzaak: de melding daarvan citeert de ontsleutelde tekst.
+    // Without the Jackson exception as cause: its message quotes the decrypted text.
     private <T> T leesJson(byte[] json, TypeReference<T> type, String veld) {
         try {
             return objectMapper.readValue(json, type);
@@ -177,7 +179,7 @@ public class Sleutelbeheer {
         return personalisation != null ? personalisation : Map.of();
     }
 
-    // Zonder de Jackson-fout als oorzaak, om dezelfde reden als bij het lezen.
+    // Without the Jackson exception as cause, for the same reason as when reading.
     private byte[] serialiseer(Object waarde) {
         try {
             return objectMapper.writeValueAsBytes(waarde);
