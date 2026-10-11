@@ -68,8 +68,8 @@ public class ReceiptVerwerker {
             return;
         }
 
-        Overgang overgang = Overgang.bij(uitkomst.get());
-        OvergangUitkomst resultaat = overgangsfunctie.voerUit(notificatie.getId(), overgang.naar(), overgang.reden());
+        Overgang overgang = Overgang.bepaal(uitkomst.get());
+        OvergangUitkomst resultaat = overgangsfunctie.voerUit(notificatie.getId(), overgang.status(), overgang.reden());
 
         if (!resultaat.isUitgevoerd()) {
             Log.debugf("Notificatie %s blijft op %s; receipt %s (NotifyNL-referentie %s) is op de poging vastgelegd",
@@ -110,10 +110,10 @@ public class ReceiptVerwerker {
         return tijdstip.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
     }
 
-    // Tot er herverzending is, is elke faaluitkomst terminaal.
-    private record Overgang(NotificatieStatus naar, Reden reden) {
+    // Tot er herverzending is, leidt elke faaluitkomst tot een eindstatus.
+    private record Overgang(NotificatieStatus status, Reden reden) {
 
-        static Overgang bij(PogingStatus uitkomst) {
+        static Overgang bepaal(PogingStatus uitkomst) {
             return switch (uitkomst) {
                 case BEZORGD -> new Overgang(NotificatieStatus.BEZORGD, null);
                 case PERMANENT_MISLUKT, TIJDELIJK_MISLUKT -> new Overgang(NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR);

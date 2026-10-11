@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import java.util.Locale;
 
 /**
- * De reden bij een terminale status, zoals de Dienstverlener hem ziet. Bewust grof: een onbekende
+ * De reden bij een eindstatus, zoals de Dienstverlener hem ziet. Bewust grof: een onbekende
  * partij en een ontbrekende voorkeur vallen beide onder {@code GEEN_CONTACTGEGEVENS}.
  */
 public enum Reden {

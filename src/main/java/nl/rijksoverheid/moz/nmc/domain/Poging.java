@@ -4,6 +4,8 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -22,6 +24,7 @@ import java.util.UUID;
 public class Poging {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(name = "notificatie_id", nullable = false)
@@ -53,7 +56,6 @@ public class Poging {
     }
 
     public Poging(UUID notificatieId, int nummer) {
-        this.id = UUID.randomUUID();
         this.notificatieId = Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
         this.nummer = nummer;
         this.status = PogingStatus.GEPLAND;

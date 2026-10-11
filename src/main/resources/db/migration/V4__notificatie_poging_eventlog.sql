@@ -44,31 +44,3 @@ CREATE TABLE event (
 CREATE TABLE event_standaard PARTITION OF event DEFAULT;
 
 CREATE INDEX event_notificatie_volgnummer_idx ON event (notificatie_id, volgnummer);
-
--- De toegestane statusovergangen; gelijk aan Overgangsregels, bewaakt door een test.
-CREATE TABLE toegestane_overgang (
-    van varchar(32) NOT NULL,
-    naar varchar(32) NOT NULL,
-    PRIMARY KEY (van, naar)
-);
-
-INSERT INTO toegestane_overgang (van, naar) VALUES
-    ('AANGENOMEN', 'IN_VERZENDING'),
-    ('AANGENOMEN', 'VERLOPEN'),
-    ('AANGENOMEN', 'GEANNULEERD'),
-    ('IN_VERZENDING', 'VERZONDEN'),
-    ('IN_VERZENDING', 'TECHNISCH_MISLUKT'),
-    ('IN_VERZENDING', 'VERLOPEN'),
-    ('IN_VERZENDING', 'NIET_BEZORGBAAR'),
-    ('VERZONDEN', 'VERZONDEN'),
-    ('VERZONDEN', 'VERLOPEN'),
-    ('VERZONDEN', 'BEZORGD'),
-    ('VERZONDEN', 'NIET_BEZORGBAAR'),
-    ('VERZONDEN', 'TECHNISCH_MISLUKT'),
-    ('VERZONDEN', 'BEZORGSTATUS_ONBEKEND'),
-    ('BEZORGSTATUS_ONBEKEND', 'BEZORGD'),
-    ('BEZORGSTATUS_ONBEKEND', 'NIET_BEZORGBAAR'),
-    ('BEZORGD', 'DEFINITIEF_BEZORGD'),
-    ('BEZORGD', 'VERZONDEN'),
-    ('BEZORGD', 'NIET_BEZORGBAAR'),
-    ('BEZORGD', 'VERLOPEN');

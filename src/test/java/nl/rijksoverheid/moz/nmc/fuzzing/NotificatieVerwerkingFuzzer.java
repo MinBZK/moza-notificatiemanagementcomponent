@@ -56,6 +56,7 @@ import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -140,17 +141,17 @@ public class NotificatieVerwerkingFuzzer {
             implements Event<StatusUpdateOpdracht> {
 
         @Override
-        public void fire(StatusUpdateOpdracht opdracht) {
-            adapter.stuurStatusUpdate(opdracht);
+        public void fire(StatusUpdateOpdracht statusUpdateOpdracht) {
+            adapter.stuurStatusUpdate(statusUpdateOpdracht);
         }
 
         @Override
-        public <U extends StatusUpdateOpdracht> CompletionStage<U> fireAsync(U opdracht) {
+        public <U extends StatusUpdateOpdracht> CompletionStage<U> fireAsync(U statusUpdateOpdracht) {
             throw new UnsupportedOperationException("ReceiptVerwerker fires synchronously");
         }
 
         @Override
-        public <U extends StatusUpdateOpdracht> CompletionStage<U> fireAsync(U opdracht, NotificationOptions options) {
+        public <U extends StatusUpdateOpdracht> CompletionStage<U> fireAsync(U statusUpdateOpdracht, NotificationOptions options) {
             throw new UnsupportedOperationException("ReceiptVerwerker fires synchronously");
         }
 
@@ -439,11 +440,30 @@ public class NotificatieVerwerkingFuzzer {
     /** In-memory stand-in for the pogingen; column constraints are not enforced. */
     private static final class GeheugenPogingRepository extends PogingRepository {
 
+        private static final Field ID_VELD = idVeld();
+
         private final Map<UUID, Poging> opgeslagen = new HashMap<>();
 
         @Override
         public void persist(Poging poging) {
+            try {
+                ID_VELD.set(poging, UUID.randomUUID());
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException(e);
+            }
+
             opgeslagen.put(poging.getId(), poging);
+        }
+
+        private static Field idVeld() {
+            try {
+                // JPA assigns the generated id on persist; the entity has no setter for it.
+                Field veld = Poging.class.getDeclaredField("id");
+                veld.setAccessible(true);
+                return veld;
+            } catch (NoSuchFieldException e) {
+                throw new IllegalStateException(e);
+            }
         }
 
         @Override

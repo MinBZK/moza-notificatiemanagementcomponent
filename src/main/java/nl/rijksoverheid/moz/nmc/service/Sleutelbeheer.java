@@ -37,7 +37,9 @@ public class Sleutelbeheer {
 
     private static final String GCM = "AES/GCM/NoPadding";
     private static final int SLEUTEL_BITS = 256;
+    // Willekeurige nonce per versleuteling, opgeslagen vóór de versleutelde tekst.
     private static final int IV_BYTES = 12;
+    // Integriteitscontrole achter de versleutelde tekst; ontsleutelen faalt als data of AAD gewijzigd is.
     private static final int TAG_BITS = 128;
     private static final TypeReference<Map<String, String>> PERSONALISATION_TYPE = new TypeReference<>() {
     };

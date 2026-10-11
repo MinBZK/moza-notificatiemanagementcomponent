@@ -233,7 +233,7 @@ components:
 
             De statusupdate is een CloudEvent per statusovergang, met `subject` de
             notificatie-id, `sequence` het volgnummer van de overgang en in `data` de
-            statussen `van` en `naar`, de `reden` en de `versie`. De statussen staan
+            `vorigeStatus` en `nieuweStatus`, de `reden` en de `versie`. De statussen staan
             beschreven bij het schema `NotificatieStatus`. Verwerk per `subject` op
             `sequence`: callbacks kunnen in een andere volgorde aankomen. De NMC doet
             maximaal drie pogingen en biedt daarna niet opnieuw aan.
@@ -283,7 +283,7 @@ components:
 
             De statusupdate is een CloudEvent per statusovergang, met `subject` de
             notificatie-id, `sequence` het volgnummer van de overgang en in `data` de
-            statussen `van` en `naar`, de `reden` en de `versie`. De statussen staan
+            `vorigeStatus` en `nieuweStatus`, de `reden` en de `versie`. De statussen staan
             beschreven bij het schema `NotificatieStatus`. Verwerk per `subject` op
             `sequence`: callbacks kunnen in een andere volgorde aankomen. De NMC doet
             maximaal drie pogingen en biedt daarna niet opnieuw aan.
@@ -328,9 +328,9 @@ components:
         type:
           type: string
           description: >-
-            `nl.overheid.moz.notificatie.status.` gevolgd door de nieuwe status, bijvoorbeeld
-            `nl.overheid.moz.notificatie.status.bezorgd`.
-          example: nl.overheid.moz.notificatie.status.bezorgd
+            `nl.mijnoverheidzakelijk.nmc.notificatie.status.` gevolgd door de nieuwe status, bijvoorbeeld
+            `nl.mijnoverheidzakelijk.nmc.notificatie.status.bezorgd`.
+          example: nl.mijnoverheidzakelijk.nmc.notificatie.status.bezorgd
         source:
           type: string
           format: uri-reference
@@ -362,15 +362,15 @@ components:
     NotificatieStatusData:
       type: object
       description: >-
-        Eén statusovergang. `van` ontbreekt bij het eerste event van een notificatie en
+        Eén statusovergang. `vorigeStatus` ontbreekt bij het eerste event van een notificatie en
         `reden` ontbreekt bij een overgang zonder reden, zoals naar `bezorgd`.
       required:
-        - naar
+        - nieuweStatus
         - versie
       properties:
-        van:
+        vorigeStatus:
           $ref: '#/components/schemas/NotificatieStatus'
-        naar:
+        nieuweStatus:
           $ref: '#/components/schemas/NotificatieStatus'
         reden:
           $ref: '#/components/schemas/Reden'

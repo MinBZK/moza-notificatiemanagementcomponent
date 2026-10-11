@@ -12,12 +12,12 @@ public enum NotificatieStatus {
     AANGENOMEN,
     IN_VERZENDING,
     VERZONDEN,
-    // Niet terminaal: NotifyNL kan tot zeven dagen na delivered nog een faalreceipt sturen.
+    // Geen eindstatus: NotifyNL kan tot zeven dagen na delivered nog een faalreceipt sturen.
     BEZORGD,
     DEFINITIEF_BEZORGD,
     NIET_BEZORGBAAR,
     TECHNISCH_MISLUKT,
-    // Terminaal, maar een later binnengekomen receipt mag hem nog corrigeren.
+    // Eindstatus, maar een later binnengekomen receipt mag hem nog corrigeren.
     BEZORGSTATUS_ONBEKEND,
     VERLOPEN,
     GEANNULEERD;
@@ -26,7 +26,7 @@ public enum NotificatieStatus {
      * Een eindstatus: geen uitgaande overgang meer, behalve dat {@code BEZORGSTATUS_ONBEKEND} door een
      * laat event nog gecorrigeerd mag worden.
      */
-    public boolean isTerminaal() {
+    public boolean isEindstatus() {
         return switch (this) {
             case DEFINITIEF_BEZORGD, NIET_BEZORGBAAR, TECHNISCH_MISLUKT, BEZORGSTATUS_ONBEKEND, VERLOPEN, GEANNULEERD -> true;
             case AANGENOMEN, IN_VERZENDING, VERZONDEN, BEZORGD -> false;
