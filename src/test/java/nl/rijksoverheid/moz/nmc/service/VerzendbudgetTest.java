@@ -4,6 +4,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import nl.rijksoverheid.moz.nmc.repository.VerzendbudgetRepository;
 import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +30,9 @@ class VerzendbudgetTest {
 
     @Inject
     EntityManager entityManager;
+
+    @Inject
+    VerzendbudgetRepository verzendbudgetRepository;
 
     @InjectMock
     Clock clock;
@@ -110,9 +114,9 @@ class VerzendbudgetTest {
 
     @Test
     void constructor_ongeldigeConfiguratie_weigert() {
-        assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, clock, "x", 0, 0));
-        assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, clock, "x", 10, 10));
-        assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, clock, "x", 10, -1));
+        assertThrows(IllegalStateException.class, () -> new Verzendbudget(verzendbudgetRepository, clock, "x", 0, 0));
+        assertThrows(IllegalStateException.class, () -> new Verzendbudget(verzendbudgetRepository, clock, "x", 10, 10));
+        assertThrows(IllegalStateException.class, () -> new Verzendbudget(verzendbudgetRepository, clock, "x", 10, -1));
     }
 
     private int neem(BudgetDoel doel, int gevraagd) {

@@ -7,7 +7,10 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Version;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.PartitionKey;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
@@ -23,16 +26,19 @@ import java.util.UUID;
  * die zijn lease verloor niets meer kan afronden of uitstellen.
  * <p>
  * De tabel is gepartitioneerd op {@code soort}; alle queries in {@code TaakRepository} noemen de soort,
- * zodat PostgreSQL naar één partitie kan. Wijzigingen lopen via die repository, niet via deze entity:
+ * zodat PostgreSQL naar één partitie kan, en {@link PartitionKey} zet hem ook in de updates van
+ * Hibernate zelf. Op de claim na lopen wijzigingen via die repository, met een toets op het epoch:
  * daarom zijn er geen setters.
  */
 @Entity
+@DynamicUpdate
 public class Taak {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @PartitionKey
     @Enumerated(EnumType.STRING)
     @Column(name = "soort", nullable = false, length = 32, updatable = false)
     private TaakSoort taakSoort;
@@ -51,6 +57,9 @@ public class Taak {
     @Column(name = "lease_tot")
     private OffsetDateTime leaseTot;
 
+    // Hibernate verhoogt het epoch bij de claim in SQL en toetst de oude waarde; de bulkupdates in
+    // TaakRepository raken het niet.
+    @Version
     @Column(name = "claim_epoch", nullable = false)
     private long claimEpoch;
 
@@ -84,6 +93,11 @@ public class Taak {
         this.traceId = traceId;
         this.payload = payload;
         this.status = TaakStatus.OPEN;
+    }
+
+    /** Zet de lease; bij de flush verhoogt Hibernate het epoch. */
+    public void claim(OffsetDateTime leaseTot) {
+        this.leaseTot = Objects.requireNonNull(leaseTot, "leaseTot is verplicht");
     }
 
     public Long getId() {

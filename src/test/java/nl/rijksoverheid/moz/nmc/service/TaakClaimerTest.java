@@ -200,6 +200,40 @@ class TaakClaimerTest {
         }
     }
 
+    // Een rij die een andere transactie vergrendeld houdt, wordt overgeslagen in plaats van afgewacht.
+    @Test
+    void claim_vergrendeldeTaak_wordtOvergeslagenZonderTeWachten() throws Exception {
+        long vergrendeld = plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(2));
+        long vrij = plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        CountDownLatch vast = new CountDownLatch(1);
+        CountDownLatch los = new CountDownLatch(1);
+        ExecutorService threads = Executors.newFixedThreadPool(2);
+
+        try {
+            Future<?> houder = threads.submit(() -> QuarkusTransaction.requiringNew().run(() -> {
+                entityManager.createNativeQuery("SELECT id FROM taak WHERE soort = 'CONTROLE' AND id = ?1 FOR UPDATE")
+                        .setParameter(1, vergrendeld)
+                        .getResultList();
+                vast.countDown();
+                try {
+                    los.await(20, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+            assertTrue(vast.await(10, TimeUnit.SECONDS));
+
+            List<Taak> geclaimd = threads.submit(() -> taakClaimer.claim(TaakSoort.CONTROLE, 10)).get(5, TimeUnit.SECONDS);
+
+            assertEquals(List.of(vrij), geclaimd.stream().map(Taak::getId).toList());
+            los.countDown();
+            houder.get(10, TimeUnit.SECONDS);
+        } finally {
+            los.countDown();
+            threads.shutdownNow();
+        }
+    }
+
     // De batch wordt over de dienstverleners met werk verdeeld, zodat een piek van de ene de andere
     // niet blokkeert.
     @Test

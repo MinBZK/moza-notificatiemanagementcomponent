@@ -1,11 +1,17 @@
 package nl.rijksoverheid.moz.nmc.repository;
 
+import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
+import io.quarkus.panache.common.Parameters;
+import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.persistence.LockModeType;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
-import org.hibernate.query.NativeQuery;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
+import org.hibernate.Timeouts;
+import org.hibernate.jpa.SpecHints;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -20,54 +26,24 @@ import java.util.UUID;
 @ApplicationScoped
 public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
 
-    // Claim en lease in één statement: de subquery kiest met SKIP LOCKED de rijen die geen andere
-    // worker vasthoudt, de UPDATE zet de lease en verhoogt het epoch, en de CTE maakt er een SELECT
-    // van zodat Hibernate de rijen als entities leest. %s is de dv-voorwaarde: een gelijkheid, of
-    // IS NULL voor taken per systeem.
-    private static final String CLAIM_SQL = """
-            WITH geclaimd AS (
-                UPDATE taak
-                   SET lease_tot = ?3, claim_epoch = claim_epoch + 1
-                 WHERE (soort, id) IN (
-                        SELECT soort, id
-                          FROM taak
-                         WHERE soort = ?1
-                           AND %s
-                           AND status = 'OPEN'
-                           AND due <= ?2
-                           AND (lease_tot IS NULL OR lease_tot < ?2)
-                         ORDER BY due
-                         FETCH FIRST ?4 ROWS ONLY
-                           FOR UPDATE SKIP LOCKED)
-             RETURNING *)
-            SELECT * FROM geclaimd ORDER BY due
-            """;
+    private static final String AAN_DE_BEURT = Taak_.TAAK_SOORT + " = :taakSoort and " + Taak_.STATUS + " = :open and "
+            + Taak_.DUE + " <= :nu and (" + Taak_.LEASE_TOT + " is null or " + Taak_.LEASE_TOT + " < :nu)";
 
-    // Wie het langst wacht eerst: is het budget kleiner dan het aantal dienstverleners, dan krijgen
-    // niet steeds dezelfde dienstverleners niets.
-    private static final String DIENSTVERLENERS_MET_WERK_SQL = """
-            SELECT dv_id
-              FROM taak
-             WHERE soort = ?1
-               AND status = 'OPEN'
-               AND due <= ?2
-               AND (lease_tot IS NULL OR lease_tot < ?2)
-             GROUP BY dv_id
-             ORDER BY min(due)
-            """;
+    private static final String ZELFDE_CLAIM = Taak_.TAAK_SOORT + " = :taakSoort and " + Taak_.ID + " = :id and "
+            + Taak_.CLAIM_EPOCH + " = :claimEpoch";
 
     /**
-     * De dienstverleners met een taak van deze soort die aan de beurt is; {@code null} in de lijst
-     * staat voor taken per systeem.
+     * De dienstverleners met een taak van deze soort die aan de beurt is, wie het langst wacht eerst,
+     * zodat bij een klein budget niet steeds dezelfde dienstverleners niets krijgen; {@code null} in de
+     * lijst staat voor taken per systeem.
      */
-    @SuppressWarnings("unchecked")
     public List<UUID> dienstverlenersMetOpenWerk(TaakSoort taakSoort, OffsetDateTime nu) {
         return getEntityManager()
-                .createNativeQuery(DIENSTVERLENERS_MET_WERK_SQL)
-                .unwrap(NativeQuery.class)
-                .addScalar("dv_id", UUID.class)
-                .setParameter(1, taakSoort.name())
-                .setParameter(2, nu)
+                .createQuery("select " + Taak_.DV_ID + " from Taak where " + AAN_DE_BEURT
+                        + " group by " + Taak_.DV_ID + " order by min(" + Taak_.DUE + ")", UUID.class)
+                .setParameter("taakSoort", taakSoort)
+                .setParameter("open", TaakStatus.OPEN)
+                .setParameter("nu", nu)
                 .getResultList();
     }
 
@@ -77,31 +53,32 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
      *
      * @param dvId de dienstverlener, of {@code null} voor taken per systeem
      */
-    @SuppressWarnings("unchecked")
     public List<Taak> claim(TaakSoort taakSoort, UUID dvId, int maximum, OffsetDateTime nu, OffsetDateTime leaseTot) {
-        String dvVoorwaarde = dvId == null ? "dv_id IS NULL" : "dv_id = ?5";
-        var query = getEntityManager()
-                .createNativeQuery(CLAIM_SQL.formatted(dvVoorwaarde), Taak.class)
-                .setParameter(1, taakSoort.name())
-                .setParameter(2, nu)
-                .setParameter(3, leaseTot)
-                .setParameter(4, maximum);
+        Parameters parameters = Parameters.with("taakSoort", taakSoort).and("open", TaakStatus.OPEN).and("nu", nu);
+        PanacheQuery<Taak> query = dvId == null
+                ? find(AAN_DE_BEURT + " and " + Taak_.DV_ID + " is null", Sort.by(Taak_.DUE), parameters)
+                : find(AAN_DE_BEURT + " and " + Taak_.DV_ID + " = :dvId", Sort.by(Taak_.DUE), parameters.and("dvId", dvId));
 
-        if (dvId != null) {
-            query.setParameter(5, dvId);
-        }
+        // SKIP LOCKED slaat rijen over die een andere worker op dit moment claimt. De lease en het
+        // epoch gaan bij de commit naar de database, met een toets op het oude epoch.
+        List<Taak> taken = query
+                .withLock(LockModeType.PESSIMISTIC_WRITE)
+                .withHint(SpecHints.HINT_SPEC_LOCK_TIMEOUT, Timeouts.SKIP_LOCKED_MILLI)
+                .page(0, maximum)
+                .list();
+        taken.forEach(taak -> taak.claim(leaseTot));
 
-        return query.getResultList();
+        return taken;
     }
 
     /** Verlengt de lease; false als de taak inmiddels door een andere worker is geclaimd. */
     public boolean verlengLease(Taak taak, OffsetDateTime tot) {
-        return wijzig("UPDATE taak SET lease_tot = ?4 WHERE soort = ?1 AND id = ?2 AND claim_epoch = ?3", taak, tot);
+        return update(Taak_.LEASE_TOT + " = :tot where " + ZELFDE_CLAIM, claimVan(taak).and("tot", tot)) == 1;
     }
 
     /** Verwijdert de afgeronde taak; false als de taak inmiddels door een andere worker is geclaimd. */
     public boolean rondAf(Taak taak) {
-        return wijzig("DELETE FROM taak WHERE soort = ?1 AND id = ?2 AND claim_epoch = ?3", taak);
+        return delete(ZELFDE_CLAIM, claimVan(taak)) == 1;
     }
 
     /**
@@ -111,39 +88,34 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
      * @param teltAlsPoging of dit uitstel een mislukking in het NMC zelf was
      */
     public boolean stelUit(Taak taak, OffsetDateTime due, boolean teltAlsPoging) {
-        return wijzig("UPDATE taak SET lease_tot = NULL, due = ?4, pogingen = pogingen + ?5 "
-                + "WHERE soort = ?1 AND id = ?2 AND claim_epoch = ?3", taak, due, teltAlsPoging ? 1 : 0);
+        return update(Taak_.LEASE_TOT + " = null, " + Taak_.DUE + " = :due, " + Taak_.POGINGEN + " = "
+                        + Taak_.POGINGEN + " + :extra where " + ZELFDE_CLAIM,
+                claimVan(taak).and("due", due).and("extra", teltAlsPoging ? 1 : 0)) == 1;
     }
 
     /** Zet de taak op mislukt en geeft de lease vrij; false als een andere worker hem inmiddels claimde. */
     public boolean markeerMislukt(Taak taak) {
-        return wijzig("UPDATE taak SET lease_tot = NULL, status = 'MISLUKT' "
-                + "WHERE soort = ?1 AND id = ?2 AND claim_epoch = ?3", taak);
+        return update(Taak_.LEASE_TOT + " = null, " + Taak_.STATUS + " = :mislukt where " + ZELFDE_CLAIM,
+                claimVan(taak).and("mislukt", TaakStatus.MISLUKT)) == 1;
     }
 
     public long telMetStatus(TaakSoort taakSoort, TaakStatus status) {
-        return count("taakSoort = ?1 and status = ?2", taakSoort, status);
+        return count(Taak_.TAAK_SOORT + " = ?1 and " + Taak_.STATUS + " = ?2", taakSoort, status);
     }
 
     /** Het aantal open taken van deze soort dat aan de beurt is: de achterstand. */
     public long telAchterstand(TaakSoort taakSoort, OffsetDateTime nu) {
-        return count("taakSoort = ?1 and status = ?2 and due <= ?3", taakSoort, TaakStatus.OPEN, nu);
+        return count(Taak_.TAAK_SOORT + " = ?1 and " + Taak_.STATUS + " = ?2 and " + Taak_.DUE + " <= ?3",
+                taakSoort, TaakStatus.OPEN, nu);
     }
 
     public Optional<Taak> zoek(TaakSoort taakSoort, long id) {
-        return find("taakSoort = ?1 and id = ?2", taakSoort, id).singleResultOptional();
+        return find(Taak_.TAAK_SOORT + " = ?1 and " + Taak_.ID + " = ?2", taakSoort, id).singleResultOptional();
     }
 
-    private boolean wijzig(String sql, Taak taak, Object... extra) {
-        var query = getEntityManager().createNativeQuery(sql)
-                .setParameter(1, taak.getTaakSoort().name())
-                .setParameter(2, taak.getId())
-                .setParameter(3, taak.getClaimEpoch());
-
-        for (int i = 0; i < extra.length; i++) {
-            query.setParameter(4 + i, extra[i]);
-        }
-
-        return query.executeUpdate() == 1;
+    private static Parameters claimVan(Taak taak) {
+        return Parameters.with("taakSoort", taak.getTaakSoort())
+                .and("id", taak.getId())
+                .and("claimEpoch", taak.getClaimEpoch());
     }
 }

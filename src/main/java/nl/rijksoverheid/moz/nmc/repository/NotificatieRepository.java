@@ -12,9 +12,9 @@ import java.util.UUID;
 @ApplicationScoped
 public class NotificatieRepository implements PanacheRepositoryBase<Notificatie, UUID> {
 
-    // Native SQL omdat JPQL geen lock-clausule met SKIP LOCKED kent. Zie
-    // RetentieBatch#verwijder voor waarom die clausule er staat. %s is leeg of de
-    // uitsluiting hieronder, zodat beide varianten maar één keer beschreven staan.
+    // Native: Hibernate geeft op PostgreSQL alleen FOR NO KEY UPDATE, en alleen FOR UPDATE blokkeert ook
+    // inserts met een foreign key naar de rijen die de retentie verwijdert. Zie RetentieBatch#verwijder
+    // voor SKIP LOCKED. %s is leeg of de uitsluiting hieronder.
     private static final String CLAIM_VERLOPEN_SQL = """
             SELECT id
               FROM notificatie
