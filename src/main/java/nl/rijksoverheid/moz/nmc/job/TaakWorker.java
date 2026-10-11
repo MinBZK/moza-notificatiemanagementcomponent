@@ -158,11 +158,11 @@ public class TaakWorker {
             TaakUitkomst uitkomst = handler.voerUit(taak, () -> taakClaimer.verleng(taak));
 
             switch (uitkomst) {
-                case TaakUitkomst.Afgerond _ -> taakClaimer.rondAf(taak);
+                case TaakUitkomst.Afgerond() -> taakClaimer.rondAf(taak);
                 case TaakUitkomst.Uitgesteld u when u.teltAlsPoging() && taak.getPogingen() + 1 >= maxPogingen ->
                         putUit(handler, taak, null);
                 case TaakUitkomst.Uitgesteld u -> taakClaimer.stelUit(taak, u.due(), u.teltAlsPoging());
-                case TaakUitkomst.AlAfgerond _ -> {
+                case TaakUitkomst.AlAfgerond() -> {
                     // De handler heeft de rij in zijn eigen transactie afgerond.
                 }
             }
