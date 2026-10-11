@@ -36,7 +36,7 @@ public class ControleTestHandler implements TaakHandler {
     }
 
     @Override
-    public TaakSoort soort() {
+    public TaakSoort taakSoort() {
         return TaakSoort.CONTROLE;
     }
 

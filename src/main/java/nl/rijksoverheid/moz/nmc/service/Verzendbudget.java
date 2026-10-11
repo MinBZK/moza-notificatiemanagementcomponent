@@ -26,12 +26,12 @@ import java.time.temporal.ChronoUnit;
 public class Verzendbudget {
 
     private final EntityManager entityManager;
-    private final Clock klok;
+    private final Clock clock;
     private final String notifyService;
     private final int tokensPerMinuut;
     private final int navraagReservering;
 
-    public Verzendbudget(EntityManager entityManager, Clock klok,
+    public Verzendbudget(EntityManager entityManager, Clock clock,
                          @ConfigProperty(name = "nmc.verzendbudget.notify-service") String notifyService,
                          @ConfigProperty(name = "nmc.verzendbudget.tokens-per-minuut") int tokensPerMinuut,
                          @ConfigProperty(name = "nmc.verzendbudget.navraag-reservering") int navraagReservering) {
@@ -45,7 +45,7 @@ public class Verzendbudget {
         }
 
         this.entityManager = entityManager;
-        this.klok = klok;
+        this.clock = clock;
         this.notifyService = notifyService;
         this.tokensPerMinuut = tokensPerMinuut;
         this.navraagReservering = navraagReservering;
@@ -111,6 +111,6 @@ public class Verzendbudget {
     }
 
     private OffsetDateTime tijdvak() {
-        return OffsetDateTime.now(klok).withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MINUTES);
+        return OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MINUTES);
     }
 }

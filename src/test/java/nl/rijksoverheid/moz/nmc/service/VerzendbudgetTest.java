@@ -31,12 +31,12 @@ class VerzendbudgetTest {
     EntityManager entityManager;
 
     @InjectMock
-    Clock klok;
+    Clock clock;
 
     @BeforeEach
     void setUp() {
-        when(klok.instant()).thenReturn(TIJDVAK_A);
-        when(klok.getZone()).thenReturn(ZoneOffset.UTC);
+        when(clock.instant()).thenReturn(TIJDVAK_A);
+        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
         QuarkusTransaction.requiringNew().run(() ->
                 entityManager.createNativeQuery("DELETE FROM verzendbudget").executeUpdate());
     }
@@ -60,7 +60,7 @@ class VerzendbudgetTest {
     void neem_inEenNieuwTijdvak_beginntMetHetVolledigeBudget() {
         assertEquals(15, neem(BudgetDoel.VERZENDEN, 100));
 
-        when(klok.instant()).thenReturn(TIJDVAK_B);
+        when(clock.instant()).thenReturn(TIJDVAK_B);
 
         assertEquals(15, neem(BudgetDoel.VERZENDEN, 100));
     }
@@ -81,7 +81,7 @@ class VerzendbudgetTest {
     @Test
     void geefTerug_naDeMinuutgrens_laatHetNieuweTijdvakOngemoeid() {
         Verzendbudget.Genomen genomen = QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.VERZENDEN, 10));
-        when(klok.instant()).thenReturn(TIJDVAK_B);
+        when(clock.instant()).thenReturn(TIJDVAK_B);
         assertEquals(15, neem(BudgetDoel.VERZENDEN, 15));
 
         QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(genomen, 10));
@@ -110,9 +110,9 @@ class VerzendbudgetTest {
 
     @Test
     void constructor_ongeldigeConfiguratie_weigert() {
-        assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, klok, "x", 0, 0));
-        assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, klok, "x", 10, 10));
-        assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, klok, "x", 10, -1));
+        assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, clock, "x", 0, 0));
+        assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, clock, "x", 10, 10));
+        assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, clock, "x", 10, -1));
     }
 
     private int neem(BudgetDoel doel, int gevraagd) {

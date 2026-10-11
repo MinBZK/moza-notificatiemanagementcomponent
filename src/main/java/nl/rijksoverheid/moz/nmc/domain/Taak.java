@@ -34,8 +34,8 @@ public class Taak {
     private Long id;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 32, updatable = false)
-    private TaakSoort soort;
+    @Column(name = "soort", nullable = false, length = 32, updatable = false)
+    private TaakSoort taakSoort;
 
     // Leeg voor een taak per systeem, zoals onderhoud.
     @Column(name = "dv_id")
@@ -74,9 +74,9 @@ public class Taak {
         // Voor JPA
     }
 
-    public Taak(TaakSoort soort, UUID dvId, UUID notificatieId, OffsetDateTime due, String traceId,
+    public Taak(TaakSoort taakSoort, UUID dvId, UUID notificatieId, OffsetDateTime due, String traceId,
                 Map<String, String> payload) {
-        this.soort = Objects.requireNonNull(soort, "soort is verplicht");
+        this.taakSoort = Objects.requireNonNull(taakSoort, "taakSoort is verplicht");
         this.dvId = dvId;
         this.notificatieId = notificatieId;
         this.due = Objects.requireNonNull(due, "due is verplicht").withOffsetSameInstant(ZoneOffset.UTC)
@@ -90,8 +90,8 @@ public class Taak {
         return id;
     }
 
-    public TaakSoort getSoort() {
-        return soort;
+    public TaakSoort getTaakSoort() {
+        return taakSoort;
     }
 
     public UUID getDvId() {

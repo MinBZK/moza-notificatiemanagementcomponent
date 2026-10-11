@@ -301,7 +301,7 @@ class TaakWorkerTest {
 
         assertEquals(Map.of("k", "v"), metPayload.getPayload());
         assertEquals(Map.of(), zonderPayload.getPayload());
-        assertNotNull(metPayload.getSoort());
+        assertNotNull(metPayload.getTaakSoort());
     }
 
     // Het aantal aanroepen van de handler is het aantal geclaimde taken; de teller bewijst dat de
@@ -323,9 +323,9 @@ class TaakWorkerTest {
         assertEquals(0, taakRepository.count());
     }
 
-    private long plan(TaakSoort soort, OffsetDateTime due) {
+    private long plan(TaakSoort taakSoort, OffsetDateTime due) {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Taak taak = new Taak(soort, NotificatieFixtures.DV_ID, null, due, null, null);
+            Taak taak = new Taak(taakSoort, NotificatieFixtures.DV_ID, null, due, null, null);
             taakRepository.persist(taak);
 
             return taak.getId();

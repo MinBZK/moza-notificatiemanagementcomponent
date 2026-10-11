@@ -252,7 +252,7 @@ class TaakClaimerTest {
 
         assertEquals(15, taakClaimer.claim(TaakSoort.VERZENDEN, 100).size());
         assertEquals(0, taakClaimer.claim(TaakSoort.VERZENDEN, 100).size(), "budget voor dit tijdvak is op");
-        assertEquals(15, taakRepository.count("soort = ?1 and leaseTot is null and pogingen = 0", TaakSoort.VERZENDEN),
+        assertEquals(15, taakRepository.count("taakSoort = ?1 and leaseTot is null and pogingen = 0", TaakSoort.VERZENDEN),
                 "de niet-geclaimde taken zijn onaangeraakt");
     }
 
@@ -275,9 +275,9 @@ class TaakClaimerTest {
         assertThrows(IllegalStateException.class, () -> new TaakClaimer(taakRepository, null, Duration.ZERO));
     }
 
-    private long plan(TaakSoort soort, UUID dvId, OffsetDateTime due) {
+    private long plan(TaakSoort taakSoort, UUID dvId, OffsetDateTime due) {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Taak taak = new Taak(soort, dvId, null, due, "trace-" + UUID.randomUUID(), Map.of("k", "v"));
+            Taak taak = new Taak(taakSoort, dvId, null, due, "trace-" + UUID.randomUUID(), Map.of("k", "v"));
             taakRepository.persist(taak);
 
             return taak.getId();

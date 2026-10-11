@@ -10,7 +10,7 @@ import nl.rijksoverheid.moz.nmc.domain.Taak;
 public class TaakVerlorenException extends RuntimeException {
 
     public TaakVerlorenException(Taak taak) {
-        super("Taak " + taak.getSoort() + "/" + taak.getId() + " is met claim-epoch " + taak.getClaimEpoch()
+        super("Taak " + taak.getTaakSoort() + "/" + taak.getId() + " is met claim-epoch " + taak.getClaimEpoch()
                 + " niet meer van deze worker");
     }
 }

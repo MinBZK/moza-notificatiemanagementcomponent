@@ -61,12 +61,12 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
      * staat voor taken per systeem.
      */
     @SuppressWarnings("unchecked")
-    public List<UUID> dienstverlenersMetOpenWerk(TaakSoort soort, OffsetDateTime nu) {
+    public List<UUID> dienstverlenersMetOpenWerk(TaakSoort taakSoort, OffsetDateTime nu) {
         return getEntityManager()
                 .createNativeQuery(DIENSTVERLENERS_MET_WERK_SQL)
                 .unwrap(NativeQuery.class)
                 .addScalar("dv_id", UUID.class)
-                .setParameter(1, soort.name())
+                .setParameter(1, taakSoort.name())
                 .setParameter(2, nu)
                 .getResultList();
     }
@@ -78,11 +78,11 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
      * @param dvId de dienstverlener, of {@code null} voor taken per systeem
      */
     @SuppressWarnings("unchecked")
-    public List<Taak> claim(TaakSoort soort, UUID dvId, int maximum, OffsetDateTime nu, OffsetDateTime leaseTot) {
+    public List<Taak> claim(TaakSoort taakSoort, UUID dvId, int maximum, OffsetDateTime nu, OffsetDateTime leaseTot) {
         String dvVoorwaarde = dvId == null ? "dv_id IS NULL" : "dv_id = ?5";
         var query = getEntityManager()
                 .createNativeQuery(CLAIM_SQL.formatted(dvVoorwaarde), Taak.class)
-                .setParameter(1, soort.name())
+                .setParameter(1, taakSoort.name())
                 .setParameter(2, nu)
                 .setParameter(3, leaseTot)
                 .setParameter(4, maximum);
@@ -121,22 +121,22 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
                 + "WHERE soort = ?1 AND id = ?2 AND claim_epoch = ?3", taak);
     }
 
-    public long telMetStatus(TaakSoort soort, TaakStatus status) {
-        return count("soort = ?1 and status = ?2", soort, status);
+    public long telMetStatus(TaakSoort taakSoort, TaakStatus status) {
+        return count("taakSoort = ?1 and status = ?2", taakSoort, status);
     }
 
     /** Het aantal open taken van deze soort dat aan de beurt is: de achterstand. */
-    public long telAchterstand(TaakSoort soort, OffsetDateTime nu) {
-        return count("soort = ?1 and status = ?2 and due <= ?3", soort, TaakStatus.OPEN, nu);
+    public long telAchterstand(TaakSoort taakSoort, OffsetDateTime nu) {
+        return count("taakSoort = ?1 and status = ?2 and due <= ?3", taakSoort, TaakStatus.OPEN, nu);
     }
 
-    public Optional<Taak> zoek(TaakSoort soort, long id) {
-        return find("soort = ?1 and id = ?2", soort, id).singleResultOptional();
+    public Optional<Taak> zoek(TaakSoort taakSoort, long id) {
+        return find("taakSoort = ?1 and id = ?2", taakSoort, id).singleResultOptional();
     }
 
     private boolean wijzig(String sql, Taak taak, Object... extra) {
         var query = getEntityManager().createNativeQuery(sql)
-                .setParameter(1, taak.getSoort().name())
+                .setParameter(1, taak.getTaakSoort().name())
                 .setParameter(2, taak.getId())
                 .setParameter(3, taak.getClaimEpoch());
 
