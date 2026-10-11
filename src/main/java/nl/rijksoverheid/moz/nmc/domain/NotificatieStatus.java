@@ -8,7 +8,7 @@ public enum NotificatieStatus {
     AANGENOMEN,
     IN_VERZENDING,
     VERZONDEN,
-    // Geen eindstatus: NotifyNL kan tot zeven dagen na delivered nog een faalreceipt sturen.
+    // Geen eindstatus: NotifyNL kan na delivered nog een faalreceipt sturen (aanname: tot zeven dagen).
     BEZORGD,
     DEFINITIEF_BEZORGD,
     NIET_BEZORGBAAR,

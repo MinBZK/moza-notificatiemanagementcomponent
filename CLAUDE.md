@@ -125,6 +125,9 @@ Geïmplementeerd:
   stuurt `ConsumentCallbackAdapter` bij elke nieuw vastgelegde afleverstatus een CloudEvent naar
   die URL: maximaal drie pogingen met oplopende wachttijd. De `Notificatie` en
   zijn statusgeschiedenis blijven daarna staan.
+- **Statusmodel naast het oude model.** `Overgangsfunctie`, `poging` en het eventlog
+  (`event`) staan klaar, maar nog niets roept ze aan; de afleverstatus loopt nog via
+  `notificatie_status`.
 - **Adresselectie in de Profielservice-respons** (`ProfielServiceAdapter`): eerst
   een e-mailadres met exact de scope Dienstverlener + dienst, dan een met alleen
   de Dienstverlener als scope, dan het default-adres, dan een adres zonder scopes.
@@ -164,7 +167,7 @@ de logica die kiest tussen herverzending en contactherstel.
   bij zo'n seam staat een comment met de reden. Moet je meer dan een handvol leden openen,
   haal er dan een klasse uit (zoals `RetentieBatch`) in plaats van de bestaande verder open
   te zetten. Reflectie om private leden te bereiken is geen alternatief.
-- **Queries staan in `NotificatieRepository`, niet in een entiteit of een service.** De
+- **Queries staan in een repository, niet in een entiteit of een service.** De
   JPQL van de retentiejob staat als `@NamedQuery` op `Notificatie`, want JPA kent geen
   andere plek en Hibernate controleert ze daar bij het opstarten; uitvoeren gebeurt
   uitsluitend in de repository. Entiteiten krijgen geen finders en geen native SQL, en
@@ -210,10 +213,10 @@ de logica die kiest tussen herverzending en contactherstel.
   Welke uitkomst uiteindelijk telt is nog niet belegd — `isDefinitief` betekent
   "NotifyNL heeft iets teruggemeld", niet "hier komt niets meer overheen".
 - **Gebeurtenistijd en registratietijd zijn aparte kolommen.**
-  `NotificatieStatus#tijdstip` is wanneer de status ontstond, op de klok van de bron:
+  `StatusRegistratie#tijdstip` is wanneer de status ontstond, op de klok van de bron:
   voor een delivery receipt NotifyNL's `completed_at`, met `sent_at` en `created_at`
   als terugval. Geen van die drie is verplicht in hun callbackschema; dan valt de NMC
-  terug op de eigen klok. `NotificatieStatus#geregistreerd` is wanneer de NMC de status
+  terug op de eigen klok. `StatusRegistratie#geregistreerd` is wanneer de NMC de status
   vastlegde, op de eigen klok. Ze lopen uiteen omdat NotifyNL een mislukte callback tot
   5x met 5 minuten ertussen herhaalt. De bewaartermijn vaart op `geregistreerd` (kolom
   `geregistreerd`, gekopieerd naar `laatste_status_update`); `tijdstip` is het tijdstip

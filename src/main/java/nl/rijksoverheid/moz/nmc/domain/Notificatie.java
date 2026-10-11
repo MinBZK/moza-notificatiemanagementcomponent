@@ -59,7 +59,7 @@ public class Notificatie {
     @Column(name = "laatste_status_update", nullable = false)
     private OffsetDateTime laatsteStatusUpdate;
 
-    // Status in de levenscyclus uit ADR 0024. Alleen Overgangsfunctie schrijft hem; leeg voor een
+    // Status in de levenscyclus. Alleen Overgangsfunctie schrijft hem; leeg voor een
     // notificatie die nog niet via de overgangsfunctie is aangenomen.
     @Enumerated(EnumType.STRING)
     @Column(length = 32)

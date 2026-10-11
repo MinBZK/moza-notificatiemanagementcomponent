@@ -1,8 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
@@ -11,6 +9,7 @@ import nl.rijksoverheid.moz.nmc.domain.OvergangUitkomst;
 import nl.rijksoverheid.moz.nmc.domain.Overgangsregels;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -24,11 +23,11 @@ import java.util.UUID;
 @Transactional(Transactional.TxType.MANDATORY)
 public class Overgangsfunctie {
 
-    private final EntityManager entityManager;
+    private final NotificatieRepository notificatieRepository;
     private final EventRepository eventRepository;
 
-    public Overgangsfunctie(EntityManager entityManager, EventRepository eventRepository) {
-        this.entityManager = entityManager;
+    public Overgangsfunctie(NotificatieRepository notificatieRepository, EventRepository eventRepository) {
+        this.notificatieRepository = notificatieRepository;
         this.eventRepository = eventRepository;
     }
 
@@ -41,8 +40,7 @@ public class Overgangsfunctie {
         }
 
         notificatie.pasOvergangToe(NotificatieStatus.AANGENOMEN, null);
-        entityManager.persist(notificatie);
-        entityManager.flush();
+        notificatieRepository.persistAndFlush(notificatie);
 
         return schrijfEvent(notificatie, null, null);
     }
@@ -56,11 +54,8 @@ public class Overgangsfunctie {
     public OvergangUitkomst voerUit(UUID notificatieId, NotificatieStatus naar, Reden reden) {
         Objects.requireNonNull(naar, "naar is verplicht");
 
-        Notificatie notificatie = entityManager.find(Notificatie.class, notificatieId, LockModeType.PESSIMISTIC_WRITE);
-
-        if (notificatie == null) {
-            throw new NotificatieNietGevondenException("Geen notificatie gevonden met id " + notificatieId);
-        }
+        Notificatie notificatie = notificatieRepository.vergrendel(notificatieId)
+                .orElseThrow(() -> new NotificatieNietGevondenException("Geen notificatie gevonden met id " + notificatieId));
 
         NotificatieStatus van = notificatie.getNotificatieStatus();
 
@@ -72,12 +67,12 @@ public class Overgangsfunctie {
         // alleen de force-increment de versie. Anders doet de flush dat, en een tweede ophoging zou
         // een gat in de volgnummers geven.
         if (van == naar) {
-            entityManager.lock(notificatie, LockModeType.PESSIMISTIC_FORCE_INCREMENT);
+            notificatieRepository.verhoogVersie(notificatie);
         } else {
             notificatie.pasOvergangToe(naar, reden);
         }
 
-        entityManager.flush();
+        notificatieRepository.flush();
 
         return OvergangUitkomst.uitgevoerd(van, schrijfEvent(notificatie, van, reden));
     }

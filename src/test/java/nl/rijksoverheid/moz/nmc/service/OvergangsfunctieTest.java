@@ -12,6 +12,7 @@ import nl.rijksoverheid.moz.nmc.domain.Overgangsregels;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -100,10 +101,12 @@ class OvergangsfunctieTest {
             Event laatste = eventRepository.findByNotificatie(id).getLast();
 
             assertEquals(naar, herladen.getNotificatieStatus());
+            assertEquals(van == naar ? null : Reden.ONBEREIKBAAR, herladen.getReden());
             assertEquals(1, herladen.getVersie());
             assertEquals(1, laatste.getVolgnummer());
             assertEquals(van, laatste.getVan());
             assertEquals(naar, laatste.getNaar());
+            assertEquals(Reden.ONBEREIKBAAR, laatste.getReden());
         });
     }
 
@@ -131,7 +134,8 @@ class OvergangsfunctieTest {
     void voerUit_herverzending_houdtStatusEnReden() {
         UUID id = aangenomenNotificatieMetStatus(NotificatieStatus.VERZONDEN);
 
-        QuarkusTransaction.requiringNew().run(() -> overgangsfunctie.voerUit(id, NotificatieStatus.VERZONDEN, null));
+        QuarkusTransaction.requiringNew().run(() ->
+                overgangsfunctie.voerUit(id, NotificatieStatus.VERZONDEN, Reden.ONBEREIKBAAR));
 
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie herladen = notificatieRepository.findById(id);
@@ -232,11 +236,7 @@ class OvergangsfunctieTest {
         return QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(null);
             overgangsfunctie.neemAan(notificatie);
-            notificatieRepository.getEntityManager()
-                    .createNativeQuery("UPDATE notificatie SET status = ?1 WHERE id = ?2")
-                    .setParameter(1, status.name())
-                    .setParameter(2, notificatie.getId())
-                    .executeUpdate();
+            NotificatieFixtures.zetStatus(notificatieRepository.getEntityManager(), notificatie.getId(), status);
 
             return notificatie.getId();
         });

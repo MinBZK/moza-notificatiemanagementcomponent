@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.testhelper;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.persistence.EntityManager;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.StatusRegistratie;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 
@@ -69,6 +70,14 @@ public final class NotificatieFixtures {
     public static void verwijderNotificatie(EntityManager entityManager, UUID id) {
         entityManager.createNativeQuery("DELETE FROM notificatie WHERE id = ?1")
                 .setParameter(1, id)
+                .executeUpdate();
+    }
+
+    /** Zet de status rechtstreeks, zonder overgang en zonder de versie te verhogen. */
+    public static void zetStatus(EntityManager entityManager, UUID id, NotificatieStatus status) {
+        entityManager.createNativeQuery("UPDATE notificatie SET status = ?1 WHERE id = ?2")
+                .setParameter(1, status.name())
+                .setParameter(2, id)
                 .executeUpdate();
     }
 
