@@ -15,7 +15,7 @@ public enum Reden {
     GEANNULEERD,
     TECHNISCH;
 
-    /** De kebab-case-weergave in de API en in het CloudEvent, bijvoorbeeld {@code niet-bezorgbaar}. */
+    /** De kebab-case-weergave in de API en in het CloudEvent, bijvoorbeeld {@code geen-contactgegevens}. */
     @JsonValue
     public String toApiValue() {
         return name().toLowerCase(Locale.ROOT).replace('_', '-');

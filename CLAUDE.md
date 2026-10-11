@@ -206,7 +206,7 @@ de logica die kiest tussen herverzending en contactherstel.
   Tussenstatussen worden genegeerd; een onbekende status wordt op ERROR gelogd en
   verandert niets.
 - **Receipttijd en registratietijd zijn gescheiden.** Het tijdstip uit de receipt staat
-  op `poging.receipt_tijdstip` en is het tijdstip voor het afleverbewijs; `event.tijdstip`
+  op `poging.receipt_tijdstip` en is het tijdstip voor het afleverbewijs; `event.geregistreerd`
   en `notificatie.laatste_status_update` staan op de eigen klok.
 - **De statusupdate naar de Dienstverlener gaat pas ná de commit.**
   `ReceiptVerwerker` vuurt bij een uitgevoerde overgang een `StatusUpdateOpdracht` af;
@@ -312,7 +312,7 @@ Tests hebben geen containers nodig: `EmbeddedPostgresTestResource` start een ech
 PostgreSQL 18 als kindproces van de test-JVM (Zonky) en geeft url en credentials aan
 Quarkus door; Flyway migreert die database bij het opstarten en `validate` controleert
 het schema tegen de entities. Elke `@QuarkusTest` deelt die ene database, dus een test
-ruimt zijn eigen rijen op. Tests die zonder Quarkus tegen de migraties werken
+ruimt zijn eigen rijen op; een `@TestProfile` herstart Quarkus en krijgt een eigen database. Tests die zonder Quarkus tegen de migraties werken
 (`V2MigratieTest`) starten hun eigen embedded PostgreSQL. Profielservice, NotifyNL en de
 callback naar de aanroeper worden gemockt.
 
@@ -365,7 +365,8 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
 - **Expand/contract bij een kolomwijziging.** Voeg eerst de nieuwe kolom toe, vul hem
   in dezelfde migratie uit de oude, en laat de `DROP COLUMN` pas volgen als niets hem
   meer leest. V4 (expand), V5 (overstap en backfill) en V6 (contract) doen dat voor de
-  overstap naar het statusmodel uit ADR 0024.
+  overstap naar het statusmodel uit ADR 0024. De contract-migratie gaat pas uit als geen pod
+  met de oude code meer draait, dus in een latere uitrol dan de expand.
 - **SQL is PostgreSQL 18.** Dev, test en prod draaien hetzelfde dialect, dus
   PostgreSQL-eigen SQL is toegestaan en draait ook in de tests.
 - **Een index op een gevulde tabel gaat met `CREATE INDEX CONCURRENTLY`.** Een gewone

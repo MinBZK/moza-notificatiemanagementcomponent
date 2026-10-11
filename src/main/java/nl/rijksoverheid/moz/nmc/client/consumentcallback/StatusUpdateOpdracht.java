@@ -31,6 +31,6 @@ public record StatusUpdateOpdracht(UUID notificatieId, String callbackUrl, long 
 
     public static StatusUpdateOpdracht van(Event event, String callbackUrl) {
         return new StatusUpdateOpdracht(event.getNotificatieId(), callbackUrl, event.getVolgnummer(),
-                event.getVan(), event.getNaar(), event.getReden(), event.getTijdstip());
+                event.getVan(), event.getNaar(), event.getReden(), event.getGeregistreerd());
     }
 }

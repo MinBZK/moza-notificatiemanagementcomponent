@@ -16,6 +16,7 @@ import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -94,11 +95,8 @@ class NotificatieServiceTest {
     void versturen_legtVastVoordatNotifyWordtAangeroepen() throws Exception {
         when(profielServiceAdapter.zoekEmailAdres(any())).thenReturn("burger@example.nl");
         when(verzendAdapter.verstuurEmail(any(), any(), any())).thenAnswer(aanroep -> {
-            Object status = notificatieRepository.getEntityManager()
-                    .createNativeQuery("SELECT n.status FROM notificatie n JOIN poging p ON p.notificatie_id = n.id "
-                            + "WHERE p.status = 'GEPLAND'")
-                    .getSingleResult();
-            assertEquals("IN_VERZENDING", status);
+            assertEquals("IN_VERZENDING",
+                    NotificatieFixtures.statusBijGeplandePoging(notificatieRepository.getEntityManager()));
 
             return UUID.randomUUID();
         });
