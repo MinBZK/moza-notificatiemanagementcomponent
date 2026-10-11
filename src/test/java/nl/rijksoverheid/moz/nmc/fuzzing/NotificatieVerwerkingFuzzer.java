@@ -59,6 +59,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -251,6 +252,7 @@ public class NotificatieVerwerkingFuzzer {
         if (melding == null) {
             return;
         }
+
         UUID bekendeId = notificatieIsBekend ? bewaarVerzonden(melding.getId()) : null;
         // The callback adapter absorbs a failing callback; a 5xx on this route is always a finding.
         roepAan(() -> callbackController.verwerkAfleverstatus(melding), true);
@@ -422,7 +424,7 @@ public class NotificatieVerwerkingFuzzer {
                         .isDefault(true)));
     }
 
-    /** A notificatie on VERZONDEN with one poging under the given NotifyNL id. */
+    /** Een notificatie op VERZONDEN met één poging onder het gegeven NotifyNL-id. */
     private static UUID bewaarVerzonden(UUID notifyId) {
         Notificatie notificatie = new Notificatie("https://consument.example.invalid/callback");
         overgangsfunctie.neemAan(notificatie);
@@ -435,43 +437,24 @@ public class NotificatieVerwerkingFuzzer {
         return notificatie.getId();
     }
 
-    /** In-memory stand-in for the pogingen; column constraints are not enforced. */
+    /** Pogingen in het geheugen; kolomconstraints worden niet afgedwongen en niets leest het id. */
     private static final class GeheugenPogingRepository extends PogingRepository {
 
-        private static final Field ID_VELD = idVeld();
-
-        private final Map<UUID, Poging> opgeslagen = new HashMap<>();
+        private final List<Poging> opgeslagen = new ArrayList<>();
 
         @Override
         public void persist(Poging poging) {
-            try {
-                ID_VELD.set(poging, UUID.randomUUID());
-            } catch (IllegalAccessException e) {
-                throw new IllegalStateException(e);
-            }
-
-            opgeslagen.put(poging.getId(), poging);
-        }
-
-        private static Field idVeld() {
-            try {
-                // JPA assigns the generated id on persist; the entity has no setter for it.
-                Field veld = Poging.class.getDeclaredField("id");
-                veld.setAccessible(true);
-                return veld;
-            } catch (NoSuchFieldException e) {
-                throw new IllegalStateException(e);
-            }
+            opgeslagen.add(poging);
         }
 
         @Override
         public Optional<Poging> findByNotifyId(UUID notifyId) {
-            return opgeslagen.values().stream().filter(p -> notifyId.equals(p.getNotifyId())).findFirst();
+            return opgeslagen.stream().filter(p -> notifyId.equals(p.getNotifyId())).findFirst();
         }
 
         @Override
         public void herlaad(Poging poging) {
-            // No-op; the in-memory copy is the only copy.
+            // Niets te doen: de kopie in het geheugen is de enige.
         }
 
         void leegmaken() {
@@ -480,8 +463,8 @@ public class NotificatieVerwerkingFuzzer {
     }
 
     /**
-     * In-memory stand-in for the transition function: applies Overgangsregels without a database,
-     * lock or trigger, and numbers events per notificatie.
+     * De overgangsfunctie in het geheugen: past Overgangsregels toe zonder database, lock of trigger,
+     * en nummert de events per notificatie.
      */
     private static final class GeheugenOvergangsfunctie extends Overgangsfunctie {
 

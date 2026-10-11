@@ -32,7 +32,7 @@ public class Notificatie {
     @Id
     private UUID id;
 
-    // Loopt per overgang met één op en is het volgnummer van het bijbehorende event; een
+    // Loopt per overgang op en is het volgnummer van het bijbehorende event; een
     // databasetrigger weigert een nieuwe versie zonder event.
     @Version
     private long versie;

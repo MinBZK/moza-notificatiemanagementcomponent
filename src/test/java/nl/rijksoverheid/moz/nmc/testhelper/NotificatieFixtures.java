@@ -49,12 +49,12 @@ public final class NotificatieFixtures {
                 .executeUpdate();
     }
 
-    /** Een event met een eigen tijdstip, los van de registratietijd op de notificatie. */
+    /** Een event met een eigen registratietijd, los van {@code laatste_status_update} op de notificatie. */
     public static void voegEventToe(EntityManager entityManager, UUID notificatieId, long volgnummer,
-                                    NotificatieStatus van, NotificatieStatus naar, OffsetDateTime tijdstip) {
-        entityManager.createNativeQuery("INSERT INTO event (tijdstip, notificatie_id, volgnummer, van, naar) "
+                                    NotificatieStatus van, NotificatieStatus naar, OffsetDateTime geregistreerd) {
+        entityManager.createNativeQuery("INSERT INTO event (geregistreerd, notificatie_id, volgnummer, van, naar) "
                         + "VALUES (?1, ?2, ?3, ?4, ?5)")
-                .setParameter(1, tijdstip)
+                .setParameter(1, geregistreerd)
                 .setParameter(2, notificatieId)
                 .setParameter(3, volgnummer)
                 .setParameter(4, van != null ? van.name() : null)
@@ -66,6 +66,22 @@ public final class NotificatieFixtures {
         entityManager.createNativeQuery("DELETE FROM notificatie WHERE id = ?1")
                 .setParameter(1, id)
                 .executeUpdate();
+    }
+
+    /** Zet de status rechtstreeks, zonder overgang en zonder versieverhoging; de trigger staat daarvoor uit. */
+    public static void zetStatus(EntityManager entityManager, UUID id, NotificatieStatus status) {
+        zetTriggerUit(entityManager);
+        entityManager.createNativeQuery("UPDATE notificatie SET status = ?1 WHERE id = ?2")
+                .setParameter(1, status.name())
+                .setParameter(2, id)
+                .executeUpdate();
+    }
+
+    /** De status van de notificatie met een poging op {@code GEPLAND}, rechtstreeks uit de database. */
+    public static String statusBijGeplandePoging(EntityManager entityManager) {
+        return (String) entityManager.createNativeQuery("SELECT n.status FROM notificatie n "
+                        + "JOIN poging p ON p.notificatie_id = n.id WHERE p.status = 'GEPLAND'")
+                .getSingleResult();
     }
 
     /** Zet de registratietijd terug, zodat een notificatie buiten de bewaartermijn valt. */
