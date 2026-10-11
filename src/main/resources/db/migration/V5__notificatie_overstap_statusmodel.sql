@@ -56,7 +56,7 @@ LEFT JOIN oude_status_afbeelding a ON a.oud = l.status
 WHERE n.external_reference IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM poging p WHERE p.notificatie_id = n.id);
 
-INSERT INTO event (tijdstip, notificatie_id, volgnummer, van, naar, reden)
+INSERT INTO event (geregistreerd, notificatie_id, volgnummer, van, naar, reden)
 SELECT s.geregistreerd, s.notificatie_id, s.volgnummer,
        lag(a.notificatie_status) OVER (PARTITION BY s.notificatie_id ORDER BY s.volgnummer),
        a.notificatie_status, a.reden

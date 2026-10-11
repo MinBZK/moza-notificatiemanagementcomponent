@@ -102,7 +102,6 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-hibernate-orm-panache</artifactId>
         </dependency>
-        <!-- Worker-lus en periodieke taken; de takentabel is de planner, dus geen Quartz. -->
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-scheduler</artifactId>
@@ -153,7 +152,7 @@
             <scope>test</scope>
         </dependency>
         <!-- Echte PostgreSQL als kindproces van de test-JVM, zonder Docker; zie
-             EmbeddedPostgresTestResource. De extensie brengt alleen amd64-binaries mee; de twee
+             EmbeddedPostgresTestResource. embedded-postgres brengt standaard alleen amd64-binaries mee; de twee
              arm64-artefacten dekken Apple Silicon en arm64-runners. -->
         <dependency>
             <groupId>io.zonky.test</groupId>

@@ -19,8 +19,8 @@ import java.util.UUID;
  * notificatie na de overgang. Bevat geen contactgegevens, identificerende nummers of referentie van
  * de Dienstverlener.
  * <p>
- * De kolom {@code xid} (transactie-id, gevuld door de database) is hier niet gemapt; de feed leest
- * hem met SQL.
+ * De kolom {@code xid} (transactie-id, gevuld door de database) is hier niet gemapt; hij is bedoeld
+ * om het log op volgorde van commit te lezen.
  */
 @Entity
 public class Event {
@@ -52,9 +52,9 @@ public class Event {
     @Column(length = 32)
     private Reden reden;
 
-    // Registratietijd op de klok van het NMC; het tijdstip uit een receipt staat op de poging.
+    // Op de klok van het NMC; het tijdstip uit een receipt staat op de poging.
     @Column(nullable = false)
-    private OffsetDateTime tijdstip;
+    private OffsetDateTime geregistreerd;
 
     protected Event() {
         // Voor JPA
@@ -67,7 +67,7 @@ public class Event {
         this.van = van;
         this.naar = Objects.requireNonNull(naar, "naar is verplicht");
         this.reden = reden;
-        this.tijdstip = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        this.geregistreerd = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
     }
 
     public Long getId() {
@@ -98,7 +98,7 @@ public class Event {
         return reden;
     }
 
-    public OffsetDateTime getTijdstip() {
-        return tijdstip;
+    public OffsetDateTime getGeregistreerd() {
+        return geregistreerd;
     }
 }

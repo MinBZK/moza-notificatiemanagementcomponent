@@ -216,7 +216,7 @@ de logica die kiest tussen herverzending en contactherstel.
   Tussenstatussen worden genegeerd; een onbekende status wordt op ERROR gelogd en
   verandert niets.
 - **Receipttijd en registratietijd zijn gescheiden.** Het tijdstip uit de receipt staat
-  op `poging.receipt_tijdstip` en is het tijdstip voor het afleverbewijs; `event.tijdstip`
+  op `poging.receipt_tijdstip` en is het tijdstip voor het afleverbewijs; `event.geregistreerd`
   en `notificatie.laatste_status_update` staan op de eigen klok.
 - **De statusupdate naar de Dienstverlener gaat pas ná de commit.**
   `ReceiptVerwerker` vuurt bij een uitgevoerde overgang een `StatusUpdateOpdracht` af;
@@ -322,7 +322,7 @@ Tests hebben geen containers nodig: `EmbeddedPostgresTestResource` start een ech
 PostgreSQL 18 als kindproces van de test-JVM (Zonky) en geeft url en credentials aan
 Quarkus door; Flyway migreert die database bij het opstarten en `validate` controleert
 het schema tegen de entities. Elke `@QuarkusTest` deelt die ene database, dus een test
-ruimt zijn eigen rijen op. Tests die zonder Quarkus tegen de migraties werken
+ruimt zijn eigen rijen op; een `@TestProfile` herstart Quarkus en krijgt een eigen database. Tests die zonder Quarkus tegen de migraties werken
 (`V2MigratieTest`) starten hun eigen embedded PostgreSQL. Profielservice, NotifyNL en de
 callback naar de aanroeper worden gemockt.
 
@@ -375,8 +375,10 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
 - **Expand/contract bij een kolomwijziging.** Voeg eerst de nieuwe kolom toe, vul hem
   in dezelfde migratie uit de oude, en laat de `DROP COLUMN` pas volgen als niets hem
   meer leest. V4 (expand), V5 (overstap en backfill) en V6 (contract) doen dat voor de
-  overstap naar het statusmodel uit ADR 0024; V8 voegt `dienstverlener`, `taak` en
-  `verzendbudget` toe en maakt `dv_id` op `notificatie` en `event` verplicht.
+  overstap naar het statusmodel uit ADR 0024. De contract-migratie gaat pas uit als geen pod
+  met de oude code meer draait, dus in een latere uitrol dan de expand. V8 voegt
+  `dienstverlener`, `taak` en `verzendbudget` toe en maakt `dv_id` op `notificatie` en
+  `event` verplicht.
 - **Gepartitioneerde tabellen (`event`, `taak`) hebben de partitiesleutel in de primary
   key.** Een query op `taak` noemt daarom altijd de `soort`, anders zoekt PostgreSQL in
   elke partitie; een nieuwe `TaakSoort` vraagt een migratie met een nieuwe partitie.
@@ -416,14 +418,14 @@ starten als ze ontbreken**:
 | `nmc.kek.huidige-versie` | `ConfigKekProvider`: KEK-versie waarmee `Sleutelbeheer` nieuwe sleutels per notificatie wrapt |
 | `nmc.kek.versie.<n>` | `ConfigKekProvider`: KEK per versie, base64 van 32 bytes; die van de huidige versie is verplicht, oudere zolang er rijen met die `kek_versie` zijn |
 
+Lokaal horen ze in een niet-ingecheckte `src/main/resources/application-dev.properties`,
+nooit in `application.properties`. Onder `%test` staan dummywaarden.
+
 Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
 `nmc.dienstverlener.id` (de rij uit V8), `nmc.taak.*` (interval, batch, lease,
 max-pogingen van de worker-lus) en `nmc.verzendbudget.*` (Notify-service, tokens per
 minuut, reservering voor de navraag). Onder `%test` staat de lus uit en is het budget
 klein, zodat tests het uitputten.
-
-Lokaal horen ze in een niet-ingecheckte `src/main/resources/application-dev.properties`,
-nooit in `application.properties`. Onder `%test` staan dummywaarden.
 
 Ook `quarkus.rest-client.profielservice.url` en `quarkus.rest-client.notify.url`
 hebben buiten `%dev`/`%test` geen default en moeten per omgeving gezet worden.

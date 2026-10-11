@@ -9,6 +9,8 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -51,11 +53,8 @@ class TaakClaimerTest {
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
-            entityManager.createNativeQuery("DELETE FROM verzendbudget").executeUpdate();
-            entityManager.createNativeQuery("INSERT INTO dienstverlener (id, oin, naam) VALUES (?1, '00000000000000000002', 'Tweede') "
-                            + "ON CONFLICT (id) DO NOTHING")
-                    .setParameter(1, TWEEDE_DV)
-                    .executeUpdate();
+            TaakFixtures.leegVerzendbudget(entityManager);
+            TaakFixtures.voegDienstverlenerToe(entityManager, TWEEDE_DV, "00000000000000000002", "Tweede");
         });
     }
 
@@ -96,7 +95,7 @@ class TaakClaimerTest {
         assertThrows(TaakVerlorenException.class, () -> taakClaimer.rondAf(eerste));
         assertEquals(TaakStatus.OPEN, zoek(id).getStatus(), "de oude worker mocht de taak niet afronden");
         taakClaimer.rondAf(tweede);
-        assertTrue(taakRepository.findByIdOptional(id).isEmpty());
+        assertTrue(taakRepository.zoek(TaakSoort.CONTROLE, id).isEmpty());
     }
 
     // De epochtoets geldt voor elke schrijfactie, ook in de transactie van een handler: de exceptie
@@ -110,19 +109,16 @@ class TaakClaimerTest {
         UUID markering = UUID.randomUUID();
 
         assertThrows(TaakVerlorenException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
-            entityManager.createNativeQuery("INSERT INTO dienstverlener (id, oin, naam) VALUES (?1, 'markering00000000001', 'markering')")
-                    .setParameter(1, markering)
-                    .executeUpdate();
+            TaakFixtures.voegDienstverlenerToe(entityManager, markering, "markering00000000001", "markering");
             taakClaimer.rondAf(eerste);
         }));
 
-        assertEquals(0, ((Number) QuarkusTransaction.requiringNew().call(() -> entityManager
-                .createNativeQuery("SELECT COUNT(*) FROM dienstverlener WHERE id = ?1").setParameter(1, markering)
-                .getSingleResult())).intValue(), "het werk in dezelfde transactie is teruggerold");
+        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> TaakFixtures.telDienstverleners(entityManager, markering)),
+                "het werk in dezelfde transactie is teruggerold");
     }
 
     @Test
-    void stelUit_zetDueEnLaatDeLeaseLos_enTeltAlleenAlsGevraagdEenPoging() {
+    void stelUit_metEnZonderPoging_zetDueLaatDeLeaseLosEnTeltAlleenAlsGevraagd() {
         long id = plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         Taak taak = taakClaimer.claim(TaakSoort.CONTROLE, 10).getFirst();
         OffsetDateTime straks = nu().plusMinutes(10).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
@@ -154,9 +150,8 @@ class TaakClaimerTest {
     void verleng_zetDeLeaseVerderVooruit() {
         long id = plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         Taak taak = taakClaimer.claim(TaakSoort.CONTROLE, 10).getFirst();
-        QuarkusTransaction.requiringNew().run(() -> entityManager
-                .createNativeQuery("UPDATE taak SET lease_tot = ?2 WHERE id = ?1")
-                .setParameter(1, id).setParameter(2, nu().plusSeconds(5)).executeUpdate());
+        QuarkusTransaction.requiringNew().run(() ->
+                TaakFixtures.zetLeaseTot(entityManager, TaakSoort.CONTROLE, id, nu().plusSeconds(5)));
 
         taakClaimer.verleng(taak);
 
@@ -211,9 +206,7 @@ class TaakClaimerTest {
 
         try {
             Future<?> houder = threads.submit(() -> QuarkusTransaction.requiringNew().run(() -> {
-                entityManager.createNativeQuery("SELECT id FROM taak WHERE soort = 'CONTROLE' AND id = ?1 FOR UPDATE")
-                        .setParameter(1, vergrendeld)
-                        .getResultList();
+                TaakFixtures.vergrendel(entityManager, TaakSoort.CONTROLE, vergrendeld);
                 vast.countDown();
                 try {
                     los.await(20, TimeUnit.SECONDS);
@@ -262,7 +255,7 @@ class TaakClaimerTest {
     }
 
     @Test
-    void claim_takenPerSysteem_zonderDienstverlener() {
+    void claim_takenPerSysteem_claimtZonderDienstverlener() {
         long id = plan(TaakSoort.ONDERHOUD, null, nu().minusMinutes(1));
 
         List<Taak> geclaimd = taakClaimer.claim(TaakSoort.ONDERHOUD, 10);
@@ -286,7 +279,8 @@ class TaakClaimerTest {
 
         assertEquals(15, taakClaimer.claim(TaakSoort.VERZENDEN, 100).size());
         assertEquals(0, taakClaimer.claim(TaakSoort.VERZENDEN, 100).size(), "budget voor dit tijdvak is op");
-        assertEquals(15, taakRepository.count("taakSoort = ?1 and leaseTot is null and pogingen = 0", TaakSoort.VERZENDEN),
+        assertEquals(15, taakRepository.count(Taak_.TAAK_SOORT + " = ?1 and " + Taak_.LEASE_TOT + " is null and "
+                        + Taak_.POGINGEN + " = 0", TaakSoort.VERZENDEN),
                 "de niet-geclaimde taken zijn onaangeraakt");
     }
 
@@ -299,8 +293,7 @@ class TaakClaimerTest {
 
         assertEquals(3, taakClaimer.claim(TaakSoort.VERZENDEN, 100).size());
 
-        int tokens = QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager
-                .createNativeQuery("SELECT tokens FROM verzendbudget").getSingleResult()).intValue());
+        int tokens = QuarkusTransaction.requiringNew().call(() -> TaakFixtures.tokens(entityManager));
         assertEquals(17, tokens);
     }
 
@@ -319,13 +312,12 @@ class TaakClaimerTest {
     }
 
     private Taak zoek(long id) {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.findById(id));
+        return QuarkusTransaction.requiringNew().call(() -> taakRepository.zoek(TaakSoort.CONTROLE, id).orElseThrow());
     }
 
     private void laatLeaseVerlopen(long id) {
-        QuarkusTransaction.requiringNew().run(() -> entityManager
-                .createNativeQuery("UPDATE taak SET lease_tot = ?2 WHERE id = ?1")
-                .setParameter(1, id).setParameter(2, nu().minusSeconds(1)).executeUpdate());
+        QuarkusTransaction.requiringNew().run(() ->
+                TaakFixtures.zetLeaseTot(entityManager, TaakSoort.CONTROLE, id, nu().minusSeconds(1)));
     }
 
     private static OffsetDateTime nu() {

@@ -134,7 +134,8 @@ public class TaakWorker {
      *
      * @return het aantal geclaimde taken
      */
-    public int verwerk(TaakSoort taakSoort) {
+    // Package-private zodat TaakWorkerTest een ronde direct kan draaien en het aantal geclaimde taken ziet.
+    int verwerk(TaakSoort taakSoort) {
         TaakHandler handler = handlers.get(taakSoort);
 
         if (handler == null) {
