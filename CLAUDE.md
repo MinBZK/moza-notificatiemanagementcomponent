@@ -323,7 +323,7 @@ Tests hebben geen containers nodig: `EmbeddedPostgresTestResource` start een ech
 PostgreSQL 18 als kindproces van de test-JVM (Zonky) en geeft url en credentials aan
 Quarkus door; Flyway migreert die database bij het opstarten en `validate` controleert
 het schema tegen de entities. Elke `@QuarkusTest` deelt die ene database, dus een test
-ruimt zijn eigen rijen op. Tests die zonder Quarkus tegen de migraties werken
+ruimt zijn eigen rijen op; een `@TestProfile` herstart Quarkus en krijgt een eigen database. Tests die zonder Quarkus tegen de migraties werken
 (`V2MigratieTest`) starten hun eigen embedded PostgreSQL. Profielservice, NotifyNL en de
 callback naar de aanroeper worden gemockt.
 
