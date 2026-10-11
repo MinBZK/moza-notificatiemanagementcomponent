@@ -125,6 +125,10 @@ Geïmplementeerd:
   stuurt `ConsumentCallbackAdapter` bij elke nieuw vastgelegde afleverstatus een CloudEvent naar
   die URL: maximaal drie pogingen met oplopende wachttijd. De `Notificatie` en
   zijn statusgeschiedenis blijven daarna staan.
+- **Statusmodel uit ADR 0024.** `notificatie` draagt de status en een versie,
+  `poging` de uitkomst per verzending, `event` het eventlog met één rij per
+  overgang. `Overgangsfunctie` is de enige schrijver van de status; een deferred
+  databasetrigger weigert een nieuwe versie zonder event.
 - **Adresselectie in de Profielservice-respons** (`ProfielServiceAdapter`): eerst
   een e-mailadres met exact de scope Dienstverlener + dienst, dan een met alleen
   de Dienstverlener als scope, dan het default-adres, dan een adres zonder scopes.
@@ -164,7 +168,7 @@ de logica die kiest tussen herverzending en contactherstel.
   bij zo'n seam staat een comment met de reden. Moet je meer dan een handvol leden openen,
   haal er dan een klasse uit (zoals `RetentieBatch`) in plaats van de bestaande verder open
   te zetten. Reflectie om private leden te bereiken is geen alternatief.
-- **Queries staan in `NotificatieRepository`, niet in een entiteit of een service.** De
+- **Queries staan in een repository, niet in een entiteit of een service.** De
   JPQL van de retentiejob staat als `@NamedQuery` op `Notificatie`, want JPA kent geen
   andere plek en Hibernate controleert ze daar bij het opstarten; uitvoeren gebeurt
   uitsluitend in de repository. Entiteiten krijgen geen finders en geen native SQL, en
@@ -210,10 +214,10 @@ de logica die kiest tussen herverzending en contactherstel.
   Welke uitkomst uiteindelijk telt is nog niet belegd — `isDefinitief` betekent
   "NotifyNL heeft iets teruggemeld", niet "hier komt niets meer overheen".
 - **Gebeurtenistijd en registratietijd zijn aparte kolommen.**
-  `NotificatieStatus#tijdstip` is wanneer de status ontstond, op de klok van de bron:
+  `StatusRegistratie#tijdstip` is wanneer de status ontstond, op de klok van de bron:
   voor een delivery receipt NotifyNL's `completed_at`, met `sent_at` en `created_at`
   als terugval. Geen van die drie is verplicht in hun callbackschema; dan valt de NMC
-  terug op de eigen klok. `NotificatieStatus#geregistreerd` is wanneer de NMC de status
+  terug op de eigen klok. `StatusRegistratie#geregistreerd` is wanneer de NMC de status
   vastlegde, op de eigen klok. Ze lopen uiteen omdat NotifyNL een mislukte callback tot
   5x met 5 minuten ertussen herhaalt. De bewaartermijn vaart op `geregistreerd` (kolom
   `geregistreerd`, gekopieerd naar `laatste_status_update`); `tijdstip` is het tijdstip
@@ -323,7 +327,7 @@ Tests hebben geen containers nodig: `EmbeddedPostgresTestResource` start een ech
 PostgreSQL 18 als kindproces van de test-JVM (Zonky) en geeft url en credentials aan
 Quarkus door; Flyway migreert die database bij het opstarten en `validate` controleert
 het schema tegen de entities. Elke `@QuarkusTest` deelt die ene database, dus een test
-ruimt zijn eigen rijen op. Tests die zonder Quarkus tegen de migraties werken
+ruimt zijn eigen rijen op; een `@TestProfile` herstart Quarkus en krijgt een eigen database. Tests die zonder Quarkus tegen de migraties werken
 (`V2MigratieTest`) starten hun eigen embedded PostgreSQL. Profielservice, NotifyNL en de
 callback naar de aanroeper worden gemockt.
 

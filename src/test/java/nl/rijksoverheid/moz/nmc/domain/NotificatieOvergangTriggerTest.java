@@ -7,9 +7,12 @@ import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -59,7 +62,7 @@ class NotificatieOvergangTriggerTest {
 
         assertDoesNotThrow(() -> QuarkusTransaction.requiringNew().run(() -> {
             sql("UPDATE notificatie SET versie = 1, status = 'IN_VERZENDING' WHERE id = ?1", id);
-            schrijfEvent(id, 1, "AANGENOMEN", "IN_VERZENDING");
+            schrijfEvent(id, 1, NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING);
         }));
     }
 
@@ -78,7 +81,8 @@ class NotificatieOvergangTriggerTest {
     @Test
     void eventUitEenEerdereTransactie_teltNiet() {
         UUID id = aangenomenNotificatie();
-        QuarkusTransaction.requiringNew().run(() -> schrijfEvent(id, 1, "AANGENOMEN", "IN_VERZENDING"));
+        QuarkusTransaction.requiringNew().run(() ->
+                schrijfEvent(id, 1, NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING));
 
         Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() ->
                 sql("UPDATE notificatie SET versie = 1, status = 'IN_VERZENDING' WHERE id = ?1", id)));
@@ -93,7 +97,7 @@ class NotificatieOvergangTriggerTest {
         Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
             sql("INSERT INTO notificatie (id, versie, status, laatste_status_update) "
                     + "VALUES (?1, 0, 'VERZONDEN', CURRENT_TIMESTAMP)", id);
-            schrijfEvent(id, 0, null, "VERZONDEN");
+            schrijfEvent(id, 0, null, NotificatieStatus.VERZONDEN);
         }));
 
         assertTrue(bevat(fout, "niet op AANGENOMEN"), fout.toString());
@@ -123,14 +127,8 @@ class NotificatieOvergangTriggerTest {
         entityManager.createNativeQuery(sql).setParameter(1, id).executeUpdate();
     }
 
-    private void schrijfEvent(UUID id, long volgnummer, String van, String naar) {
-        entityManager.createNativeQuery("INSERT INTO event (tijdstip, notificatie_id, volgnummer, van, naar) "
-                        + "VALUES (CURRENT_TIMESTAMP, ?1, ?2, ?3, ?4)")
-                .setParameter(1, id)
-                .setParameter(2, volgnummer)
-                .setParameter(3, van)
-                .setParameter(4, naar)
-                .executeUpdate();
+    private void schrijfEvent(UUID id, long volgnummer, NotificatieStatus van, NotificatieStatus naar) {
+        NotificatieFixtures.voegEventToe(entityManager, id, volgnummer, van, naar, OffsetDateTime.now(ZoneOffset.UTC));
     }
 
     // De databasefout zit als suppressed exception onder de RollbackException van de commit.
