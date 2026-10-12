@@ -1,14 +1,15 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
 import io.quarkus.logging.Log;
+import jakarta.ws.rs.core.Response;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.Logboek;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
 import nl.rijksoverheid.moz.nmc.api.DecentraleNotificatiesApi;
 import nl.rijksoverheid.moz.nmc.api.model.DecentraleNotificatieAanvraagRequest;
-import nl.rijksoverheid.moz.nmc.api.model.NotificatieResponse;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
+import nl.rijksoverheid.moz.nmc.helper.Responses;
 import nl.rijksoverheid.moz.nmc.service.AannameOpdracht;
 import nl.rijksoverheid.moz.nmc.service.AannameService;
 import nl.rijksoverheid.moz.nmc.service.BerichtType;
@@ -40,15 +41,14 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
     // TODO #754 (LDV Logboek annotaties hebben placeholder URL)
     // processingActivityId is een placeholder, vervang door de echte URL uit het privacy-register.
     @Logboek(name = "decentraleNotificatieAannemen", processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
-    @Aanname
-    public NotificatieResponse decentraleNotificatieVersturen(DecentraleNotificatieAanvraagRequest request) {
+    public Response decentraleNotificatieVersturen(DecentraleNotificatieAanvraagRequest request) {
         // TODO #758 (Logboek context setten via annotatie ipv in method body)
         // Betrokkene-id eerst zetten: de @Logboek-interceptor eist een niet-lege data_subject_id.
         logboekContext.setDataSubjectId(hashHelper.hashIdentifier(request.getEmailAdres()));
         logboekContext.setDataSubjectType(BETROKKENE_TYPE_EMAIL);
 
         try {
-            return new NotificatieResponse(aannameService.neemAan(opdracht(request)));
+            return Responses.notificatieAangenomen(aannameService.neemAan(opdracht(request)));
         } catch (OnbekendBerichtTypeException e) {
             throw Problems.badRequest("Notificatie niet aangenomen.", e.getMessage());
         } catch (QuotumOverschredenException e) {
