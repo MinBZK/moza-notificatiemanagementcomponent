@@ -14,7 +14,7 @@ import java.util.Objects;
  * Een PostgreSQL-{@code xid8} als {@code Long}. De waarde gaat als tekst zonder type naar de database,
  * zodat PostgreSQL er een {@code xid8} van maakt en een vergelijking de index op de kolom gebruikt.
  */
-public class Xid8Type implements UserType<Long> {
+public class TransactieIdType implements UserType<Long> {
 
     @Override
     public int getSqlType() {

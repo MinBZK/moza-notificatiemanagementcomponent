@@ -252,7 +252,7 @@ de logica die kiest tussen herverzending en contactherstel.
 - **Callback en feed leveren hetzelfde CloudEvent.** `NotificatieStatusEvent.van` bouwt
   beide; `id` is het event-id uit het eventlog, zodat een Dienstverlener een event uit de
   callback in de feed herkent. `xid` staat als `Long` op `Event` en `Bevestiging` via
-  `Xid8Type`, dat de waarde als tekst zonder type bindt, zodat PostgreSQL er een `xid8`
+  `TransactieIdType`, dat de waarde als tekst zonder type bindt, zodat PostgreSQL er een `xid8`
   van maakt. In een rijvergelijking leidt Hibernate het parametertype niet af; geef het
   dan mee met `setParameter(naam, waarde, Event_.xid.getType())`.
 - **`NotificatieRetentieScheduler` ruimt verlopen notificaties op**, in batches met een

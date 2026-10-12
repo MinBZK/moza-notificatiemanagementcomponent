@@ -56,7 +56,7 @@ public class Event {
 
     // Transactie-id van de schrijvende transactie, gevuld door de database; de feed leest het log
     // op (xid, id). Leeg op een event dat in deze sessie is aangemaakt.
-    @Type(Xid8Type.class)
+    @Type(TransactieIdType.class)
     @Column(insertable = false, updatable = false)
     private Long xid;
 

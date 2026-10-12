@@ -22,7 +22,7 @@ public class Bevestiging {
     @Column(nullable = false)
     private int epoch;
 
-    @Type(Xid8Type.class)
+    @Type(TransactieIdType.class)
     @Column(nullable = false)
     private Long xid;
 
