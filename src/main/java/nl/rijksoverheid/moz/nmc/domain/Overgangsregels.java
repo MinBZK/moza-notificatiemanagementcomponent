@@ -17,11 +17,10 @@ import static nl.rijksoverheid.moz.nmc.domain.NotificatieStatus.VERLOPEN;
 import static nl.rijksoverheid.moz.nmc.domain.NotificatieStatus.VERZONDEN;
 
 /**
- * De toegestane statusovergangen van een notificatie. De tabel {@code toegestane_overgang} in de
- * database bevat dezelfde paren; een test houdt beide gelijk.
+ * De toegestane statusovergangen van een notificatie.
  * <p>
  * {@code VERZONDEN} naar {@code VERZONDEN} is de herverzending: de status blijft, er komt een nieuwe
- * poging bij. Terminale statussen hebben geen uitgaande overgang, behalve
+ * poging bij. Eindstatussen hebben geen uitgaande overgang, behalve
  * {@code BEZORGSTATUS_ONBEKEND}.
  */
 public final class Overgangsregels {

@@ -36,7 +36,7 @@ public class WisTestHandler implements TaakHandler {
     }
 
     @Override
-    public TaakSoort soort() {
+    public TaakSoort taakSoort() {
         return TaakSoort.WISSEN;
     }
 

@@ -5,7 +5,16 @@ import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 
+import javax.sql.DataSource;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -53,12 +62,12 @@ public final class NotificatieFixtures {
                 .executeUpdate();
     }
 
-    /** Een event met een eigen tijdstip, los van de registratietijd op de notificatie. */
+    /** Een event met een eigen registratietijd, los van {@code laatste_status_update} op de notificatie. */
     public static void voegEventToe(EntityManager entityManager, UUID notificatieId, long volgnummer,
-                                    NotificatieStatus van, NotificatieStatus naar, OffsetDateTime tijdstip) {
-        entityManager.createNativeQuery("INSERT INTO event (tijdstip, dv_id, notificatie_id, volgnummer, van, naar) "
+                                    NotificatieStatus van, NotificatieStatus naar, OffsetDateTime geregistreerd) {
+        entityManager.createNativeQuery("INSERT INTO event (geregistreerd, dv_id, notificatie_id, volgnummer, van, naar) "
                         + "VALUES (?1, ?6, ?2, ?3, ?4, ?5)")
-                .setParameter(1, tijdstip)
+                .setParameter(1, geregistreerd)
                 .setParameter(6, DV_ID)
                 .setParameter(2, notificatieId)
                 .setParameter(3, volgnummer)
@@ -71,6 +80,51 @@ public final class NotificatieFixtures {
         entityManager.createNativeQuery("DELETE FROM notificatie WHERE id = ?1")
                 .setParameter(1, id)
                 .executeUpdate();
+    }
+
+    /** Zet de status rechtstreeks, zonder overgang en zonder versieverhoging; de trigger staat daarvoor uit. */
+    public static void zetStatus(EntityManager entityManager, UUID id, NotificatieStatus status) {
+        zetTriggerUit(entityManager);
+        entityManager.createNativeQuery("UPDATE notificatie SET status = ?1 WHERE id = ?2")
+                .setParameter(1, status.name())
+                .setParameter(2, id)
+                .executeUpdate();
+    }
+
+    /** De status van de notificatie met een poging op {@code GEPLAND}, rechtstreeks uit de database. */
+    public static String statusBijGeplandePoging(EntityManager entityManager) {
+        return (String) entityManager.createNativeQuery("SELECT n.status FROM notificatie n "
+                        + "JOIN poging p ON p.notificatie_id = n.id WHERE p.status = 'GEPLAND'")
+                .getSingleResult();
+    }
+
+    /**
+     * De notificatierij zoals een {@code SELECT} van een beheerder hem ziet: elke kolom als bytes, bytea zoals
+     * opgeslagen en andere typen in hun tekstvorm.
+     */
+    public static Map<String, byte[]> leesRuweRij(DataSource dataSource, UUID id) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("SELECT * FROM notificatie WHERE id = ?")) {
+            statement.setObject(1, id);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    throw new IllegalStateException("notificatie " + id + " niet gevonden");
+                }
+
+                ResultSetMetaData metaData = resultSet.getMetaData();
+                Map<String, byte[]> rij = new LinkedHashMap<>();
+
+                for (int i = 1; i <= metaData.getColumnCount(); i++) {
+                    Object waarde = resultSet.getObject(i);
+                    byte[] bytes = waarde instanceof byte[] b ? b
+                            : waarde == null ? null : String.valueOf(waarde).getBytes(StandardCharsets.UTF_8);
+                    rij.put(metaData.getColumnName(i), bytes);
+                }
+
+                return rij;
+            }
+        }
     }
 
     /** Zet de registratietijd terug, zodat een notificatie buiten de bewaartermijn valt. */

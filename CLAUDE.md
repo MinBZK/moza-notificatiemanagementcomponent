@@ -125,8 +125,7 @@ Geïmplementeerd:
 - **Statusmodel uit ADR 0024.** `notificatie` draagt de status en een versie,
   `poging` de uitkomst per verzending, `event` het eventlog met één rij per
   overgang. `Overgangsfunctie` is de enige schrijver van de status; een deferred
-  databasetrigger weigert een nieuwe versie zonder event of een niet-toegestane
-  overgang.
+  databasetrigger weigert een nieuwe versie zonder event.
 - **Statusupdate naar de aanroeper.** Heeft het verzoek een `callbackUrl`, dan
   stuurt `ConsumentCallbackAdapter` bij elke overgang die op een receipt volgt een
   CloudEvent naar die URL: maximaal drie pogingen met oplopende wachttijd.
@@ -188,18 +187,18 @@ de logica die kiest tussen herverzending en contactherstel.
   verhoogt de versie met precies één en schrijft het event, in de transactie van de
   aanroeper. De deferred constraint trigger `notificatie_overgang` (V5) bewaakt ook
   schrijvers buiten Hibernate, maar controleert minder: een nieuwe rij begint op
-  `AANGENOMEN`, en een nieuwe versie moet een toegestane overgang zijn met in dezelfde
-  transactie een event met die versie als volgnummer. Een stap van precies één en de
-  vergrendeling dwingt hij niet af. Let op: elke update van een
-  `notificatie`-rij via Hibernate verhoogt `@Version` en vraagt dus een event. Een
-  schrijver die geen overgang doet (bijvoorbeeld het wissen van een sleutel) moet
-  de versie buiten beschouwing laten. In tests zet je de trigger uit met
+  `AANGENOMEN`, de status verandert alleen met een nieuwe versie, en een nieuwe versie
+  heeft in dezelfde transactie een event met die versie als volgnummer. Welke overgang
+  toegestaan is, een stap van precies één en de vergrendeling dwingt hij niet af. Let
+  op: elke update van een `notificatie`-rij via Hibernate verhoogt `@Version` en
+  vraagt dus een event. Een schrijver die geen overgang doet (bijvoorbeeld het wissen
+  van een sleutel) moet de versie buiten beschouwing laten. In tests zet je de trigger uit met
   `SET LOCAL session_replication_role = replica`; de databasefout van een deferred
   trigger zit bij de commit als suppressed exception onder de `RollbackException`.
 - **Statussen.** `NotificatieStatus` (tien waarden, levenscyclus) en `PogingStatus`
   (zeven waarden, uitkomst per verzending) staan als `CHECK`-constraint in V4; een
   nieuwe waarde vraagt dus ook een migratie, en voor `NotificatieStatus` een regel in
-  `toegestane_overgang` en `Overgangsregels`. In de API en het CloudEvent gaan
+  `Overgangsregels`. In de API en het CloudEvent gaan
   statussen en redenen als kebab-case (`toApiValue`).
 - **Een test rekt zichtbaarheid hooguit op tot package-private.** `public` is nooit een
   testkeuze: dat maakt van een implementatiedetail een belofte aan elke aanroeper.
@@ -226,11 +225,11 @@ de logica die kiest tussen herverzending en contactherstel.
   begrensd op de eigen klok); een herhaalde of oudere receipt verandert niets. De
   poging wordt pas na het vergrendelen van de notificatie opnieuw gelezen, zodat een
   receipt die op de vergrendeling wachtte de uitkomst van de eerste ziet. Tot er
-  herverzending is, zijn `temporary-failure` en `technical-failure` terminaal.
+  herverzending is, leiden `temporary-failure` en `technical-failure` tot een eindstatus.
   Tussenstatussen worden genegeerd; een onbekende status wordt op ERROR gelogd en
   verandert niets.
 - **Receipttijd en registratietijd zijn gescheiden.** Het tijdstip uit de receipt staat
-  op `poging.receipt_tijdstip` en is het tijdstip voor het afleverbewijs; `event.tijdstip`
+  op `poging.receipt_tijdstip` en is het tijdstip voor het afleverbewijs; `event.geregistreerd`
   en `notificatie.laatste_status_update` staan op de eigen klok.
 - **De statusupdate naar de Dienstverlener gaat pas ná de commit.**
   `ReceiptVerwerker` vuurt bij een uitgevoerde overgang een `StatusUpdateOpdracht` af;
@@ -243,7 +242,7 @@ de logica die kiest tussen herverzending en contactherstel.
   (`laatste_status_update`) en los van de status en van of de callback naar de
   Dienstverlener slaagde. De batch claimt met `FOR UPDATE SKIP LOCKED`, omdat er in
   productie minimaal drie pods draaien. De pogingen gaan mee via de foreignkey; de events
-  blijven staan. Een notificatie die verloopt zonder uitkomst (niet terminaal en niet
+  blijven staan. Een notificatie die verloopt zonder uitkomst (geen eindstatus en niet
   `BEZORGD`) wordt apart op WARN gemeld voordat de rij weggaat. Dit is een tussenstand:
   de wistaak en onderhoudstaak uit ADR 0024 vervangen deze job.
 
@@ -336,7 +335,7 @@ Tests hebben geen containers nodig: `EmbeddedPostgresTestResource` start een ech
 PostgreSQL 18 als kindproces van de test-JVM (Zonky) en geeft url en credentials aan
 Quarkus door; Flyway migreert die database bij het opstarten en `validate` controleert
 het schema tegen de entities. Elke `@QuarkusTest` deelt die ene database, dus een test
-ruimt zijn eigen rijen op. Tests die zonder Quarkus tegen de migraties werken
+ruimt zijn eigen rijen op; een `@TestProfile` herstart Quarkus en krijgt een eigen database. Tests die zonder Quarkus tegen de migraties werken
 (`V2MigratieTest`) starten hun eigen embedded PostgreSQL. Profielservice, NotifyNL en de
 callback naar de aanroeper worden gemockt.
 
@@ -389,8 +388,10 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
 - **Expand/contract bij een kolomwijziging.** Voeg eerst de nieuwe kolom toe, vul hem
   in dezelfde migratie uit de oude, en laat de `DROP COLUMN` pas volgen als niets hem
   meer leest. V4 (expand), V5 (overstap en backfill) en V6 (contract) doen dat voor de
-  overstap naar het statusmodel uit ADR 0024; V8 voegt `dienstverlener`, `taak` en
-  `verzendbudget` toe en maakt `dv_id` op `notificatie` en `event` verplicht.
+  overstap naar het statusmodel uit ADR 0024. De contract-migratie gaat pas uit als geen pod
+  met de oude code meer draait, dus in een latere uitrol dan de expand. V8 voegt
+  `dienstverlener`, `taak` en `verzendbudget` toe en maakt `dv_id` op `notificatie` en
+  `event` verplicht.
 - **Gepartitioneerde tabellen (`event`, `taak`) hebben de partitiesleutel in de primary
   key.** Een query op `taak` noemt daarom altijd de `soort`, anders zoekt PostgreSQL in
   elke partitie; een nieuwe `TaakSoort` vraagt een migratie met een nieuwe partitie.
@@ -430,14 +431,14 @@ starten als ze ontbreken**:
 | `nmc.kek.huidige-versie` | `ConfigKekProvider`: KEK-versie waarmee `Sleutelbeheer` nieuwe sleutels per notificatie wrapt |
 | `nmc.kek.versie.<n>` | `ConfigKekProvider`: KEK per versie, base64 van 32 bytes; die van de huidige versie is verplicht, oudere zolang er rijen met die `kek_versie` zijn |
 
+Lokaal horen ze in een niet-ingecheckte `src/main/resources/application-dev.properties`,
+nooit in `application.properties`. Onder `%test` staan dummywaarden.
+
 Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
 `nmc.dienstverlener.id` (de rij uit V8), `nmc.taak.*` (interval, batch, lease,
 max-pogingen van de worker-lus) en `nmc.verzendbudget.*` (Notify-service, tokens per
 minuut, reservering voor de navraag). Onder `%test` staat de lus uit en is het budget
 klein, zodat tests het uitputten.
-
-Lokaal horen ze in een niet-ingecheckte `src/main/resources/application-dev.properties`,
-nooit in `application.properties`. Onder `%test` staan dummywaarden.
 
 Ook `quarkus.rest-client.profielservice.url` en `quarkus.rest-client.notify.url`
 hebben buiten `%dev`/`%test` geen default en moeten per omgeving gezet worden.

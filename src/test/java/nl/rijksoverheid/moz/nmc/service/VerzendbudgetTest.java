@@ -4,6 +4,8 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import nl.rijksoverheid.moz.nmc.repository.VerzendbudgetRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,15 +32,17 @@ class VerzendbudgetTest {
     @Inject
     EntityManager entityManager;
 
+    @Inject
+    VerzendbudgetRepository verzendbudgetRepository;
+
     @InjectMock
-    Clock klok;
+    Clock clock;
 
     @BeforeEach
     void setUp() {
-        when(klok.instant()).thenReturn(TIJDVAK_A);
-        when(klok.getZone()).thenReturn(ZoneOffset.UTC);
-        QuarkusTransaction.requiringNew().run(() ->
-                entityManager.createNativeQuery("DELETE FROM verzendbudget").executeUpdate());
+        when(clock.instant()).thenReturn(TIJDVAK_A);
+        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
+        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.leegVerzendbudget(entityManager));
     }
 
     @Test
@@ -60,7 +64,7 @@ class VerzendbudgetTest {
     void neem_inEenNieuwTijdvak_beginntMetHetVolledigeBudget() {
         assertEquals(15, neem(BudgetDoel.VERZENDEN, 100));
 
-        when(klok.instant()).thenReturn(TIJDVAK_B);
+        when(clock.instant()).thenReturn(TIJDVAK_B);
 
         assertEquals(15, neem(BudgetDoel.VERZENDEN, 100));
     }
@@ -81,22 +85,20 @@ class VerzendbudgetTest {
     @Test
     void geefTerug_naDeMinuutgrens_laatHetNieuweTijdvakOngemoeid() {
         Verzendbudget.Genomen genomen = QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.VERZENDEN, 10));
-        when(klok.instant()).thenReturn(TIJDVAK_B);
+        when(clock.instant()).thenReturn(TIJDVAK_B);
         assertEquals(15, neem(BudgetDoel.VERZENDEN, 15));
 
         QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(genomen, 10));
 
-        assertEquals(5, QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager
-                .createNativeQuery("SELECT tokens FROM verzendbudget WHERE tijdvak = ?1")
-                .setParameter(1, java.time.OffsetDateTime.ofInstant(TIJDVAK_B, ZoneOffset.UTC)).getSingleResult()).intValue()));
+        assertEquals(5, QuarkusTransaction.requiringNew().call(() ->
+                TaakFixtures.tokens(entityManager, java.time.OffsetDateTime.ofInstant(TIJDVAK_B, ZoneOffset.UTC))));
     }
 
     @Test
     void neem_nulOfNegatief_neemtNiets() {
         assertEquals(0, neem(BudgetDoel.VERZENDEN, 0));
         assertEquals(0, neem(BudgetDoel.VERZENDEN, -3));
-        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager
-                .createNativeQuery("SELECT COUNT(*) FROM verzendbudget").getSingleResult()).intValue()));
+        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> TaakFixtures.telBudgetrijen(entityManager)));
     }
 
     @Test
@@ -104,15 +106,14 @@ class VerzendbudgetTest {
         QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(
                 new Verzendbudget.Genomen(0, java.time.OffsetDateTime.ofInstant(TIJDVAK_A, ZoneOffset.UTC)), 0));
 
-        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager
-                .createNativeQuery("SELECT COUNT(*) FROM verzendbudget").getSingleResult()).intValue()));
+        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> TaakFixtures.telBudgetrijen(entityManager)));
     }
 
     @Test
     void constructor_ongeldigeConfiguratie_weigert() {
-        assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, klok, "x", 0, 0));
-        assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, klok, "x", 10, 10));
-        assertThrows(IllegalStateException.class, () -> new Verzendbudget(entityManager, klok, "x", 10, -1));
+        assertThrows(IllegalStateException.class, () -> new Verzendbudget(verzendbudgetRepository, clock, "x", 0, 0));
+        assertThrows(IllegalStateException.class, () -> new Verzendbudget(verzendbudgetRepository, clock, "x", 10, 10));
+        assertThrows(IllegalStateException.class, () -> new Verzendbudget(verzendbudgetRepository, clock, "x", 10, -1));
     }
 
     private int neem(BudgetDoel doel, int gevraagd) {
@@ -120,7 +121,6 @@ class VerzendbudgetTest {
     }
 
     private int tokensInDatabase() {
-        return QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager
-                .createNativeQuery("SELECT tokens FROM verzendbudget").getSingleResult()).intValue());
+        return QuarkusTransaction.requiringNew().call(() -> TaakFixtures.tokens(entityManager));
     }
 }
