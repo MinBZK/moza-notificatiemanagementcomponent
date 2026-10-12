@@ -17,7 +17,6 @@ import nl.rijksoverheid.moz.nmc.service.OnbekendBerichtTypeException;
 import nl.rijksoverheid.moz.nmc.service.QuotumOverschredenException;
 import nl.rijksoverheid.moz.nmc.service.Regie;
 
-import java.util.UUID;
 
 /**
  * Intake bij centrale regie: de aanroeper levert een identificerend nummer, het NMC haalt het adres
@@ -29,14 +28,11 @@ public class CentraleNotificatieController implements CentraleNotificatiesApi {
     private final AannameService aannameService;
     private final LogboekContext logboekContext;
     private final HashHelper hashHelper;
-    private final AannameLocatie aannameLocatie;
 
-    public CentraleNotificatieController(AannameService aannameService, LogboekContext logboekContext, HashHelper hashHelper,
-                                         AannameLocatie aannameLocatie) {
+    public CentraleNotificatieController(AannameService aannameService, LogboekContext logboekContext, HashHelper hashHelper) {
         this.aannameService = aannameService;
         this.logboekContext = logboekContext;
         this.hashHelper = hashHelper;
-        this.aannameLocatie = aannameLocatie;
     }
 
     @Override
@@ -50,10 +46,7 @@ public class CentraleNotificatieController implements CentraleNotificatiesApi {
         logboekContext.setDataSubjectType(String.valueOf(notificatieAanvraagRequest.getIdentificatieType()));
 
         try {
-            UUID id = aannameService.neemAan(opdracht(notificatieAanvraagRequest));
-            aannameLocatie.zet(id);
-
-            return new NotificatieResponse(id);
+            return new NotificatieResponse(aannameService.neemAan(opdracht(notificatieAanvraagRequest)));
         } catch (OnbekendBerichtTypeException e) {
             throw Problems.badRequest("Notificatie niet aangenomen.", e.getMessage());
         } catch (QuotumOverschredenException e) {

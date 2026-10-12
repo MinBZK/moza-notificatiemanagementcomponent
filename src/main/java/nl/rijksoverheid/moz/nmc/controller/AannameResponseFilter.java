@@ -4,6 +4,7 @@ import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ResourceInfo;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
+import nl.rijksoverheid.moz.nmc.api.model.NotificatieResponse;
 import org.jboss.resteasy.reactive.server.ServerResponseFilter;
 
 /**
@@ -13,11 +14,7 @@ import org.jboss.resteasy.reactive.server.ServerResponseFilter;
  */
 public class AannameResponseFilter {
 
-    private final AannameLocatie aannameLocatie;
-
-    public AannameResponseFilter(AannameLocatie aannameLocatie) {
-        this.aannameLocatie = aannameLocatie;
-    }
+    private static final String NOTIFICATIE_PAD = "/api/nmc/v1/notificaties/";
 
     @ServerResponseFilter
     public void filter(ContainerResponseContext response, ResourceInfo resourceInfo) {
@@ -27,6 +24,8 @@ public class AannameResponseFilter {
         }
 
         response.setStatus(Response.Status.ACCEPTED.getStatusCode());
-        aannameLocatie.pad().ifPresent(pad -> response.getHeaders().putSingle(HttpHeaders.LOCATION, pad));
+        if (response.getEntity() instanceof NotificatieResponse aangenomen) {
+            response.getHeaders().putSingle(HttpHeaders.LOCATION, NOTIFICATIE_PAD + aangenomen.getNotificatieId());
+        }
     }
 }

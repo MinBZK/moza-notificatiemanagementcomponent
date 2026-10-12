@@ -17,7 +17,6 @@ import nl.rijksoverheid.moz.nmc.service.OnbekendBerichtTypeException;
 import nl.rijksoverheid.moz.nmc.service.QuotumOverschredenException;
 import nl.rijksoverheid.moz.nmc.service.Regie;
 
-import java.util.UUID;
 
 /**
  * Intake bij decentrale regie: de aanroeper levert het e-mailadres zelf. De aanname antwoordt 202
@@ -30,14 +29,11 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
     private final AannameService aannameService;
     private final LogboekContext logboekContext;
     private final HashHelper hashHelper;
-    private final AannameLocatie aannameLocatie;
 
-    public DecentraleNotificatieController(AannameService aannameService, LogboekContext logboekContext, HashHelper hashHelper,
-                                           AannameLocatie aannameLocatie) {
+    public DecentraleNotificatieController(AannameService aannameService, LogboekContext logboekContext, HashHelper hashHelper) {
         this.aannameService = aannameService;
         this.logboekContext = logboekContext;
         this.hashHelper = hashHelper;
-        this.aannameLocatie = aannameLocatie;
     }
 
     @Override
@@ -52,10 +48,7 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
         logboekContext.setDataSubjectType(BETROKKENE_TYPE_EMAIL);
 
         try {
-            UUID id = aannameService.neemAan(opdracht(request));
-            aannameLocatie.zet(id);
-
-            return new NotificatieResponse(id);
+            return new NotificatieResponse(aannameService.neemAan(opdracht(request)));
         } catch (OnbekendBerichtTypeException e) {
             throw Problems.badRequest("Notificatie niet aangenomen.", e.getMessage());
         } catch (QuotumOverschredenException e) {

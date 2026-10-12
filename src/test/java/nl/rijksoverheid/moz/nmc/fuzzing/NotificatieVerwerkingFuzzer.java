@@ -24,7 +24,6 @@ import java.lang.annotation.Annotation;
 import java.util.concurrent.CompletionStage;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackClient;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.NotificatieStatusEvent;
-import nl.rijksoverheid.moz.nmc.controller.AannameLocatie;
 import nl.rijksoverheid.moz.nmc.controller.CentraleNotificatieController;
 import nl.rijksoverheid.moz.nmc.controller.DecentraleNotificatieController;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
@@ -189,10 +188,9 @@ public class NotificatieVerwerkingFuzzer {
 
         LogboekContext logboekContext = new LogboekContext();
         HashHelper hashHelper = new HashHelper(Optional.of("fuzz-pepper-niet-voor-productie"));
-        AannameLocatie aannameLocatie = new AannameLocatie();
 
-        centraleController = new CentraleNotificatieController(aannameService, logboekContext, hashHelper, aannameLocatie);
-        decentraleController = new DecentraleNotificatieController(aannameService, logboekContext, hashHelper, aannameLocatie);
+        centraleController = new CentraleNotificatieController(aannameService, logboekContext, hashHelper);
+        decentraleController = new DecentraleNotificatieController(aannameService, logboekContext, hashHelper);
         callbackController = new NotifyNLCallbackController(receiptVerwerker);
     }
 
