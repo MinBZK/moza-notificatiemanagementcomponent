@@ -9,7 +9,7 @@ ALTER TABLE notificatie ADD COLUMN aangenomen_op timestamp(6) with time zone;
 SET CONSTRAINTS notificatie_overgang IMMEDIATE;
 
 UPDATE notificatie n
-   SET aangenomen_op = e.tijdstip
+   SET aangenomen_op = e.geregistreerd
   FROM event e
  WHERE e.notificatie_id = n.id
    AND e.volgnummer = 0;

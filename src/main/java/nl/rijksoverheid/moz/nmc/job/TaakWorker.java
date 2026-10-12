@@ -134,7 +134,8 @@ public class TaakWorker {
      *
      * @return het aantal geclaimde taken
      */
-    // Package-private zodat TaakWorkerTest een ronde direct kan draaien en het aantal geclaimde taken ziet.
+    // Package-private zodat een test een ronde direct kan draaien en het aantal geclaimde taken ziet; tests buiten
+    // dit package gaan via TaakRonde.
     int verwerk(TaakSoort taakSoort) {
         TaakHandler handler = handlers.get(taakSoort);
 

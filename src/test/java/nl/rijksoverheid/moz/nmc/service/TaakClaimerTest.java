@@ -105,7 +105,7 @@ class TaakClaimerTest {
         assertThrows(TaakVerlorenException.class, () -> taakClaimer.rondAf(eerste));
         assertEquals(TaakStatus.OPEN, zoek(id).getStatus(), "de oude worker mocht de taak niet afronden");
         taakClaimer.rondAf(tweede);
-        assertTrue(taakRepository.zoek(TaakSoort.CONTROLE, id).isEmpty());
+        assertTrue(taakRepository.zoek(TaakSoort.ONDERHOUD, id).isEmpty());
     }
 
     // De epochtoets geldt voor elke schrijfactie, ook in de transactie van een handler: de exceptie
@@ -172,9 +172,8 @@ class TaakClaimerTest {
     void eisClaim_naEenClaimDoorEenAndereWorker_gooitTaakVerlorenException() {
         long id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         Taak taak = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
-        QuarkusTransaction.requiringNew().run(() -> entityManager
-                .createNativeQuery("UPDATE taak SET claim_epoch = claim_epoch + 1 WHERE id = ?1")
-                .setParameter(1, id).executeUpdate());
+        QuarkusTransaction.requiringNew().run(() ->
+                TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.ONDERHOUD, id));
 
         assertThrows(TaakVerlorenException.class, () -> QuarkusTransaction.requiringNew().run(() -> taakClaimer.eisClaim(taak)));
     }
@@ -219,15 +218,15 @@ class TaakClaimerTest {
     // Een rij die een andere transactie vergrendeld houdt, wordt overgeslagen in plaats van afgewacht.
     @Test
     void claim_vergrendeldeTaak_wordtOvergeslagenZonderTeWachten() throws Exception {
-        long vergrendeld = plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(2));
-        long vrij = plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        long vergrendeld = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(2));
+        long vrij = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         CountDownLatch vast = new CountDownLatch(1);
         CountDownLatch los = new CountDownLatch(1);
         ExecutorService threads = Executors.newFixedThreadPool(2);
 
         try {
             Future<?> houder = threads.submit(() -> QuarkusTransaction.requiringNew().run(() -> {
-                TaakFixtures.vergrendel(entityManager, TaakSoort.CONTROLE, vergrendeld);
+                TaakFixtures.vergrendel(entityManager, TaakSoort.ONDERHOUD, vergrendeld);
                 vast.countDown();
                 try {
                     los.await(20, TimeUnit.SECONDS);
@@ -237,7 +236,7 @@ class TaakClaimerTest {
             }));
             assertTrue(vast.await(10, TimeUnit.SECONDS));
 
-            List<Taak> geclaimd = threads.submit(() -> taakClaimer.claim(TaakSoort.CONTROLE, 10)).get(5, TimeUnit.SECONDS);
+            List<Taak> geclaimd = threads.submit(() -> taakClaimer.claim(TaakSoort.ONDERHOUD, 10)).get(5, TimeUnit.SECONDS);
 
             assertEquals(List.of(vrij), geclaimd.stream().map(Taak::getId).toList());
             los.countDown();
@@ -267,10 +266,10 @@ class TaakClaimerTest {
     // Meer dienstverleners dan plek in de batch: de dienstverlener die het langst wacht gaat voor.
     @Test
     void claim_minderPlekDanDienstverleners_geeftVoorrangAanWieHetLangstWacht() {
-        plan(TaakSoort.CONTROLE, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
-        plan(TaakSoort.CONTROLE, TWEEDE_DV, nu().minusHours(3));
+        plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        plan(TaakSoort.ONDERHOUD, TWEEDE_DV, nu().minusHours(3));
 
-        List<Taak> geclaimd = taakClaimer.claim(TaakSoort.CONTROLE, 1);
+        List<Taak> geclaimd = taakClaimer.claim(TaakSoort.ONDERHOUD, 1);
 
         assertEquals(List.of(TWEEDE_DV), geclaimd.stream().map(Taak::getDvId).toList());
     }
@@ -333,12 +332,12 @@ class TaakClaimerTest {
     }
 
     private Taak zoek(long id) {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.zoek(TaakSoort.CONTROLE, id).orElseThrow());
+        return QuarkusTransaction.requiringNew().call(() -> taakRepository.zoek(TaakSoort.ONDERHOUD, id).orElseThrow());
     }
 
     private void laatLeaseVerlopen(long id) {
         QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.zetLeaseTot(entityManager, TaakSoort.CONTROLE, id, nu().minusSeconds(1)));
+                TaakFixtures.zetLeaseTot(entityManager, TaakSoort.ONDERHOUD, id, nu().minusSeconds(1)));
     }
 
     private static OffsetDateTime nu() {

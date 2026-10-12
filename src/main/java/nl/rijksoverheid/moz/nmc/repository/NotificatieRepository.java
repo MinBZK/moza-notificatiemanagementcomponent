@@ -5,6 +5,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.LockModeType;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import org.hibernate.query.NativeQuery;
 
 import java.time.OffsetDateTime;
@@ -67,19 +69,20 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
 
     /** Het aantal notificaties dat deze dienstverlener sinds {@code vanaf} heeft aangeboden. */
     public long telAangenomenSinds(UUID dvId, OffsetDateTime vanaf) {
-        return count("dvId = ?1 and aangenomenOp >= ?2", dvId, vanaf);
+        return count(Notificatie_.DV_ID + " = ?1 and " + Notificatie_.AANGENOMEN_OP + " >= ?2", dvId, vanaf);
     }
 
     /**
-     * Notificaties zonder terminale status waarvoor geen taak open staat of mislukt is: die zijn
-     * blijven steken en krijgen van de controletaak de ontbrekende taak.
+     * Notificaties zonder eindstatus waarvoor geen taak open staat of mislukt is: die zijn blijven steken
+     * en krijgen van de controletaak de ontbrekende taak.
      */
-    public List<Notificatie> zonderTaak(Collection<NotificatieStatus> terminaal, int limiet) {
+    public List<Notificatie> zonderTaak(Collection<NotificatieStatus> eindstatussen, int limiet) {
+        // De subquery noemt geen soort: een taak van elke soort telt, dus hij leest elke partitie.
         return getEntityManager()
-                .createQuery("SELECT n FROM Notificatie n WHERE n.status NOT IN :terminaal "
-                        + "AND NOT EXISTS (SELECT t.id FROM Taak t WHERE t.notificatieId = n.id) "
-                        + "ORDER BY n.laatsteStatusUpdate", Notificatie.class)
-                .setParameter("terminaal", terminaal)
+                .createQuery("select n from Notificatie n where n." + Notificatie_.STATUS + " not in :eindstatussen "
+                        + "and not exists (select t." + Taak_.ID + " from Taak t where t." + Taak_.NOTIFICATIE_ID
+                        + " = n." + Notificatie_.ID + ") order by n." + Notificatie_.LAATSTE_STATUS_UPDATE, Notificatie.class)
+                .setParameter("eindstatussen", eindstatussen)
                 .setMaxResults(limiet)
                 .getResultList();
     }

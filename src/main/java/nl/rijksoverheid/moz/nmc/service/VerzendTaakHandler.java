@@ -39,7 +39,7 @@ import java.util.UUID;
  * transactie de overgang naar {@code verzonden}, het NotifyNL-id op de poging, de navraagtaak en het
  * afronden van de verzendtaak. De HTTP-aanroep naar NotifyNL valt nooit binnen een transactie.
  * <p>
- * Een fout over het adres of de partij is terminaal; een storing bij NotifyNL of de Profielservice
+ * Een fout over het adres of de partij leidt tot een eindstatus; een storing bij NotifyNL of de Profielservice
  * stelt de taak uit zonder dat het de notificatie een poging kost. Een herclaim na een verlopen lease
  * hergebruikt de poging en zoekt eerst op {@code reference}, zodat een al aangeboden e-mail niet nog
  * eens gaat.
@@ -76,7 +76,7 @@ public class VerzendTaakHandler implements TaakHandler {
     }
 
     @Override
-    public TaakSoort soort() {
+    public TaakSoort taakSoort() {
         return TaakSoort.VERZENDEN;
     }
 
@@ -248,7 +248,7 @@ public class VerzendTaakHandler implements TaakHandler {
     }
 
     /**
-     * @return het adres, of null als de partij of het adres er niet is (terminaal)
+     * @return het adres, of null als de partij of het adres er niet is (eindstatus)
      * @throws ProfielServiceException bij een storing, die uitstel oplevert
      */
     private String emailAdres(Verzending verzending) {
