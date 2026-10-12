@@ -23,8 +23,8 @@ public class Bevestiging {
     private int epoch;
 
     @Type(TransactieIdType.class)
-    @Column(nullable = false)
-    private Long xid;
+    @Column(name = "transactie_id", nullable = false)
+    private Long transactieId;
 
     @Column(name = "event_id", nullable = false)
     private long eventId;
@@ -41,7 +41,7 @@ public class Bevestiging {
     }
 
     public Cursor getCursor() {
-        return new Cursor(epoch, xid, eventId);
+        return new Cursor(epoch, transactieId, eventId);
     }
 
     public OffsetDateTime getBevestigdOp() {

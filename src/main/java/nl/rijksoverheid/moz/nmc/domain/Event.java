@@ -55,10 +55,10 @@ public class Event {
     private OffsetDateTime geregistreerd;
 
     // Transactie-id van de schrijvende transactie, gevuld door de database; de feed leest het log
-    // op (xid, id). Leeg op een event dat in deze sessie is aangemaakt.
+    // op (transactie-id, id). Leeg op een event dat in deze sessie is aangemaakt.
     @Type(TransactieIdType.class)
-    @Column(insertable = false, updatable = false)
-    private Long xid;
+    @Column(name = "transactie_id", insertable = false, updatable = false)
+    private Long transactieId;
 
     protected Event() {
         // Voor JPA
@@ -106,7 +106,7 @@ public class Event {
         return geregistreerd;
     }
 
-    public Long getXid() {
-        return xid;
+    public Long getTransactieId() {
+        return transactieId;
     }
 }

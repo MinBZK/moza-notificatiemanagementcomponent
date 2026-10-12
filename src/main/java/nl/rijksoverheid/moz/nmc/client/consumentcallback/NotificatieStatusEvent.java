@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
 import nl.rijksoverheid.moz.nmc.domain.Event;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 
@@ -24,6 +25,8 @@ public record NotificatieStatusEvent(
         String sequencetype,
         NotificatieData data) {
 
+    private static final String SPECVERSION = "1.0";
+    private static final String SEQUENCETYPE = "Integer";
     private static final String TYPE_PREFIX = "nl.mijnoverheidzakelijk.nmc.notificatie.status.";
 
     public static NotificatieStatusEvent van(Event event) {
@@ -35,16 +38,16 @@ public record NotificatieStatusEvent(
                                              NotificatieStatus vorigeStatus, NotificatieStatus nieuweStatus, Reden reden,
                                              OffsetDateTime tijdstip) {
         return new NotificatieStatusEvent(
-                "1.0",
+                SPECVERSION,
                 String.valueOf(eventId),
                 TYPE_PREFIX + nieuweStatus.toApiValue(),
-                "/api/nmc/v1/notificaties/" + notificatieId,
+                Notificatie.PAD + notificatieId,
                 notificatieId.toString(),
                 tijdstip,
                 "application/json",
                 // De sequence-extensie van CloudEvents schrijft een string voor.
                 String.valueOf(versie),
-                "Integer",
+                SEQUENCETYPE,
                 new NotificatieData(vorigeStatus, nieuweStatus, reden, versie));
     }
 }

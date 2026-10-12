@@ -40,7 +40,15 @@ public class TransactieIdType implements UserType<Long> {
     public Long nullSafeGet(ResultSet rs, int position, WrapperOptions options) throws SQLException {
         String waarde = rs.getString(position);
 
-        return waarde == null ? null : Long.valueOf(waarde);
+        if (waarde == null) {
+            return null;
+        }
+
+        try {
+            return Long.valueOf(waarde);
+        } catch (NumberFormatException e) {
+            throw new SQLException("Transactie-id " + waarde + " in kolom " + position + " past niet in een long", e);
+        }
     }
 
     @Override

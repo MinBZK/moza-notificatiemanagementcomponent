@@ -3,12 +3,11 @@ package nl.rijksoverheid.moz.nmc.helper;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieResponse;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 
 import java.util.UUID;
 
 public final class AannameResponse {
-
-    private static final String NOTIFICATIE_PAD = "/api/nmc/v1/notificaties/";
 
     private AannameResponse() {
     }
@@ -19,7 +18,7 @@ public final class AannameResponse {
      */
     public static Response notificatieAangenomen(UUID notificatieId) {
         return Response.accepted(new NotificatieResponse(notificatieId))
-                .header(HttpHeaders.LOCATION, NOTIFICATIE_PAD + notificatieId)
+                .header(HttpHeaders.LOCATION, Notificatie.PAD + notificatieId)
                 .build();
     }
 }

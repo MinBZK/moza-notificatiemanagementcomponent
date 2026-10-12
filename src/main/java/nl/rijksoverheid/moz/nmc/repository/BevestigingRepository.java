@@ -16,22 +16,22 @@ public class BevestigingRepository implements PanacheRepositoryBase<Bevestiging,
      * Schrijft de cursor als hij verder ligt dan de bewaarde; false als de bewaarde al even ver of verder was.
      * Eén statement, zodat twee gelijktijdige bevestigingen elkaar niet terugzetten.
      */
-    public boolean zetVooruit(UUID dvId, Cursor cursor, OffsetDateTime bevestigdOp) {
-        String positie = "(" + Bevestiging_.EPOCH + ", " + Bevestiging_.XID + ", " + Bevestiging_.EVENT_ID + ")";
+    public boolean updateCursorPositie(UUID dvId, Cursor cursor, OffsetDateTime bevestigdOp) {
+        String positie = "(" + Bevestiging_.EPOCH + ", " + Bevestiging_.TRANSACTIE_ID + ", " + Bevestiging_.EVENT_ID + ")";
 
         return getSession().createMutationQuery("insert into Bevestiging (" + Bevestiging_.DV_ID + ", "
-                        + Bevestiging_.EPOCH + ", " + Bevestiging_.XID + ", " + Bevestiging_.EVENT_ID + ", "
-                        + Bevestiging_.BEVESTIGD_OP + ") values (:dvId, :epoch, :xid, :eventId, :bevestigdOp)"
+                        + Bevestiging_.EPOCH + ", " + Bevestiging_.TRANSACTIE_ID + ", " + Bevestiging_.EVENT_ID + ", "
+                        + Bevestiging_.BEVESTIGD_OP + ") values (:dvId, :epoch, :transactieId, :eventId, :bevestigdOp)"
                         + " on conflict(" + Bevestiging_.DV_ID + ") do update set "
                         + Bevestiging_.EPOCH + " = excluded." + Bevestiging_.EPOCH + ", "
-                        + Bevestiging_.XID + " = excluded." + Bevestiging_.XID + ", "
+                        + Bevestiging_.TRANSACTIE_ID + " = excluded." + Bevestiging_.TRANSACTIE_ID + ", "
                         + Bevestiging_.EVENT_ID + " = excluded." + Bevestiging_.EVENT_ID + ", "
                         + Bevestiging_.BEVESTIGD_OP + " = excluded." + Bevestiging_.BEVESTIGD_OP
                         + " where " + positie + " < (excluded." + Bevestiging_.EPOCH + ", excluded."
-                        + Bevestiging_.XID + ", excluded." + Bevestiging_.EVENT_ID + ")")
+                        + Bevestiging_.TRANSACTIE_ID + ", excluded." + Bevestiging_.EVENT_ID + ")")
                 .setParameter("dvId", dvId)
                 .setParameter("epoch", cursor.epoch())
-                .setParameter("xid", cursor.xid(), Bevestiging_.xid.getType())
+                .setParameter("transactieId", cursor.transactieId(), Bevestiging_.transactieId.getType())
                 .setParameter("eventId", cursor.eventId())
                 .setParameter("bevestigdOp", bevestigdOp)
                 .executeUpdate() == 1;

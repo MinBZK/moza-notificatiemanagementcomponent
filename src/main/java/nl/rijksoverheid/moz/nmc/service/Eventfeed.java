@@ -62,9 +62,9 @@ public class Eventfeed {
         valideer(cursor);
 
         int grootte = limiet == null ? maxPagina : Math.min(limiet, maxPagina);
-        long xid = cursor == null ? 0 : cursor.xid();
+        long transactieId = cursor == null ? 0 : cursor.transactieId();
         long eventId = cursor == null ? 0 : cursor.eventId();
-        List<Event> events = eventRepository.leesVanafPositie(dvId, xid, eventId, grootte);
+        List<Event> events = eventRepository.leesVanafPositie(dvId, transactieId, eventId, grootte);
 
         if (events.isEmpty()) {
             return new EventPagina(List.of(), cursor);
@@ -72,7 +72,7 @@ public class Eventfeed {
 
         Event laatste = events.getLast();
 
-        return new EventPagina(events, new Cursor(epoch, laatste.getXid(), laatste.getId()));
+        return new EventPagina(events, new Cursor(epoch, laatste.getTransactieId(), laatste.getId()));
     }
 
     /**
@@ -90,7 +90,7 @@ public class Eventfeed {
 
         OffsetDateTime nu = OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
-        return bevestigingRepository.zetVooruit(dvId, cursor, nu);
+        return bevestigingRepository.updateCursorPositie(dvId, cursor, nu);
     }
 
     @Transactional
@@ -110,9 +110,9 @@ public class Eventfeed {
                     + "; het huidige epoch is " + epoch);
         }
 
-        Optional<Long> oudste = eventRepository.oudsteXid();
+        Optional<Long> oudste = eventRepository.oudsteTransactieId();
 
-        if (oudste.isPresent() && cursor.xid() < oudste.get()) {
+        if (oudste.isPresent() && cursor.transactieId() < oudste.get()) {
             throw new CursorVervallenException("De cursor wijst onder het oudste beschikbare event");
         }
     }
