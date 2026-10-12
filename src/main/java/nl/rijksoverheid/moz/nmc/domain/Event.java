@@ -19,7 +19,7 @@ import java.util.UUID;
  * notificatie na de overgang. Bevat geen contactgegevens, identificerende nummers of referentie van
  * de Dienstverlener.
  * <p>
- * De kolom {@code xid} (transactie-id, gevuld door de database) is hier niet gemapt; hij is bedoeld
+ * De kolom {@code transactie_id} (gevuld door de database) is hier niet gemapt; hij is bedoeld
  * om het log op volgorde van commit te lezen.
  */
 @Entity
