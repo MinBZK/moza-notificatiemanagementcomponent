@@ -89,7 +89,7 @@ BEGIN
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM event
-                   WHERE notificatie_id = NEW.id AND volgnummer = NEW.versie AND xid = pg_current_xact_id()) THEN
+                   WHERE notificatie_id = NEW.id AND volgnummer = NEW.versie AND transactie_id = pg_current_xact_id()) THEN
         RAISE EXCEPTION 'Versie % van notificatie % heeft geen event in deze transactie', NEW.versie, NEW.id
             USING ERRCODE = 'check_violation';
     END IF;
