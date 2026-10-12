@@ -7,9 +7,9 @@ import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
 import nl.rijksoverheid.moz.nmc.api.CentraleNotificatiesApi;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieAanvraagRequest;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
+import nl.rijksoverheid.moz.nmc.helper.AannameResponse;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
-import nl.rijksoverheid.moz.nmc.helper.Responses;
 import nl.rijksoverheid.moz.nmc.service.AannameOpdracht;
 import nl.rijksoverheid.moz.nmc.service.AannameService;
 import nl.rijksoverheid.moz.nmc.service.BerichtType;
@@ -46,7 +46,7 @@ public class CentraleNotificatieController implements CentraleNotificatiesApi {
         logboekContext.setDataSubjectType(String.valueOf(notificatieAanvraagRequest.getIdentificatieType()));
 
         try {
-            return Responses.notificatieAangenomen(aannameService.neemAan(opdracht(notificatieAanvraagRequest)));
+            return AannameResponse.notificatieAangenomen(aannameService.neemAan(opdracht(notificatieAanvraagRequest)));
         } catch (OnbekendBerichtTypeException e) {
             throw Problems.badRequest("Notificatie niet aangenomen.", e.getMessage());
         } catch (QuotumOverschredenException e) {

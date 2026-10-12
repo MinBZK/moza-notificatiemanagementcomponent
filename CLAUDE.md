@@ -146,7 +146,7 @@ Geïmplementeerd:
 Beide intakes gaan via `AannameService`: notificatie op `aangenomen` met event 0, de
 versleutelde payload en een verzendtaak in één transactie; het quotum per
 dienstverlener per dag (`dienstverlener.quotum_per_dag`) geeft 429.
-De controllers antwoorden 202 met `Location` via `Responses.notificatieAangenomen`; daarvoor genereert
+De controllers antwoorden 202 met `Location` via `AannameResponse.notificatieAangenomen`; daarvoor genereert
 de `notificaties`-run in de pom met `returnResponse=true`. `VerzendTaakHandler` doet in een
 eerste transactie `aangenomen` naar `in-verzending` met een geplande poging, roept
 daarbuiten de Profielservice (bij centrale regie) en NotifyNL aan met het poging-id

@@ -7,9 +7,9 @@ import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
 import nl.rijksoverheid.moz.nmc.api.DecentraleNotificatiesApi;
 import nl.rijksoverheid.moz.nmc.api.model.DecentraleNotificatieAanvraagRequest;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
+import nl.rijksoverheid.moz.nmc.helper.AannameResponse;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
-import nl.rijksoverheid.moz.nmc.helper.Responses;
 import nl.rijksoverheid.moz.nmc.service.AannameOpdracht;
 import nl.rijksoverheid.moz.nmc.service.AannameService;
 import nl.rijksoverheid.moz.nmc.service.BerichtType;
@@ -48,7 +48,7 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
         logboekContext.setDataSubjectType(BETROKKENE_TYPE_EMAIL);
 
         try {
-            return Responses.notificatieAangenomen(aannameService.neemAan(opdracht(request)));
+            return AannameResponse.notificatieAangenomen(aannameService.neemAan(opdracht(request)));
         } catch (OnbekendBerichtTypeException e) {
             throw Problems.badRequest("Notificatie niet aangenomen.", e.getMessage());
         } catch (QuotumOverschredenException e) {

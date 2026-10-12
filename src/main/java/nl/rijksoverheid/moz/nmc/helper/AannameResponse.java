@@ -6,11 +6,11 @@ import nl.rijksoverheid.moz.nmc.api.model.NotificatieResponse;
 
 import java.util.UUID;
 
-public final class Responses {
+public final class AannameResponse {
 
     private static final String NOTIFICATIE_PAD = "/api/nmc/v1/notificaties/";
 
-    private Responses() {
+    private AannameResponse() {
     }
 
     /**
