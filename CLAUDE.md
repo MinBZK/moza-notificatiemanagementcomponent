@@ -251,8 +251,10 @@ de logica die kiest tussen herverzending en contactherstel.
   `@InjectMock` vervangen, en een observer-methode op een mock wordt nooit aangeroepen.
 - **Callback en feed leveren hetzelfde CloudEvent.** `NotificatieStatusEvent.van` bouwt
   beide; `id` is het event-id uit het eventlog, zodat een Dienstverlener een event uit de
-  callback in de feed herkent. `xid` staat niet op de entity `Event`: de feed leest hem
-  met native SQL via `xid::text::bigint`, omdat `xid8` geen cast naar `bigint` kent.
+  callback in de feed herkent. `xid` staat als `Long` op `Event` en `Bevestiging` via
+  `Xid8Type`, dat de waarde als tekst zonder type bindt, zodat PostgreSQL er een `xid8`
+  van maakt. In een rijvergelijking leidt Hibernate het parametertype niet af; geef het
+  dan mee met `setParameter(naam, waarde, Event_.xid.getType())`.
 - **`NotificatieRetentieScheduler` ruimt verlopen notificaties op**, in batches met een
   eigen transactie per batch, `notificatie.retentie.bewaartermijn` na de laatste overgang
   (`laatste_status_update`) en los van de status en van of de callback naar de
@@ -285,8 +287,10 @@ een eigen contract komt. Volg die indeling.
 ## Contract-first
 
 Er zijn twee servercontracten, elk met een eigen execution van de
-`openapi-generator-maven-plugin` (`jaxrs-spec`, `interfaceOnly=true`,
-`returnResponse=false`):
+`openapi-generator-maven-plugin` (`jaxrs-spec`, `interfaceOnly=true`). Voor
+`openapi.yaml` staat `returnResponse=true`, omdat de aanname 202 met een
+`Location`-header antwoordt; de controllers geven daar een `Response` terug. De
+NotifyNL-callback heeft `returnResponse=false`.
 
 | Contract | Interfaces en modellen in |
 |----------|---------------------------|
@@ -313,7 +317,8 @@ Aandachtspunten in de contracten:
   een `java.net.URI`, waar Hibernate Validator geen `@Size` voor heeft (HV000030);
   daarom `@ValidCallbackUrl`, die `CallbackUrlValidator` aanroept.
 - **`IdentificatieType`** is via `importMappings` gekoppeld aan de bestaande enum
-  in `controller/`, zodat er geen tweede klasse ontstaat.
+  in `controller/`, zodat er geen tweede klasse ontstaat. Zo ook
+  `NotificatieStatusEvent`: de feed levert hetzelfde record als de callback.
 - **De lijst geldige berichttypes staat op twee plekken**: in de `description` van
   `berichtType` in het contract en in de enum `BerichtType`. Houd ze gelijk.
 - **Contractversie op twee plekken**: `info.version` in `openapi.yaml` en
@@ -455,7 +460,8 @@ Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
 max-pogingen van de worker-lus, en het uitstel na een storing),
 `nmc.navraag.eerste-due` (wanneer de eerste navraag naar de afleverstatus gepland wordt),
 `nmc.controle.*` (interval en maximum per ronde van de controletaak) en
-`nmc.verzendbudget.*` (Notify-service, tokens per minuut, reservering voor de navraag). Onder `%test` staat de lus uit en is het budget
+`nmc.verzendbudget.*` (Notify-service, tokens per minuut, reservering voor de navraag) en
+`nmc.feed.*` (grootste pagina, aanroepen per minuut, cluster-epoch). Onder `%test` staat de lus uit en is het budget
 klein, zodat tests het uitputten.
 
 Ook `quarkus.rest-client.profielservice.url` en `quarkus.rest-client.notify.url`

@@ -46,7 +46,7 @@ class TaakClaimerTest {
 
     // Vast tijdvak voor het verzendbudget, zodat een test niet over een minuutgrens heen twee budgetten ziet.
     @InjectMock
-    Clock klok;
+    Clock clock;
 
     @Inject
     TaakClaimer taakClaimer;
@@ -59,8 +59,8 @@ class TaakClaimerTest {
 
     @BeforeEach
     void setUp() {
-        when(klok.instant()).thenReturn(Instant.parse("2030-01-01T10:00:30Z"));
-        when(klok.getZone()).thenReturn(ZoneOffset.UTC);
+        when(clock.instant()).thenReturn(Instant.parse("2030-01-01T10:00:30Z"));
+        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
             TaakFixtures.leegVerzendbudget(entityManager);

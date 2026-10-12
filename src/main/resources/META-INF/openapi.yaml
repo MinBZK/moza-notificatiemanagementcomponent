@@ -82,7 +82,7 @@ paths:
         '202':
           description: >-
             Notificatie aangenomen en duurzaam opgeslagen; de verzending volgt asynchroon. De
-            uitkomst komt via de callback, als er een `callbackUrl` is.
+            uitkomst komt via de eventfeed en, als er een `callbackUrl` is, via de callback.
           headers:
             API-Version:
               schema:
@@ -170,7 +170,7 @@ paths:
         '202':
           description: >-
             Notificatie aangenomen en duurzaam opgeslagen; de verzending volgt asynchroon. De
-            uitkomst komt via de callback, als er een `callbackUrl` is.
+            uitkomst komt via de eventfeed en, als er een `callbackUrl` is, via de callback.
           headers:
             API-Version:
               schema:

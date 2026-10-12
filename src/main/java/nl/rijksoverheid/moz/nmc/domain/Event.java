@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import org.hibernate.annotations.Type;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -18,9 +19,6 @@ import java.util.UUID;
  * Eén statusovergang van een notificatie in het eventlog. Het volgnummer is de versie van de
  * notificatie na de overgang. Bevat geen contactgegevens, identificerende nummers of referentie van
  * de Dienstverlener.
- * <p>
- * De kolom {@code xid} (transactie-id, gevuld door de database) is hier niet gemapt; hij is bedoeld
- * om het log op volgorde van commit te lezen.
  */
 @Entity
 public class Event {
@@ -55,6 +53,12 @@ public class Event {
     // Op de klok van het NMC; het tijdstip uit een receipt staat op de poging.
     @Column(nullable = false)
     private OffsetDateTime geregistreerd;
+
+    // Transactie-id van de schrijvende transactie, gevuld door de database; de feed leest het log
+    // op (xid, id). Leeg op een event dat in deze sessie is aangemaakt.
+    @Type(Xid8Type.class)
+    @Column(insertable = false, updatable = false)
+    private Long xid;
 
     protected Event() {
         // Voor JPA
@@ -100,5 +104,9 @@ public class Event {
 
     public OffsetDateTime getGeregistreerd() {
         return geregistreerd;
+    }
+
+    public Long getXid() {
+        return xid;
     }
 }

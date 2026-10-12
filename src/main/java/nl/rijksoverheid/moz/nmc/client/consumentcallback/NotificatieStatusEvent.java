@@ -24,19 +24,20 @@ public record NotificatieStatusEvent(
         String sequencetype,
         NotificatieData data) {
 
-    private static final String TYPE_PREFIX = "nl.overheid.moz.notificatie.status.";
+    private static final String TYPE_PREFIX = "nl.mijnoverheidzakelijk.nmc.notificatie.status.";
 
     public static NotificatieStatusEvent van(Event event) {
         return van(event.getId(), event.getNotificatieId(), event.getVolgnummer(), event.getVan(), event.getNaar(),
-                event.getReden(), event.getTijdstip());
+                event.getReden(), event.getGeregistreerd());
     }
 
-    public static NotificatieStatusEvent van(long eventId, UUID notificatieId, long versie, NotificatieStatus van,
-                                             NotificatieStatus naar, Reden reden, OffsetDateTime tijdstip) {
+    public static NotificatieStatusEvent van(long eventId, UUID notificatieId, long versie,
+                                             NotificatieStatus vorigeStatus, NotificatieStatus nieuweStatus, Reden reden,
+                                             OffsetDateTime tijdstip) {
         return new NotificatieStatusEvent(
                 "1.0",
                 String.valueOf(eventId),
-                TYPE_PREFIX + naar.toApiValue(),
+                TYPE_PREFIX + nieuweStatus.toApiValue(),
                 "/api/nmc/v1/notificaties/" + notificatieId,
                 notificatieId.toString(),
                 tijdstip,
@@ -44,6 +45,6 @@ public record NotificatieStatusEvent(
                 // De sequence-extensie van CloudEvents schrijft een string voor.
                 String.valueOf(versie),
                 "Integer",
-                new NotificatieData(van, naar, reden, versie));
+                new NotificatieData(vorigeStatus, nieuweStatus, reden, versie));
     }
 }
