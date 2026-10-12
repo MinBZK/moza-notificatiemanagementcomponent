@@ -162,7 +162,7 @@ public class TaakWorker {
             switch (uitkomst) {
                 case TaakUitkomst.Afgerond() -> taakClaimer.rondAf(taak);
                 case TaakUitkomst.Uitgesteld u when u.teltAlsPoging() && taak.getPogingen() + 1 >= maxPogingen ->
-                        putUit(handler, taak, null);
+                        verwerkUitputting(handler, taak, null);
                 case TaakUitkomst.Uitgesteld u -> taakClaimer.stelUit(taak, u.due(), u.teltAlsPoging());
                 case TaakUitkomst.AlAfgerond() -> {
                     // De handler heeft de rij in zijn eigen transactie afgerond.
@@ -183,7 +183,7 @@ public class TaakWorker {
 
         try {
             if (pogingen >= maxPogingen) {
-                putUit(handler, taak, fout);
+                verwerkUitputting(handler, taak, fout);
             } else {
                 OffsetDateTime due = OffsetDateTime.now(ZoneOffset.UTC).plus(wachttijd(pogingen));
                 taakClaimer.stelUit(taak, due, true);
@@ -199,7 +199,7 @@ public class TaakWorker {
     }
 
     // De handler krijgt de kans de uitputting af te handelen, in dezelfde transactie als de taakrij.
-    private void putUit(TaakHandler handler, Taak taak, RuntimeException fout) {
+    private void verwerkUitputting(TaakHandler handler, Taak taak, RuntimeException fout) {
         if (handler.periodiek()) {
             OffsetDateTime due = OffsetDateTime.now(ZoneOffset.UTC).plus(wachttijd(maxPogingen));
             taakClaimer.stelUit(taak, due, false);
@@ -210,7 +210,7 @@ public class TaakWorker {
         }
 
         boolean afgehandeld = QuarkusTransaction.requiringNew().call(() -> {
-            if (handler.uitgeput(taak)) {
+            if (handler.handelUitputtingAf(taak)) {
                 taakClaimer.rondAf(taak);
 
                 return true;

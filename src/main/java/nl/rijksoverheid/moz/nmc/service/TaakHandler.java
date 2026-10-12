@@ -29,7 +29,7 @@ public interface TaakHandler {
      * @return true als de handler de uitputting heeft afgehandeld en de taak af is; false laat de taak
      *         op mislukt gaan, waar hij op beheer wacht
      */
-    default boolean uitgeput(Taak taak) {
+    default boolean handelUitputtingAf(Taak taak) {
         return false;
     }
 

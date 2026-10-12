@@ -87,7 +87,7 @@ public class VerzendTaakHandler implements TaakHandler {
      * haar status.
      */
     @Override
-    public boolean uitgeput(Taak taak) {
+    public boolean handelUitputtingAf(Taak taak) {
         Notificatie notificatie = overgangsfunctie.vergrendel(taak.getNotificatieId());
 
         if (notificatie.getStatus() == NotificatieStatus.AANGENOMEN) {
