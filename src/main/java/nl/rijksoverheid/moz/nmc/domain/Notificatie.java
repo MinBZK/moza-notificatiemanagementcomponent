@@ -72,7 +72,6 @@ public class Notificatie {
     @Column(name = "kek_versie")
     private Integer kekVersie;
 
-    // Wat elke verzendtaak nodig heeft; geen persoonsgegevens.
     @Column(name = "template_id", length = 64)
     private String templateId;
 
