@@ -32,7 +32,7 @@ public class Notificatie {
     @Id
     private UUID id;
 
-    // Loopt per overgang met één op en is het volgnummer van het bijbehorende event; een
+    // Loopt per overgang op en is het volgnummer van het bijbehorende event; een
     // databasetrigger weigert een nieuwe versie zonder event.
     @Version
     private long versie;
@@ -72,7 +72,6 @@ public class Notificatie {
     @Column(name = "kek_versie")
     private Integer kekVersie;
 
-    // Wat elke verzendtaak nodig heeft; geen persoonsgegevens.
     @Column(name = "template_id", length = 64)
     private String templateId;
 
@@ -133,8 +132,8 @@ public class Notificatie {
      * Zet status en reden. Alleen voor Overgangsfunctie, die de rij vergrendelt, de overgang toetst en
      * het event schrijft.
      */
-    public void pasOvergangToe(NotificatieStatus naar, Reden reden) {
-        this.status = Objects.requireNonNull(naar, "naar is verplicht");
+    public void pasOvergangToe(NotificatieStatus status, Reden reden) {
+        this.status = Objects.requireNonNull(status, "status is verplicht");
         this.reden = reden;
         this.laatsteStatusUpdate = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
     }

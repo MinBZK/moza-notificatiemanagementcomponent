@@ -2,21 +2,25 @@ package nl.rijksoverheid.moz.nmc.repository;
 
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.persistence.LockModeType;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import org.hibernate.query.NativeQuery;
 
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @ApplicationScoped
 public class NotificatieRepository implements PanacheRepositoryBase<Notificatie, UUID> {
 
-    // Native SQL omdat JPQL geen lock-clausule met SKIP LOCKED kent. Zie
-    // RetentieBatch#verwijder voor waarom die clausule er staat. %s is leeg of de
-    // uitsluiting hieronder, zodat beide varianten maar één keer beschreven staan.
+    // Native: Hibernate geeft op PostgreSQL alleen FOR NO KEY UPDATE, en alleen FOR UPDATE blokkeert ook
+    // inserts met een foreign key naar de rijen die de retentie verwijdert. Zie RetentieBatch#verwijder
+    // voor SKIP LOCKED. %s is leeg of de uitsluiting hieronder.
     private static final String CLAIM_VERLOPEN_SQL = """
             SELECT id
               FROM notificatie
@@ -28,6 +32,16 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
 
     // Slaat rijen over die in een eerdere batch mislukten; zie de batchlus in de scheduler.
     private static final String UITSLUITING_SQL = "\n   AND id NOT IN (?3)";
+
+    /** Leest de notificatie met een rijlock die tot het einde van de transactie blijft staan. */
+    public Optional<Notificatie> vergrendel(UUID id) {
+        return findByIdOptional(id, LockModeType.PESSIMISTIC_WRITE);
+    }
+
+    /** Verhoogt de versie van een vergrendelde notificatie waarvan geen veld verandert. */
+    public void verhoogVersie(Notificatie notificatie) {
+        getEntityManager().lock(notificatie, LockModeType.PESSIMISTIC_FORCE_INCREMENT);
+    }
 
     /**
      * Claimt tot {@code maximum} verlopen notificaties met {@code FOR UPDATE SKIP LOCKED} en geeft
@@ -55,19 +69,20 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
 
     /** Het aantal notificaties dat deze dienstverlener sinds {@code vanaf} heeft aangeboden. */
     public long telAangenomenSinds(UUID dvId, OffsetDateTime vanaf) {
-        return count("dvId = ?1 and aangenomenOp >= ?2", dvId, vanaf);
+        return count(Notificatie_.DV_ID + " = ?1 and " + Notificatie_.AANGENOMEN_OP + " >= ?2", dvId, vanaf);
     }
 
     /**
-     * Notificaties zonder terminale status waarvoor geen taak open staat of mislukt is: die zijn
-     * blijven steken en krijgen van de controletaak de ontbrekende taak.
+     * Notificaties zonder eindstatus waarvoor geen taak open staat of mislukt is: die zijn blijven steken
+     * en krijgen van de controletaak de ontbrekende taak.
      */
-    public List<Notificatie> zonderTaak(Collection<NotificatieStatus> terminaal, int limiet) {
+    public List<Notificatie> zonderTaak(Collection<NotificatieStatus> eindstatussen, int limiet) {
+        // De subquery noemt geen soort: een taak van elke soort telt, dus hij leest elke partitie.
         return getEntityManager()
-                .createQuery("SELECT n FROM Notificatie n WHERE n.status NOT IN :terminaal "
-                        + "AND NOT EXISTS (SELECT t.id FROM Taak t WHERE t.notificatieId = n.id) "
-                        + "ORDER BY n.laatsteStatusUpdate", Notificatie.class)
-                .setParameter("terminaal", terminaal)
+                .createQuery("select n from Notificatie n where n." + Notificatie_.STATUS + " not in :eindstatussen "
+                        + "and not exists (select t." + Taak_.ID + " from Taak t where t." + Taak_.NOTIFICATIE_ID
+                        + " = n." + Notificatie_.ID + ") order by n." + Notificatie_.LAATSTE_STATUS_UPDATE, Notificatie.class)
+                .setParameter("eindstatussen", eindstatussen)
                 .setMaxResults(limiet)
                 .getResultList();
     }

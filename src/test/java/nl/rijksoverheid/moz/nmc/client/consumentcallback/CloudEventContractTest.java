@@ -54,10 +54,10 @@ class CloudEventContractTest {
         assertTrue(json.get("sequence").isTextual(), "sequence hoort volgens de CloudEvents-extensie een string te zijn");
         assertEquals(json.get("data").get("versie").asText(), json.get("sequence").asText());
         List<String> statussen = spec.getList("components.schemas.NotificatieStatus.enum", String.class);
-        assertTrue(statussen.contains(json.get("data").get("naar").asText()),
-                "data.naar hoort een waarde uit de NotificatieStatus-enum te zijn");
-        assertTrue(statussen.contains(json.get("data").get("van").asText()),
-                "data.van hoort een waarde uit de NotificatieStatus-enum te zijn");
+        assertTrue(statussen.contains(json.get("data").get("nieuweStatus").asText()),
+                "data.nieuweStatus hoort een waarde uit de NotificatieStatus-enum te zijn");
+        assertTrue(statussen.contains(json.get("data").get("vorigeStatus").asText()),
+                "data.vorigeStatus hoort een waarde uit de NotificatieStatus-enum te zijn");
         List<String> redenen = spec.getList("components.schemas.Reden.enum", String.class);
         assertTrue(redenen.contains(json.get("data").get("reden").asText()),
                 "data.reden hoort een waarde uit de Reden-enum te zijn");

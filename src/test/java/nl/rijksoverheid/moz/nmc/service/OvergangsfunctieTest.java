@@ -13,6 +13,7 @@ import nl.rijksoverheid.moz.nmc.domain.Overgangsregels;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -96,15 +97,20 @@ class OvergangsfunctieTest {
         assertTrue(uitkomst.isUitgevoerd());
         assertEquals(van, uitkomst.van());
 
+        // Bij een herverzending blijft de reden van de rij staan; anders komt de meegegeven reden erop.
+        Reden verwachteReden = van == naar ? null : Reden.ONBEREIKBAAR;
+
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie herladen = notificatieRepository.findById(id);
             Event laatste = eventRepository.findByNotificatie(id).getLast();
 
             assertEquals(naar, herladen.getStatus());
+            assertEquals(verwachteReden, herladen.getReden());
             assertEquals(1, herladen.getVersie());
             assertEquals(1, laatste.getVolgnummer());
             assertEquals(van, laatste.getVan());
             assertEquals(naar, laatste.getNaar());
+            assertEquals(verwachteReden, laatste.getReden());
         });
     }
 
@@ -214,8 +220,7 @@ class OvergangsfunctieTest {
     }
 
     // Neemt een notificatie aan en zet de status daarna rechtstreeks, zodat elke status als
-    // vertrekpunt te testen is zonder de hele keten te doorlopen. De versie blijft 0. De trigger
-    // staat daarvoor in die transactie uit (replica-rol).
+    // vertrekpunt te testen is zonder de hele keten te doorlopen. De versie blijft 0.
     private UUID aangenomenNotificatieMetStatus(NotificatieStatus status) {
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, null);
@@ -224,14 +229,8 @@ class OvergangsfunctieTest {
             return notificatie.getId();
         });
 
-        QuarkusTransaction.requiringNew().run(() -> {
-            var entityManager = notificatieRepository.getEntityManager();
-            entityManager.createNativeQuery("SET LOCAL session_replication_role = replica").executeUpdate();
-            entityManager.createNativeQuery("UPDATE notificatie SET status = ?1 WHERE id = ?2")
-                    .setParameter(1, status.name())
-                    .setParameter(2, id)
-                    .executeUpdate();
-        });
+        QuarkusTransaction.requiringNew().run(() ->
+                NotificatieFixtures.zetStatus(notificatieRepository.getEntityManager(), id, status));
 
         return id;
     }

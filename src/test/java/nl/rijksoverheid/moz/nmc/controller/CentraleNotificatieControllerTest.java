@@ -13,6 +13,7 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -76,7 +77,7 @@ class CentraleNotificatieControllerTest {
 
         QuarkusTransaction.requiringNew().run(() -> {
             assertEquals(NotificatieStatus.AANGENOMEN, notificatieRepository.findById(UUID.fromString(id)).getStatus());
-            assertEquals(TaakSoort.VERZENDEN, taakRepository.listAll().getFirst().getSoort());
+            assertEquals(TaakSoort.VERZENDEN, taakRepository.listAll().getFirst().getTaakSoort());
         });
         verifyNoInteractions(profielApi, sendAMessageApi);
     }
@@ -179,8 +180,7 @@ class CentraleNotificatieControllerTest {
     }
 
     private void zetQuotum(Integer quotum) {
-        QuarkusTransaction.requiringNew().run(() -> entityManager
-                .createNativeQuery("UPDATE dienstverlener SET quotum_per_dag = ?1 WHERE id = ?2")
-                .setParameter(1, quotum).setParameter(2, NotificatieFixtures.DV_ID).executeUpdate());
+        QuarkusTransaction.requiringNew().run(() ->
+                TaakFixtures.zetQuotumPerDag(entityManager, NotificatieFixtures.DV_ID, quotum));
     }
 }

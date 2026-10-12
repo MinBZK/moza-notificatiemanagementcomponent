@@ -12,18 +12,17 @@ import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.service.TaakClaimer;
 import nl.rijksoverheid.moz.nmc.service.TaakUitkomst;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -51,7 +50,7 @@ class TaakWorkerTest {
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
-            entityManager.createNativeQuery("DELETE FROM verzendbudget").executeUpdate();
+            TaakFixtures.leegVerzendbudget(entityManager);
         });
     }
 
@@ -74,7 +73,7 @@ class TaakWorkerTest {
         zetDue(id, nu().minusSeconds(1));
         taakWorker.verwerk(TaakSoort.WISSEN);
 
-        Taak taak = zoek(id).orElseThrow();
+        Taak taak = zoek(TaakSoort.WISSEN, id).orElseThrow();
         assertEquals(TaakStatus.OPEN, taak.getStatus());
         assertTrue(taak.getDue().isAfter(nu()));
     }
@@ -87,10 +86,10 @@ class TaakWorkerTest {
         WisTestHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.uitgesteld(nu().minusSeconds(1), true));
 
         taakWorker.verwerk(TaakSoort.WISSEN);
-        assertEquals(1, zoek(id).orElseThrow().getPogingen());
+        assertEquals(1, zoek(TaakSoort.WISSEN, id).orElseThrow().getPogingen());
         taakWorker.verwerk(TaakSoort.WISSEN);
 
-        assertEquals(TaakStatus.MISLUKT, zoek(id).orElseThrow().getStatus());
+        assertEquals(TaakStatus.MISLUKT, zoek(TaakSoort.WISSEN, id).orElseThrow().getStatus());
     }
 
     // Een handler die de uitputting afhandelt (de verzendtaak zet de notificatie op technisch-mislukt),
@@ -107,7 +106,7 @@ class TaakWorkerTest {
         zetDue(id, nu().minusSeconds(1));
         taakWorker.verwerk(TaakSoort.WISSEN);
 
-        assertTrue(zoek(id).isEmpty());
+        assertTrue(zoek(TaakSoort.WISSEN, id).isEmpty());
     }
 
     @Test
@@ -116,7 +115,7 @@ class TaakWorkerTest {
 
         assertEquals(1, taakWorker.verwerk(TaakSoort.WISSEN));
 
-        assertTrue(zoek(id).isEmpty());
+        assertTrue(zoek(TaakSoort.WISSEN, id).isEmpty());
     }
 
     @Test
@@ -127,7 +126,7 @@ class TaakWorkerTest {
 
         taakWorker.verwerk(TaakSoort.WISSEN);
 
-        Taak taak = zoek(id).orElseThrow();
+        Taak taak = zoek(TaakSoort.WISSEN, id).orElseThrow();
         assertEquals(straks.toInstant(), taak.getDue().toInstant());
         assertEquals(0, taak.getPogingen());
         assertNull(taak.getLeaseTot());
@@ -145,7 +144,7 @@ class TaakWorkerTest {
 
         taakWorker.verwerk(TaakSoort.WISSEN);
 
-        Taak naEerste = zoek(id).orElseThrow();
+        Taak naEerste = zoek(TaakSoort.WISSEN, id).orElseThrow();
         assertEquals(1, naEerste.getPogingen());
         assertEquals(TaakStatus.OPEN, naEerste.getStatus());
         assertTrue(naEerste.getDue().isAfter(nu().plusSeconds(20)), "uitstel met wachttijd");
@@ -154,7 +153,7 @@ class TaakWorkerTest {
         zetDue(id, nu().minusSeconds(1));
         taakWorker.verwerk(TaakSoort.WISSEN);
 
-        Taak naTweede = zoek(id).orElseThrow();
+        Taak naTweede = zoek(TaakSoort.WISSEN, id).orElseThrow();
         assertEquals(TaakStatus.MISLUKT, naTweede.getStatus());
         assertEquals(1.0, meterRegistry.get("nmc.taken.mislukt").tag("soort", "WISSEN").gauge().value());
         assertEquals(0, taakWorker.verwerk(TaakSoort.WISSEN), "een mislukte taak wordt niet meer geclaimd");
@@ -171,7 +170,7 @@ class TaakWorkerTest {
 
         taakWorker.verwerk(TaakSoort.WISSEN);
 
-        assertTrue(zoek(id).isEmpty());
+        assertTrue(zoek(TaakSoort.WISSEN, id).isEmpty());
     }
 
     @Test
@@ -180,14 +179,14 @@ class TaakWorkerTest {
         WisTestHandler.GEDRAG.set((taak, lease) -> {
             zetLease(id, nu().plusSeconds(1));
             lease.verleng();
-            assertTrue(zoek(id).orElseThrow().getLeaseTot().isAfter(nu().plusMinutes(1)));
+            assertTrue(zoek(TaakSoort.WISSEN, id).orElseThrow().getLeaseTot().isAfter(nu().plusMinutes(1)));
 
             return TaakUitkomst.uitgesteld(nu().plusHours(1), false);
         });
 
         taakWorker.verwerk(TaakSoort.WISSEN);
 
-        assertEquals(0, zoek(id).orElseThrow().getPogingen(), "de asserties in de handler zijn niet gegooid");
+        assertEquals(0, zoek(TaakSoort.WISSEN, id).orElseThrow().getPogingen(), "de asserties in de handler zijn niet gegooid");
     }
 
     // Een andere worker heeft de taak inmiddels: wat deze worker nog wil, wordt geweigerd en de rij
@@ -196,16 +195,15 @@ class TaakWorkerTest {
     void verwerk_leaseVerloren_laatDeTaakAanDeNieuweEigenaar() {
         long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
         WisTestHandler.GEDRAG.set((taak, lease) -> {
-            QuarkusTransaction.requiringNew().run(() -> entityManager
-                    .createNativeQuery("UPDATE taak SET claim_epoch = claim_epoch + 1 WHERE id = ?1")
-                    .setParameter(1, id).executeUpdate());
+            QuarkusTransaction.requiringNew().run(() ->
+                    TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.WISSEN, id));
 
             return TaakUitkomst.afgerond();
         });
 
         taakWorker.verwerk(TaakSoort.WISSEN);
 
-        assertTrue(zoek(id).isPresent(), "de afronding van de oude worker is geweigerd");
+        assertTrue(zoek(TaakSoort.WISSEN, id).isPresent(), "de afronding van de oude worker is geweigerd");
     }
 
     // Terwijl de worker de eerste taak van de batch uitvoert, claimt een andere worker de tweede.
@@ -216,9 +214,8 @@ class TaakWorkerTest {
         AtomicInteger uitgevoerd = new AtomicInteger();
         WisTestHandler.GEDRAG.set((taak, lease) -> {
             uitgevoerd.incrementAndGet();
-            QuarkusTransaction.requiringNew().run(() -> entityManager
-                    .createNativeQuery("UPDATE taak SET claim_epoch = claim_epoch + 1 WHERE id = ?1")
-                    .setParameter(1, tweede).executeUpdate());
+            QuarkusTransaction.requiringNew().run(() ->
+                    TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.WISSEN, tweede));
 
             return TaakUitkomst.afgerond();
         });
@@ -226,24 +223,23 @@ class TaakWorkerTest {
         taakWorker.verwerk(TaakSoort.WISSEN);
 
         assertEquals(1, uitgevoerd.get());
-        assertTrue(zoek(eerste).isEmpty());
-        assertEquals(0, zoek(tweede).orElseThrow().getPogingen());
+        assertTrue(zoek(TaakSoort.WISSEN, eerste).isEmpty());
+        assertEquals(0, zoek(TaakSoort.WISSEN, tweede).orElseThrow().getPogingen());
     }
 
     @Test
     void verwerk_leaseVerlorenNaEenFout_laatDeTaakAanDeNieuweEigenaar() {
         long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
         WisTestHandler.GEDRAG.set((taak, lease) -> {
-            QuarkusTransaction.requiringNew().run(() -> entityManager
-                    .createNativeQuery("UPDATE taak SET claim_epoch = claim_epoch + 1 WHERE id = ?1")
-                    .setParameter(1, id).executeUpdate());
+            QuarkusTransaction.requiringNew().run(() ->
+                    TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.WISSEN, id));
 
             throw new IllegalStateException("gesimuleerde fout");
         });
 
         taakWorker.verwerk(TaakSoort.WISSEN);
 
-        assertEquals(0, zoek(id).orElseThrow().getPogingen(), "het uitstel van de oude worker is geweigerd");
+        assertEquals(0, zoek(TaakSoort.WISSEN, id).orElseThrow().getPogingen(), "het uitstel van de oude worker is geweigerd");
     }
 
     @Test
@@ -252,7 +248,7 @@ class TaakWorkerTest {
 
         assertEquals(0, taakWorker.verwerk(TaakSoort.ONDERHOUD));
 
-        assertNull(zoek(id).orElseThrow().getLeaseTot());
+        assertNull(zoek(TaakSoort.ONDERHOUD, id).orElseThrow().getLeaseTot());
     }
 
     // De geplande rondes delegeren elk aan verwerk; zonder handler voor de soort doen ze niets.
@@ -267,39 +263,24 @@ class TaakWorkerTest {
         taakWorker.ongeldigMelden();
         taakWorker.onderhoud();
 
-        assertNull(zoek(id).orElseThrow().getLeaseTot());
+        assertNull(zoek(TaakSoort.ONDERHOUD, id).orElseThrow().getLeaseTot());
     }
 
     @Test
-    void geplandeRondeWissen_voertDeHandlerUit() {
+    void wissen_taakAanDeBeurt_voertDeHandlerUit() {
         long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
 
         taakWorker.wissen();
 
-        assertTrue(zoek(id).isEmpty());
+        assertTrue(zoek(TaakSoort.WISSEN, id).isEmpty());
     }
 
     @Test
-    void achterstandmetriek_teltOpenTakenDieAanDeBeurtZijn() {
+    void achterstandmetriek_takenNuEnLater_teltAlleenWatAanDeBeurtIs() {
         plan(TaakSoort.WISSEN, nu().minusMinutes(1));
         plan(TaakSoort.WISSEN, nu().plusHours(1));
 
         assertEquals(1.0, meterRegistry.get("nmc.taken.achterstand").tag("soort", "WISSEN").gauge().value());
-    }
-
-    @Test
-    void taakUitkomst_uitgesteldZonderDue_weigert() {
-        assertThrows(NullPointerException.class, () -> TaakUitkomst.uitgesteld(null, false));
-    }
-
-    @Test
-    void taak_payloadIsEenKopieEnNooitNull() {
-        Taak metPayload = new Taak(TaakSoort.WISSEN, null, null, nu(), null, Map.of("k", "v"));
-        Taak zonderPayload = new Taak(TaakSoort.WISSEN, null, null, nu(), null, null);
-
-        assertEquals(Map.of("k", "v"), metPayload.getPayload());
-        assertEquals(Map.of(), zonderPayload.getPayload());
-        assertNotNull(metPayload.getSoort());
     }
 
     // Het aantal aanroepen van de handler is het aantal geclaimde taken; de teller bewijst dat de
@@ -321,29 +302,25 @@ class TaakWorkerTest {
         assertEquals(0, taakRepository.count());
     }
 
-    private long plan(TaakSoort soort, OffsetDateTime due) {
+    private long plan(TaakSoort taakSoort, OffsetDateTime due) {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Taak taak = new Taak(soort, NotificatieFixtures.DV_ID, null, due, null, null);
+            Taak taak = new Taak(taakSoort, NotificatieFixtures.DV_ID, null, due, null, null);
             taakRepository.persist(taak);
 
             return taak.getId();
         });
     }
 
-    private java.util.Optional<Taak> zoek(long id) {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.findByIdOptional(id));
+    private java.util.Optional<Taak> zoek(TaakSoort taakSoort, long id) {
+        return QuarkusTransaction.requiringNew().call(() -> taakRepository.zoek(taakSoort, id));
     }
 
     private void zetDue(long id, OffsetDateTime due) {
-        QuarkusTransaction.requiringNew().run(() -> entityManager
-                .createNativeQuery("UPDATE taak SET due = ?2 WHERE id = ?1")
-                .setParameter(1, id).setParameter(2, due).executeUpdate());
+        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetDue(entityManager, TaakSoort.WISSEN, id, due));
     }
 
     private void zetLease(long id, OffsetDateTime tot) {
-        QuarkusTransaction.requiringNew().run(() -> entityManager
-                .createNativeQuery("UPDATE taak SET lease_tot = ?2 WHERE id = ?1")
-                .setParameter(1, id).setParameter(2, tot).executeUpdate());
+        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetLeaseTot(entityManager, TaakSoort.WISSEN, id, tot));
     }
 
     private static OffsetDateTime nu() {

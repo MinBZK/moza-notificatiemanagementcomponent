@@ -71,7 +71,7 @@ class DecentraleNotificatieControllerTest {
             assertEquals("https://omc.example.nl/cb", notificatie.getCallbackUrl());
             assertEquals(Ontvanger.email("burger@example.nl"),
                     sleutelbeheer.ontsleutelOntvanger(notificatie.getId(), notificatie.getVersleuteldeGegevens()));
-            assertEquals(TaakSoort.VERZENDEN, taakRepository.listAll().getFirst().getSoort());
+            assertEquals(TaakSoort.VERZENDEN, taakRepository.listAll().getFirst().getTaakSoort());
         });
         verifyNoInteractions(sendAMessageApi);
     }

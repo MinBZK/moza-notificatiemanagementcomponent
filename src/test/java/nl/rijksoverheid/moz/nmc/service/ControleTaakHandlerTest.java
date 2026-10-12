@@ -10,22 +10,27 @@ import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
+import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
@@ -66,23 +71,23 @@ class ControleTaakHandlerTest {
         UUID verzondenLopend = notificatie(NotificatieStatus.VERZONDEN, UUID.randomUUID());
         UUID verzondenZonderPoging = notificatie(NotificatieStatus.VERZONDEN, null);
         UUID bezorgd = notificatie(NotificatieStatus.BEZORGD, UUID.randomUUID());
-        UUID terminaal = notificatie(NotificatieStatus.NIET_BEZORGBAAR, UUID.randomUUID());
+        UUID eindstatus = notificatie(NotificatieStatus.NIET_BEZORGBAAR, UUID.randomUUID());
 
-        assertEquals(1, taakWorker.verwerk(TaakSoort.CONTROLE));
+        assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.CONTROLE));
 
         Map<UUID, Taak> perNotificatie = perNotificatie();
-        assertEquals(TaakSoort.VERZENDEN, perNotificatie.get(aangenomen).getSoort());
-        assertEquals(TaakSoort.VERZENDEN, perNotificatie.get(inVerzending).getSoort());
-        assertEquals(TaakSoort.RECONCILIEREN, perNotificatie.get(verzondenLopend).getSoort());
+        assertEquals(TaakSoort.VERZENDEN, perNotificatie.get(aangenomen).getTaakSoort());
+        assertEquals(TaakSoort.VERZENDEN, perNotificatie.get(inVerzending).getTaakSoort());
+        assertEquals(TaakSoort.RECONCILIEREN, perNotificatie.get(verzondenLopend).getTaakSoort());
         assertEquals(pogingRepository.findLaatsteVan(verzondenLopend).orElseThrow().getId().toString(),
                 perNotificatie.get(verzondenLopend).getPayload().get(VerzendTaakHandler.PAYLOAD_POGING_ID));
-        assertTrue(!perNotificatie.containsKey(verzondenZonderPoging), "zonder herverzending valt er niets te plannen");
-        assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, perNotificatie.get(bezorgd).getSoort());
-        assertTrue(!perNotificatie.containsKey(terminaal), "een terminale notificatie krijgt geen taak");
+        assertFalse(perNotificatie.containsKey(verzondenZonderPoging), "zonder herverzending valt er niets te plannen");
+        assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, perNotificatie.get(bezorgd).getTaakSoort());
+        assertFalse(perNotificatie.containsKey(eindstatus), "een notificatie met een eindstatus krijgt geen taak");
         assertEquals(NotificatieFixtures.DV_ID, perNotificatie.get(aangenomen).getDvId());
 
         Taak controle = QuarkusTransaction.requiringNew().call(() -> taakRepository
-                .find("soort", TaakSoort.CONTROLE).singleResult());
+                .find(Taak_.TAAK_SOORT, TaakSoort.CONTROLE).singleResult());
         assertEquals(TaakStatus.OPEN, controle.getStatus());
         assertTrue(controle.getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(1)), "opnieuw gepland");
         assertEquals(0, controle.getPogingen());
@@ -99,11 +104,10 @@ class ControleTaakHandlerTest {
                     OffsetDateTime.now(ZoneOffset.UTC), null, null);
             taakRepository.persist(mislukt);
             taakRepository.flush();
-            taakRepository.getEntityManager().createNativeQuery("UPDATE taak SET status = 'MISLUKT' WHERE id = ?1")
-                    .setParameter(1, mislukt.getId()).executeUpdate();
+            TaakFixtures.markeerMislukt(taakRepository.getEntityManager(), TaakSoort.VERZENDEN, mislukt.getId());
         });
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
         assertEquals(3, QuarkusTransaction.requiringNew().call(() -> taakRepository.count()),
                 "controletaak plus de twee bestaande taken, geen nieuwe");
@@ -113,9 +117,9 @@ class ControleTaakHandlerTest {
     void geplandeRondeControle_voertDeHandlerUit() {
         UUID id = notificatie(NotificatieStatus.AANGENOMEN, null);
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
-        assertEquals(TaakSoort.VERZENDEN, perNotificatie().get(id).getSoort());
+        assertEquals(TaakSoort.VERZENDEN, perNotificatie().get(id).getTaakSoort());
     }
 
     // Een notificatie in de gegeven status, zonder taak; bij een NotifyNL-id met een verzonden poging.
@@ -149,7 +153,7 @@ class ControleTaakHandlerTest {
 
     private Map<UUID, Taak> perNotificatie() {
         List<Taak> taken = QuarkusTransaction.requiringNew().call(() -> taakRepository.listAll());
-        java.util.Map<UUID, Taak> map = new java.util.HashMap<>();
+        Map<UUID, Taak> map = new HashMap<>();
 
         for (Taak taak : taken) {
             if (taak.getNotificatieId() != null) {

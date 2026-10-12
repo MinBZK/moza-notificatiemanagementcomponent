@@ -19,13 +19,13 @@ import java.util.function.Function;
  * {@code NMC_KEK_HUIDIGE_VERSIE} en {@code NMC_KEK_VERSIE_<n>}.
  * <p>
  * Eager bij het opstarten, zodat een ontbrekende of ongeldige KEK de applicatie niet laat starten. Alle
- * versies van 1 tot en met {@value #MAX_VERSIE} worden gelezen, ook die boven de huidige: na het
- * terugzetten van de huidige versie blijven rijen onder een hogere versie leesbaar, zolang die versie geconfigureerd blijft.
+ * versies van 1 tot en met {@value #MAX_VERSIE} worden gelezen, ook die boven de huidige.
  */
 @Startup
 @ApplicationScoped
 public class ConfigKekProvider implements KekProvider {
 
+    // Package-private zodat de tests dezelfde configuratienamen en grens gebruiken.
     static final String HUIDIGE_VERSIE = "nmc.kek.huidige-versie";
     static final String VERSIE_PREFIX = "nmc.kek.versie.";
 
@@ -41,6 +41,7 @@ public class ConfigKekProvider implements KekProvider {
         this(naam -> config.getOptionalValue(naam, String.class));
     }
 
+    // Package-private zodat tests de configuratie zonder SmallRye Config kunnen aanleveren.
     ConfigKekProvider(Function<String, Optional<String>> configWaarde) {
         String versie = configWaarde.apply(HUIDIGE_VERSIE)
                 .filter(s -> !s.isBlank())

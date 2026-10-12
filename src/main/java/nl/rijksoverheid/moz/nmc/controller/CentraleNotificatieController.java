@@ -1,12 +1,13 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
 import io.quarkus.logging.Log;
+import jakarta.ws.rs.core.Response;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.Logboek;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
 import nl.rijksoverheid.moz.nmc.api.CentraleNotificatiesApi;
 import nl.rijksoverheid.moz.nmc.api.model.NotificatieAanvraagRequest;
-import nl.rijksoverheid.moz.nmc.api.model.NotificatieResponse;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
+import nl.rijksoverheid.moz.nmc.helper.AannameResponse;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
 import nl.rijksoverheid.moz.nmc.service.AannameOpdracht;
@@ -17,7 +18,6 @@ import nl.rijksoverheid.moz.nmc.service.OnbekendBerichtTypeException;
 import nl.rijksoverheid.moz.nmc.service.QuotumOverschredenException;
 import nl.rijksoverheid.moz.nmc.service.Regie;
 
-import java.util.UUID;
 
 /**
  * Intake bij centrale regie: de aanroeper levert een identificerend nummer, het NMC haalt het adres
@@ -29,31 +29,24 @@ public class CentraleNotificatieController implements CentraleNotificatiesApi {
     private final AannameService aannameService;
     private final LogboekContext logboekContext;
     private final HashHelper hashHelper;
-    private final AannameLocatie aannameLocatie;
 
-    public CentraleNotificatieController(AannameService aannameService, LogboekContext logboekContext, HashHelper hashHelper,
-                                         AannameLocatie aannameLocatie) {
+    public CentraleNotificatieController(AannameService aannameService, LogboekContext logboekContext, HashHelper hashHelper) {
         this.aannameService = aannameService;
         this.logboekContext = logboekContext;
         this.hashHelper = hashHelper;
-        this.aannameLocatie = aannameLocatie;
     }
 
     @Override
     // TODO #754 (LDV Logboek annotaties hebben placeholder URL)
     // processingActivityId is een placeholder, vervang door de echte URL uit het privacy-register.
     @Logboek(name = "notificatieAannemen", processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
-    @Aanname
-    public NotificatieResponse notificatieVersturen(NotificatieAanvraagRequest notificatieAanvraagRequest) {
+    public Response notificatieVersturen(NotificatieAanvraagRequest notificatieAanvraagRequest) {
         // TODO #758 (Logboek context setten via annotatie ipv in method body)
         logboekContext.setDataSubjectId(hashHelper.hashIdentifier(notificatieAanvraagRequest.getIdentificatieNummer()));
         logboekContext.setDataSubjectType(String.valueOf(notificatieAanvraagRequest.getIdentificatieType()));
 
         try {
-            UUID id = aannameService.neemAan(opdracht(notificatieAanvraagRequest));
-            aannameLocatie.zet(id);
-
-            return new NotificatieResponse(id);
+            return AannameResponse.notificatieAangenomen(aannameService.neemAan(opdracht(notificatieAanvraagRequest)));
         } catch (OnbekendBerichtTypeException e) {
             throw Problems.badRequest("Notificatie niet aangenomen.", e.getMessage());
         } catch (QuotumOverschredenException e) {

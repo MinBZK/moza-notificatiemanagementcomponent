@@ -200,24 +200,24 @@ class ConsumentCallbackAdapterTest {
 
     @Test
     void stuurStatusUpdate_event_bevat_correcteData() {
-        StatusUpdateOpdracht opdracht = opdracht("https://omc.example.nl/callback");
+        StatusUpdateOpdracht statusUpdateOpdracht = opdracht("https://omc.example.nl/callback");
 
-        adapter.stuurStatusUpdate(opdracht);
+        adapter.stuurStatusUpdate(statusUpdateOpdracht);
 
         ArgumentCaptor<NotificatieStatusEvent> captor = ArgumentCaptor.forClass(NotificatieStatusEvent.class);
         verify(callbackClient).stuurStatusUpdate(captor.capture());
         NotificatieStatusEvent event = captor.getValue();
         assertNotNull(event.id());
         assertEquals("1.0", event.specversion());
-        assertEquals("nl.overheid.moz.notificatie.status.niet-bezorgbaar", event.type());
+        assertEquals("nl.mijnoverheidzakelijk.nmc.notificatie.status.niet-bezorgbaar", event.type());
         assertEquals("application/json", event.datacontenttype());
         assertNotNull(event.source());
-        assertEquals(opdracht.notificatieId().toString(), event.subject());
+        assertEquals(statusUpdateOpdracht.notificatieId().toString(), event.subject());
         assertEquals(OffsetDateTime.parse("2026-01-15T10:00:00Z"), event.time());
         assertEquals("3", event.sequence());
         assertEquals("Integer", event.sequencetype());
-        assertEquals(NotificatieStatus.VERZONDEN, event.data().van());
-        assertEquals(NotificatieStatus.NIET_BEZORGBAAR, event.data().naar());
+        assertEquals(NotificatieStatus.VERZONDEN, event.data().vorigeStatus());
+        assertEquals(NotificatieStatus.NIET_BEZORGBAAR, event.data().nieuweStatus());
         assertEquals(Reden.ONBEREIKBAAR, event.data().reden());
         assertEquals(3L, event.data().versie());
     }
