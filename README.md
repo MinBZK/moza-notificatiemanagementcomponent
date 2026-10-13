@@ -127,8 +127,8 @@ contactherstel-deel van beide profielen is nog niet gebouwd.
    centraal profiel volstaat een identificatie; bij een decentraal profiel
    worden ook het verzendkanaal en de ontvangergegevens meegegeven.
 2. **Versturen**: de NMC haalt (in een latere stap) de juiste template op en
-   stuurt het bericht via NotifyNL. De notificatie wordt opgeslagen met status
-   `sending`.
+   stuurt het bericht via NotifyNL. De notificatie gaat van `aangenomen` via
+   `in-verzending` naar `verzonden`.
 3. **Bezorgstatus verwerken**: NotifyNL meldt asynchroon terug of de
    bezorging is gelukt of mislukt. De NMC werkt de status bij; de overgang staat in de
    eventfeed en gaat naar de webhook van de Dienstverlener, als die er een heeft.
@@ -150,7 +150,7 @@ Geïmplementeerde componenten zijn vetgedrukt; de rest is toekomstig ontwerp.
 | **Afleverstatus-callback** | REST (controller) | Webhook waarop NotifyNL delivery receipts meldt. |
 | **Aanname** | Service (`AannameService`) | Legt notificatie, eerste event en verzendtaak vast in één transactie en dwingt het quotum per Dienstverlener af. |
 | **Verzendtaak** | Taakhandler (`VerzendTaakHandler`) | Haalt bij centrale regie het adres op, verstuurt via NotifyNL met het poging-id als `reference` en voert de overgangen uit. |
-| **Profielservice-adapter** | Client | Haalt contactvoorkeur op bij de Profielservice en kan een e-mailadres invalideren. |
+| **Profielservice-adapter** | Client | Haalt contactvoorkeur op bij de Profielservice. |
 | **Verzendadapter** | Client (bearer-JWT) | Verstuurt berichten via NotifyNL (`template_id` + `personalisation`). |
 | **Terugkoppeltaak** | Taakhandler (`TerugkoppelTaakHandler`, `WebhookDispatcher`) | Levert per dienstverlener de events vanaf de leverpositie als CloudEvents-batch aan de webhook uit het register, met een ondertekende bearer-JWT. |
 | **Consument-callback-adapter** | Webhook-client (CloudEvents NL GOV) | Doet de POST naar de webhook: één poging, zonder herhaling. |
@@ -305,7 +305,7 @@ Gepland/toekomstig (nog niet aanwezig):
 - **`POST /centraal/notificaties/{id}/contactherstel`**: een nieuwe verzendpoging
   (contactherstel) starten voor een bestaande notificatie.
 
-De `openapi.yaml`-specificatie (`/centraal/notificaties` en `/decentraal/notificaties`)
+De `openapi.yaml`-specificatie (intake, eventfeed, bevestiging, webhook en JWKS)
 is beschikbaar via `/q/swagger-ui` wanneer de applicatie draait (`./mvnw quarkus:dev`);
 zie de toelichting bij
 "OpenAPI-specificatie & codegen" hieronder voor waarom `/notifynl-callback`
@@ -316,8 +316,9 @@ daar niet in staat.
 Het contract van `/api/nmc/v1` is **spec-first** en bestaat uit twee losse
 specificaties:
 
-- `src/main/resources/META-INF/openapi.yaml` — `POST /centraal/notificaties` en
-  `POST /decentraal/notificaties` (de centrale- en decentrale-regie-flow).
+- `src/main/resources/META-INF/openapi.yaml` — `POST /centraal/notificaties`,
+  `POST /decentraal/notificaties`, de eventfeed met de bevestiging en de webhook als
+  callback, en `GET /.well-known/jwks.json`.
 - `src/main/resources/META-INF/notifynl-callback-openapi.yaml` — `POST
   /notifynl-callback`, in een eigen bestand zodat het zelfstandig te verwijderen
   is zodra dit endpoint niet meer nodig is (zie de API-sectie hierboven).
@@ -331,13 +332,14 @@ specificaties:
   voor runtime-documentatie.
 - Bij elke build genereert de `openapi-generator-maven-plugin` (twee losse
   `<execution>`s, één per spec) hieruit de JAX-RS-interfaces
-  (`nl.rijksoverheid.moz.nmc.api.CentraleNotificatiesApi` en `DecentraleNotificatiesApi`,
+  (`nl.rijksoverheid.moz.nmc.api.CentraleNotificatiesApi`, `DecentraleNotificatiesApi`,
+  `WijzigingenApi` en `SleutelsApi`,
   `nl.rijksoverheid.moz.nmc.notifynlcallback.api.NotifyNlCallbackApi`) en de
   request/response-modellen (`nl.rijksoverheid.moz.nmc.api.model.*`,
   `nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.*`) in
   `target/generated-sources/openapi` (niet ingecheckt).
-  `CentraleNotificatieController` en `DecentraleNotificatieController` (package
-  `controller`) en `NotifyNLCallbackController` (package
+  `CentraleNotificatieController`, `DecentraleNotificatieController`,
+  `EventfeedController` en `SleutelsController` (package `controller`) en `NotifyNLCallbackController` (package
   `notifynlcallback.controller`) implementeren de gegenereerde interfaces.
 
 Om een contract aan te passen: wijzig `META-INF/openapi.yaml` of

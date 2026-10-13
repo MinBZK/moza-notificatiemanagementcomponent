@@ -118,8 +118,8 @@ public class TaakClaimer {
     }
 
     /**
-     * Voor een taak die zichzelf steeds opnieuw plant: na een geslaagde ronde telt alleen een nieuwe
-     * reeks fouten mee voor het maximum aantal pogingen.
+     * Laat de taak op {@code due} weer draaien en zet de pogingen op 0, zodat alleen opeenvolgende
+     * fouten tellen voor het maximum.
      *
      * @throws TaakVerlorenException als de taak inmiddels bij een andere worker ligt
      */

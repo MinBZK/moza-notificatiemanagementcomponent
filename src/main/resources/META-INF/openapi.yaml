@@ -196,26 +196,17 @@ paths:
             post:
               summary: Statusovergangen leveren aan de webhook (CloudEvents NL GOV)
               description: |
-                Heeft de Dienstverlener bij de onboarding een webhook laten registreren, dan
-                levert het NMC dezelfde events als deze feed, in dezelfde vorm en volgorde, als
-                CloudEvents-batch aan die URL. De URL komt uit het dienstverlenerregister, niet
-                uit een aanvraag.
+                Is bij de onboarding een webhook geregistreerd, dan levert het NMC de events
+                van deze feed ook als CloudEvents-batch aan die URL.
 
-                Per aanroep gaan de events na de leverpositie van de webhook mee, tot een
-                geconfigureerd maximum. Na een `2xx` gaat de leverpositie vooruit; een ander
-                antwoord of geen verbinding levert dezelfde events later opnieuw, vanaf dezelfde
-                positie. Een `2xx` is geen bevestiging: bevestig met de cursor uit de header
-                `Nmc-Cursor` via `PUT /api/nmc/v1/notificaties/wijzigingen/bevestiging`.
+                Na een `2xx` volgen de volgende events; anders komen dezelfde events later
+                opnieuw. Na herhaalde mislukkingen pauzeert de webhook, tot ten hoogste een dag.
+                Een `2xx` is geen bevestiging: bevestig de cursor uit `Nmc-Cursor` via
+                `PUT /api/nmc/v1/notificaties/wijzigingen/bevestiging`. Een event kan dubbel
+                aankomen; herken het aan `id`.
 
-                Na een afgesproken aantal mislukte leveringen op rij pauzeert de webhook, met een
-                oplopende wachttijd tot ten hoogste een dag; de feed blijft beschikbaar. Een
-                event kan meer dan eens aankomen: herken het aan `id`, en verwerk per `subject`
-                op `sequence`.
-
-                Elke aanroep draagt een door het NMC ondertekende JWT (RS256) als bearer token,
-                met het NMC als `iss`, de webhook-URL als `aud` en een korte geldigheid (`exp`).
-                Controleer de handtekening met de sleutel uit
-                `GET /api/nmc/v1/.well-known/jwks.json` met de `kid` uit de JWT-header.
+                De bearer token is een JWT (RS256) met de webhook-URL als `aud`; controleer hem
+                met de sleutel uit `GET /api/nmc/v1/.well-known/jwks.json`.
               parameters:
                 - name: Authorization
                   in: header

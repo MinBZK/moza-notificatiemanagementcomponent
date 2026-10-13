@@ -40,7 +40,7 @@ public class WebhookOntvanger {
     @POST
     @Path("/druppel")
     @Produces(MediaType.TEXT_PLAIN)
-    public Multi<String> druppel(String body) {
+    public Multi<String> druppel() {
         return Multi.createFrom().ticks().every(Duration.ofMillis(200)).select().first(50).map(tik -> ".");
     }
 }

@@ -104,12 +104,12 @@ public class TerugkoppelTaakHandler implements TaakHandler {
         Ronde ronde = QuarkusTransaction.requiringNew().call(() -> bereidVoor(dvId));
 
         return switch (ronde) {
-            case GeenWebhook g -> {
+            case GeenWebhook() -> {
                 Log.infof("Dienstverlener %s heeft geen webhook meer; de terugkoppeltaak vervalt", dvId);
                 yield TaakUitkomst.afgerond();
             }
             case Gepauzeerd g -> TaakUitkomst.uitgesteld(g.tot(), false);
-            case GeenEvents g -> {
+            case GeenEvents() -> {
                 QuarkusTransaction.requiringNew().run(() -> taakClaimer.herplanNaSucces(taak, nu().plus(interval)));
                 yield TaakUitkomst.alAfgerond();
             }
