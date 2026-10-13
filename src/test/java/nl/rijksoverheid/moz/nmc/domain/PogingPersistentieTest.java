@@ -65,18 +65,19 @@ class PogingPersistentieTest {
         });
     }
 
-    // Het id gaat als reference mee naar NotifyNL, dus het moet er direct na persist zijn, vóór de flush.
+    // Het id gaat als reference mee naar NotifyNL, dus het moet er vóór de flush zijn en persist houdt het.
     @Test
-    void poging_naPersist_heeftEenIdZonderFlush() {
+    void poging_naPersist_houdtHetIdUitDeConstructor() {
         UUID notificatieId = nieuweNotificatie();
 
         QuarkusTransaction.requiringNew().run(() -> {
             Poging poging = new Poging(notificatieId, 1);
-            assertNull(poging.getId());
+            UUID id = poging.getId();
+            assertNotNull(id);
 
             pogingRepository.persist(poging);
 
-            assertNotNull(poging.getId());
+            assertEquals(id, poging.getId());
         });
     }
 
