@@ -35,7 +35,7 @@ import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.service.NotificatieNietGevondenException;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
-import nl.rijksoverheid.moz.nmc.service.InkomendEventOpslag;
+import nl.rijksoverheid.moz.nmc.service.ReceiptOpslag;
 import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
@@ -202,7 +202,7 @@ public class NotificatieVerwerkingFuzzer {
 
         centraleController = new CentraleNotificatieController(aannameService, logboekContext, hashHelper);
         decentraleController = new DecentraleNotificatieController(aannameService, logboekContext, hashHelper);
-        callbackController = new NotifyNLCallbackController(new InkomendEventOpslag(pogingen, repository, taken,
+        callbackController = new NotifyNLCallbackController(new ReceiptOpslag(pogingen, repository, taken,
                 new SimpleMeterRegistry()));
     }
 

@@ -24,7 +24,7 @@ import java.util.UUID;
  * receipt wordt niet opgeslagen.
  */
 @ApplicationScoped
-public class InkomendEventOpslag {
+public class ReceiptOpslag {
 
     static final String PAYLOAD_POGING_ID = "pogingId";
     static final String PAYLOAD_NOTIFY_ID = "notifyId";
@@ -36,8 +36,8 @@ public class InkomendEventOpslag {
     private final TaakRepository taakRepository;
     private final Counter afgewezen;
 
-    public InkomendEventOpslag(PogingRepository pogingRepository, NotificatieRepository notificatieRepository,
-                               TaakRepository taakRepository, MeterRegistry meterRegistry) {
+    public ReceiptOpslag(PogingRepository pogingRepository, NotificatieRepository notificatieRepository,
+                         TaakRepository taakRepository, MeterRegistry meterRegistry) {
         this.pogingRepository = pogingRepository;
         this.notificatieRepository = notificatieRepository;
         this.taakRepository = taakRepository;
@@ -78,6 +78,8 @@ public class InkomendEventOpslag {
         payload.put(PAYLOAD_POGING_ID, poging.get().getId().toString());
         payload.put(PAYLOAD_NOTIFY_ID, notifyId.toString());
         payload.put(PAYLOAD_STATUS, status);
+        // Leeg in plaats van null: de unieke index behandelt elke NULL als verschillend, waardoor een
+        // herhaalde receipt zonder tijdstip anders een tweede taak oplevert.
         payload.put(PAYLOAD_TIJDSTIP, tijdstip == null ? "" : tijdstip.withOffsetSameInstant(ZoneOffset.UTC).toString());
 
         boolean nieuw = taakRepository.planReceipt(notificatie.getDvId(), notificatie.getId(), payload,

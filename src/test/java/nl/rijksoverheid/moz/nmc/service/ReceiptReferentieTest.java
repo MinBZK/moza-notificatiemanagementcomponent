@@ -53,7 +53,7 @@ class ReceiptReferentieTest {
     EventRepository eventRepository;
 
     @Inject
-    InkomendEventOpslag inkomendEventOpslag;
+    ReceiptOpslag receiptOpslag;
 
     @Inject
     TaakWorker taakWorker;
@@ -129,8 +129,8 @@ class ReceiptReferentieTest {
         UUID pogingId = geplandePoging();
         UUID notifyId = UUID.randomUUID();
 
-        assertEquals(InkomendEventOpslag.Uitkomst.OPGESLAGEN,
-                inkomendEventOpslag.slaOp(notifyId, pogingId.toString(), "delivered", OffsetDateTime.now(ZoneOffset.UTC)));
+        assertEquals(ReceiptOpslag.Uitkomst.OPGESLAGEN,
+                receiptOpslag.slaOp(notifyId, pogingId.toString(), "delivered", OffsetDateTime.now(ZoneOffset.UTC)));
         TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
 
         Poging poging = poging(pogingId);
@@ -145,7 +145,7 @@ class ReceiptReferentieTest {
     @Test
     void receipttaakVoorEenVerwijderdePoging_rondtAf() {
         UUID pogingId = geplandePoging();
-        inkomendEventOpslag.slaOp(UUID.randomUUID(), pogingId.toString(), "delivered", null);
+        receiptOpslag.slaOp(UUID.randomUUID(), pogingId.toString(), "delivered", null);
         QuarkusTransaction.requiringNew().run(() -> {
             eventRepository.deleteAll();
             notificatieRepository.deleteAll();

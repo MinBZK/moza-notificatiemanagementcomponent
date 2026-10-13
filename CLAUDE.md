@@ -121,7 +121,7 @@ Geïmplementeerd:
 - `POST /api/nmc/v1/decentraal/notificaties`: idem met een e-mailadres van de
   aanroeper; geen Profielservice-lookup.
 - `POST /api/nmc/v1/notifynl-callback`: ontvangt de afleverstatus van NotifyNL,
-  beveiligd met een bearer token (`NotifyNLCallbackAuthFilter`). `InkomendEventOpslag`
+  beveiligd met een bearer token (`NotifyNLCallbackAuthFilter`). `ReceiptOpslag`
   slaat de receipt op als `RECEIPT_VERWERKEN`-taak (uniek op poging, status en
   tijdstip) en de controller antwoordt 204, ook bij een receipt die bij geen poging
   hoort (geteld in `nmc.receipts.afgewezen`). `ReceiptTaakHandler` verwerkt hem.

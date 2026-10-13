@@ -36,16 +36,16 @@ public class ReceiptTaakHandler implements TaakHandler {
     @Override
     public TaakUitkomst voerUit(Taak taak, Lease lease) {
         Map<String, String> payload = taak.getPayload();
-        String pogingId = payload.get(InkomendEventOpslag.PAYLOAD_POGING_ID);
-        UUID notifyId = UUID.fromString(payload.get(InkomendEventOpslag.PAYLOAD_NOTIFY_ID));
-        String tijdstip = payload.get(InkomendEventOpslag.PAYLOAD_TIJDSTIP);
+        String pogingId = payload.get(ReceiptOpslag.PAYLOAD_POGING_ID);
+        UUID notifyId = UUID.fromString(payload.get(ReceiptOpslag.PAYLOAD_NOTIFY_ID));
+        String tijdstip = payload.get(ReceiptOpslag.PAYLOAD_TIJDSTIP);
 
         QuarkusTransaction.requiringNew().run(() -> {
             // De notificatie kan inmiddels door de retentie zijn verwijderd; dan valt er niets te verwerken.
             if (pogingRepository.findById(UUID.fromString(pogingId)) == null) {
                 Log.infof("Receipt voor poging %s die niet meer bestaat; taak %d afgerond", pogingId, taak.getId());
             } else {
-                receiptVerwerker.verwerk(notifyId, pogingId, payload.get(InkomendEventOpslag.PAYLOAD_STATUS),
+                receiptVerwerker.verwerk(notifyId, pogingId, payload.get(ReceiptOpslag.PAYLOAD_STATUS),
                         tijdstip == null || tijdstip.isEmpty() ? null : OffsetDateTime.parse(tijdstip));
             }
 
