@@ -103,7 +103,7 @@ class ControleTaakHandlerTest {
         QuarkusTransaction.requiringNew().run(() -> pogingRepository.findLaatsteVan(id).orElseThrow()
                 .verwerkReceipt(PogingStatus.BEZORGD, bezorgdOp));
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
         assertEquals(bezorgdOp.plusDays(8).toInstant(), perNotificatie().get(id).getDue().toInstant());
     }
@@ -113,7 +113,7 @@ class ControleTaakHandlerTest {
     void controle_bezorgdZonderBezorgtijdstip_plantDeVaststeltaakEenVolleTermijnVooruit() {
         UUID id = notificatie(NotificatieStatus.BEZORGD, UUID.randomUUID());
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
         assertTrue(perNotificatie().get(id).getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusDays(7)));
     }

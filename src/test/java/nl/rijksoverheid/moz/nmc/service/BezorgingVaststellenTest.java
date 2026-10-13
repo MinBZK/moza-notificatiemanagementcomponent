@@ -10,6 +10,7 @@ import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
@@ -67,7 +68,7 @@ class BezorgingVaststellenTest {
         Bezorgd bezorgd = bezorgd(OffsetDateTime.now(ZoneOffset.UTC).minusDays(9));
         maakVaststeltaakDue(bezorgd.notificatieId());
 
-        assertEquals(1, taakWorker.verwerk(TaakSoort.BEZORGING_VASTSTELLEN));
+        assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.BEZORGING_VASTSTELLEN));
 
         assertEquals(NotificatieStatus.DEFINITIEF_BEZORGD, notificatie(bezorgd.notificatieId()).getStatus());
         assertTrue(taken().isEmpty());
@@ -95,10 +96,10 @@ class BezorgingVaststellenTest {
 
         assertEquals(NotificatieStatus.BEZORGD, notificatie(bezorgd.notificatieId()).getStatus());
         assertEquals(PogingStatus.PERMANENT_MISLUKT, poging(bezorgd.pogingId()).getStatus());
-        assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, taken().getFirst().getSoort(), "de vaststeltaak blijft staan");
+        assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, taken().getFirst().getTaakSoort(), "de vaststeltaak blijft staan");
 
         maakVaststeltaakDue(bezorgd.notificatieId());
-        taakWorker.verwerk(TaakSoort.BEZORGING_VASTSTELLEN);
+        TaakRonde.draai(taakWorker, TaakSoort.BEZORGING_VASTSTELLEN);
 
         assertEquals(NotificatieStatus.DEFINITIEF_BEZORGD, notificatie(bezorgd.notificatieId()).getStatus());
     }
@@ -116,7 +117,7 @@ class BezorgingVaststellenTest {
 
         assertEquals(NotificatieStatus.BEZORGD, notificatie(bezorgd.notificatieId()).getStatus());
         assertEquals(PogingStatus.PERMANENT_MISLUKT, poging(bezorgd.pogingId()).getStatus());
-        assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, taken().getFirst().getSoort(), "de vaststeltaak blijft staan");
+        assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, taken().getFirst().getTaakSoort(), "de vaststeltaak blijft staan");
     }
 
     // Een technical-failure geeft vanuit bezorgd geen overgang, maar de termijn loopt nog vanaf de bezorging.
@@ -142,7 +143,7 @@ class BezorgingVaststellenTest {
                 overgangsfunctie.voerUit(bezorgd.notificatieId(), NotificatieStatus.VERLOPEN, Reden.VERLOPEN));
         maakVaststeltaakDue(bezorgd.notificatieId());
 
-        taakWorker.verwerk(TaakSoort.BEZORGING_VASTSTELLEN);
+        TaakRonde.draai(taakWorker, TaakSoort.BEZORGING_VASTSTELLEN);
 
         assertEquals(NotificatieStatus.VERLOPEN, notificatie(bezorgd.notificatieId()).getStatus());
         assertTrue(taken().isEmpty());
@@ -157,7 +158,7 @@ class BezorgingVaststellenTest {
             notificatieRepository.deleteAll();
         });
 
-        taakWorker.verwerk(TaakSoort.BEZORGING_VASTSTELLEN);
+        TaakRonde.draai(taakWorker, TaakSoort.BEZORGING_VASTSTELLEN);
 
         assertTrue(taken().isEmpty());
     }

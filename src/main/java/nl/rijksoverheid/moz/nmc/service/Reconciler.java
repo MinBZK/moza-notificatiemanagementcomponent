@@ -57,7 +57,7 @@ public class Reconciler implements TaakHandler {
     }
 
     @Override
-    public TaakSoort soort() {
+    public TaakSoort taakSoort() {
         return TaakSoort.RECONCILIEREN;
     }
 

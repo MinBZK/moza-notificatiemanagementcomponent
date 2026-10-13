@@ -410,7 +410,7 @@ class VerzendTaakHandlerTest {
         assertEquals(List.of(), poging.getDuplicaatIds());
         assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
                 NotificatieStatus.BEZORGD), overgangen(id));
-        assertEquals(List.of(TaakSoort.BEZORGING_VASTSTELLEN), taken().stream().map(Taak::getSoort).toList(),
+        assertEquals(List.of(TaakSoort.BEZORGING_VASTSTELLEN), taken().stream().map(Taak::getTaakSoort).toList(),
                 "geen navraag voor een al bezorgde notificatie, wel de vaststeltaak");
     }
 
@@ -430,7 +430,7 @@ class VerzendTaakHandlerTest {
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         assertEquals(NotificatieStatus.BEZORGD, notificatie(id).getStatus());
-        assertEquals(List.of(TaakSoort.BEZORGING_VASTSTELLEN), taken().stream().map(Taak::getSoort).toList());
+        assertEquals(List.of(TaakSoort.BEZORGING_VASTSTELLEN), taken().stream().map(Taak::getTaakSoort).toList());
     }
 
     @Test

@@ -117,8 +117,9 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
      * Verwijdert de open taak van deze soort voor de notificatie, ook als een worker hem net geclaimd
      * heeft; diens afronding vindt de taak dan niet meer en rolt terug.
      */
-    public long verwijderOpen(TaakSoort soort, UUID notificatieId) {
-        return delete("soort = ?1 and notificatieId = ?2 and status = ?3", soort, notificatieId, TaakStatus.OPEN);
+    public long verwijderOpen(TaakSoort taakSoort, UUID notificatieId) {
+        return delete(Taak_.TAAK_SOORT + " = ?1 and " + Taak_.NOTIFICATIE_ID + " = ?2 and " + Taak_.STATUS + " = ?3",
+                taakSoort, notificatieId, TaakStatus.OPEN);
     }
 
     /** Verlengt de lease; false als de taak inmiddels door een andere worker is geclaimd. */
