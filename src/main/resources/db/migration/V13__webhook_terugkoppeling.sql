@@ -2,10 +2,12 @@
 -- per notificatie op de intake; een terugkoppeltaak per dienstverlener leest het eventlog vanaf de
 -- eigen leverpositie in webhookpositie.
 
--- Leeg betekent: geen webhook. Leeg aantal mislukkingen betekent: de default uit de configuratie.
+-- Leeg betekent: geen webhook. Een leeg aantal mislukkingen of een lege bundelgrootte betekent: de
+-- default uit de configuratie.
 ALTER TABLE dienstverlener
     ADD COLUMN webhook_url varchar(2048),
-    ADD COLUMN webhook_max_mislukkingen integer CHECK (webhook_max_mislukkingen > 0);
+    ADD COLUMN webhook_max_mislukkingen integer CHECK (webhook_max_mislukkingen > 0),
+    ADD COLUMN webhook_bundel integer CHECK (webhook_bundel > 0);
 
 -- De leverpositie per dienstverlener, geen bevestiging. Leeg (epoch, transactie_id, event_id)
 -- betekent: nog niets geleverd, dus vanaf het oudste beschikbare event.

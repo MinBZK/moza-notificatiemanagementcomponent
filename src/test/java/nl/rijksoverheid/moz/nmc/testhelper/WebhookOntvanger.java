@@ -1,11 +1,15 @@
 package nl.rijksoverheid.moz.nmc.testhelper;
 
+import io.smallrye.mutiny.Multi;
 import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -30,5 +34,13 @@ public class WebhookOntvanger {
         AANROEPEN.add(new Aanroep(contentType, autorisatie, cursor, body));
 
         return Response.status(status).header("Location", "https://elders.example.nl/webhook").build();
+    }
+
+    /** Antwoordt 200 en stuurt dan tien seconden lang elke 200 ms één teken, zonder ooit stil te vallen. */
+    @POST
+    @Path("/druppel")
+    @Produces(MediaType.TEXT_PLAIN)
+    public Multi<String> druppel(String body) {
+        return Multi.createFrom().ticks().every(Duration.ofMillis(200)).select().first(50).map(tik -> ".");
     }
 }

@@ -120,11 +120,14 @@ public final class TaakFixtures {
     }
 
     /** Zet de webhook in het register; {@code null} betekent geen webhook of de default. */
-    public static void zetWebhook(EntityManager entityManager, UUID dvId, String url, Integer maxMislukkingen) {
+    public static void zetWebhook(EntityManager entityManager, UUID dvId, String url, Integer maxMislukkingen,
+                                  Integer bundel) {
         entityManager.createQuery("update Dienstverlener set " + Dienstverlener_.WEBHOOK_URL + " = :url, "
-                        + Dienstverlener_.WEBHOOK_MAX_MISLUKKINGEN + " = :max where " + Dienstverlener_.ID + " = :id")
+                        + Dienstverlener_.WEBHOOK_MAX_MISLUKKINGEN + " = :max, " + Dienstverlener_.WEBHOOK_BUNDEL
+                        + " = :bundel where " + Dienstverlener_.ID + " = :id")
                 .setParameter("url", url)
                 .setParameter("max", maxMislukkingen)
+                .setParameter("bundel", bundel)
                 .setParameter("id", dvId)
                 .executeUpdate();
     }

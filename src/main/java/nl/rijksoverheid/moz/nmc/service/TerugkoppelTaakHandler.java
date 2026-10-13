@@ -150,6 +150,7 @@ public class TerugkoppelTaakHandler implements TaakHandler {
         }
 
         int max = dienstverlener.get().getWebhookMaxMislukkingen().orElse(maxMislukkingen);
+        int grootte = dienstverlener.get().getWebhookBundel().orElse(bundel);
         Webhookpositie positie = webhookpositieRepository.zoek(dvId);
 
         if (positie.getGepauzeerdTot() != null && positie.getGepauzeerdTot().isAfter(nu())) {
@@ -163,7 +164,7 @@ public class TerugkoppelTaakHandler implements TaakHandler {
             return new OngeldigeUrl(e.getMessage(), max);
         }
 
-        EventPagina pagina = eventfeed.leesVoorWebhook(dvId, positie.getPositie(), bundel);
+        EventPagina pagina = eventfeed.leesVoorWebhook(dvId, positie.getPositie(), grootte);
 
         if (pagina.events().isEmpty()) {
             return new GeenEvents();

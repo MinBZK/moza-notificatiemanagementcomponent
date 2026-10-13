@@ -35,6 +35,10 @@ public class Dienstverlener {
     @Column(name = "webhook_max_mislukkingen")
     private Integer webhookMaxMislukkingen;
 
+    // Leeg is de default uit de configuratie.
+    @Column(name = "webhook_bundel")
+    private Integer webhookBundel;
+
     protected Dienstverlener() {
         // Voor JPA
     }
@@ -64,5 +68,10 @@ public class Dienstverlener {
     /** Het aantal mislukte leveringen waarna de webhook pauzeert, als daar een afspraak over is. */
     public Optional<Integer> getWebhookMaxMislukkingen() {
         return Optional.ofNullable(webhookMaxMislukkingen);
+    }
+
+    /** Hoeveel events per aanroep naar de webhook gaan, als de dienstverlener dat afwijkend wil. */
+    public Optional<Integer> getWebhookBundel() {
+        return Optional.ofNullable(webhookBundel);
     }
 }

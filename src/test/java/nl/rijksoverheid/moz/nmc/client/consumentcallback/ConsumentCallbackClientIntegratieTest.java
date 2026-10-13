@@ -15,6 +15,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.net.URL;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -36,7 +37,7 @@ class ConsumentCallbackClientIntegratieTest {
     URL ontvanger;
 
     @Inject
-    QuarkusConsumentCallbackClientFactory clientFactory;
+    ConsumentCallbackClient client;
 
     @Inject
     ObjectMapper objectMapper;
@@ -48,9 +49,8 @@ class ConsumentCallbackClientIntegratieTest {
 
     @Test
     void antwoord2xx_teltAlsAfgeleverdMetHeaders() {
-        try (ConsumentCallbackClient client = clientFactory.maakClient(ontvanger + "/204")) {
-            assertDoesNotThrow(() -> client.lever("Bearer jwt", "cursor-1", List.of(event(UUID.randomUUID()))));
-        }
+        assertDoesNotThrow(() -> client.lever(ontvanger + "/204", "Bearer jwt", "cursor-1", List.of(event(UUID.randomUUID())))
+                .await().indefinitely());
 
         WebhookOntvanger.Aanroep aanroep = WebhookOntvanger.AANROEPEN.getFirst();
         assertEquals("Bearer jwt", aanroep.autorisatie());
@@ -62,21 +62,17 @@ class ConsumentCallbackClientIntegratieTest {
     @ParameterizedTest
     @ValueSource(ints = {301, 302, 307, 400, 500})
     void antwoordBuiten2xx_gooitWebApplicationException(int status) {
-        try (ConsumentCallbackClient client = clientFactory.maakClient(ontvanger + "/" + status)) {
-            WebApplicationException fout = assertThrows(WebApplicationException.class,
-                    () -> client.lever("Bearer jwt", "cursor", List.of(event(UUID.randomUUID()))));
+        WebApplicationException fout = assertThrows(WebApplicationException.class,
+                () -> client.lever(ontvanger + "/" + status, "Bearer jwt", "cursor", List.of(event(UUID.randomUUID())))
+                        .await().indefinitely());
 
-            assertEquals(status, fout.getResponse().getStatus());
-        }
-
+        assertEquals(status, fout.getResponse().getStatus());
         assertEquals(1, WebhookOntvanger.AANROEPEN.size());
     }
 
     @Test
     void contentType_isWatDeGepubliceerdeSpecBelooft() throws Exception {
-        try (ConsumentCallbackClient client = clientFactory.maakClient(ontvanger + "/204")) {
-            client.lever("Bearer jwt", "cursor", List.of(event(UUID.randomUUID())));
-        }
+        client.lever(ontvanger + "/204", "Bearer jwt", "cursor", List.of(event(UUID.randomUUID()))).await().indefinitely();
 
         JsonNode content = objectMapper.readTree(given().queryParam("format", "JSON")
                         .when().get("/q/openapi")
@@ -93,9 +89,8 @@ class ConsumentCallbackClientIntegratieTest {
     @Test
     void verzondenBody_isEenArrayVanCloudEventsUitDeSpec() throws Exception {
         UUID notificatieId = UUID.randomUUID();
-        try (ConsumentCallbackClient client = clientFactory.maakClient(ontvanger + "/204")) {
-            client.lever("Bearer jwt", "cursor", List.of(event(notificatieId), event(UUID.randomUUID())));
-        }
+        client.lever(ontvanger + "/204", "Bearer jwt", "cursor", List.of(event(notificatieId), event(UUID.randomUUID())))
+                .await().indefinitely();
 
         JsonNode body = objectMapper.readTree(WebhookOntvanger.AANROEPEN.getFirst().body());
         assertTrue(body.isArray());
@@ -115,10 +110,24 @@ class ConsumentCallbackClientIntegratieTest {
     // Een geweigerde verbinding is een transportfout: de levering is mislukt, niet het NMC.
     @Test
     void geweigerdeVerbinding_wordtEenLeveringException() {
-        ConsumentCallbackAdapter adapter = new ConsumentCallbackAdapter(clientFactory);
+        ConsumentCallbackAdapter adapter = new ConsumentCallbackAdapter(client, Duration.ofSeconds(5));
 
         assertThrows(WebhookLeveringException.class,
                 () -> adapter.lever("http://localhost:1/webhook", "Bearer jwt", "cursor", List.of(event(UUID.randomUUID()))));
+    }
+
+    // Een webhook die blijft druppelen valt nooit onder de read-time-out; de totale termijn breekt hem af.
+    @Test
+    void druppelendeWebhook_wordtNaDeTermijnAfgebroken() {
+        ConsumentCallbackAdapter adapter = new ConsumentCallbackAdapter(client, Duration.ofSeconds(1));
+        long start = System.nanoTime();
+
+        WebhookLeveringException fout = assertThrows(WebhookLeveringException.class,
+                () -> adapter.lever(ontvanger + "/druppel", "Bearer jwt", "cursor", List.of(event(UUID.randomUUID()))));
+
+        assertTrue(fout.getMessage().contains("niet binnen"), fout.getMessage());
+        assertTrue(Duration.ofNanos(System.nanoTime() - start).compareTo(Duration.ofSeconds(5)) < 0,
+                "afgebroken vóór de webhook klaar was met druppelen");
     }
 
     private static NotificatieStatusEvent event(UUID id) {

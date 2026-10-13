@@ -257,8 +257,9 @@ de logica die kiest tussen herverzending en contactherstel.
   binnen `nmc.controle.interval` leveren; een unieke index houdt het op één taak per
   dienstverlener, zodat met de claim nooit twee pods tegelijk aan dezelfde
   dienstverlener leveren. Per ronde: lees in een transactie register, positie en
-  events (`Eventfeed.leesVoorWebhook`, een positie uit een ander epoch begint bij het
-  oudste event), verleng de lease, POST buiten de transactie, en zet in één transactie
+  events (`Eventfeed.leesVoorWebhook`, `webhook_bundel` of anders `nmc.webhook.bundel`
+  per aanroep, ten hoogste `nmc.feed.max-pagina`; een positie uit een ander epoch begint
+  bij het oudste event), verleng de lease, POST buiten de transactie, en zet in één transactie
   met `TaakClaimer.stelUit` (epoch-getoetst) de positie vooruit of de mislukking vast.
   Een mislukte levering is een externe fout en kost de taak geen poging. Wachttijd:
   `nmc.webhook.herpoging-wachttijd` verdubbeld per mislukking; vanaf
@@ -292,7 +293,7 @@ de logica die kiest tussen herverzending en contactherstel.
 - **API:** contract-first uit `META-INF/openapi.yaml` en
   `META-INF/notifynl-callback-openapi.yaml`, Quarkus REST + Jackson
 - **Uitgaande clients:** quarkus-openapi-generator voor Profielservice en
-  NotifyNL; een dynamisch gebouwde REST-client voor de webhook van de dienstverlener
+  NotifyNL; één REST-client voor de webhooks van de dienstverleners, met de URL per aanroep (`@Url`)
 - **Persistentie:** PostgreSQL 18 + Hibernate ORM Panache + Flyway; in tests een embedded PostgreSQL (Zonky)
 - **Test:** JUnit 5, REST-assured, Mockito, Jazzer (fuzzing)
 - **Fouten:** RFC 9457 `application/problem+json` via quarkus-http-problem

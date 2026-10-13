@@ -108,6 +108,20 @@ class TerugkoppelTaakHandlerTest {
         zetWebhook(null, null);
     }
 
+    // Een eigen bundelgrootte in het register gaat voor de default, hier één event per aanroep.
+    @Test
+    void terugkoppelen_eigenBundelgrootte_levertZoveelEventsPerAanroep() throws Exception {
+        schrijfEvents(2);
+        zetWebhook(ontvanger + "/204", null, 1);
+
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
+
+        assertEquals(2, WebhookOntvanger.AANROEPEN.size());
+        assertEquals(1, geleverdeEvents(List.of(WebhookOntvanger.AANROEPEN.getFirst())).size());
+        assertEquals(1, geleverdeEvents(List.of(WebhookOntvanger.AANROEPEN.getLast())).size());
+    }
+
     @Test
     void terugkoppelen_levertDezelfdeEventsAlsDeFeed_inDezelfdeVormEnVolgorde() throws Exception {
         schrijfEvents(5);
@@ -358,8 +372,12 @@ class TerugkoppelTaakHandlerTest {
     }
 
     private void zetWebhook(String url, Integer maxMislukkingen) {
+        zetWebhook(url, maxMislukkingen, null);
+    }
+
+    private void zetWebhook(String url, Integer maxMislukkingen, Integer bundel) {
         QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.zetWebhook(entityManager, NotificatieFixtures.DV_ID, url, maxMislukkingen));
+                TaakFixtures.zetWebhook(entityManager, NotificatieFixtures.DV_ID, url, maxMislukkingen, bundel));
     }
 
     private void zetPogingen(int pogingen) {

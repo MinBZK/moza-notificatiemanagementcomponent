@@ -155,7 +155,7 @@ class ControleTaakHandlerTest {
 
     private void zetWebhook(String url) {
         QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.zetWebhook(taakRepository.getEntityManager(), NotificatieFixtures.DV_ID, url, null));
+                TaakFixtures.zetWebhook(taakRepository.getEntityManager(), NotificatieFixtures.DV_ID, url, null, null));
     }
 
     // Een notificatie in de gegeven status, zonder taak; bij een NotifyNL-id met een verzonden poging.

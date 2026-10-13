@@ -186,7 +186,8 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
   zodat het per partitie kan worden opgeruimd.
 - **`dienstverlener`** is het register uit de onboarding; nu één rij uit de
   migratie, waarvan `dv_id` op elke notificatie en elk event staat. De optionele
-  `webhook_url` en `webhook_max_mislukkingen` zet beheer; een registratie-API is er nog niet.
+  `webhook_url`, `webhook_max_mislukkingen` en `webhook_bundel` zet beheer; een
+  registratie-API is er nog niet.
 - **`taak`** draagt de bijwerkingen (verzenden, receipts verwerken, navraag,
   vaststellen, terugkoppelen, ongeldig melden, wissen, controle, onderhoud) met
   `due` als timer, een lease, een claim-epoch en een pogingenteller; per soort
@@ -262,7 +263,8 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   Dienstverlener heeft verwerkt; een oudere cursor verandert niets. `204`, `400` of `410`.
 - **Webhook** (in het contract als callback bij de feed): heeft de Dienstverlener een
   `webhook_url` in het register, dan levert één terugkoppeltaak per Dienstverlener
-  dezelfde events als de feed, gebundeld per aanroep (`nmc.webhook.bundel`), als
+  dezelfde events als de feed, gebundeld per aanroep (`webhook_bundel` in het register,
+  anders `nmc.webhook.bundel`; ten hoogste `nmc.feed.max-pagina`), als
   `application/cloudevents-batch+json`. Elke aanroep draagt de header `Nmc-Cursor`
   met de cursor van het laatste event in de bundel en een bearer-JWT (RS256, `iss` het
   NMC, `aud` de webhook-URL, 5 minuten geldig). Een `2xx` zet de leverpositie vooruit
