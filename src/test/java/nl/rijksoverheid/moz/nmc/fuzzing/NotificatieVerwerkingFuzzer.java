@@ -55,7 +55,10 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -364,7 +367,7 @@ public class NotificatieVerwerkingFuzzer {
         Poging poging = new Poging(notificatie.getId(), 1);
         pogingen.persist(poging);
         overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
-        poging.markeerVerzonden(notifyId, java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC));
+        poging.markeerVerzonden(notifyId, OffsetDateTime.now(ZoneOffset.UTC));
         overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
 
         return notificatie.getId();
@@ -394,7 +397,7 @@ public class NotificatieVerwerkingFuzzer {
         public Optional<Poging> findLaatsteVan(UUID notificatieId) {
             return opgeslagen.values().stream()
                     .filter(p -> notificatieId.equals(p.getNotificatieId()))
-                    .max(java.util.Comparator.comparingInt(Poging::getNummer));
+                    .max(Comparator.comparingInt(Poging::getNummer));
         }
 
         @Override
@@ -418,7 +421,7 @@ public class NotificatieVerwerkingFuzzer {
         }
 
         @Override
-        public boolean planReceipt(UUID dvId, UUID notificatieId, Map<String, String> payload, java.time.OffsetDateTime due) {
+        public boolean planReceipt(UUID dvId, UUID notificatieId, Map<String, String> payload, OffsetDateTime due) {
             receipts.add(payload);
 
             return true;
@@ -428,7 +431,7 @@ public class NotificatieVerwerkingFuzzer {
             for (Map<String, String> receipt : receipts) {
                 String tijdstip = receipt.get("tijdstip");
                 receiptVerwerker.verwerk(UUID.fromString(receipt.get("notifyId")), receipt.get("pogingId"), receipt.get("status"),
-                        tijdstip == null || tijdstip.isEmpty() ? null : java.time.OffsetDateTime.parse(tijdstip));
+                        tijdstip == null || tijdstip.isEmpty() ? null : OffsetDateTime.parse(tijdstip));
             }
 
             receipts.clear();
