@@ -1,7 +1,5 @@
 package nl.rijksoverheid.moz.nmc.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.logging.Log;
@@ -36,15 +34,13 @@ public class InkomendEventOpslag {
     private final PogingRepository pogingRepository;
     private final NotificatieRepository notificatieRepository;
     private final TaakRepository taakRepository;
-    private final ObjectMapper objectMapper;
     private final Counter afgewezen;
 
     public InkomendEventOpslag(PogingRepository pogingRepository, NotificatieRepository notificatieRepository,
-                               TaakRepository taakRepository, ObjectMapper objectMapper, MeterRegistry meterRegistry) {
+                               TaakRepository taakRepository, MeterRegistry meterRegistry) {
         this.pogingRepository = pogingRepository;
         this.notificatieRepository = notificatieRepository;
         this.taakRepository = taakRepository;
-        this.objectMapper = objectMapper;
         this.afgewezen = Counter.builder("nmc.receipts.afgewezen")
                 .description("Receipts die bij geen poging horen en niet zijn opgeslagen")
                 .register(meterRegistry);
@@ -84,7 +80,7 @@ public class InkomendEventOpslag {
         payload.put(PAYLOAD_STATUS, status);
         payload.put(PAYLOAD_TIJDSTIP, tijdstip == null ? "" : tijdstip.withOffsetSameInstant(ZoneOffset.UTC).toString());
 
-        boolean nieuw = taakRepository.planReceipt(notificatie.getDvId(), notificatie.getId(), json(payload),
+        boolean nieuw = taakRepository.planReceipt(notificatie.getDvId(), notificatie.getId(), payload,
                 OffsetDateTime.now(ZoneOffset.UTC));
 
         if (!nieuw) {
@@ -92,13 +88,5 @@ public class InkomendEventOpslag {
         }
 
         return nieuw ? Uitkomst.OPGESLAGEN : Uitkomst.HERHALING;
-    }
-
-    private String json(Map<String, String> payload) {
-        try {
-            return objectMapper.writeValueAsString(payload);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Receiptpayload kon niet naar JSON", e);
-        }
     }
 }

@@ -1,6 +1,7 @@
 -- V9: de aanname wordt een 202 met een verzendtaak. Het aannametijdstip krijgt een eigen kolom voor
--- het quotum per dienstverlener per dag, het register krijgt dat quotum, en de controletaak per
--- systeem krijgt haar eerste rij; daarna plant ze zichzelf steeds opnieuw.
+-- het quotum per dienstverlener per dag, het register krijgt dat quotum, de verzendgegevens staan op
+-- de notificatie zodat elke verzendtaak kan versturen, en de controletaak per systeem krijgt haar
+-- eerste rij; daarna plant ze zichzelf steeds opnieuw.
 
 ALTER TABLE notificatie ADD COLUMN aangenomen_op timestamp(6) with time zone;
 
@@ -9,7 +10,7 @@ ALTER TABLE notificatie ADD COLUMN aangenomen_op timestamp(6) with time zone;
 SET CONSTRAINTS notificatie_overgang IMMEDIATE;
 
 UPDATE notificatie n
-   SET aangenomen_op = e.tijdstip
+   SET aangenomen_op = e.geregistreerd
   FROM event e
  WHERE e.notificatie_id = n.id
    AND e.volgnummer = 0;
@@ -22,6 +23,13 @@ ALTER TABLE notificatie
     ALTER COLUMN aangenomen_op SET DEFAULT now();
 
 CREATE INDEX notificatie_dv_aangenomen_idx ON notificatie (dv_id, aangenomen_op);
+
+-- Template, regie, dienstverlener en dienst voor de Profielservice-lookup.
+ALTER TABLE notificatie
+    ADD COLUMN template_id varchar(64),
+    ADD COLUMN regie varchar(16) CHECK (regie IN ('CENTRAAL', 'DECENTRAAL')),
+    ADD COLUMN dienstverlener_naam varchar(255),
+    ADD COLUMN dienst varchar(255);
 
 -- Leeg betekent onbeperkt.
 ALTER TABLE dienstverlener ADD COLUMN quotum_per_dag integer CHECK (quotum_per_dag > 0);

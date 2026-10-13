@@ -17,6 +17,7 @@ import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,7 +33,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @QuarkusTest
@@ -101,7 +101,7 @@ class AannameServiceTest {
             assertEquals(NotificatieStatus.AANGENOMEN, events.getFirst().getNaar());
 
             Taak taak = taakRepository.listAll().getFirst();
-            assertEquals(TaakSoort.VERZENDEN, taak.getSoort());
+            assertEquals(TaakSoort.VERZENDEN, taak.getTaakSoort());
             assertEquals(id, taak.getNotificatieId());
             assertEquals(NotificatieFixtures.DV_ID, taak.getDvId());
             assertFalse(taak.getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC)));
@@ -165,12 +165,7 @@ class AannameServiceTest {
     }
 
     private void zetQuotum(Integer quotum) {
-        QuarkusTransaction.requiringNew().run(() -> {
-            entityManager.createNativeQuery("UPDATE dienstverlener SET quotum_per_dag = ?1 WHERE id = ?2")
-                    .setParameter(1, quotum)
-                    .setParameter(2, NotificatieFixtures.DV_ID)
-                    .executeUpdate();
-            assertTrue(true);
-        });
+        QuarkusTransaction.requiringNew().run(() ->
+                TaakFixtures.zetQuotumPerDag(entityManager, NotificatieFixtures.DV_ID, quotum));
     }
 }

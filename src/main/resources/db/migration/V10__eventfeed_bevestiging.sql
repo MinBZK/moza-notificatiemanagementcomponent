@@ -5,11 +5,11 @@
 CREATE TABLE bevestiging (
     dv_id uuid PRIMARY KEY REFERENCES dienstverlener(id),
     epoch integer NOT NULL,
-    xid xid8 NOT NULL,
+    transactie_id xid8 NOT NULL,
     event_id bigint NOT NULL,
     bevestigd_op timestamp(6) with time zone NOT NULL
 );
 
--- De feed leest per dienstverlener op (xid, id) vanaf de cursor. Geen CONCURRENTLY: PostgreSQL
+-- De feed leest per dienstverlener op (transactie_id, id) vanaf de cursor. Geen CONCURRENTLY: PostgreSQL
 -- ondersteunt dat niet op een gepartitioneerde tabel, en het log is nog klein.
-CREATE INDEX event_feed_idx ON event (dv_id, xid, id);
+CREATE INDEX event_feed_idx ON event (dv_id, transactie_id, id);

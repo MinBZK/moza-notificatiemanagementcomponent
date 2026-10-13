@@ -6,7 +6,6 @@ import nl.rijksoverheid.moz.nmc.domain.Bevestiging;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.repository.BevestigingRepository;
-import nl.rijksoverheid.moz.nmc.repository.EventMetXid;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
@@ -28,11 +27,11 @@ public class Eventfeed {
 
     private final EventRepository eventRepository;
     private final BevestigingRepository bevestigingRepository;
-    private final Clock klok;
+    private final Clock clock;
     private final int epoch;
     private final int maxPagina;
 
-    public Eventfeed(EventRepository eventRepository, BevestigingRepository bevestigingRepository, Clock klok,
+    public Eventfeed(EventRepository eventRepository, BevestigingRepository bevestigingRepository, Clock clock,
                      @ConfigProperty(name = "nmc.feed.cluster-epoch") int epoch,
                      @ConfigProperty(name = "nmc.feed.max-pagina") int maxPagina) {
         if (epoch < 0 || maxPagina < 1) {
@@ -41,7 +40,7 @@ public class Eventfeed {
 
         this.eventRepository = eventRepository;
         this.bevestigingRepository = bevestigingRepository;
-        this.klok = klok;
+        this.clock = clock;
         this.epoch = epoch;
         this.maxPagina = maxPagina;
     }
@@ -63,18 +62,17 @@ public class Eventfeed {
         valideer(cursor);
 
         int grootte = limiet == null ? maxPagina : Math.min(limiet, maxPagina);
-        long xid = cursor == null ? 0 : cursor.xid();
+        long transactieId = cursor == null ? 0 : cursor.transactieId();
         long eventId = cursor == null ? 0 : cursor.eventId();
-        List<EventMetXid> regels = eventRepository.leesVanafPositie(dvId, xid, eventId, grootte);
+        List<Event> events = eventRepository.leesVanafPositie(dvId, transactieId, eventId, grootte);
 
-        if (regels.isEmpty()) {
+        if (events.isEmpty()) {
             return new EventPagina(List.of(), cursor);
         }
 
-        EventMetXid laatste = regels.getLast();
-        List<Event> events = regels.stream().map(EventMetXid::event).toList();
+        Event laatste = events.getLast();
 
-        return new EventPagina(events, new Cursor(epoch, laatste.xid(), laatste.event().getId()));
+        return new EventPagina(events, new Cursor(epoch, laatste.getTransactieId(), laatste.getId()));
     }
 
     /**
@@ -90,14 +88,14 @@ public class Eventfeed {
         Objects.requireNonNull(cursor, "cursor is verplicht");
         valideer(cursor);
 
-        OffsetDateTime nu = OffsetDateTime.now(klok).withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        OffsetDateTime nu = OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
-        return bevestigingRepository.zetVooruit(dvId, cursor, nu);
+        return bevestigingRepository.updateCursorPositie(dvId, cursor, nu);
     }
 
     @Transactional
     public Optional<Bevestiging> bevestiging(UUID dvId) {
-        return bevestigingRepository.zoek(dvId);
+        return bevestigingRepository.findByIdOptional(dvId);
     }
 
     // Het log wordt per partitie opgeruimd, dus alles onder het oudste event is weg; een cursor
@@ -112,9 +110,9 @@ public class Eventfeed {
                     + "; het huidige epoch is " + epoch);
         }
 
-        Optional<Long> oudste = eventRepository.oudsteXid();
+        Optional<Long> oudste = eventRepository.oudsteTransactieId();
 
-        if (oudste.isPresent() && cursor.xid() < oudste.get()) {
+        if (oudste.isPresent() && cursor.transactieId() < oudste.get()) {
             throw new CursorVervallenException("De cursor wijst onder het oudste beschikbare event");
         }
     }

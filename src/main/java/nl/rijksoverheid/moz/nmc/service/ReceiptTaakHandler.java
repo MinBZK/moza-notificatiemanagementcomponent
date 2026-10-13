@@ -29,7 +29,7 @@ public class ReceiptTaakHandler implements TaakHandler {
     }
 
     @Override
-    public TaakSoort soort() {
+    public TaakSoort taakSoort() {
         return TaakSoort.RECEIPT_VERWERKEN;
     }
 

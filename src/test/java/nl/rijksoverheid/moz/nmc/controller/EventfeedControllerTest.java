@@ -5,7 +5,6 @@ import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
@@ -13,6 +12,7 @@ import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
+import nl.rijksoverheid.moz.nmc.repository.BevestigingRepository;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
@@ -66,7 +66,7 @@ class EventfeedControllerTest {
     EventRepository eventRepository;
 
     @Inject
-    EntityManager entityManager;
+    BevestigingRepository bevestigingRepository;
 
     @BeforeEach
     void setUp() {
@@ -74,7 +74,7 @@ class EventfeedControllerTest {
         QuarkusTransaction.requiringNew().run(() -> {
             eventRepository.deleteAll();
             notificatieRepository.deleteAll();
-            entityManager.createNativeQuery("DELETE FROM bevestiging").executeUpdate();
+            bevestigingRepository.deleteAll();
         });
     }
 
@@ -91,7 +91,7 @@ class EventfeedControllerTest {
                 .then()
                 .statusCode(200)
                 .body("events", hasSize(4))
-                .body("events[3].type", equalTo("nl.overheid.moz.notificatie.status.bezorgd"))
+                .body("events[3].type", equalTo("nl.mijnoverheidzakelijk.nmc.notificatie.status.bezorgd"))
                 .body("events[3].sequence", equalTo("3"))
                 .extract().path("events.id");
 
@@ -139,10 +139,8 @@ class EventfeedControllerTest {
         given().contentType(ContentType.JSON).body("{\"cursor\": \"" + cursor + "\"}")
                 .when().put(BEVESTIGING).then().statusCode(204);
 
-        Number aantal = (Number) QuarkusTransaction.requiringNew().call(() -> entityManager
-                .createNativeQuery("SELECT COUNT(*) FROM bevestiging WHERE dv_id = ?1")
-                .setParameter(1, NotificatieFixtures.DV_ID).getSingleResult());
-        assertEquals(1, aantal.intValue());
+        assertTrue(QuarkusTransaction.requiringNew()
+                .call(() -> bevestigingRepository.findByIdOptional(NotificatieFixtures.DV_ID).isPresent()));
     }
 
     @Test

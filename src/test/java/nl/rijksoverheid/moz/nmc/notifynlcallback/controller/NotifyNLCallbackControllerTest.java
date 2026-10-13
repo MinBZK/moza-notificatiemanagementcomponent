@@ -26,7 +26,10 @@ import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
+import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -96,7 +99,7 @@ class NotifyNLCallbackControllerTest {
             taakRepository.deleteAll();
             eventRepository.deleteAll();
             notificatieRepository.deleteAll();
-            notificatieRepository.getEntityManager().createNativeQuery("DELETE FROM verzendbudget").executeUpdate();
+            TaakFixtures.leegVerzendbudget(notificatieRepository.getEntityManager());
         });
 
         Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
@@ -121,7 +124,7 @@ class NotifyNLCallbackControllerTest {
         stuurDeliveryReceiptZonderVerwerking(deliveryReceipt(UUID.randomUUID(), "delivered"));
 
         assertEquals(voor + 1, meterRegistry.get("nmc.receipts.afgewezen").counter().count());
-        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count("soort", TaakSoort.RECEIPT_VERWERKEN)));
+        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN)));
     }
 
     // De receipt ligt vast voordat hij verwerkt wordt, zonder het e-mailadres uit het veld `to`.
@@ -131,7 +134,7 @@ class NotifyNLCallbackControllerTest {
 
         stuurDeliveryReceiptZonderVerwerking(deliveryReceipt(notifyNlId, "delivered"));
 
-        Taak taak = QuarkusTransaction.requiringNew().call(() -> taakRepository.find("soort", TaakSoort.RECEIPT_VERWERKEN).singleResult());
+        Taak taak = QuarkusTransaction.requiringNew().call(() -> taakRepository.find(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN).singleResult());
         assertEquals("delivered", taak.getPayload().get("status"));
         assertTrue(taak.getPayload().values().stream().noneMatch(waarde -> waarde.contains("@")),
                 "het e-mailadres staat niet in de payload: " + taak.getPayload());
@@ -147,7 +150,7 @@ class NotifyNLCallbackControllerTest {
         stuurDeliveryReceiptZonderVerwerking(receipt);
         stuurDeliveryReceiptZonderVerwerking(receipt);
 
-        assertEquals(1L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count("soort", TaakSoort.RECEIPT_VERWERKEN)));
+        assertEquals(1L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN)));
     }
 
     // Een fout in de verwerking kost de receipt niet: de taak blijft staan en slaagt bij een volgende ronde.
@@ -158,17 +161,16 @@ class NotifyNLCallbackControllerTest {
         Mockito.doThrow(new IllegalStateException("gesimuleerde storing")).doCallRealMethod()
                 .when(receiptVerwerker).verwerk(any(), any(), any(), any());
 
-        taakWorker.verwerk(TaakSoort.RECEIPT_VERWERKEN);
+        TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
         assertEquals(NotificatieStatus.VERZONDEN, status(notifyNlId));
-        Taak taak = QuarkusTransaction.requiringNew().call(() -> taakRepository.find("soort", TaakSoort.RECEIPT_VERWERKEN).singleResult());
-        QuarkusTransaction.requiringNew().run(() -> taakRepository.getEntityManager()
-                .createNativeQuery("UPDATE taak SET due = now() - interval '1 second' WHERE id = ?1")
-                .setParameter(1, taak.getId()).executeUpdate());
+        Taak taak = QuarkusTransaction.requiringNew().call(() -> taakRepository.find(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN).singleResult());
+        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetDue(taakRepository.getEntityManager(),
+                TaakSoort.RECEIPT_VERWERKEN, taak.getId(), OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1)));
 
-        taakWorker.verwerk(TaakSoort.RECEIPT_VERWERKEN);
+        TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
 
         assertEquals(NotificatieStatus.BEZORGD, status(notifyNlId));
-        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count("soort", TaakSoort.RECEIPT_VERWERKEN)));
+        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN)));
     }
 
     @Test
@@ -242,7 +244,7 @@ class NotifyNLCallbackControllerTest {
         ArgumentCaptor<StatusUpdateOpdracht> captor = ArgumentCaptor.forClass(StatusUpdateOpdracht.class);
         Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(captor.capture());
         assertEquals("https://omc.example.com/callback", captor.getValue().callbackUrl());
-        assertEquals(NotificatieStatus.BEZORGD, captor.getValue().naar());
+        assertEquals(NotificatieStatus.BEZORGD, captor.getValue().nieuweStatus());
         assertEquals(3, captor.getValue().versie());
     }
 
@@ -270,7 +272,7 @@ class NotifyNLCallbackControllerTest {
                 .when().post("/api/nmc/v1/centraal/notificaties")
                 .then().statusCode(202);
         // De verzending is asynchroon: de verzendtaak zet de poging op het NotifyNL-id uit de mock.
-        taakWorker.verwerk(TaakSoort.VERZENDEN);
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         return notifyNlId;
     }
@@ -278,7 +280,7 @@ class NotifyNLCallbackControllerTest {
     // De callback slaat op; de receipttaak verwerkt.
     private void stuurDeliveryReceipt(String body) {
         stuurDeliveryReceiptZonderVerwerking(body);
-        taakWorker.verwerk(TaakSoort.RECEIPT_VERWERKEN);
+        TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
     }
 
     private static void stuurDeliveryReceiptZonderVerwerking(String body) {

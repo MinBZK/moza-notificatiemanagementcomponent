@@ -82,8 +82,7 @@ paths:
         '202':
           description: >-
             Notificatie aangenomen en duurzaam opgeslagen; de verzending volgt asynchroon. De
-            uitkomst komt via de callback (als er een `callbackUrl` is) of via de status van de
-            notificatie.
+            uitkomst komt via de eventfeed en, als er een `callbackUrl` is, via de callback.
           headers:
             API-Version:
               schema:
@@ -99,10 +98,9 @@ paths:
                 $ref: '#/components/schemas/NotificatieResponse'
         '400':
           description: >-
-            Ongeldige aanvraag, zoals een onbekend berichttype. Bij bean-validatie, zoals
-            een ongeldige callbackUrl, is `violations` gevuld. Een partij zonder
-            e-mailadres is geen 400 meer: die uitkomst volgt asynchroon als
-            `niet-bezorgbaar`.
+            Ongeldige aanvraag, zoals een ontbrekend identificatienummer, een ongeldige
+            callbackUrl of een onbekend berichttype. Bij een ongeldig veld noemt `violations`
+            het veld.
           content:
             application/problem+json:
               schema:
@@ -127,9 +125,8 @@ paths:
       operationId: decentraleNotificatieVersturen
       summary: Notificatie versturen op basis van een e-mailadres
       description: |
-        Neemt een notificatie aan voor het opgegeven e-mailadres, zonder de Profielservice
-        te raadplegen (decentraal profiel / doorgeefluik), en antwoordt 202 zodra ze
-        duurzaam is opgeslagen. De verzending bij NotifyNL volgt asynchroon. Als een
+        Neemt een notificatie aan voor het opgegeven e-mailadres en antwoordt 202 zodra
+        ze duurzaam is opgeslagen. De verzending bij NotifyNL volgt asynchroon. Als een
         callbackUrl is meegegeven, stuurt de NMC een statusupdate (CloudEvents) bij elke
         overgang die op een delivery receipt volgt.
       tags:
@@ -173,8 +170,7 @@ paths:
         '202':
           description: >-
             Notificatie aangenomen en duurzaam opgeslagen; de verzending volgt asynchroon. De
-            uitkomst komt via de callback (als er een `callbackUrl` is) of via de status van de
-            notificatie.
+            uitkomst komt via de eventfeed en, als er een `callbackUrl` is, via de callback.
           headers:
             API-Version:
               schema:
@@ -190,9 +186,9 @@ paths:
                 $ref: '#/components/schemas/NotificatieResponse'
         '400':
           description: >-
-            Ongeldige aanvraag (bijv. ontbrekend/ongeldig e-mailadres of onbekend
-            berichttype). Bij bean-validatie, zoals een ongeldig e-mailadres of een
-            ongeldige callbackUrl, is `violations` gevuld.
+            Ongeldige aanvraag, zoals een ontbrekend of ongeldig e-mailadres, een ongeldige
+            callbackUrl of een onbekend berichttype. Bij een ongeldig veld noemt `violations`
+            het veld.
           content:
             application/problem+json:
               schema:
@@ -382,7 +378,7 @@ components:
 
             De statusupdate is een CloudEvent per statusovergang, met `subject` de
             notificatie-id, `sequence` het volgnummer van de overgang en in `data` de
-            statussen `van` en `naar`, de `reden` en de `versie`. De statussen staan
+            `vorigeStatus` en `nieuweStatus`, de `reden` en de `versie`. De statussen staan
             beschreven bij het schema `NotificatieStatus`. Verwerk per `subject` op
             `sequence`: callbacks kunnen in een andere volgorde aankomen. De NMC doet
             maximaal drie pogingen en biedt daarna niet opnieuw aan.
@@ -432,7 +428,7 @@ components:
 
             De statusupdate is een CloudEvent per statusovergang, met `subject` de
             notificatie-id, `sequence` het volgnummer van de overgang en in `data` de
-            statussen `van` en `naar`, de `reden` en de `versie`. De statussen staan
+            `vorigeStatus` en `nieuweStatus`, de `reden` en de `versie`. De statussen staan
             beschreven bij het schema `NotificatieStatus`. Verwerk per `subject` op
             `sequence`: callbacks kunnen in een andere volgorde aankomen. De NMC doet
             maximaal drie pogingen en biedt daarna niet opnieuw aan.
@@ -480,9 +476,9 @@ components:
         type:
           type: string
           description: >-
-            `nl.overheid.moz.notificatie.status.` gevolgd door de nieuwe status, bijvoorbeeld
-            `nl.overheid.moz.notificatie.status.bezorgd`.
-          example: nl.overheid.moz.notificatie.status.bezorgd
+            `nl.mijnoverheidzakelijk.nmc.notificatie.status.` gevolgd door de nieuwe status, bijvoorbeeld
+            `nl.mijnoverheidzakelijk.nmc.notificatie.status.bezorgd`.
+          example: nl.mijnoverheidzakelijk.nmc.notificatie.status.bezorgd
         source:
           type: string
           format: uri-reference
@@ -514,15 +510,15 @@ components:
     NotificatieStatusData:
       type: object
       description: >-
-        Eén statusovergang. `van` ontbreekt bij het eerste event van een notificatie en
+        Eén statusovergang. `vorigeStatus` ontbreekt bij het eerste event van een notificatie en
         `reden` ontbreekt bij een overgang zonder reden, zoals naar `bezorgd`.
       required:
-        - naar
+        - nieuweStatus
         - versie
       properties:
-        van:
+        vorigeStatus:
           $ref: '#/components/schemas/NotificatieStatus'
-        naar:
+        nieuweStatus:
           $ref: '#/components/schemas/NotificatieStatus'
         reden:
           $ref: '#/components/schemas/Reden'
