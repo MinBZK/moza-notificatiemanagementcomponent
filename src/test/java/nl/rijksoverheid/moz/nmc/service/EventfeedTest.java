@@ -7,8 +7,11 @@ import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.domain.Bevestiging;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.domain.Event;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.repository.BevestigingRepository;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -41,18 +44,20 @@ class EventfeedTest {
     EventRepository eventRepository;
 
     @Inject
+    BevestigingRepository bevestigingRepository;
+
+    @Inject
     EntityManager entityManager;
 
     @Inject
-    Clock klok;
+    Clock clock;
 
     @BeforeEach
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
             eventRepository.deleteAll();
-            entityManager.createNativeQuery("DELETE FROM bevestiging").executeUpdate();
-            entityManager.createNativeQuery("INSERT INTO dienstverlener (id, oin, naam) VALUES (?1, '00000000000000000002', 'Tweede') "
-                    + "ON CONFLICT (id) DO NOTHING").setParameter(1, TWEEDE_DV).executeUpdate();
+            bevestigingRepository.deleteAll();
+            TaakFixtures.voegDienstverlenerToe(entityManager, TWEEDE_DV, "00000000000000000002", "Tweede");
         });
     }
 
@@ -188,7 +193,7 @@ class EventfeedTest {
         assertFalse(eventfeed.bevestig(NotificatieFixtures.DV_ID, eerste), "een oudere cursor zet hem niet terug");
 
         Bevestiging bevestiging = eventfeed.bevestiging(NotificatieFixtures.DV_ID).orElseThrow();
-        assertEquals(tweede, bevestiging.cursor());
+        assertEquals(tweede, bevestiging.getCursor());
         assertTrue(eventfeed.bevestiging(TWEEDE_DV).isEmpty());
     }
 
@@ -201,8 +206,8 @@ class EventfeedTest {
 
     @Test
     void constructor_ongeldigeConfiguratie_weigert() {
-        assertThrows(IllegalStateException.class, () -> new Eventfeed(eventRepository, null, klok, -1, 10));
-        assertThrows(IllegalStateException.class, () -> new Eventfeed(eventRepository, null, klok, 1, 0));
+        assertThrows(IllegalStateException.class, () -> new Eventfeed(eventRepository, null, clock, -1, 10));
+        assertThrows(IllegalStateException.class, () -> new Eventfeed(eventRepository, null, clock, 1, 0));
     }
 
     private long schrijfEvent(UUID dvId) {
@@ -211,11 +216,10 @@ class EventfeedTest {
 
     // Het eventlog heeft geen foreign key naar notificatie, dus een los event volstaat.
     private long voegEventToe(UUID dvId) {
-        return ((Number) entityManager.createNativeQuery("INSERT INTO event (tijdstip, dv_id, notificatie_id, volgnummer, naar) "
-                        + "VALUES (now(), ?1, ?2, 0, 'AANGENOMEN') RETURNING id")
-                .setParameter(1, dvId)
-                .setParameter(2, UUID.randomUUID())
-                .getSingleResult()).longValue();
+        Event event = new Event(dvId, UUID.randomUUID(), 0, null, NotificatieStatus.AANGENOMEN, null);
+        eventRepository.persist(event);
+
+        return event.getId();
     }
 
     private static List<Long> ids(EventPagina pagina) {

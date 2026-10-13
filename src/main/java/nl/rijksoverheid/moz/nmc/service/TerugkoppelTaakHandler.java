@@ -67,6 +67,11 @@ public class TerugkoppelTaakHandler implements TaakHandler {
             throw new IllegalStateException("nmc.webhook.bundel en nmc.webhook.max-mislukkingen moeten 1 of hoger zijn");
         }
 
+        if (!positief(interval) || !positief(herpogingWachttijd) || !positief(pauzeWachttijd)) {
+            throw new IllegalStateException(
+                    "nmc.webhook.interval, nmc.webhook.herpoging-wachttijd en nmc.webhook.pauze-wachttijd moeten positief zijn");
+        }
+
         this.dienstverlenerRepository = dienstverlenerRepository;
         this.webhookpositieRepository = webhookpositieRepository;
         this.eventfeed = eventfeed;
@@ -87,7 +92,7 @@ public class TerugkoppelTaakHandler implements TaakHandler {
     }
 
     @Override
-    public TaakSoort soort() {
+    public TaakSoort taakSoort() {
         return TaakSoort.TERUGKOPPELEN;
     }
 
@@ -104,12 +109,12 @@ public class TerugkoppelTaakHandler implements TaakHandler {
         Ronde ronde = QuarkusTransaction.requiringNew().call(() -> bereidVoor(dvId));
 
         return switch (ronde) {
-            case GeenWebhook g -> {
+            case GeenWebhook() -> {
                 Log.infof("Dienstverlener %s heeft geen webhook meer; de terugkoppeltaak vervalt", dvId);
                 yield TaakUitkomst.afgerond();
             }
             case Gepauzeerd g -> TaakUitkomst.uitgesteld(g.tot(), false);
-            case GeenEvents g -> {
+            case GeenEvents() -> {
                 QuarkusTransaction.requiringNew().run(() -> taakClaimer.herplanNaSucces(taak, nu().plus(interval)));
                 yield TaakUitkomst.alAfgerond();
             }
@@ -150,10 +155,11 @@ public class TerugkoppelTaakHandler implements TaakHandler {
         }
 
         int max = dienstverlener.get().getWebhookMaxMislukkingen().orElse(maxMislukkingen);
+        int grootte = dienstverlener.get().getWebhookBundel().orElse(bundel);
         Webhookpositie positie = webhookpositieRepository.zoek(dvId);
 
-        if (positie.gepauzeerdTot() != null && positie.gepauzeerdTot().isAfter(nu())) {
-            return new Gepauzeerd(positie.gepauzeerdTot());
+        if (positie.getGepauzeerdTot() != null && positie.getGepauzeerdTot().isAfter(nu())) {
+            return new Gepauzeerd(positie.getGepauzeerdTot());
         }
 
         String url;
@@ -163,7 +169,7 @@ public class TerugkoppelTaakHandler implements TaakHandler {
             return new OngeldigeUrl(e.getMessage(), max);
         }
 
-        EventPagina pagina = eventfeed.leesVoorWebhook(dvId, positie.positie(), bundel);
+        EventPagina pagina = eventfeed.leesVoorWebhook(dvId, positie.getPositie(), grootte);
 
         if (pagina.events().isEmpty()) {
             return new GeenEvents();
@@ -184,7 +190,7 @@ public class TerugkoppelTaakHandler implements TaakHandler {
     private void registreerMislukking(Taak taak, int max, boolean directPauzeren) {
         OffsetDateTime nu = nu();
         Webhookpositie positie = webhookpositieRepository.zoek(taak.getDvId());
-        int mislukkingen = positie.mislukkingen() + 1;
+        int mislukkingen = positie.getMislukkingen() + 1;
         boolean pauzeert = directPauzeren || mislukkingen >= max;
         Duration wachttijd = pauzeert
                 ? oplopend(pauzeWachttijd, Math.max(0, mislukkingen - max))
@@ -193,7 +199,7 @@ public class TerugkoppelTaakHandler implements TaakHandler {
 
         taakClaimer.stelUit(taak, due, false);
         webhookpositieRepository.bewaar(
-                new Webhookpositie(taak.getDvId(), positie.positie(), mislukkingen, pauzeert ? due : null), nu);
+                new Webhookpositie(taak.getDvId(), positie.getPositie(), mislukkingen, pauzeert ? due : null), nu);
 
         if (pauzeert) {
             Log.warnf("Webhook van dienstverlener %s gepauzeerd tot %s na %d mislukte levering(en) op rij; de feed "
@@ -206,6 +212,10 @@ public class TerugkoppelTaakHandler implements TaakHandler {
         Duration wachttijd = basis.multipliedBy(1L << Math.min(stap, 20));
 
         return wachttijd.compareTo(MAX_WACHTTIJD) > 0 ? MAX_WACHTTIJD : wachttijd;
+    }
+
+    private static boolean positief(Duration duur) {
+        return !duur.isNegative() && !duur.isZero();
     }
 
     private static OffsetDateTime nu() {

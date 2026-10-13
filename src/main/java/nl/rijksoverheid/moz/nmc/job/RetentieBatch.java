@@ -110,7 +110,7 @@ class RetentieBatch {
         return zonderEindstatus;
     }
 
-    /** Verwijderd met status bezorgstatus-onbekend: terminaal, maar de NMC kende de uitkomst nooit. */
+    /** Verwijderd met status bezorgstatus-onbekend: een eindstatus, maar de NMC kende de uitkomst nooit. */
     int onbekend() {
         return onbekend;
     }
@@ -133,6 +133,6 @@ class RetentieBatch {
     // Bezorgd telt hier als uitkomst: de vaststeltaak die hem definitief maakt bestaat nog niet, en
     // elke bezorgde notificatie melden zou het meldbudget vullen met wat geen storing is.
     private static boolean heeftUitkomst(NotificatieStatus status) {
-        return status.isTerminaal() || status == NotificatieStatus.BEZORGD;
+        return status.isEindstatus() || status == NotificatieStatus.BEZORGD;
     }
 }

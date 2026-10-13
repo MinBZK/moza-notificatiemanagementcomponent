@@ -61,25 +61,25 @@ public class TaakWorker {
         this.maxPogingen = maxPogingen;
 
         for (TaakHandler handler : handlerBeans) {
-            TaakHandler eerder = handlers.putIfAbsent(handler.soort(), handler);
+            TaakHandler eerder = handlers.putIfAbsent(handler.taakSoort(), handler);
 
             if (eerder != null) {
-                throw new IllegalStateException("Twee handlers voor taaksoort " + handler.soort() + ": "
+                throw new IllegalStateException("Twee handlers voor taaksoort " + handler.taakSoort() + ": "
                         + eerder.getClass().getName() + " en " + handler.getClass().getName());
             }
         }
 
         // Eigen transactie per meting: een scrape heeft geen transactie of requestcontext.
-        for (TaakSoort soort : TaakSoort.values()) {
+        for (TaakSoort taakSoort : TaakSoort.values()) {
             Gauge.builder("nmc.taken.mislukt", () -> QuarkusTransaction.requiringNew()
-                            .call(() -> taakRepository.telMetStatus(soort, TaakStatus.MISLUKT)))
+                            .call(() -> taakRepository.telMetStatus(taakSoort, TaakStatus.MISLUKT)))
                     .description("Taken die na het maximum aantal pogingen op beheer wachten")
-                    .tag("soort", soort.name())
+                    .tag("soort", taakSoort.name())
                     .register(meterRegistry);
             Gauge.builder("nmc.taken.achterstand", () -> QuarkusTransaction.requiringNew()
-                            .call(() -> taakRepository.telAchterstand(soort, OffsetDateTime.now(ZoneOffset.UTC))))
+                            .call(() -> taakRepository.telAchterstand(taakSoort, OffsetDateTime.now(ZoneOffset.UTC))))
                     .description("Open taken die aan de beurt zijn")
-                    .tag("soort", soort.name())
+                    .tag("soort", taakSoort.name())
                     .register(meterRegistry);
         }
     }
@@ -134,14 +134,16 @@ public class TaakWorker {
      *
      * @return het aantal geclaimde taken
      */
-    public int verwerk(TaakSoort soort) {
-        TaakHandler handler = handlers.get(soort);
+    // Package-private zodat een test een ronde direct kan draaien en het aantal geclaimde taken ziet; tests buiten
+    // dit package gaan via TaakRonde.
+    int verwerk(TaakSoort taakSoort) {
+        TaakHandler handler = handlers.get(taakSoort);
 
         if (handler == null) {
             return 0;
         }
 
-        List<Taak> taken = taakClaimer.claim(soort, batch);
+        List<Taak> taken = taakClaimer.claim(taakSoort, batch);
 
         for (Taak taak : taken) {
             voerUit(handler, taak);
@@ -158,11 +160,11 @@ public class TaakWorker {
             TaakUitkomst uitkomst = handler.voerUit(taak, () -> taakClaimer.verleng(taak));
 
             switch (uitkomst) {
-                case TaakUitkomst.Afgerond a -> taakClaimer.rondAf(taak);
+                case TaakUitkomst.Afgerond() -> taakClaimer.rondAf(taak);
                 case TaakUitkomst.Uitgesteld u when u.teltAlsPoging() && taak.getPogingen() + 1 >= maxPogingen ->
-                        putUit(handler, taak, null);
+                        verwerkUitputting(handler, taak, null);
                 case TaakUitkomst.Uitgesteld u -> taakClaimer.stelUit(taak, u.due(), u.teltAlsPoging());
-                case TaakUitkomst.AlAfgerond a -> {
+                case TaakUitkomst.AlAfgerond() -> {
                     // De handler heeft de rij in zijn eigen transactie afgerond.
                 }
             }
@@ -181,34 +183,34 @@ public class TaakWorker {
 
         try {
             if (pogingen >= maxPogingen) {
-                putUit(handler, taak, fout);
+                verwerkUitputting(handler, taak, fout);
             } else {
                 OffsetDateTime due = OffsetDateTime.now(ZoneOffset.UTC).plus(wachttijd(pogingen));
                 taakClaimer.stelUit(taak, due, true);
                 Log.warnf(fout, "Taak %s/%d mislukt (poging %d van %d), opnieuw op %s",
-                        taak.getSoort(), taak.getId(), pogingen, maxPogingen, due);
+                        taak.getTaakSoort(), taak.getId(), pogingen, maxPogingen, due);
             }
         } catch (TaakVerlorenException e) {
             Log.warn(e.getMessage());
         } catch (RuntimeException e) {
             // De rest van de batch gaat door; deze taak komt terug zodra zijn lease verloopt.
-            Log.errorf(e, "Taak %s/%d kon na een fout niet worden bijgewerkt", taak.getSoort(), taak.getId());
+            Log.errorf(e, "Taak %s/%d kon na een fout niet worden bijgewerkt", taak.getTaakSoort(), taak.getId());
         }
     }
 
     // De handler krijgt de kans de uitputting af te handelen, in dezelfde transactie als de taakrij.
-    private void putUit(TaakHandler handler, Taak taak, RuntimeException fout) {
+    private void verwerkUitputting(TaakHandler handler, Taak taak, RuntimeException fout) {
         if (handler.periodiek()) {
             OffsetDateTime due = OffsetDateTime.now(ZoneOffset.UTC).plus(wachttijd(maxPogingen));
             taakClaimer.stelUit(taak, due, false);
             Log.errorf(fout, "Periodieke taak %s/%d faalt na %d pogingen; opnieuw op %s",
-                    taak.getSoort(), taak.getId(), maxPogingen, due);
+                    taak.getTaakSoort(), taak.getId(), maxPogingen, due);
 
             return;
         }
 
         boolean afgehandeld = QuarkusTransaction.requiringNew().call(() -> {
-            if (handler.uitgeput(taak)) {
+            if (handler.handelUitputtingAf(taak)) {
                 taakClaimer.rondAf(taak);
 
                 return true;
@@ -221,10 +223,10 @@ public class TaakWorker {
 
         if (afgehandeld) {
             Log.warnf(fout, "Taak %s/%d uitgeput na %d pogingen; door de handler afgehandeld",
-                    taak.getSoort(), taak.getId(), maxPogingen);
+                    taak.getTaakSoort(), taak.getId(), maxPogingen);
         } else {
             Log.errorf(fout, "Taak %s/%d na %d pogingen op mislukt gezet; wacht op beheer",
-                    taak.getSoort(), taak.getId(), maxPogingen);
+                    taak.getTaakSoort(), taak.getId(), maxPogingen);
         }
     }
 

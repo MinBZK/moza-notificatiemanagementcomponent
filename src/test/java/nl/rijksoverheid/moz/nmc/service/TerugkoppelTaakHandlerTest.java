@@ -12,9 +12,13 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceException;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.domain.Webhookpositie;
+import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
@@ -93,7 +97,7 @@ class TerugkoppelTaakHandlerTest {
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
             eventRepository.deleteAll();
-            entityManager.createNativeQuery("DELETE FROM webhookpositie").executeUpdate();
+            webhookpositieRepository.deleteAll();
             taakRepository.persist(new Taak(TaakSoort.TERUGKOPPELEN, NotificatieFixtures.DV_ID, null,
                     OffsetDateTime.now(ZoneOffset.UTC), null, null));
         });
@@ -104,20 +108,34 @@ class TerugkoppelTaakHandlerTest {
         zetWebhook(null, null);
     }
 
+    // Een eigen bundelgrootte in het register gaat voor de default, hier één event per aanroep.
+    @Test
+    void terugkoppelen_eigenBundelgrootte_levertZoveelEventsPerAanroep() throws Exception {
+        schrijfEvents(2);
+        zetWebhook(ontvanger + "/204", null, 1);
+
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
+
+        assertEquals(2, WebhookOntvanger.AANROEPEN.size());
+        assertEquals(1, geleverdeEvents(List.of(WebhookOntvanger.AANROEPEN.getFirst())).size());
+        assertEquals(1, geleverdeEvents(List.of(WebhookOntvanger.AANROEPEN.getLast())).size());
+    }
+
     @Test
     void terugkoppelen_levertDezelfdeEventsAlsDeFeed_inDezelfdeVormEnVolgorde() throws Exception {
         schrijfEvents(5);
         zetWebhook(ontvanger + "/204", null);
 
-        assertEquals(1, taakWorker.verwerk(TaakSoort.TERUGKOPPELEN));
-        assertEquals(1, taakWorker.verwerk(TaakSoort.TERUGKOPPELEN));
-        assertEquals(1, taakWorker.verwerk(TaakSoort.TERUGKOPPELEN));
+        assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN));
+        assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN));
+        assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN));
 
         assertEquals(2, WebhookOntvanger.AANROEPEN.size(), "twee bundels van ten hoogste drie; de derde ronde vond niets");
         JsonNode feed = objectMapper.readTree(given().when().get(FEED).then().statusCode(200).extract().asString());
         assertEquals(feed.get("events"), geleverdeEvents(WebhookOntvanger.AANROEPEN));
         assertEquals(feed.get("cursor").asText(), WebhookOntvanger.AANROEPEN.getLast().cursor());
-        assertEquals(Cursor.decodeer(feed.get("cursor").asText()), positie().positie());
+        assertEquals(Cursor.decodeer(feed.get("cursor").asText()), positie().getPositie());
 
         Taak taak = terugkoppeltaak();
         assertEquals(TaakStatus.OPEN, taak.getStatus());
@@ -133,12 +151,12 @@ class TerugkoppelTaakHandlerTest {
         zetPogingen(1);
         schrijfEvents(1);
 
-        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
         assertEquals(0, terugkoppeltaak().getPogingen(), "na een levering");
 
         zetPogingen(1);
         maakAanDeBeurt();
-        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
         assertEquals(0, terugkoppeltaak().getPogingen(), "na een ronde zonder events");
         assertEquals(TaakStatus.OPEN, terugkoppeltaak().getStatus());
     }
@@ -150,7 +168,7 @@ class TerugkoppelTaakHandlerTest {
         String url = ontvanger + "/204";
         zetWebhook(url, null);
 
-        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
         String autorisatie = WebhookOntvanger.AANROEPEN.getFirst().autorisatie();
         assertTrue(autorisatie.startsWith("Bearer "));
@@ -172,29 +190,29 @@ class TerugkoppelTaakHandlerTest {
     void mislukteLevering_hervatVanafDeLeverpositie_zonderOverslaanOfDubbel() throws Exception {
         schrijfEvents(5);
         zetWebhook(ontvanger + "/204", null);
-        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
-        Cursor naEersteBundel = positie().positie();
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
+        Cursor naEersteBundel = positie().getPositie();
 
         zetWebhook(ontvanger + "/500", null);
         maakAanDeBeurt();
-        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
-        assertEquals(naEersteBundel, positie().positie(), "een mislukte levering verzet de positie niet");
-        assertEquals(1, positie().mislukkingen());
+        assertEquals(naEersteBundel, positie().getPositie(), "een mislukte levering verzet de positie niet");
+        assertEquals(1, positie().getMislukkingen());
         Taak taak = terugkoppeltaak();
         assertEquals(0, taak.getPogingen(), "een mislukte levering kost de taak geen poging");
         assertBinnen(Duration.ofSeconds(30), taak.getDue());
 
         zetWebhook(ontvanger + "/204", null);
         maakAanDeBeurt();
-        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
         List<WebhookOntvanger.Aanroep> aanroepen = WebhookOntvanger.AANROEPEN;
         assertEquals(3, aanroepen.size());
         assertEquals(aanroepen.get(1).body(), aanroepen.get(2).body(), "dezelfde bundel opnieuw, vanaf dezelfde positie");
         JsonNode feed = objectMapper.readTree(given().when().get(FEED).then().statusCode(200).extract().asString());
         assertEquals(feed.get("events"), geleverdeEvents(List.of(aanroepen.get(0), aanroepen.get(2))));
-        assertEquals(0, positie().mislukkingen());
+        assertEquals(0, positie().getMislukkingen());
     }
 
     // Default twee mislukkingen (onder %test); het register zegt drie en gaat voor.
@@ -203,33 +221,33 @@ class TerugkoppelTaakHandlerTest {
         schrijfEvents(1);
         zetWebhook(ontvanger + "/503", 3);
 
-        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
-        assertNull(positie().gepauzeerdTot());
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
+        assertNull(positie().getGepauzeerdTot());
         assertBinnen(Duration.ofSeconds(30), terugkoppeltaak().getDue());
 
         maakAanDeBeurt();
-        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
-        assertNull(positie().gepauzeerdTot());
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
+        assertNull(positie().getGepauzeerdTot());
         assertBinnen(Duration.ofMinutes(1), terugkoppeltaak().getDue());
 
         maakAanDeBeurt();
-        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
-        assertNotNull(positie().gepauzeerdTot(), "na drie mislukkingen gepauzeerd");
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
+        assertNotNull(positie().getGepauzeerdTot(), "na drie mislukkingen gepauzeerd");
         assertBinnen(Duration.ofMinutes(15), terugkoppeltaak().getDue());
 
         maakAanDeBeurt();
-        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
         assertBinnen(Duration.ofMinutes(30), terugkoppeltaak().getDue());
-        assertEquals(terugkoppeltaak().getDue(), positie().gepauzeerdTot());
+        assertEquals(terugkoppeltaak().getDue(), positie().getGepauzeerdTot());
 
         zetWebhook(ontvanger + "/204", 3);
         maakAanDeBeurt();
-        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
         Webhookpositie hervat = positie();
-        assertNull(hervat.gepauzeerdTot());
-        assertEquals(0, hervat.mislukkingen());
-        assertNotNull(hervat.positie());
+        assertNull(hervat.getGepauzeerdTot());
+        assertEquals(0, hervat.getMislukkingen());
+        assertNotNull(hervat.getPositie());
         assertEquals(5, WebhookOntvanger.AANROEPEN.size());
         assertEquals(0, terugkoppeltaak().getPogingen());
     }
@@ -243,20 +261,30 @@ class TerugkoppelTaakHandlerTest {
     }
 
     @Test
+    void wachttijdNulOfNegatief_weigertOpTeStarten() {
+        Duration minuut = Duration.ofMinutes(1);
+
+        assertThrows(IllegalStateException.class, () -> new TerugkoppelTaakHandler(null, null, null, null, null, null,
+                Duration.ZERO, 1, 1, minuut, minuut));
+        assertThrows(IllegalStateException.class, () -> new TerugkoppelTaakHandler(null, null, null, null, null, null,
+                minuut, 1, 1, minuut, Duration.ofSeconds(-1)));
+    }
+
+    @Test
     void ongeldigeWebhookUrl_pauzeertZonderAanroepEnLogtError() {
         schrijfEvents(1);
         zetWebhook("https://intern.local/webhook", null);
 
         List<String> fouten;
         try (LogVanger vanger = LogVanger.van(TerugkoppelTaakHandler.class)) {
-            taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
+            TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
             fouten = vanger.regelsOpNiveau(Level.SEVERE);
         }
 
         assertEquals(0, WebhookOntvanger.AANROEPEN.size());
         assertEquals(1, fouten.size());
         assertTrue(fouten.getFirst().contains("interne hostnaam"));
-        assertNotNull(positie().gepauzeerdTot());
+        assertNotNull(positie().getGepauzeerdTot());
         assertBinnen(Duration.ofMinutes(15), terugkoppeltaak().getDue());
         assertEquals(0, terugkoppeltaak().getPogingen());
     }
@@ -269,7 +297,7 @@ class TerugkoppelTaakHandlerTest {
         QuarkusTransaction.requiringNew().run(() -> webhookpositieRepository.bewaar(
                 new Webhookpositie(NotificatieFixtures.DV_ID, null, 4, tot), OffsetDateTime.now(ZoneOffset.UTC)));
 
-        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
         assertEquals(0, WebhookOntvanger.AANROEPEN.size());
         assertEquals(tot.toInstant(), terugkoppeltaak().getDue().toInstant());
@@ -277,9 +305,9 @@ class TerugkoppelTaakHandlerTest {
 
     @Test
     void geenWebhookMeer_rondtDeTaakAf() {
-        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
-        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> taakRepository.count("soort", TaakSoort.TERUGKOPPELEN)));
+        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.TERUGKOPPELEN)));
     }
 
     @Test
@@ -289,9 +317,9 @@ class TerugkoppelTaakHandlerTest {
             taakRepository.persist(new Taak(TaakSoort.TERUGKOPPELEN, null, null, OffsetDateTime.now(ZoneOffset.UTC), null, null));
         });
 
-        taakWorker.verwerk(TaakSoort.TERUGKOPPELEN);
+        TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
-        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> taakRepository.count("soort", TaakSoort.TERUGKOPPELEN)));
+        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.TERUGKOPPELEN)));
     }
 
     // Eén taak per dienstverlener, geclaimd met SKIP LOCKED en een lease: twee workers die tegelijk
@@ -347,44 +375,39 @@ class TerugkoppelTaakHandlerTest {
     private void schrijfEvents(int aantal) {
         QuarkusTransaction.requiringNew().run(() -> {
             for (int i = 0; i < aantal; i++) {
-                entityManager.createNativeQuery("INSERT INTO event (tijdstip, dv_id, notificatie_id, volgnummer, naar) "
-                                + "VALUES (now(), ?1, ?2, 0, 'AANGENOMEN')")
-                        .setParameter(1, NotificatieFixtures.DV_ID)
-                        .setParameter(2, UUID.randomUUID())
-                        .executeUpdate();
+                NotificatieFixtures.voegEventToe(entityManager, UUID.randomUUID(), 0, null, NotificatieStatus.AANGENOMEN,
+                        OffsetDateTime.now(ZoneOffset.UTC));
             }
         });
     }
 
     private void zetWebhook(String url, Integer maxMislukkingen) {
-        QuarkusTransaction.requiringNew().run(() -> entityManager
-                .createNativeQuery("UPDATE dienstverlener SET webhook_url = CAST(?1 AS varchar), "
-                        + "webhook_max_mislukkingen = CAST(?2 AS integer) WHERE id = ?3")
-                .setParameter(1, url)
-                .setParameter(2, maxMislukkingen)
-                .setParameter(3, NotificatieFixtures.DV_ID)
-                .executeUpdate());
+        zetWebhook(url, maxMislukkingen, null);
+    }
+
+    private void zetWebhook(String url, Integer maxMislukkingen, Integer bundel) {
+        QuarkusTransaction.requiringNew().run(() ->
+                TaakFixtures.zetWebhook(entityManager, NotificatieFixtures.DV_ID, url, maxMislukkingen, bundel));
     }
 
     private void zetPogingen(int pogingen) {
-        QuarkusTransaction.requiringNew().run(() -> entityManager
-                .createNativeQuery("UPDATE taak SET pogingen = ?1 WHERE soort = 'TERUGKOPPELEN'")
-                .setParameter(1, pogingen)
-                .executeUpdate());
+        long id = terugkoppeltaak().getId();
+        QuarkusTransaction.requiringNew().run(() ->
+                TaakFixtures.zetPogingen(entityManager, TaakSoort.TERUGKOPPELEN, id, pogingen));
     }
 
     // Laat de wachttijd en een eventuele pauze verstrijken.
     private void maakAanDeBeurt() {
+        long id = terugkoppeltaak().getId();
+        OffsetDateTime verstreken = OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1);
         QuarkusTransaction.requiringNew().run(() -> {
-            entityManager.createNativeQuery("UPDATE taak SET due = now() - interval '1 second' WHERE soort = 'TERUGKOPPELEN'")
-                    .executeUpdate();
-            entityManager.createNativeQuery("UPDATE webhookpositie SET gepauzeerd_tot = now() - interval '1 second' "
-                    + "WHERE gepauzeerd_tot IS NOT NULL").executeUpdate();
+            TaakFixtures.zetDue(entityManager, TaakSoort.TERUGKOPPELEN, id, verstreken);
+            TaakFixtures.beeindigPauze(entityManager, NotificatieFixtures.DV_ID, verstreken);
         });
     }
 
     private Taak terugkoppeltaak() {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.find("soort", TaakSoort.TERUGKOPPELEN).singleResult());
+        return QuarkusTransaction.requiringNew().call(() -> taakRepository.find(Taak_.TAAK_SOORT, TaakSoort.TERUGKOPPELEN).singleResult());
     }
 
     private Webhookpositie positie() {
