@@ -261,6 +261,16 @@ class TerugkoppelTaakHandlerTest {
     }
 
     @Test
+    void wachttijdNulOfNegatief_weigertOpTeStarten() {
+        Duration minuut = Duration.ofMinutes(1);
+
+        assertThrows(IllegalStateException.class, () -> new TerugkoppelTaakHandler(null, null, null, null, null, null,
+                Duration.ZERO, 1, 1, minuut, minuut));
+        assertThrows(IllegalStateException.class, () -> new TerugkoppelTaakHandler(null, null, null, null, null, null,
+                minuut, 1, 1, minuut, Duration.ofSeconds(-1)));
+    }
+
+    @Test
     void ongeldigeWebhookUrl_pauzeertZonderAanroepEnLogtError() {
         schrijfEvents(1);
         zetWebhook("https://intern.local/webhook", null);

@@ -67,6 +67,11 @@ public class TerugkoppelTaakHandler implements TaakHandler {
             throw new IllegalStateException("nmc.webhook.bundel en nmc.webhook.max-mislukkingen moeten 1 of hoger zijn");
         }
 
+        if (!positief(interval) || !positief(herpogingWachttijd) || !positief(pauzeWachttijd)) {
+            throw new IllegalStateException(
+                    "nmc.webhook.interval, nmc.webhook.herpoging-wachttijd en nmc.webhook.pauze-wachttijd moeten positief zijn");
+        }
+
         this.dienstverlenerRepository = dienstverlenerRepository;
         this.webhookpositieRepository = webhookpositieRepository;
         this.eventfeed = eventfeed;
@@ -207,6 +212,10 @@ public class TerugkoppelTaakHandler implements TaakHandler {
         Duration wachttijd = basis.multipliedBy(1L << Math.min(stap, 20));
 
         return wachttijd.compareTo(MAX_WACHTTIJD) > 0 ? MAX_WACHTTIJD : wachttijd;
+    }
+
+    private static boolean positief(Duration duur) {
+        return !duur.isNegative() && !duur.isZero();
     }
 
     private static OffsetDateTime nu() {

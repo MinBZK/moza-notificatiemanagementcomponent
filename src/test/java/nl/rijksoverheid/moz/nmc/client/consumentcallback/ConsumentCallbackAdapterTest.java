@@ -28,6 +28,7 @@ import static org.mockito.Mockito.when;
 class ConsumentCallbackAdapterTest {
 
     private static final String URL = "https://omc.example.nl/webhook";
+    private static final Duration LEASE = Duration.ofMinutes(2);
 
     private ConsumentCallbackClient client;
     private ConsumentCallbackAdapter adapter;
@@ -36,7 +37,7 @@ class ConsumentCallbackAdapterTest {
     void setUp() {
         client = Mockito.mock(ConsumentCallbackClient.class);
         when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().voidItem());
-        adapter = new ConsumentCallbackAdapter(client, Duration.ofSeconds(5));
+        adapter = new ConsumentCallbackAdapter(client, Duration.ofSeconds(5), LEASE);
     }
 
     @Test
@@ -105,12 +106,18 @@ class ConsumentCallbackAdapterTest {
     @Test
     void lever_geenAntwoordBinnenDeTermijn_gooitLeveringException() {
         when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().nothing());
-        ConsumentCallbackAdapter kort = new ConsumentCallbackAdapter(client, Duration.ofMillis(100));
+        ConsumentCallbackAdapter kort = new ConsumentCallbackAdapter(client, Duration.ofMillis(100), LEASE);
 
         WebhookLeveringException fout = assertThrows(WebhookLeveringException.class,
                 () -> kort.lever(URL, "Bearer jwt", "cursor", events()));
 
         assertTrue(fout.getMessage().contains("niet binnen"));
+    }
+
+    @Test
+    void timeoutNietKorterDanLease_weigertOpTeStarten() {
+        assertThrows(IllegalStateException.class, () -> new ConsumentCallbackAdapter(client, LEASE, LEASE));
+        assertThrows(IllegalStateException.class, () -> new ConsumentCallbackAdapter(client, Duration.ZERO, LEASE));
     }
 
     @Test

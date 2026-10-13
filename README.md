@@ -274,6 +274,8 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   wachttijd die verdubbelt tot ten hoogste een dag. Een geslaagde levering zet de
   teller terug. De URL gaat vóór elke levering door `CallbackUrlValidator`; een
   ongeldige URL pauzeert de webhook zonder aanroep en geeft een ERROR in het log.
+  Een gewijzigde URL heft de pauze niet op; dat doet beheer met
+  `update webhookpositie set gepauzeerd_tot = null, mislukkingen = 0 where dv_id = '…';`.
 - **`GET /.well-known/jwks.json`**: de publieke sleutel waarmee de Dienstverlener de
   JWT op de webhook controleert, gekozen op `kid`.
 - **`POST /notifynl-callback`**: webhook waarop NotifyNL de bezorgstatus

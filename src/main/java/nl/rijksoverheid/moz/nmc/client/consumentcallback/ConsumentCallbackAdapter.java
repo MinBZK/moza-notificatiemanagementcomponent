@@ -33,7 +33,14 @@ public class ConsumentCallbackAdapter {
     private final Duration timeout;
 
     public ConsumentCallbackAdapter(ConsumentCallbackClient client,
-                                    @ConfigProperty(name = "nmc.webhook.timeout") Duration timeout) {
+                                    @ConfigProperty(name = "nmc.webhook.timeout") Duration timeout,
+                                    @ConfigProperty(name = "nmc.taak.lease") Duration lease) {
+        // Een aanroep die langer duurt dan de lease, laat een tweede worker dezelfde webhook beleveren.
+        if (timeout.isNegative() || timeout.isZero() || timeout.compareTo(lease) >= 0) {
+            throw new IllegalStateException("nmc.webhook.timeout moet positief en korter dan nmc.taak.lease ("
+                    + lease + ") zijn, is " + timeout);
+        }
+
         this.client = client;
         this.timeout = timeout;
     }

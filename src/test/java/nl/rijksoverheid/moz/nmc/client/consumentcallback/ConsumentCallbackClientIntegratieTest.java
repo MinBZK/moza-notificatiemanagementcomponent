@@ -33,6 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @QuarkusTest
 class ConsumentCallbackClientIntegratieTest {
 
+    private static final Duration LEASE = Duration.ofMinutes(2);
+
     @TestHTTPResource("/test/webhook")
     URL ontvanger;
 
@@ -110,7 +112,7 @@ class ConsumentCallbackClientIntegratieTest {
     // Een geweigerde verbinding is een transportfout: de levering is mislukt, niet het NMC.
     @Test
     void geweigerdeVerbinding_wordtEenLeveringException() {
-        ConsumentCallbackAdapter adapter = new ConsumentCallbackAdapter(client, Duration.ofSeconds(5));
+        ConsumentCallbackAdapter adapter = new ConsumentCallbackAdapter(client, Duration.ofSeconds(5), LEASE);
 
         assertThrows(WebhookLeveringException.class,
                 () -> adapter.lever("http://localhost:1/webhook", "Bearer jwt", "cursor", List.of(event(UUID.randomUUID()))));
@@ -119,7 +121,7 @@ class ConsumentCallbackClientIntegratieTest {
     // Een webhook die blijft druppelen valt nooit onder de read-time-out; de totale termijn breekt hem af.
     @Test
     void druppelendeWebhook_wordtNaDeTermijnAfgebroken() {
-        ConsumentCallbackAdapter adapter = new ConsumentCallbackAdapter(client, Duration.ofSeconds(1));
+        ConsumentCallbackAdapter adapter = new ConsumentCallbackAdapter(client, Duration.ofSeconds(1), LEASE);
         long start = System.nanoTime();
 
         WebhookLeveringException fout = assertThrows(WebhookLeveringException.class,
