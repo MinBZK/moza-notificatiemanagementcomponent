@@ -364,7 +364,7 @@ public class NotificatieVerwerkingFuzzer {
     private static UUID bewaarVerzonden(UUID notifyId) {
         Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, "https://consument.example.invalid/callback");
         overgangsfunctie.neemAan(notificatie);
-        Poging poging = new Poging(notificatie.getId(), 1);
+        Poging poging = new GeheugenPoging(notificatie.getId(), 1);
         pogingen.persist(poging);
         overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
         poging.markeerVerzonden(notifyId, OffsetDateTime.now(ZoneOffset.UTC));
@@ -374,6 +374,24 @@ public class NotificatieVerwerkingFuzzer {
     }
 
     /** Pogingen in het geheugen; kolomconstraints worden niet afgedwongen. */
+    /**
+     * Een poging met een id vanaf het aanmaken. In productie deelt Hibernate het id uit bij persist; dit
+     * target heeft geen Hibernate.
+     */
+    private static final class GeheugenPoging extends Poging {
+
+        private final UUID id = UUID.randomUUID();
+
+        GeheugenPoging(UUID notificatieId, int nummer) {
+            super(notificatieId, nummer);
+        }
+
+        @Override
+        public UUID getId() {
+            return id;
+        }
+    }
+
     private static final class GeheugenPogingRepository extends PogingRepository {
 
         private final Map<UUID, Poging> opgeslagen = new HashMap<>();
