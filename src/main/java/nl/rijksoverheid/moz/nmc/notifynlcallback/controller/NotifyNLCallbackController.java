@@ -4,7 +4,7 @@ import io.quarkus.logging.Log;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.NotifyNlCallbackApi;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.filter.NotifyNLCallbackBeveiligd;
-import nl.rijksoverheid.moz.nmc.service.InkomendEventOpslag;
+import nl.rijksoverheid.moz.nmc.service.ReceiptOpslag;
 
 import java.time.OffsetDateTime;
 import java.util.Objects;
@@ -17,18 +17,18 @@ import java.util.stream.Stream;
 @NotifyNLCallbackBeveiligd
 public class NotifyNLCallbackController implements NotifyNlCallbackApi {
 
-    private final InkomendEventOpslag inkomendEventOpslag;
+    private final ReceiptOpslag receiptOpslag;
 
-    public NotifyNLCallbackController(InkomendEventOpslag inkomendEventOpslag) {
-        this.inkomendEventOpslag = inkomendEventOpslag;
+    public NotifyNLCallbackController(ReceiptOpslag receiptOpslag) {
+        this.receiptOpslag = receiptOpslag;
     }
 
     @Override
     public void verwerkAfleverstatus(AfleverstatusRequest afleverstatusRequest) {
-        InkomendEventOpslag.Uitkomst uitkomst = inkomendEventOpslag.slaOp(afleverstatusRequest.getId(),
+        ReceiptOpslag.Uitkomst uitkomst = receiptOpslag.slaOp(afleverstatusRequest.getId(),
                 afleverstatusRequest.getReference(), afleverstatusRequest.getStatus(), gebeurtenisTijdstip(afleverstatusRequest));
 
-        if (uitkomst == InkomendEventOpslag.Uitkomst.ONBEKEND) {
+        if (uitkomst == ReceiptOpslag.Uitkomst.ONBEKEND) {
             Log.warnf("NotifyNL-receipt hoort bij geen poging (notifyNlNotificatieId=%s); niet opgeslagen",
                     afleverstatusRequest.getId());
         }

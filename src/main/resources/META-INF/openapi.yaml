@@ -72,10 +72,8 @@ paths:
                 $ref: '#/components/schemas/NotificatieResponse'
         '400':
           description: >-
-            Ongeldige aanvraag, zoals een onbekend berichttype. Bij bean-validatie, zoals
-            een leeg identificatienummer, is `violations` gevuld. Een partij zonder
-            e-mailadres is geen 400 meer: die uitkomst volgt asynchroon als
-            `niet-bezorgbaar`.
+            Ongeldige aanvraag, zoals een ontbrekend identificatienummer of een onbekend
+            berichttype. Bij een ongeldig veld noemt `violations` het veld.
           content:
             application/problem+json:
               schema:
@@ -100,9 +98,8 @@ paths:
       operationId: decentraleNotificatieVersturen
       summary: Notificatie versturen op basis van een e-mailadres
       description: |
-        Neemt een notificatie aan voor het opgegeven e-mailadres, zonder de Profielservice
-        te raadplegen (decentraal profiel / doorgeefluik), en antwoordt 202 zodra ze
-        duurzaam is opgeslagen. De verzending bij NotifyNL volgt asynchroon. Elke
+        Neemt een notificatie aan voor het opgegeven e-mailadres en antwoordt 202 zodra
+        ze duurzaam is opgeslagen. De verzending bij NotifyNL volgt asynchroon. Elke
         statusovergang staat in de eventfeed en gaat naar de webhook van de Dienstverlener,
         als die er een heeft.
       tags:
@@ -133,9 +130,8 @@ paths:
                 $ref: '#/components/schemas/NotificatieResponse'
         '400':
           description: >-
-            Ongeldige aanvraag (bijv. ontbrekend/ongeldig e-mailadres of onbekend
-            berichttype). Bij bean-validatie, zoals een ongeldig e-mailadres, is
-            `violations` gevuld.
+            Ongeldige aanvraag, zoals een ontbrekend of ongeldig e-mailadres of een onbekend
+            berichttype. Bij een ongeldig veld noemt `violations` het veld.
           content:
             application/problem+json:
               schema:
@@ -449,9 +445,9 @@ components:
         type:
           type: string
           description: >-
-            `nl.overheid.moz.notificatie.status.` gevolgd door de nieuwe status, bijvoorbeeld
-            `nl.overheid.moz.notificatie.status.bezorgd`.
-          example: nl.overheid.moz.notificatie.status.bezorgd
+            `nl.mijnoverheidzakelijk.nmc.notificatie.status.` gevolgd door de nieuwe status, bijvoorbeeld
+            `nl.mijnoverheidzakelijk.nmc.notificatie.status.bezorgd`.
+          example: nl.mijnoverheidzakelijk.nmc.notificatie.status.bezorgd
         source:
           type: string
           format: uri-reference
@@ -483,15 +479,15 @@ components:
     NotificatieStatusData:
       type: object
       description: >-
-        Eén statusovergang. `van` ontbreekt bij het eerste event van een notificatie en
+        Eén statusovergang. `vorigeStatus` ontbreekt bij het eerste event van een notificatie en
         `reden` ontbreekt bij een overgang zonder reden, zoals naar `bezorgd`.
       required:
-        - naar
+        - nieuweStatus
         - versie
       properties:
-        van:
+        vorigeStatus:
           $ref: '#/components/schemas/NotificatieStatus'
-        naar:
+        nieuweStatus:
           $ref: '#/components/schemas/NotificatieStatus'
         reden:
           $ref: '#/components/schemas/Reden'

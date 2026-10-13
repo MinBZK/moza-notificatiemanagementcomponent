@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
+import jakarta.ws.rs.core.Response;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.Logboek;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
 import nl.rijksoverheid.moz.nmc.api.WijzigingenApi;
@@ -43,7 +44,7 @@ public class EventfeedController implements WijzigingenApi {
     // TODO #754 (LDV Logboek annotaties hebben placeholder URL)
     // processingActivityId is een placeholder, vervang door de echte URL uit het privacy-register.
     @Logboek(name = "wijzigingenLezen", processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
-    public WijzigingenPagina wijzigingenLezen(String cursor, Integer limiet) {
+    public Response wijzigingenLezen(String cursor, Integer limiet) {
         UUID dvId = dvProvider.huidigeDvId();
         logboekContext.setDataSubjectId(dvId.toString());
         logboekContext.setDataSubjectType(BETROKKENE_TYPE_DIENSTVERLENER);
@@ -60,12 +61,12 @@ public class EventfeedController implements WijzigingenApi {
             throw Problems.gone(Problems.TYPE_CURSOR_VERVALLEN, "Cursor vervallen", e.getMessage());
         }
 
-        return new WijzigingenPagina(pagina.events().stream().map(NotificatieStatusEvent::van).toList())
-                .cursor(pagina.cursor() == null ? null : pagina.cursor().codeer());
+        return Response.ok(new WijzigingenPagina(pagina.events().stream().map(NotificatieStatusEvent::van).toList())
+                .cursor(pagina.cursor() == null ? null : pagina.cursor().codeer())).build();
     }
 
     @Override
-    public void wijzigingenBevestigen(BevestigingRequest bevestigingRequest) {
+    public Response wijzigingenBevestigen(BevestigingRequest bevestigingRequest) {
         Cursor cursor = ontleed(bevestigingRequest.getCursor());
 
         if (cursor == null) {
@@ -77,6 +78,8 @@ public class EventfeedController implements WijzigingenApi {
         } catch (CursorVervallenException e) {
             throw Problems.gone(Problems.TYPE_CURSOR_VERVALLEN, "Cursor vervallen", e.getMessage());
         }
+
+        return Response.noContent().build();
     }
 
     // Een lege cursor betekent: vanaf het oudste beschikbare event.

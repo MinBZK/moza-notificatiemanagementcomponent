@@ -13,6 +13,8 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
+import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,7 +48,7 @@ class ReceiptReferentieTest {
     EventRepository eventRepository;
 
     @Inject
-    InkomendEventOpslag inkomendEventOpslag;
+    ReceiptOpslag receiptOpslag;
 
     @Inject
     TaakWorker taakWorker;
@@ -122,31 +124,31 @@ class ReceiptReferentieTest {
         UUID pogingId = geplandePoging();
         UUID notifyId = UUID.randomUUID();
 
-        assertEquals(InkomendEventOpslag.Uitkomst.OPGESLAGEN,
-                inkomendEventOpslag.slaOp(notifyId, pogingId.toString(), "delivered", OffsetDateTime.now(ZoneOffset.UTC)));
-        taakWorker.verwerk(TaakSoort.RECEIPT_VERWERKEN);
+        assertEquals(ReceiptOpslag.Uitkomst.OPGESLAGEN,
+                receiptOpslag.slaOp(notifyId, pogingId.toString(), "delivered", OffsetDateTime.now(ZoneOffset.UTC)));
+        TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
 
         Poging poging = poging(pogingId);
         assertEquals(notifyId, poging.getNotifyId());
         assertEquals(PogingStatus.BEZORGD, poging.getStatus());
         assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
                 NotificatieStatus.BEZORGD), overgangen(poging.getNotificatieId()));
-        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count("soort", TaakSoort.RECEIPT_VERWERKEN)));
+        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN)));
     }
 
     // Is de notificatie inmiddels verwijderd, dan rondt de receipttaak af zonder iets te doen.
     @Test
     void receipttaakVoorEenVerwijderdePoging_rondtAf() {
         UUID pogingId = geplandePoging();
-        inkomendEventOpslag.slaOp(UUID.randomUUID(), pogingId.toString(), "delivered", null);
+        receiptOpslag.slaOp(UUID.randomUUID(), pogingId.toString(), "delivered", null);
         QuarkusTransaction.requiringNew().run(() -> {
             eventRepository.deleteAll();
             notificatieRepository.deleteAll();
         });
 
-        taakWorker.verwerk(TaakSoort.RECEIPT_VERWERKEN);
+        TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
 
-        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count("soort", TaakSoort.RECEIPT_VERWERKEN)));
+        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN)));
     }
 
     private UUID geplandePoging() {

@@ -87,7 +87,7 @@ public class TerugkoppelTaakHandler implements TaakHandler {
     }
 
     @Override
-    public TaakSoort soort() {
+    public TaakSoort taakSoort() {
         return TaakSoort.TERUGKOPPELEN;
     }
 
@@ -152,8 +152,8 @@ public class TerugkoppelTaakHandler implements TaakHandler {
         int max = dienstverlener.get().getWebhookMaxMislukkingen().orElse(maxMislukkingen);
         Webhookpositie positie = webhookpositieRepository.zoek(dvId);
 
-        if (positie.gepauzeerdTot() != null && positie.gepauzeerdTot().isAfter(nu())) {
-            return new Gepauzeerd(positie.gepauzeerdTot());
+        if (positie.getGepauzeerdTot() != null && positie.getGepauzeerdTot().isAfter(nu())) {
+            return new Gepauzeerd(positie.getGepauzeerdTot());
         }
 
         String url;
@@ -163,7 +163,7 @@ public class TerugkoppelTaakHandler implements TaakHandler {
             return new OngeldigeUrl(e.getMessage(), max);
         }
 
-        EventPagina pagina = eventfeed.leesVoorWebhook(dvId, positie.positie(), bundel);
+        EventPagina pagina = eventfeed.leesVoorWebhook(dvId, positie.getPositie(), bundel);
 
         if (pagina.events().isEmpty()) {
             return new GeenEvents();
@@ -184,7 +184,7 @@ public class TerugkoppelTaakHandler implements TaakHandler {
     private void registreerMislukking(Taak taak, int max, boolean directPauzeren) {
         OffsetDateTime nu = nu();
         Webhookpositie positie = webhookpositieRepository.zoek(taak.getDvId());
-        int mislukkingen = positie.mislukkingen() + 1;
+        int mislukkingen = positie.getMislukkingen() + 1;
         boolean pauzeert = directPauzeren || mislukkingen >= max;
         Duration wachttijd = pauzeert
                 ? oplopend(pauzeWachttijd, Math.max(0, mislukkingen - max))
@@ -193,7 +193,7 @@ public class TerugkoppelTaakHandler implements TaakHandler {
 
         taakClaimer.stelUit(taak, due, false);
         webhookpositieRepository.bewaar(
-                new Webhookpositie(taak.getDvId(), positie.positie(), mislukkingen, pauzeert ? due : null), nu);
+                new Webhookpositie(taak.getDvId(), positie.getPositie(), mislukkingen, pauzeert ? due : null), nu);
 
         if (pauzeert) {
             Log.warnf("Webhook van dienstverlener %s gepauzeerd tot %s na %d mislukte levering(en) op rij; de feed "

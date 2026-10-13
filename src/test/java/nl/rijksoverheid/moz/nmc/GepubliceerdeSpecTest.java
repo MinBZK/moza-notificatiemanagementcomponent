@@ -40,7 +40,7 @@ class GepubliceerdeSpecTest {
 
     // Gesorteerd vergeleken: alleen het lidmaatschap telt, niet de volgorde.
     @Test
-    void deStatusenumInHetGepubliceerdeDocumentDektElkeNotificatieStatus() {
+    void notificatieStatusEnum_inGepubliceerdeSpec_dektElkeNotificatieStatus() {
         List<String> verwacht = Arrays.stream(NotificatieStatus.values())
                 .map(NotificatieStatus::toApiValue).sorted().toList();
 
@@ -48,7 +48,7 @@ class GepubliceerdeSpecTest {
     }
 
     @Test
-    void deRedenenumInHetGepubliceerdeDocumentDektElkeReden() {
+    void redenEnum_inGepubliceerdeSpec_dektElkeReden() {
         List<String> verwacht = Arrays.stream(Reden.values()).map(Reden::toApiValue).sorted().toList();
 
         assertEquals(verwacht, gepubliceerdeEnum("Reden"));

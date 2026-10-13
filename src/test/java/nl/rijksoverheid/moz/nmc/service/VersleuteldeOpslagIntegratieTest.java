@@ -15,6 +15,7 @@ import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.domain.VersleuteldeGegevens;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,12 +23,7 @@ import org.mockito.Mockito;
 
 import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -85,7 +81,7 @@ class VersleuteldeOpslagIntegratieTest {
     void decentraleNotificatieVersturen_rijBevatGeenLeesbaarAdresOfPersonalisation() throws Exception {
         UUID id = verstuur();
 
-        Map<String, byte[]> rij = leesRij(id);
+        Map<String, byte[]> rij = NotificatieFixtures.leesRuweRij(dataSource, id);
 
         assertNotNull(rij.get("ontvanger_versleuteld"));
         assertNotNull(rij.get("personalisation_versleuteld"));
@@ -143,7 +139,7 @@ class VersleuteldeOpslagIntegratieTest {
                 .extract().path("notificatieId");
         UUID id = UUID.fromString(notificatieId);
 
-        for (Map.Entry<String, byte[]> kolom : leesRij(id).entrySet()) {
+        for (Map.Entry<String, byte[]> kolom : NotificatieFixtures.leesRuweRij(dataSource, id).entrySet()) {
             for (String geheim : List.of(EMAIL, KVK_NUMMER)) {
                 assertFalse(bevat(kolom.getValue(), geheim.getBytes(StandardCharsets.UTF_8)),
                         "kolom " + kolom.getKey() + " bevat " + geheim + " leesbaar");
@@ -170,28 +166,6 @@ class VersleuteldeOpslagIntegratieTest {
         return UUID.fromString(id);
     }
 
-    // Elke kolom als bytes: bytea zoals opgeslagen, andere typen in hun tekstvorm.
-    private Map<String, byte[]> leesRij(UUID id) throws Exception {
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement("SELECT * FROM notificatie WHERE id = ?")) {
-            statement.setObject(1, id);
-
-            try (ResultSet resultSet = statement.executeQuery()) {
-                assertTrue(resultSet.next(), "notificatie " + id + " niet gevonden");
-                ResultSetMetaData metaData = resultSet.getMetaData();
-                Map<String, byte[]> rij = new LinkedHashMap<>();
-
-                for (int i = 1; i <= metaData.getColumnCount(); i++) {
-                    Object waarde = resultSet.getObject(i);
-                    byte[] bytes = waarde instanceof byte[] b ? b
-                            : waarde == null ? null : String.valueOf(waarde).getBytes(StandardCharsets.UTF_8);
-                    rij.put(metaData.getColumnName(i), bytes);
-                }
-
-                return rij;
-            }
-        }
-    }
 
     private static boolean bevat(byte[] hooiberg, byte[] naald) {
         if (hooiberg == null) {
