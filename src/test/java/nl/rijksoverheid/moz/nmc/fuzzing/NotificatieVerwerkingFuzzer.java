@@ -123,7 +123,8 @@ public class NotificatieVerwerkingFuzzer {
                 () -> NotificatieFixtures.DV_ID,
                 new GeheugenDienstverlenerRepository(),
                 repository,
-                taken);
+                taken,
+                Optional.empty());
         receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie);
 
         LogboekContext logboekContext = new LogboekContext();
