@@ -155,7 +155,8 @@ Geïmplementeerd:
 
 Beide intakes gaan via `AannameService`: notificatie op `aangenomen` met event 0, de
 versleutelde payload en een verzendtaak in één transactie; het quotum per
-dienstverlener per dag (`dienstverlener.quotum_per_dag`) geeft 429.
+dienstverlener per dag (`dienstverlener.quotum_per_dag`, zonder waarde daar
+`nmc.aanname.quotum-per-dag`) geeft 429.
 De controllers antwoorden 202 met `Location` via `AannameResponse.notificatieAangenomen`; daarvoor genereert
 de `notificaties`-run in de pom met `returnResponse=true`. `VerzendTaakHandler` doet in een
 eerste transactie `aangenomen` naar `in-verzending` met een geplande poging, roept
@@ -463,7 +464,9 @@ Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
 `nmc.dienstverlener.id` (de rij uit V8), `nmc.taak.*` (interval, batch, lease,
 max-pogingen van de worker-lus, en het uitstel na een storing),
 `nmc.navraag.eerste-due` (wanneer de eerste navraag naar de afleverstatus gepland wordt),
-`nmc.controle.*` (interval en maximum per ronde van de controletaak) en
+`nmc.controle.*` (interval en maximum per ronde van de controletaak),
+`nmc.aanname.quotum-per-dag` (quotum voor een dienstverlener zonder eigen quotum in
+het register; leeg is onbeperkt),
 `nmc.verzendbudget.*` (Notify-service, tokens per minuut, reservering voor de navraag) en
 `nmc.feed.*` (grootste pagina, aanroepen per minuut, cluster-epoch). Onder `%test` staat de lus uit en is het budget
 klein, zodat tests het uitputten.
