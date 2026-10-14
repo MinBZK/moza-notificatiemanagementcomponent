@@ -147,10 +147,11 @@ Geïmplementeerd:
   `TaakHandler` van die soort. Handlers: `VerzendTaakHandler`, `ReceiptTaakHandler`,
   `Reconciler` (navraag), `BezorgingVaststellenTaakHandler`, `ControleTaakHandler` en `TerugkoppelTaakHandler`; de
   overige soorten worden gepland maar nog niet uitgevoerd.
-- **Herverzending en `geldig_tot`.** Een notificatie krijgt één herverzending: een
-  `temporary-failure` of `technical-failure` op de eerste poging plant een verzendtaak
-  na `Verzendbeleid.herverzendWachttijd`, en de claim daarvan maakt de tweede poging aan
-  (`verzonden` naar `verzonden`, met event). Op de tweede poging is een fout terminaal.
+- **Herverzending en `geldig_tot`.** Een notificatie krijgt `Verzendbeleid.maxHerverzendingen`
+  herverzendingen (standaard één): een `temporary-failure` of `technical-failure` op een
+  poging daarbinnen plant een verzendtaak na `Verzendbeleid.herverzendWachttijd`, en de
+  claim daarvan maakt de volgende poging aan (`verzonden` naar `verzonden`, met event). Op
+  de laatste toegestane poging is een fout terminaal.
   `geldig_tot` (aanname plus `Verzendbeleid.geldigheid` van het berichttype) begrenst het
   starten van een poging: daarna eindigt de notificatie in `verlopen`, ook na een uitstel;
   een poging die al bij NotifyNL ligt loopt door. `ONGELDIG_MELDEN` bestaat als taaksoort
@@ -487,8 +488,8 @@ Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
 `nmc.dienstverlener.id` (de rij uit V8), `nmc.taak.*` (interval, batch, lease,
 max-pogingen van de worker-lus) en `nmc.verzendbudget.*` (Notify-service, tokens per
 minuut, het vaste aandeel van de navraag), `nmc.navraag.*` (momenten en bewaartermijn van
-NotifyNL), `nmc.vaststelling.*` (termijn en callback-venster), `nmc.beleid.*` (geldigheid
-en herverzend-wachttijd, per berichttype te overschrijven als
+NotifyNL), `nmc.vaststelling.*` (termijn en callback-venster), `nmc.beleid.*` (geldigheid,
+herverzend-wachttijd en max-herverzendingen, per berichttype te overschrijven als
 `nmc.beleid.<berichttype>.<sleutel>`) en `nmc.webhook.*` (interval,
 bundel, max-mislukkingen, herpoging- en pauzewachttijd, time-out, `jwt.issuer`,
 `jwt.geldigheid`). Onder `%test` staat de lus uit en is het budget klein, zodat tests

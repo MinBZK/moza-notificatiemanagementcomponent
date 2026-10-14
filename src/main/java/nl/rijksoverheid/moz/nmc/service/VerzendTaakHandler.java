@@ -39,8 +39,9 @@ import java.util.UUID;
  * transactie de overgang naar {@code verzonden}, het NotifyNL-id op de poging, de navraagtaak en het
  * afronden van de verzendtaak. De HTTP-aanroep naar NotifyNL valt nooit binnen een transactie.
  * <p>
- * Dezelfde taak doet de herverzending: vanuit {@code verzonden} na een tijdelijke of technische fout op de
- * eerste poging maakt de claim de tweede poging aan ({@code verzonden} naar {@code verzonden}). Na
+ * Dezelfde taak doet de herverzending: vanuit {@code verzonden} na een tijdelijke of technische fout, zolang
+ * het {@link Verzendbeleid} nog een herverzending toestaat, maakt de claim de volgende poging aan
+ * ({@code verzonden} naar {@code verzonden}). Na
  * {@code geldig_tot} wordt geen poging meer gestart en eindigt de notificatie in {@code verlopen}; een
  * poging die al bij NotifyNL ligt loopt door.
  * <p>
@@ -63,11 +64,12 @@ public class VerzendTaakHandler implements TaakHandler {
     private final NotifyNLVerzendAdapter verzendAdapter;
     private final Duration uitstel;
     private final Navraagschema navraagschema;
+    private final Verzendbeleid verzendbeleid;
 
     public VerzendTaakHandler(Overgangsfunctie overgangsfunctie, PogingRepository pogingRepository,
                               TaakRepository taakRepository, TaakClaimer taakClaimer, Sleutelbeheer sleutelbeheer,
                               ProfielServiceAdapter profielServiceAdapter, NotifyNLVerzendAdapter verzendAdapter,
-                              Navraagschema navraagschema,
+                              Navraagschema navraagschema, Verzendbeleid verzendbeleid,
                               @ConfigProperty(name = "nmc.taak.uitstel") Duration uitstel) {
         this.overgangsfunctie = overgangsfunctie;
         this.pogingRepository = pogingRepository;
@@ -78,6 +80,7 @@ public class VerzendTaakHandler implements TaakHandler {
         this.verzendAdapter = verzendAdapter;
         this.uitstel = uitstel;
         this.navraagschema = navraagschema;
+        this.verzendbeleid = verzendbeleid;
     }
 
     @Override
@@ -230,11 +233,11 @@ public class VerzendTaakHandler implements TaakHandler {
                 herclaim = true;
             }
             case VERZONDEN -> {
-                // Een herverzending: de tweede poging, of bij een herclaim de al geplande.
+                // Een herverzending: de volgende poging, of bij een herclaim de al geplande.
                 if (laatste.filter(p -> p.getStatus() == PogingStatus.GEPLAND).isPresent()) {
                     poging = laatste.get();
                     herclaim = true;
-                } else if (laatste.filter(VerzendTaakHandler::magHerverzonden).isPresent()) {
+                } else if (laatste.filter(p -> magHerverzonden(p, verzendbeleid, notificatie.getBerichtType())).isPresent()) {
                     if (notificatie.isVerlopen(nu)) {
                         return verloop(taak, notificatie);
                     }
@@ -271,10 +274,10 @@ public class VerzendTaakHandler implements TaakHandler {
                 notificatie.getTemplateId(), personalisation, taak.getTraceId());
     }
 
-    // Eén herverzending in totaal: alleen na een tijdelijke of technische fout op de eerste poging.
-    static boolean magHerverzonden(Poging poging) {
-        return poging.getNummer() == 1
-                && (poging.getStatus() == PogingStatus.TIJDELIJK_MISLUKT || poging.getStatus() == PogingStatus.TECHNISCH_MISLUKT);
+    // Alleen na een tijdelijke of technische fout, en zolang het beleid van het berichttype nog een herverzending toestaat.
+    static boolean magHerverzonden(Poging poging, Verzendbeleid verzendbeleid, String berichtType) {
+        return (poging.getStatus() == PogingStatus.TIJDELIJK_MISLUKT || poging.getStatus() == PogingStatus.TECHNISCH_MISLUKT)
+                && verzendbeleid.magHerverzenden(berichtType, poging.getNummer());
     }
 
     private Verzending verloop(Taak taak, Notificatie notificatie) {

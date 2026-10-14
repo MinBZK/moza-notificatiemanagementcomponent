@@ -47,7 +47,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** Eén herverzending per notificatie, en geen nieuwe poging na {@code geldig_tot}. */
+/** Herverzending volgens het verzendbeleid (standaard één), en geen nieuwe poging na {@code geldig_tot}. */
 @QuarkusTest
 class HerverzendingTest {
 
@@ -178,6 +178,33 @@ class HerverzendingTest {
 
         assertEquals(naar, notificatie(id).getStatus());
         assertEquals(reden, notificatie(id).getReden());
+        assertTrue(taken().isEmpty());
+    }
+
+    // De stuurgroepagenda heeft in tests twee herverzendingen: een fout op de tweede poging geeft een derde,
+    // pas een fout op de derde is terminaal.
+    @Test
+    void meerHerverzendingenInHetBeleid_gevenMeerPogingen() {
+        UUID id = aannameService.neemAan(opdracht(BerichtType.STUURGROEP_AGENDA));
+        taakWorker.verwerk(TaakSoort.VERZENDEN);
+
+        for (int nummer = 1; nummer <= 2; nummer++) {
+            Poging poging = laatstePoging(id);
+            assertEquals(nummer, poging.getNummer());
+            receiptVerwerker.verwerk(poging.getNotifyId(), poging.getId().toString(), "temporary-failure",
+                    OffsetDateTime.now(ZoneOffset.UTC));
+            assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
+            maakDue();
+            taakWorker.verwerk(TaakSoort.VERZENDEN);
+        }
+
+        Poging derde = laatstePoging(id);
+        assertEquals(3, derde.getNummer());
+        receiptVerwerker.verwerk(derde.getNotifyId(), derde.getId().toString(), "temporary-failure",
+                OffsetDateTime.now(ZoneOffset.UTC));
+
+        assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(id).getStatus());
+        verify(sendAMessageApi, times(3)).sendEmail(any());
         assertTrue(taken().isEmpty());
     }
 
@@ -349,8 +376,12 @@ class HerverzendingTest {
     }
 
     private static AannameOpdracht opdracht() {
+        return opdracht(BerichtType.DEMO_TEMPLATE);
+    }
+
+    private static AannameOpdracht opdracht(BerichtType berichtType) {
         return new AannameOpdracht(Regie.DECENTRAAL, Ontvanger.email("burger@example.nl"), null, null,
-                BerichtType.DEMO_TEMPLATE, Map.of());
+                berichtType, Map.of());
     }
 
     private void verzetGeldigTot(UUID id) {

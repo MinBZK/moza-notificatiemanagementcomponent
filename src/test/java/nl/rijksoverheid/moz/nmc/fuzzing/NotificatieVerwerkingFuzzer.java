@@ -140,7 +140,7 @@ public class NotificatieVerwerkingFuzzer {
         // Application logging off. The AssertionError in roepAan names the stand-in states.
         Logger.getLogger("").setLevel(Level.OFF);
 
-        Verzendbeleid verzendbeleid = new Verzendbeleid(java.time.Duration.ofDays(7), java.time.Duration.ofHours(1),
+        Verzendbeleid verzendbeleid = new Verzendbeleid(java.time.Duration.ofDays(7), java.time.Duration.ofHours(1), 1,
                 org.eclipse.microprofile.config.ConfigProvider.getConfig());
         // The intake no longer calls the Profielservice or NotifyNL; those stand-ins belong to the
         // verzendtaak, which is outside this target.

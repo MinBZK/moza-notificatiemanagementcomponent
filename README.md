@@ -419,8 +419,8 @@ verzendtaak. Blijft de receipt uit, dan vraagt de navraag de status op bij Notif
 (na 1, 6 en 24 uur, daarna dagelijks tot de bewaartermijn van NotifyNL; een 404 of het
 einde van die termijn geeft `bezorgstatus-onbekend`). Een `bezorgd` wordt na de
 vaststellingstermijn (7 dagen plus het callback-venster) `definitief-bezorgd`. Een
-tijdelijke of technische fout op de eerste poging geeft één herverzending; na `geldig_tot`
-(standaard 7 dagen na de aanname, per berichttype in te stellen) wordt geen poging meer
+tijdelijke of technische fout geeft een herverzending (standaard één, per berichttype in te
+stellen); na `geldig_tot` (standaard 7 dagen na de aanname, per berichttype in te stellen) wordt geen poging meer
 gestart en eindigt de notificatie in `verlopen`. Nog **niet** aanwezig:
 
 - **Contactherstel** (voor beide profielen)

@@ -39,17 +39,20 @@ public class ControleTaakHandler implements TaakHandler {
     private final PogingRepository pogingRepository;
     private final TaakRepository taakRepository;
     private final Vaststellingstermijn vaststellingstermijn;
+    private final Verzendbeleid verzendbeleid;
     private final Duration interval;
     private final int maxPerRonde;
 
     public ControleTaakHandler(NotificatieRepository notificatieRepository, PogingRepository pogingRepository,
                                TaakRepository taakRepository, Vaststellingstermijn vaststellingstermijn,
+                               Verzendbeleid verzendbeleid,
                                @ConfigProperty(name = "nmc.controle.interval") Duration interval,
                                @ConfigProperty(name = "nmc.controle.max-per-ronde") int maxPerRonde) {
         this.notificatieRepository = notificatieRepository;
         this.pogingRepository = pogingRepository;
         this.taakRepository = taakRepository;
         this.vaststellingstermijn = vaststellingstermijn;
+        this.verzendbeleid = verzendbeleid;
         this.interval = interval;
         this.maxPerRonde = maxPerRonde;
     }
@@ -114,18 +117,19 @@ public class ControleTaakHandler implements TaakHandler {
     private Optional<TaakSoort> ontbrekendeSoort(Notificatie notificatie) {
         return switch (notificatie.getStatus()) {
             case AANGENOMEN, IN_VERZENDING -> Optional.of(TaakSoort.VERZENDEN);
-            case VERZONDEN -> pogingRepository.findLaatsteVan(notificatie.getId()).flatMap(ControleTaakHandler::soortBijPoging);
+            case VERZONDEN -> pogingRepository.findLaatsteVan(notificatie.getId())
+                    .flatMap(poging -> soortBijPoging(poging, notificatie.getBerichtType()));
             case BEZORGD -> Optional.of(TaakSoort.BEZORGING_VASTSTELLEN);
             default -> throw new IllegalStateException("Terminale status " + notificatie.getStatus() + " hoort hier niet");
         };
     }
 
-    private static Optional<TaakSoort> soortBijPoging(Poging poging) {
+    private Optional<TaakSoort> soortBijPoging(Poging poging, String berichtType) {
         if (isLopend(poging)) {
             return Optional.of(TaakSoort.RECONCILIEREN);
         }
 
-        return poging.getStatus() == PogingStatus.GEPLAND || VerzendTaakHandler.magHerverzonden(poging)
+        return poging.getStatus() == PogingStatus.GEPLAND || VerzendTaakHandler.magHerverzonden(poging, verzendbeleid, berichtType)
                 ? Optional.of(TaakSoort.VERZENDEN)
                 : Optional.empty();
     }
