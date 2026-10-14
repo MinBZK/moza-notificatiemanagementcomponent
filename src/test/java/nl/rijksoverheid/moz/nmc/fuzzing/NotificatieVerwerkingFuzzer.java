@@ -181,7 +181,8 @@ public class NotificatieVerwerkingFuzzer {
                 () -> NotificatieFixtures.DV_ID,
                 new GeheugenDienstverlenerRepository(),
                 repository,
-                new GeheugenTaakRepository());
+                new GeheugenTaakRepository(),
+                Optional.empty());
         ReceiptVerwerker receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
                 // No wait between callback retries.
                 new DirecteStatusUpdateEvent(new ConsumentCallbackAdapter(url -> callbackClientStandIn(), 0)));
