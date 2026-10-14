@@ -124,7 +124,8 @@ public class NotificatieVerwerkingFuzzer {
                 () -> NotificatieFixtures.DV_ID,
                 new GeheugenDienstverlenerRepository(),
                 repository,
-                taken);
+                taken,
+                Optional.empty());
         receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
                 taken, new Vaststellingstermijn(java.time.Duration.ofDays(7), java.time.Duration.ofDays(1)));
 

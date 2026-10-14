@@ -23,7 +23,7 @@ public class Dienstverlener {
     @Column(nullable = false, length = 200)
     private String naam;
 
-    // Leeg is onbeperkt.
+    // Leeg betekent: de standaard uit nmc.aanname.quotum-per-dag.
     @Column(name = "quotum_per_dag")
     private Integer quotumPerDag;
 

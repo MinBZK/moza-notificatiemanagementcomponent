@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import nl.rijksoverheid.moz.nmc.domain.Dienstverlener;
@@ -9,17 +10,21 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.DienstverlenerRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
  * Neemt een notificatie aan: notificatie op {@code aangenomen} met event 0, de versleutelde payload en
  * de verzendtaak, in één transactie. Het antwoord aan de aanroeper volgt op de commit; de verzending
  * doet de worker. De aanname roept de Profielservice en NotifyNL niet aan.
+ * Eager bij het opstarten, zodat een ongeldig standaardquotum de applicatie niet laat starten.
  */
+@Startup
 @ApplicationScoped
 public class AannameService {
 
@@ -29,16 +34,23 @@ public class AannameService {
     private final DienstverlenerRepository dienstverlenerRepository;
     private final NotificatieRepository notificatieRepository;
     private final TaakRepository taakRepository;
+    private final Optional<Integer> standaardQuotumPerDag;
 
     public AannameService(Overgangsfunctie overgangsfunctie, Sleutelbeheer sleutelbeheer, DvProvider dvProvider,
                           DienstverlenerRepository dienstverlenerRepository, NotificatieRepository notificatieRepository,
-                          TaakRepository taakRepository) {
+                          TaakRepository taakRepository,
+                          @ConfigProperty(name = "nmc.aanname.quotum-per-dag") Optional<Integer> standaardQuotumPerDag) {
+        if (standaardQuotumPerDag.isPresent() && standaardQuotumPerDag.get() < 1) {
+            throw new IllegalStateException("nmc.aanname.quotum-per-dag moet leeg of 1 of hoger zijn");
+        }
+
         this.overgangsfunctie = overgangsfunctie;
         this.sleutelbeheer = sleutelbeheer;
         this.dvProvider = dvProvider;
         this.dienstverlenerRepository = dienstverlenerRepository;
         this.notificatieRepository = notificatieRepository;
         this.taakRepository = taakRepository;
+        this.standaardQuotumPerDag = standaardQuotumPerDag;
     }
 
     /**
@@ -65,7 +77,7 @@ public class AannameService {
         return notificatie.getId();
     }
 
-    // Per kalenderdag in UTC; het register bepaalt of er een grens is.
+    // Per kalenderdag in UTC. Het quotum uit het register gaat voor; zonder quotum daar geldt de standaard.
     private void toetsQuotum(UUID dvId) {
         Dienstverlener dienstverlener = dienstverlenerRepository.findById(dvId);
 
@@ -73,7 +85,7 @@ public class AannameService {
             throw new IllegalStateException("Dienstverlener " + dvId + " staat niet in het register");
         }
 
-        dienstverlener.getQuotumPerDag().ifPresent(quotum -> {
+        dienstverlener.getQuotumPerDag().or(() -> standaardQuotumPerDag).ifPresent(quotum -> {
             OffsetDateTime beginVanDeDag = LocalDate.now(ZoneOffset.UTC).atStartOfDay().atOffset(ZoneOffset.UTC);
 
             if (notificatieRepository.telAangenomenSinds(dvId, beginVanDeDag) >= quotum) {
