@@ -34,27 +34,19 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
     private static final String ZELFDE_CLAIM = Taak_.TAAK_SOORT + " = :taakSoort and " + Taak_.ID + " = :id and "
             + Taak_.CLAIM_EPOCH + " = :claimEpoch";
 
-    // Native: het conflictdoel is de partiële unieke index op open taken, en het predicaat achter ON
-    // CONFLICT moet letterlijk gelijk zijn aan dat van taak_open_per_notificatie_idx. Een latere overgang
-    // naar een eindstatus zet de open wistaak op de nieuwe termijn, ook als een worker hem net geclaimd
-    // heeft; die leest de termijn opnieuw onder de rijvergrendeling van de notificatie.
-    private static final String PLAN_WISTAAK_SQL = """
-            INSERT INTO taak (soort, dv_id, notificatie_id, due, status)
-            VALUES (?4, ?1, ?2, ?3, ?5)
-            ON CONFLICT (notificatie_id, soort)
-                  WHERE status = 'OPEN' AND notificatie_id IS NOT NULL AND soort <> 'RECEIPT_VERWERKEN'
-            DO UPDATE SET due = EXCLUDED.due
-            """;
-
-    /** Plant de wistaak van de notificatie op {@code due}, of verzet de open wistaak daarheen. */
+    /**
+     * Plant de wistaak van de notificatie op {@code due}, of verzet de open wistaak daarheen. De aanroeper
+     * houdt de rijvergrendeling van de notificatie, dus twee overgangen plannen nooit tegelijk; een latere
+     * overgang naar een eindstatus verzet zo ook een wistaak die een worker net geclaimd heeft, die de
+     * termijn opnieuw leest onder diezelfde vergrendeling.
+     */
     public void planWistaak(UUID dvId, UUID notificatieId, OffsetDateTime due) {
-        getEntityManager().createNativeQuery(PLAN_WISTAAK_SQL)
-                .setParameter(1, dvId)
-                .setParameter(2, notificatieId)
-                .setParameter(3, due)
-                .setParameter(4, TaakSoort.WISSEN.name())
-                .setParameter(5, TaakStatus.OPEN.name())
-                .executeUpdate();
+        long verzet = update(Taak_.DUE + " = ?1 where " + Taak_.TAAK_SOORT + " = ?2 and " + Taak_.NOTIFICATIE_ID + " = ?3 and "
+                + Taak_.STATUS + " = ?4", due, TaakSoort.WISSEN, notificatieId, TaakStatus.OPEN);
+
+        if (verzet == 0) {
+            persist(new Taak(TaakSoort.WISSEN, dvId, notificatieId, due, null, null));
+        }
     }
 
     /**
