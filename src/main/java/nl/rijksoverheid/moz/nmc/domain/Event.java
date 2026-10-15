@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import org.hibernate.annotations.Immutable;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -22,7 +23,9 @@ import java.util.UUID;
  * De kolom {@code transactie_id} (gevuld door de database) is hier niet gemapt; hij is bedoeld
  * om het log op volgorde van commit te lezen.
  */
+// Append-only: een event verandert nooit meer.
 @Entity
+@Immutable
 public class Event {
 
     @Id

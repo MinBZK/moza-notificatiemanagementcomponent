@@ -53,6 +53,24 @@ class OvergangsregelsTest {
     }
 
     @Test
+    void isRedenToegestaan_eindstatusMetReden_vraagtEenPassendeReden() {
+        assertTrue(Overgangsregels.isRedenToegestaan(NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR));
+        assertTrue(Overgangsregels.isRedenToegestaan(NotificatieStatus.NIET_BEZORGBAAR, Reden.GEEN_CONTACTGEGEVENS));
+        assertTrue(Overgangsregels.isRedenToegestaan(NotificatieStatus.TECHNISCH_MISLUKT, Reden.TECHNISCH));
+        assertTrue(Overgangsregels.isRedenToegestaan(NotificatieStatus.VERLOPEN, Reden.VERLOPEN));
+        assertTrue(Overgangsregels.isRedenToegestaan(NotificatieStatus.GEANNULEERD, Reden.GEANNULEERD));
+        assertFalse(Overgangsregels.isRedenToegestaan(NotificatieStatus.NIET_BEZORGBAAR, null));
+        assertFalse(Overgangsregels.isRedenToegestaan(NotificatieStatus.NIET_BEZORGBAAR, Reden.TECHNISCH));
+    }
+
+    @Test
+    void isRedenToegestaan_statusZonderReden_verdraagtGeenReden() {
+        assertTrue(Overgangsregels.isRedenToegestaan(NotificatieStatus.BEZORGD, null));
+        assertTrue(Overgangsregels.isRedenToegestaan(NotificatieStatus.BEZORGSTATUS_ONBEKEND, null));
+        assertFalse(Overgangsregels.isRedenToegestaan(NotificatieStatus.BEZORGD, Reden.TECHNISCH));
+    }
+
+    @Test
     void isToegestaan_leegVertrekpunt_isNietToegestaan() {
         assertFalse(Overgangsregels.isToegestaan(null, NotificatieStatus.AANGENOMEN));
     }

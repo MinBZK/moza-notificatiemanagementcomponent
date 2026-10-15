@@ -50,9 +50,14 @@ public class Overgangsfunctie {
      * niet-toegestane overgang wijzigt niets en levert een geweigerde uitkomst op.
      *
      * @throws NotificatieNietGevondenException als de notificatie niet bestaat
+     * @throws IllegalArgumentException als de reden niet bij de status hoort
      */
     public OvergangUitkomst voerUit(UUID notificatieId, NotificatieStatus naar, Reden reden) {
         Objects.requireNonNull(naar, "naar is verplicht");
+
+        if (!Overgangsregels.isRedenToegestaan(naar, reden)) {
+            throw new IllegalArgumentException("Reden " + reden + " hoort niet bij status " + naar);
+        }
 
         Notificatie notificatie = notificatieRepository.vergrendel(notificatieId)
                 .orElseThrow(() -> new NotificatieNietGevondenException("Geen notificatie gevonden met id " + notificatieId));

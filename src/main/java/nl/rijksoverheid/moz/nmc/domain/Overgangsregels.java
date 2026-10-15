@@ -21,13 +21,20 @@ import static nl.rijksoverheid.moz.nmc.domain.NotificatieStatus.VERZONDEN;
  * <p>
  * {@code VERZONDEN} naar {@code VERZONDEN} is de herverzending: de status blijft, er komt een nieuwe
  * poging bij. Eindstatussen hebben geen uitgaande overgang, behalve
- * {@code BEZORGSTATUS_ONBEKEND}.
+ * {@code BEZORGSTATUS_ONBEKEND}. Ook welke reden bij een status hoort, staat hier.
  */
 public final class Overgangsregels {
 
     private static final Map<NotificatieStatus, Set<NotificatieStatus>> TOEGESTAAN = new EnumMap<>(NotificatieStatus.class);
 
+    // De reden is wat de Dienstverlener te zien krijgt; alleen deze eindstatussen dragen er een.
+    private static final Map<NotificatieStatus, Set<Reden>> REDENEN = new EnumMap<>(NotificatieStatus.class);
+
     static {
+        REDENEN.put(NIET_BEZORGBAAR, EnumSet.of(Reden.ONBEREIKBAAR, Reden.GEEN_CONTACTGEGEVENS));
+        REDENEN.put(TECHNISCH_MISLUKT, EnumSet.of(Reden.TECHNISCH));
+        REDENEN.put(VERLOPEN, EnumSet.of(Reden.VERLOPEN));
+        REDENEN.put(GEANNULEERD, EnumSet.of(Reden.GEANNULEERD));
         TOEGESTAAN.put(AANGENOMEN, EnumSet.of(IN_VERZENDING, VERLOPEN, GEANNULEERD));
         TOEGESTAAN.put(IN_VERZENDING, EnumSet.of(VERZONDEN, TECHNISCH_MISLUKT, VERLOPEN, NIET_BEZORGBAAR));
         TOEGESTAAN.put(VERZONDEN, EnumSet.of(VERZONDEN, VERLOPEN, BEZORGD, NIET_BEZORGBAAR, TECHNISCH_MISLUKT,
@@ -41,6 +48,13 @@ public final class Overgangsregels {
 
     public static boolean isToegestaan(NotificatieStatus van, NotificatieStatus naar) {
         return TOEGESTAAN.getOrDefault(van, Set.of()).contains(naar);
+    }
+
+    /** Of de reden bij de status hoort: een passende reden bij een eindstatus met reden, geen reden bij de andere. */
+    public static boolean isRedenToegestaan(NotificatieStatus naar, Reden reden) {
+        Set<Reden> redenen = REDENEN.getOrDefault(naar, Set.of());
+
+        return redenen.isEmpty() ? reden == null : reden != null && redenen.contains(reden);
     }
 
     /** Alle toegestane paren, per status van herkomst. */

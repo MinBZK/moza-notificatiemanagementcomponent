@@ -43,4 +43,7 @@ CREATE TABLE event (
 -- Vangt alles op zolang er geen bereikpartities zijn.
 CREATE TABLE event_standaard PARTITION OF event DEFAULT;
 
+-- Niet uniek: een unieke index op een gepartitioneerde tabel moet transactie_id bevatten. Dat het
+-- volgnummer per notificatie uniek is, bewaakt alleen Overgangsfunctie als enige schrijver; een
+-- backfill of script dat events schrijft, moet dat zelf bewaken.
 CREATE INDEX event_notificatie_volgnummer_idx ON event (notificatie_id, volgnummer);

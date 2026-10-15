@@ -91,7 +91,7 @@ class OvergangsfunctieTest {
         UUID id = aangenomenNotificatieMetStatus(van);
 
         OvergangUitkomst uitkomst = QuarkusTransaction.requiringNew().call(() ->
-                overgangsfunctie.voerUit(id, naar, Reden.ONBEREIKBAAR));
+                overgangsfunctie.voerUit(id, naar, redenVoor(naar)));
 
         assertTrue(uitkomst.isUitgevoerd());
         assertEquals(van, uitkomst.van());
@@ -101,12 +101,12 @@ class OvergangsfunctieTest {
             Event laatste = eventRepository.findByNotificatie(id).getLast();
 
             assertEquals(naar, herladen.getNotificatieStatus());
-            assertEquals(van == naar ? null : Reden.ONBEREIKBAAR, herladen.getReden());
+            assertEquals(redenVoor(naar), herladen.getReden());
             assertEquals(1, herladen.getVersie());
             assertEquals(1, laatste.getVolgnummer());
             assertEquals(van, laatste.getVan());
             assertEquals(naar, laatste.getNaar());
-            assertEquals(Reden.ONBEREIKBAAR, laatste.getReden());
+            assertEquals(redenVoor(naar), laatste.getReden());
         });
     }
 
@@ -116,7 +116,7 @@ class OvergangsfunctieTest {
         UUID id = aangenomenNotificatieMetStatus(van);
 
         OvergangUitkomst uitkomst = QuarkusTransaction.requiringNew().call(() ->
-                overgangsfunctie.voerUit(id, naar, null));
+                overgangsfunctie.voerUit(id, naar, redenVoor(naar)));
 
         assertFalse(uitkomst.isUitgevoerd());
 
@@ -135,7 +135,7 @@ class OvergangsfunctieTest {
         UUID id = aangenomenNotificatieMetStatus(NotificatieStatus.VERZONDEN);
 
         QuarkusTransaction.requiringNew().run(() ->
-                overgangsfunctie.voerUit(id, NotificatieStatus.VERZONDEN, Reden.ONBEREIKBAAR));
+                overgangsfunctie.voerUit(id, NotificatieStatus.VERZONDEN, null));
 
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie herladen = notificatieRepository.findById(id);
@@ -144,6 +144,22 @@ class OvergangsfunctieTest {
             assertNull(herladen.getReden());
             assertEquals(1, herladen.getVersie());
         });
+    }
+
+    @Test
+    void voerUit_eindstatusZonderReden_gooit() {
+        UUID id = aangenomenNotificatieMetStatus(NotificatieStatus.VERZONDEN);
+
+        assertThrows(IllegalArgumentException.class, () -> QuarkusTransaction.requiringNew().run(() ->
+                overgangsfunctie.voerUit(id, NotificatieStatus.NIET_BEZORGBAAR, null)));
+    }
+
+    @Test
+    void voerUit_redenBijStatusZonderReden_gooit() {
+        UUID id = aangenomenNotificatieMetStatus(NotificatieStatus.VERZONDEN);
+
+        assertThrows(IllegalArgumentException.class, () -> QuarkusTransaction.requiringNew().run(() ->
+                overgangsfunctie.voerUit(id, NotificatieStatus.BEZORGD, Reden.TECHNISCH)));
     }
 
     @Test
@@ -203,7 +219,7 @@ class OvergangsfunctieTest {
             Future<OvergangUitkomst> eerste = pool.submit(() -> QuarkusTransaction.requiringNew().call(() -> {
                 OvergangUitkomst uitkomst = overgangsfunctie.voerUit(id, NotificatieStatus.BEZORGD, null);
                 eersteHeeftVergrendeld.countDown();
-                Thread.sleep(500);
+                wachtTotEenTransactieOpDeLockWacht();
 
                 return uitkomst;
             }));
@@ -228,6 +244,31 @@ class OvergangsfunctieTest {
             assertEquals(List.of(0L, 1L, 2L), volgnummers);
             assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatieRepository.findById(id).getNotificatieStatus());
         });
+    }
+
+    // Pas loslaten als de tweede transactie aantoonbaar op de rijvergrendeling wacht; anders kunnen de
+    // transacties na elkaar lopen en slaagt de test ook zonder vergrendeling.
+    private void wachtTotEenTransactieOpDeLockWacht() throws InterruptedException {
+        long einde = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+
+        while (NotificatieFixtures.telTransactiesWachtendOpLock(notificatieRepository.getEntityManager()) == 0) {
+            if (System.nanoTime() > einde) {
+                throw new IllegalStateException("de tweede transactie is niet op de rijvergrendeling gaan wachten");
+            }
+
+            Thread.sleep(20);
+        }
+    }
+
+    // De reden die bij de status hoort; de overgangsfunctie weigert een andere.
+    private static Reden redenVoor(NotificatieStatus naar) {
+        return switch (naar) {
+            case NIET_BEZORGBAAR -> Reden.ONBEREIKBAAR;
+            case TECHNISCH_MISLUKT -> Reden.TECHNISCH;
+            case VERLOPEN -> Reden.VERLOPEN;
+            case GEANNULEERD -> Reden.GEANNULEERD;
+            default -> null;
+        };
     }
 
     // Neemt een notificatie aan en zet de status daarna rechtstreeks, zodat elke status als

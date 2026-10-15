@@ -74,6 +74,13 @@ public final class NotificatieFixtures {
     }
 
     /** Zet de status rechtstreeks, zonder overgang en zonder de versie te verhogen. */
+    /** Het aantal transacties op deze database dat op een vergrendeling wacht. */
+    public static long telTransactiesWachtendOpLock(EntityManager entityManager) {
+        // Native: de systeemcatalogus.
+        return ((Number) entityManager.createNativeQuery("SELECT count(*) FROM pg_stat_activity "
+                + "WHERE datname = current_database() AND wait_event_type = 'Lock'").getSingleResult()).longValue();
+    }
+
     public static void zetStatus(EntityManager entityManager, UUID id, NotificatieStatus status) {
         entityManager.createNativeQuery("UPDATE notificatie SET status = ?1 WHERE id = ?2")
                 .setParameter(1, status.name())
