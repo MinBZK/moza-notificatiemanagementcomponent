@@ -5,16 +5,11 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Validates the caller-supplied callbackUrl before it is stored (#752). The NMC later
- * POSTs a statusupdate to this address, so the URL must not point at an internal
- * destination (SSRF). Accepted: an absolute https-URL to a public hostname, at most
- * {@value #MAX_LENGTE} characters. Rejected: other schemes, userinfo, IP-literal hosts
+ * Validates the webhook URL of a Dienstverlener before the terugkoppeltaak POSTs to it, so
+ * the URL must not point at an internal destination (SSRF). Accepted: an absolute https-URL
+ * to a public hostname, at most {@value #MAX_LENGTE} characters. Rejected: other schemes, userinfo, IP-literal hosts
  * and internal hostnames (localhost, single-label names, *.localhost/*.local/*.internal/*.svc,
  * *.home.arpa/*.home/*.corp/*.lan/*.intranet).
- * <p>
- * The endpoints reach these rules through
- * {@link nl.rijksoverheid.moz.nmc.validation.ValidCallbackUrl} in the contract, not by
- * calling this class; they only call {@link #normaliseer(URI)} afterwards.
  * <p>
  * This is a shape-based denylist, so it does not catch every internal destination: a
  * hostname that merely resolves to an internal IP, or a short in-cluster form such as
@@ -25,7 +20,7 @@ import java.util.Locale;
  */
 public final class CallbackUrlValidator {
 
-    // Matches the callback_url column (varchar(2048)) so a long URL fails as 400, not at insert.
+    // Matches the webhook_url column (varchar(2048)).
     private static final int MAX_LENGTE = 2048;
     private static final List<String> INTERNE_SUFFIXEN = List.of(
             ".localhost", ".local", ".internal", ".svc",
@@ -63,7 +58,7 @@ public final class CallbackUrlValidator {
     }
 
     /**
-     * Returns the URL with a lowercase scheme, or null when no callbackUrl was supplied.
+     * Returns the URL with a lowercase scheme, or null when no URL was supplied.
      * The outbound REST client compares the scheme case-sensitively and would send an
      * "HTTPS" URL over plaintext HTTP.
      * A URI without a scheme is returned unchanged.

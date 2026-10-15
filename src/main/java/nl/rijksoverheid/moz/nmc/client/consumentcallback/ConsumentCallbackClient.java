@@ -1,21 +1,25 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
+import io.quarkus.rest.client.reactive.Url;
+import io.smallrye.mutiny.Uni;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 
-// Hand-written REST client (not OpenAPI-generated) — the consumer's callbackUrl is only known
-// at runtime, so there's no fixed spec to generate this from.
-public interface ConsumentCallbackClient extends AutoCloseable {
+import java.util.List;
 
-    /**
-     * POSTs a CloudEvents-formatted notificatie-status update to the consumer-supplied
-     * callback URL this client was built for.
-     */
+/**
+ * REST-client voor de webhooks van de Dienstverleners. Eén client voor allemaal; de URL komt per
+ * levering uit het register.
+ */
+public interface ConsumentCallbackClient {
+
+    /** De header met de cursor van het laatste event in de bundel. */
+    String CURSOR_HEADER = "Nmc-Cursor";
+
+    /** POST de events als CloudEvents-batch naar de webhook op {@code url}. */
     @POST
-    @Consumes("application/cloudevents+json")
-    void stuurStatusUpdate(NotificatieStatusEvent event);
-
-    // Elke statusupdate bouwt een eigen client; sluiten geeft zijn HTTP-verbindingen vrij.
-    @Override
-    void close();
+    @Consumes("application/cloudevents-batch+json")
+    Uni<Void> lever(@Url String url, @HeaderParam("Authorization") String autorisatie,
+                    @HeaderParam(CURSOR_HEADER) String cursor, List<NotificatieStatusEvent> events);
 }

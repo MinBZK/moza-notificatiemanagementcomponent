@@ -134,10 +134,10 @@ class CallbackUrlValidatorTest {
     }
 
     @Test
-    void foutmeldingBenoemtDeCallbackUrl() {
+    void foutmeldingBenoemtDeWebhookUrl() {
         OngeldigeCallbackUrlException e = assertThrows(OngeldigeCallbackUrlException.class,
                 () -> CallbackUrlValidator.valideer(URI.create("http://consument.example.nl/status")));
-        assertTrue(e.getMessage().contains("callbackUrl"));
+        assertTrue(e.getMessage().contains("webhook-URL"));
     }
 
     private static void assertGeaccepteerd(String url) {

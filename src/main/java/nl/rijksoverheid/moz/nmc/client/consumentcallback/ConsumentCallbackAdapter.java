@@ -1,145 +1,88 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import io.quarkus.logging.Log;
 import io.vertx.core.http.HttpClosedException;
 import io.vertx.core.http.StreamResetException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.eclipse.microprofile.rest.client.RestClientDefinitionException;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Stuurt de afleverstatus als CloudEvent naar de callback-URL van de Dienstverlener, ná de commit
- * (via StatusUpdateVerzender).
+ * Levert een bundel CloudEvents in één POST aan de webhook van een Dienstverlener. Eén poging: de
+ * terugkoppeltaak bepaalt wanneer het opnieuw gaat.
  * <p>
- * TODO (buiten scope): de aanroep blokkeert de request-thread van de NotifyNL-callback en na
- * MAX_POGINGEN is de statusupdate verloren; een takentabel met eigen herpogingen lost beide op.
+ * Een fout aan de kant van de Dienstverlener (geen 2xx, geen verbinding) wordt een
+ * {@link WebhookLeveringException}; een fout in het NMC zelf, zoals een serialisatiefout, gaat
+ * ongewijzigd door.
  */
 @ApplicationScoped
 public class ConsumentCallbackAdapter {
 
-    private static final int MAX_POGINGEN = 3;
-
     // Begrenst het aflopen van een eventueel kringvormige oorzakenketen.
     private static final int MAX_OORZAAKDIEPTE = 20;
 
-    private final ConsumentCallbackClientFactory clientFactory;
-    private final long initieleWachtMs;
+    private final ConsumentCallbackClient client;
+    private final Duration timeout;
 
-    public ConsumentCallbackAdapter(ConsumentCallbackClientFactory clientFactory,
-                                     @ConfigProperty(name = "consument-callback.initiele-wacht-ms", defaultValue = "1000") long initieleWachtMs) {
-        this.clientFactory = clientFactory;
-        this.initieleWachtMs = initieleWachtMs;
+    public ConsumentCallbackAdapter(ConsumentCallbackClient client,
+                                    @ConfigProperty(name = "nmc.webhook.timeout") Duration timeout,
+                                    @ConfigProperty(name = "nmc.taak.lease") Duration lease) {
+        // Een aanroep die langer duurt dan de lease, laat een tweede worker dezelfde webhook beleveren.
+        if (timeout.isNegative() || timeout.isZero() || timeout.compareTo(lease) >= 0) {
+            throw new IllegalStateException("nmc.webhook.timeout moet positief en korter dan nmc.taak.lease ("
+                    + lease + ") zijn, is " + timeout);
+        }
+
+        this.client = client;
+        this.timeout = timeout;
     }
 
-    // Een fout aan de kant van de Dienstverlener wordt hier gelogd en niet gegooid. Elke andere fout
-    // ontsnapt naar StatusUpdateVerzender, die hem op ERROR logt.
-    public void stuurStatusUpdate(StatusUpdateOpdracht statusUpdateOpdracht) {
-        if (statusUpdateOpdracht.callbackUrl() == null) {
-            Log.infof("Geen callback-URL geconfigureerd voor notificatie %s — statusupdate niet verstuurd",
-                    statusUpdateOpdracht.notificatieId());
-
-            return;
-        }
-
-        String callbackUrl = statusUpdateOpdracht.callbackUrl();
-        ConsumentCallbackClient client;
-        try {
-            client = clientFactory.maakClient(callbackUrl);
-        } catch (IllegalArgumentException | RestClientDefinitionException e) {
-            // Buiten de retry-lus: een client die niet te bouwen is, faalt permanent. Andere
-            // RuntimeExceptions ontsnappen bewust naar StatusUpdateVerzender.
-            Log.errorf(e, "Callback-client kon niet worden gebouwd voor notificatie %s (url=%s) — "
-                    + "statusupdate niet verstuurd", statusUpdateOpdracht.notificatieId(), callbackUrl);
-
-            return;
-        }
-
-        NotificatieStatusEvent event = NotificatieStatusEvent.van(statusUpdateOpdracht.eventId(),
-                statusUpdateOpdracht.notificatieId(), statusUpdateOpdracht.versie(), statusUpdateOpdracht.vorigeStatus(),
-                statusUpdateOpdracht.nieuweStatus(), statusUpdateOpdracht.reden(), statusUpdateOpdracht.tijdstip());
+    /**
+     * @param autorisatie de waarde van de Authorization-header
+     * @param cursor      de cursor van het laatste event in de bundel
+     * @throws WebhookLeveringException als de Dienstverlener de levering niet aannam
+     */
+    public void lever(String url, String autorisatie, String cursor, List<NotificatieStatusEvent> events) {
+        Objects.requireNonNull(url, "url is verplicht");
 
         try {
-            verstuurMetHerpogingen(client, event, statusUpdateOpdracht);
-        } finally {
-            sluit(client, statusUpdateOpdracht);
+            // De read-time-out van de client geldt tussen twee stukken antwoord; een webhook die blijft
+            // druppelen houdt de aanroep anders langer open dan de lease van de taak.
+            client.lever(url, autorisatie, cursor, events)
+                    .ifNoItem().after(timeout)
+                    .failWith(() -> new WebhookLeveringException("Webhook antwoordde niet binnen " + timeout))
+                    .await().indefinitely();
+        } catch (WebApplicationException e) {
+            throw new WebhookLeveringException("Webhook antwoordde met HTTP " + e.getResponse().getStatus(), e);
+        } catch (ProcessingException | CompletionException e) {
+            throw vertaal(e);
         }
     }
 
-    // Een fout bij het sluiten zegt niets over de aflevering; doorgooien zou een afgeleverde update
-    // in StatusUpdateVerzender als verloren laten melden.
-    private static void sluit(ConsumentCallbackClient client, StatusUpdateOpdracht statusUpdateOpdracht) {
-        try {
-            client.close();
-        } catch (RuntimeException e) {
-            Log.warnf(e, "Callback-client voor notificatie %s niet netjes gesloten", statusUpdateOpdracht.notificatieId());
+    // Alleen een transportfout ligt aan de Dienstverlener. Een serialisatiefout is ook een IOException,
+    // maar ligt aan het NMC. Een fout zonder ProcessingException eromheen verpakt await in een
+    // CompletionException.
+    private static RuntimeException vertaal(RuntimeException e) {
+        if (heeftOorzaak(e, InterruptedException.class)) {
+            Thread.currentThread().interrupt();
+
+            return new WebhookLeveringException("Webhook-levering onderbroken", e);
         }
-    }
 
-    private void verstuurMetHerpogingen(ConsumentCallbackClient client, NotificatieStatusEvent event,
-                                        StatusUpdateOpdracht statusUpdateOpdracht) {
-        long wachtMs = initieleWachtMs;
-        for (int poging = 1; ; poging++) {
-            RuntimeException fout;
-            try {
-                client.stuurStatusUpdate(event);
-
-                return;
-            } catch (WebApplicationException e) {
-                fout = e;
-            } catch (ProcessingException e) {
-                // De rest-client pakt elke fout in als ProcessingException, ook een fout in de NMC zelf;
-                // alleen een transportfout ligt aan de Dienstverlener.
-                if (heeftOorzaak(e, InterruptedException.class)) {
-                    meldOnderbroken(e, statusUpdateOpdracht, poging);
-
-                    return;
-                }
-
-                // Jacksons JsonProcessingException is een IOException, maar een serialisatiefout ligt
-                // aan de NMC.
-                if (heeftOorzaak(e, JsonProcessingException.class) || !heeftOorzaak(e, IOException.class, TimeoutException.class, HttpClosedException.class,
-                        StreamResetException.class)) {
-                    throw e;
-                }
-
-                fout = e;
-            }
-
-            if (poging == MAX_POGINGEN) {
-                Log.errorf(fout, "Consument-callback naar %s mislukt na %d pogingen — statusupdate %s voor "
-                        + "notificatie %s niet afgeleverd aan de Dienstverlener; er volgt geen automatische "
-                        + "herpoging", statusUpdateOpdracht.callbackUrl(), MAX_POGINGEN,
-                        statusUpdateOpdracht.nieuweStatus(), statusUpdateOpdracht.notificatieId());
-
-                return;
-            }
-
-            Log.warnf(fout, "Consument-callback naar %s voor notificatie %s (status %s) mislukt (poging %d/%d) "
-                    + "— nieuwe poging na %dms", statusUpdateOpdracht.callbackUrl(), statusUpdateOpdracht.notificatieId(),
-                    statusUpdateOpdracht.nieuweStatus(), poging, MAX_POGINGEN, wachtMs);
-            try {
-                Thread.sleep(wachtMs);
-            } catch (InterruptedException e) {
-                meldOnderbroken(e, statusUpdateOpdracht, poging);
-
-                return;
-            }
-            wachtMs *= 2;
+        if (heeftOorzaak(e, JsonProcessingException.class)
+                || !heeftOorzaak(e, IOException.class, TimeoutException.class, HttpClosedException.class, StreamResetException.class)) {
+            return e;
         }
-    }
 
-    // ERROR: de statusupdate is hiermee definitief verloren.
-    private static void meldOnderbroken(Exception e, StatusUpdateOpdracht statusUpdateOpdracht, int poging) {
-        Thread.currentThread().interrupt();
-        Log.errorf(e, "Consument-callback naar %s onderbroken bij poging %d — statusupdate %s voor notificatie %s "
-                + "niet afgeleverd", statusUpdateOpdracht.callbackUrl(), poging, statusUpdateOpdracht.nieuweStatus(),
-                statusUpdateOpdracht.notificatieId());
+        return new WebhookLeveringException("Webhook niet bereikbaar", e);
     }
 
     @SafeVarargs

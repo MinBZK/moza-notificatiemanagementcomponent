@@ -117,6 +117,16 @@ public class TaakClaimer {
         eis(taakRepository.stelUit(taak, due, teltAlsPoging), taak);
     }
 
+    /**
+     * Laat de taak op {@code due} weer draaien en zet de pogingen op 0, zodat alleen opeenvolgende
+     * fouten tellen voor het maximum.
+     *
+     * @throws TaakVerlorenException als de taak inmiddels bij een andere worker ligt
+     */
+    public void herplanNaSucces(Taak taak, OffsetDateTime due) {
+        eis(taakRepository.herplanNaSucces(taak, due), taak);
+    }
+
     @Transactional
     public void markeerMislukt(Taak taak) {
         eis(taakRepository.markeerMislukt(taak), taak);
