@@ -153,7 +153,7 @@ public class ReceiptVerwerker {
         // Een overgang weg van bezorgd rondt de open vaststeltaak af; een nieuwe bezorging plant een nieuwe.
         taakRepository.verwijderOpen(TaakSoort.BEZORGING_VASTSTELLEN, notificatie.getId());
 
-        if (overgang.status() == NotificatieStatus.BEZORGD) {
+        if (overgang.naar() == NotificatieStatus.BEZORGD) {
             taakRepository.persist(new Taak(TaakSoort.BEZORGING_VASTSTELLEN, notificatie.getDvId(), notificatie.getId(),
                     vaststellingstermijn.vaststellenOp(tijdstip), null,
                     Map.of(VerzendTaakHandler.PAYLOAD_POGING_ID, poging.getId().toString())));

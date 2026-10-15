@@ -20,6 +20,7 @@ import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
@@ -109,11 +110,11 @@ class HerverzendingTest {
 
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
         Taak herverzending = enigeTaak();
-        assertEquals(TaakSoort.VERZENDEN, herverzending.getSoort(), "de navraag van de eerste poging is afgerond");
+        assertEquals(TaakSoort.VERZENDEN, herverzending.getTaakSoort(), "de navraag van de eerste poging is afgerond");
         assertTrue(!herverzending.getDue().isBefore(voor.plusMinutes(59)), "herverzend-wachttijd van een uur");
 
         maakDue();
-        taakWorker.verwerk(TaakSoort.VERZENDEN);
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         Poging tweede = laatstePoging(id);
         assertEquals(2, tweede.getNummer());
@@ -124,7 +125,7 @@ class HerverzendingTest {
         assertEquals(3, notificatie(id).getVersie());
         verify(sendAMessageApi, times(2)).sendEmail(any());
         Taak navraag = enigeTaak();
-        assertEquals(TaakSoort.RECONCILIEREN, navraag.getSoort());
+        assertEquals(TaakSoort.RECONCILIEREN, navraag.getTaakSoort());
         assertEquals(tweede.getId().toString(), navraag.getPayload().get(VerzendTaakHandler.PAYLOAD_POGING_ID));
     }
 
@@ -143,7 +144,7 @@ class HerverzendingTest {
         });
         maakDue();
 
-        taakWorker.verwerk(TaakSoort.VERZENDEN);
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         assertEquals(NotificatieStatus.BEZORGD, notificatie(id).getStatus());
     }
@@ -162,7 +163,7 @@ class HerverzendingTest {
 
         assertEquals(PogingStatus.TIJDELIJK_MISLUKT, poging(poging.getId()).getStatus());
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
-        assertEquals(TaakSoort.VERZENDEN, enigeTaak().getSoort());
+        assertEquals(TaakSoort.VERZENDEN, enigeTaak().getTaakSoort());
     }
 
     @ParameterizedTest
@@ -186,7 +187,7 @@ class HerverzendingTest {
     @Test
     void meerHerverzendingenInHetBeleid_gevenMeerPogingen() {
         UUID id = aannameService.neemAan(opdracht(BerichtType.STUURGROEP_AGENDA));
-        taakWorker.verwerk(TaakSoort.VERZENDEN);
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         for (int nummer = 1; nummer <= 2; nummer++) {
             Poging poging = laatstePoging(id);
@@ -195,7 +196,7 @@ class HerverzendingTest {
                     OffsetDateTime.now(ZoneOffset.UTC));
             assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
             maakDue();
-            taakWorker.verwerk(TaakSoort.VERZENDEN);
+            TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
         }
 
         Poging derde = laatstePoging(id);
@@ -243,7 +244,7 @@ class HerverzendingTest {
         verzetGeldigTot(id);
         maakDue();
 
-        taakWorker.verwerk(TaakSoort.VERZENDEN);
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         assertEquals(NotificatieStatus.VERLOPEN, notificatie(id).getStatus());
         assertEquals(1, pogingen(id).size());
@@ -256,7 +257,7 @@ class HerverzendingTest {
         UUID id = aannameService.neemAan(opdracht());
         verzetGeldigTot(id);
 
-        taakWorker.verwerk(TaakSoort.VERZENDEN);
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         assertEquals(NotificatieStatus.VERLOPEN, notificatie(id).getStatus());
         assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.VERLOPEN), overgangen(id));
@@ -271,12 +272,12 @@ class HerverzendingTest {
         when(getMessageDataApi.getMultipleMessagesStatus(any(), any(), any(), any(), any()))
                 .thenReturn(new GetMultipleMessagesResponse().notifications(List.of()));
         UUID id = aannameService.neemAan(opdracht());
-        taakWorker.verwerk(TaakSoort.VERZENDEN);
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
         assertEquals(NotificatieStatus.IN_VERZENDING, notificatie(id).getStatus());
         verzetGeldigTot(id);
         maakDue();
 
-        taakWorker.verwerk(TaakSoort.VERZENDEN);
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         assertEquals(NotificatieStatus.VERLOPEN, notificatie(id).getStatus());
         verify(sendAMessageApi, times(1)).sendEmail(any());
@@ -288,12 +289,12 @@ class HerverzendingTest {
         Poging eerste = laatstePoging(id);
         OffsetDateTime bezorgdOp = OffsetDateTime.now(ZoneOffset.UTC).minusDays(2);
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "delivered", bezorgdOp);
-        assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, enigeTaak().getSoort());
+        assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, enigeTaak().getTaakSoort());
 
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure", bezorgdOp.plusDays(1));
 
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
-        assertEquals(TaakSoort.VERZENDEN, enigeTaak().getSoort(), "de vaststeltaak is vervangen door de herverzending");
+        assertEquals(TaakSoort.VERZENDEN, enigeTaak().getTaakSoort(), "de vaststeltaak is vervangen door de herverzending");
     }
 
     @Test
@@ -310,7 +311,7 @@ class HerverzendingTest {
 
         assertEquals(NotificatieStatus.BEZORGSTATUS_ONBEKEND, notificatie(id).getStatus());
         assertEquals(PogingStatus.TIJDELIJK_MISLUKT, poging(eerste.getId()).getStatus());
-        assertTrue(taken().stream().noneMatch(t -> t.getSoort() == TaakSoort.VERZENDEN));
+        assertTrue(taken().stream().noneMatch(t -> t.getTaakSoort() == TaakSoort.VERZENDEN));
     }
 
     @Test
@@ -337,9 +338,9 @@ class HerverzendingTest {
             taakRepository.persist(new Taak(TaakSoort.CONTROLE, null, null, OffsetDateTime.now(ZoneOffset.UTC), null, null));
         });
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
-        assertTrue(taken().stream().anyMatch(t -> t.getSoort() == TaakSoort.VERZENDEN && id.equals(t.getNotificatieId())));
+        assertTrue(taken().stream().anyMatch(t -> t.getTaakSoort() == TaakSoort.VERZENDEN && id.equals(t.getNotificatieId())));
     }
 
     @Test
@@ -356,7 +357,7 @@ class HerverzendingTest {
     // Een notificatie op verzonden, met een lopende eerste poging en haar navraagtaak.
     private UUID verzonden() {
         UUID id = aannameService.neemAan(opdracht());
-        taakWorker.verwerk(TaakSoort.VERZENDEN);
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
 
         return id;
@@ -369,7 +370,7 @@ class HerverzendingTest {
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure",
                 OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1));
         maakDue();
-        taakWorker.verwerk(TaakSoort.VERZENDEN);
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
         assertEquals(2, laatstePoging(id).getNummer());
 
         return id;
@@ -416,7 +417,7 @@ class HerverzendingTest {
 
     private Taak enigeTaak() {
         List<Taak> taken = taken();
-        assertEquals(1, taken.size(), taken.stream().map(Taak::getSoort).toList().toString());
+        assertEquals(1, taken.size(), taken.stream().map(Taak::getTaakSoort).toList().toString());
 
         return taken.getFirst();
     }
