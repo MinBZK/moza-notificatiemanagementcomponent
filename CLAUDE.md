@@ -314,10 +314,9 @@ de logica die kiest tussen herverzending en contactherstel.
   `OnderhoudTaakHandler` is een taak per systeem (eerste rij uit V16) die zichzelf opnieuw
   plant; elke stap loopt in batches van `nmc.onderhoud.batch` met een eigen transactie, en
   een stap die faalt houdt de andere niet op.
-- **Het eventlog heeft bereikpartities op `transactie_id`.** V17 tot en met V19 maakten van de oude
+- **Het eventlog heeft bereikpartities op `transactie_id`.** V16 maakte van de oude
   default-partitie `event_0` (tot de eerstvolgende transactie-id plus de Flyway-placeholder
-  `event_marge`) en een nieuwe, lege `event_standaard`, in drie transacties zodat de scan van
-  de oude partitie het schrijven niet blokkeert. `Partitiebeheer` maakt `event_<van>` aan
+  `event_marge`) en een nieuwe, lege `event_standaard`. `Partitiebeheer` maakt `event_<van>` aan
   zodra de lopende partitie voor 80% gevuld is, en begint een nieuw bereik altijd boven de al
   uitgedeelde transactie-ids: PostgreSQL weigert een bereik waarvoor al rijen in de
   default-partitie staan. Liep het onderhoud achter, dan begint het nieuwe bereik

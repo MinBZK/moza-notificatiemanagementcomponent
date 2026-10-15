@@ -22,8 +22,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * Draait V16 tot en met V19 over een database met notificaties met en zonder eindstatus, events in de
- * oude default-partitie en een webhookpositie. Eigen embedded PostgreSQL, omdat de database op V15
+ * Draait V16 over een database met notificaties met en zonder eindstatus, events in de oude
+ * default-partitie en een webhookpositie. Eigen embedded PostgreSQL, omdat de database op V15
  * stilgezet moet worden.
  */
 class V16MigratieTest {
@@ -69,7 +69,7 @@ class V16MigratieTest {
             verbinding.commit();
         }
 
-        migreerTot(jdbcUrl, "19");
+        migreerTot(jdbcUrl, "16");
 
         try (Connection verbinding = DriverManager.getConnection(jdbcUrl, DB_USER, DB_PASSWORD)) {
             assertEquals(LAATSTE_OVERGANG.toInstant(), eindstatusOp(verbinding, eindstatus).toInstant());
@@ -89,8 +89,9 @@ class V16MigratieTest {
             assertEquals(List.of("true"), tekst(verbinding, "SELECT (substring(pg_get_expr(c.relpartbound, c.oid) "
                     + "FROM 'TO \\(''(\\d+)''\\)')::bigint > pg_snapshot_xmax(pg_current_snapshot())::text::bigint + 900)::text "
                     + "FROM pg_class c WHERE c.relname = 'event_0'"), "event_0 loopt tot boven de uitgedeelde transactie-ids plus de marge");
-            assertEquals(List.of(), tekst(verbinding, "SELECT conname::text FROM pg_constraint WHERE conname = 'event_0_bereik'"),
-                    "de hulpconstraint is na de ATTACH weg");
+            assertEquals(List.of("CREATE INDEX taak_notificatie_idx ON ONLY public.taak USING btree (notificatie_id)"),
+                    tekst(verbinding, "SELECT indexdef FROM pg_indexes WHERE tablename = 'taak' AND indexname = 'taak_notificatie_idx'"),
+                    "de cascade bij het verwijderen van een notificatie zoekt taken op notificatie_id alleen");
             assertEquals(List.of("2026-09-02 10:00:00+00"), tekst(verbinding,
                     "SELECT to_char(geleverd_op AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') || '+00' FROM webhookpositie"));
         }

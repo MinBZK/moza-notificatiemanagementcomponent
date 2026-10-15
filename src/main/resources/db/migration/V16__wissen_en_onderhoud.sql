@@ -1,6 +1,6 @@
 -- V16: wistaak en onderhoudstaak uit ADR 0024 vervangen de retentiejob. Wistermijn en bewaartermijn
 -- lopen vanaf de eindstatus (eindstatus_op) in plaats van vanaf de laatste overgang, en het
--- eventlog krijgt bereikpartities die de onderhoudstaak aanmaakt en opruimt (V17 tot en met V19).
+-- eventlog krijgt bereikpartities die de onderhoudstaak aanmaakt en opruimt.
 
 -- Wanneer de notificatie haar eindstatus kreeg; leeg zolang ze er geen heeft. Voor bestaande rijen met
 -- een eindstatus is de laatste overgang die naar de eindstatus.
@@ -43,6 +43,26 @@ UPDATE webhookpositie SET geleverd_op = bijgewerkt_op WHERE transactie_id IS NOT
 
 -- De onderhoudstaak per systeem; daarna plant ze zichzelf steeds opnieuw.
 INSERT INTO taak (soort, due, status) VALUES ('ONDERHOUD', now(), 'OPEN');
+
+-- De default-partitie van het eventlog wordt de eerste bereikpartitie, event_0, tot boven de uitgedeelde
+-- transactie-ids plus de Flyway-placeholder event_marge; een nieuwe, lege default-partitie vangt op wat
+-- buiten de bereiken valt. De ATTACH leest event_0 om het bereik te controleren; dat kan in één
+-- transactie, omdat deze migratie vóór de eerste productiedata draait.
+DO $$
+DECLARE
+    tot text := (pg_snapshot_xmax(pg_current_snapshot())::text::bigint + ${event_marge})::text;
+BEGIN
+    ALTER TABLE event DETACH PARTITION event_standaard;
+    ALTER TABLE event_standaard RENAME TO event_0;
+    EXECUTE format('ALTER TABLE event ATTACH PARTITION event_0 FOR VALUES FROM (%L) TO (%L)', '0', tot);
+    CREATE TABLE event_standaard PARTITION OF event DEFAULT;
+END;
+$$;
+
+-- Het verwijderen van een notificatie verwijdert haar taken via ON DELETE CASCADE. Die controle zoekt
+-- op notificatie_id zonder status of soort en kan de partiële indexen niet gebruiken; zonder deze
+-- index doorzoekt elke verwijderde notificatie alle partities van taak.
+CREATE INDEX taak_notificatie_idx ON taak (notificatie_id);
 
 -- Elke lopende schrijftransactie houdt het watermerk van de feed vast; deze timeouts begrenzen hoelang.
 -- Ze gelden voor nieuwe sessies van deze rol op deze database, dus ook voor Flyway: een migratie die
