@@ -262,7 +262,9 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   pagina. Zonder cursor vanaf het oudste beschikbare event. `400` bij een ongeldige
   cursor, `410` bij een vervallen cursor (begin dan zonder cursor), `429` bij de
   aanroeplimiet. Verwerk per `subject` op `sequence`: de feed garandeert geen
-  volgorde binnen één notificatie.
+  volgorde binnen één notificatie. Het onderhoud spaart alleen oude events waar een
+  bevestiging naar wijst; een cursor die nog niet bevestigd is kan daardoor vervallen en
+  geeft bij de volgende aanroep `410`.
 - **`PUT /notificaties/wijzigingen/bevestiging`**: legt de cursor vast tot waar de
   Dienstverlener heeft verwerkt; een oudere cursor verandert niets. `204`, `400` of `410`.
 - **Webhook** (in het contract als callback bij de feed): heeft de Dienstverlener een

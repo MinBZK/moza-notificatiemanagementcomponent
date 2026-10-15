@@ -96,6 +96,24 @@ class ControleTaakHandlerTest {
         assertEquals(0, controle.getPogingen());
     }
 
+    // Geen taak kan haar nog verder brengen, dus ze krijgt een eindstatus; daarmee volgen de wistaak en
+    // het opruimen.
+    @Test
+    void controle_verzondenZonderLopendeOfHerverzendbarePoging_eindigtInTechnischMislukt() {
+        UUID id = notificatie(NotificatieStatus.VERZONDEN, UUID.randomUUID());
+        QuarkusTransaction.requiringNew().run(() -> pogingRepository.findLaatsteVan(id).orElseThrow()
+                .verwerkReceipt(PogingStatus.PERMANENT_MISLUKT, OffsetDateTime.now(ZoneOffset.UTC)));
+
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
+
+        Notificatie notificatie = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findById(id));
+        assertEquals(NotificatieStatus.TECHNISCH_MISLUKT, notificatie.getStatus());
+        assertEquals(Reden.TECHNISCH, notificatie.getReden());
+        assertFalse(perNotificatie().containsKey(id), "geen andere taak dan de wistaak");
+        assertEquals(1, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(
+                Taak_.TAAK_SOORT + " = ?1 and " + Taak_.NOTIFICATIE_ID + " = ?2", TaakSoort.WISSEN, id)));
+    }
+
     // Opnieuw gepland houdt de vaststeltaak de termijn vanaf de bezorging aan.
     @Test
     void controle_bezorgdMetReceipt_plantDeVaststeltaakNaDeTermijn() {

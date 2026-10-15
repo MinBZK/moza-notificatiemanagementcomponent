@@ -174,7 +174,9 @@ Geïmplementeerd:
   dat later committet dan een event met een hogere transactie-id. De cursor is
   base64url van `epoch:transactieId:eventId`; een ander epoch (`nmc.feed.cluster-epoch`) of een
   positie onder het oudste event geeft 410. `PUT .../wijzigingen/bevestiging` schrijft
-  `bevestiging`, alleen vooruit. De aanroeplimiet (`Aanroeplimiet`) telt per pod.
+  `bevestiging`, alleen vooruit. Het opruimen van het eventlog spaart alleen partities waar
+  een bevestiging of leverpositie in wijst; een nog niet bevestigde cursor kan dus vervallen
+  en krijgt bij de volgende aanroep 410. Dat is bewust niet afgedekt. De aanroeplimiet (`Aanroeplimiet`) telt per pod.
 - **Wissen en onderhoud.** Elke overgang naar een eindstatus plant een
   `WISSEN`-taak op `eindstatus_op` plus `nmc.wissen.termijn`; `WisTaakHandler` wist dan de
   gewrapte sleutel. `OnderhoudTaakHandler` maakt eventpartities aan en ruimt ze op,

@@ -119,7 +119,8 @@ public class Partitiebeheer {
     }
 
     // Onder de vergrendeling opnieuw getoetst, zodat een bevestiging die tussen de eerste toets en de
-    // vergrendeling is gecommit meetelt.
+    // vergrendeling is gecommit meetelt. Een cursor die pas daarna wordt bevestigd, kan in de verwijderde
+    // partitie wijzen en krijgt bij de volgende aanroep 410; dat is de gedocumenteerde herstart.
     private boolean verwijderVergrendeld(EventPartitie partitie, OffsetDateTime nu) {
         return QuarkusTransaction.requiringNew().call(() -> {
             repository.zetLockTimeout(lockTimeout);
