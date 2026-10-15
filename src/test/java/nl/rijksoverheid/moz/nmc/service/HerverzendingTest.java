@@ -97,7 +97,7 @@ class HerverzendingTest {
             notificatieRepository.deleteAll();
         });
         when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
-        when(sendAMessageApi.sendEmail(any())).thenAnswer(a -> new SendEmailResponse().id(UUID.randomUUID().toString()));
+        when(sendAMessageApi.sendEmail(any())).thenAnswer(_ -> new SendEmailResponse().id(UUID.randomUUID().toString()));
     }
 
     @ParameterizedTest
