@@ -48,7 +48,9 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -151,11 +153,11 @@ class HerverzendingTest {
         Poging eerste = laatstePoging(id);
         OffsetDateTime fout = OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(2);
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure", fout);
-        when(sendAMessageApi.sendEmail(any())).thenAnswer(a -> {
+        doAnswer(a -> {
             receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "delivered", fout.plusMinutes(1));
 
             throw new WebApplicationException(Response.status(400).entity("{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}]}").build());
-        });
+        }).when(sendAMessageApi).sendEmail(any());
         maakDue();
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -283,7 +285,7 @@ class HerverzendingTest {
     // niet bij NotifyNL, dan verloopt de notificatie.
     @Test
     void uitstelVoorbijGeldigTot_verlooptAlsDePogingNietBijNotifyNLLigt() {
-        when(sendAMessageApi.sendEmail(any())).thenThrow(new WebApplicationException(Response.status(503).build()));
+        doThrow(new WebApplicationException(Response.status(503).build())).when(sendAMessageApi).sendEmail(any());
         when(getMessageDataApi.getMultipleMessagesStatus(any(), any(), any(), any(), any()))
                 .thenReturn(new GetMultipleMessagesResponse().notifications(List.of()));
         UUID id = aannameService.neemAan(opdracht());
