@@ -51,13 +51,31 @@ class VerzendbudgetTest {
         assertEquals(10, tokensInDatabase());
     }
 
-    // Verzenden mag de reservering voor de navraag niet aanspreken; de navraag wel.
+    // Verzenden mag de reservering voor de navraag niet aanspreken.
     @Test
     void neem_verzenden_laatDeNavraagreserveringStaan() {
         assertEquals(15, neem(BudgetDoel.VERZENDEN, 100));
         assertEquals(0, neem(BudgetDoel.VERZENDEN, 1));
         assertEquals(5, neem(BudgetDoel.NAVRAAG, 100));
         assertEquals(0, neem(BudgetDoel.NAVRAAG, 1));
+    }
+
+    // De navraag neemt alleen haar vaste aandeel, ook als het verzenden niets gebruikt.
+    @Test
+    void neem_navraag_blijftBinnenHaarAandeel() {
+        assertEquals(5, neem(BudgetDoel.NAVRAAG, 100));
+        assertEquals(0, neem(BudgetDoel.NAVRAAG, 1));
+        assertEquals(15, neem(BudgetDoel.VERZENDEN, 100));
+    }
+
+    @Test
+    void geefTerug_navraag_komtTerugInHetAandeelVanDeNavraag() {
+        Verzendbudget.Genomen genomen = QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.NAVRAAG, 5));
+
+        QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(genomen, 3));
+
+        assertEquals(15, neem(BudgetDoel.VERZENDEN, 100));
+        assertEquals(3, neem(BudgetDoel.NAVRAAG, 100));
     }
 
     @Test
@@ -104,7 +122,7 @@ class VerzendbudgetTest {
     @Test
     void geefTerug_nul_doetNiets() {
         QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(
-                new Verzendbudget.Genomen(0, java.time.OffsetDateTime.ofInstant(TIJDVAK_A, ZoneOffset.UTC)), 0));
+                new Verzendbudget.Genomen(0, java.time.OffsetDateTime.ofInstant(TIJDVAK_A, ZoneOffset.UTC), BudgetDoel.VERZENDEN), 0));
 
         assertEquals(0, QuarkusTransaction.requiringNew().call(() -> TaakFixtures.telBudgetrijen(entityManager)));
     }
@@ -114,6 +132,7 @@ class VerzendbudgetTest {
         assertThrows(IllegalStateException.class, () -> new Verzendbudget(verzendbudgetRepository, clock, "x", 0, 0));
         assertThrows(IllegalStateException.class, () -> new Verzendbudget(verzendbudgetRepository, clock, "x", 10, 10));
         assertThrows(IllegalStateException.class, () -> new Verzendbudget(verzendbudgetRepository, clock, "x", 10, -1));
+        assertThrows(IllegalStateException.class, () -> new Verzendbudget(verzendbudgetRepository, clock, "x", 10, 0));
     }
 
     private int neem(BudgetDoel doel, int gevraagd) {

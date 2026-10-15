@@ -15,7 +15,8 @@ import java.time.temporal.ChronoUnit;
 
 /**
  * Tokens per Notify-service per tijdvak van een minuut, als rij in {@code verzendbudget}. De eerste
- * claim in een tijdvak maakt de rij aan met het volledige budget; elke claim neemt er tokens af. Er
+ * claim in een tijdvak maakt de rij aan met het volledige budget; elke claim neemt er tokens af. Een
+ * vast aandeel is voor de navraag: verzenden laat het staan en de navraag neemt niet meer dan dat. Er
  * is één Notify-service; de sleutel blijft de service, zodat een tweede later een tweede rij is.
  * <p>
  * Loopt in de transactie van de claim: de rij van het tijdvak blijft tot de commit vergrendeld, zodat
@@ -40,8 +41,8 @@ public class Verzendbudget {
             throw new IllegalStateException("nmc.verzendbudget.tokens-per-minuut moet 1 of hoger zijn, is " + tokensPerMinuut);
         }
 
-        if (navraagReservering < 0 || navraagReservering >= tokensPerMinuut) {
-            throw new IllegalStateException("nmc.verzendbudget.navraag-reservering moet tussen 0 en "
+        if (navraagReservering < 1 || navraagReservering >= tokensPerMinuut) {
+            throw new IllegalStateException("nmc.verzendbudget.navraag-reservering moet tussen 1 en "
                     + tokensPerMinuut + " liggen, is " + navraagReservering);
         }
 
@@ -62,21 +63,20 @@ public class Verzendbudget {
         OffsetDateTime tijdvak = tijdvak();
 
         if (gevraagd <= 0) {
-            return new Genomen(0, tijdvak);
+            return new Genomen(0, tijdvak, doel);
         }
 
-        VerzendbudgetTijdvak budget = verzendbudgetRepository.vergrendel(notifyService, tijdvak, tokensPerMinuut);
-        int beschikbaar = budget.getTokens();
-        int toegestaan = doel == BudgetDoel.NAVRAAG ? beschikbaar : Math.max(0, beschikbaar - navraagReservering);
-        int genomen = Math.min(gevraagd, toegestaan);
-        budget.neem(genomen);
+        VerzendbudgetTijdvak budget = verzendbudgetRepository.vergrendel(notifyService, tijdvak, tokensPerMinuut,
+                navraagReservering);
+        int genomen = Math.min(gevraagd, budget.beschikbaar(doel));
+        budget.neem(doel, genomen);
 
-        return new Genomen(genomen, tijdvak);
+        return new Genomen(genomen, tijdvak, doel);
     }
 
     /**
      * Geeft tokens terug die een claim wel nam maar niet gebruikte, binnen dezelfde transactie en naar
-     * het tijdvak waaruit ze kwamen. Is dat tijdvak voorbij, dan vervallen ze met het tijdvak.
+     * het tijdvak en het aandeel waaruit ze kwamen. Is dat tijdvak voorbij, dan vervallen ze met het tijdvak.
      */
     public void geefTerug(Genomen genomen, int aantal) {
         int terug = Math.min(aantal, genomen.aantal());
@@ -85,12 +85,12 @@ public class Verzendbudget {
             return;
         }
 
-        verzendbudgetRepository.vergrendel(notifyService, genomen.tijdvak(), tokensPerMinuut)
-                .geefTerug(terug, tokensPerMinuut);
+        verzendbudgetRepository.vergrendel(notifyService, genomen.tijdvak(), tokensPerMinuut, navraagReservering)
+                .geefTerug(genomen.doel(), terug, tokensPerMinuut, navraagReservering);
     }
 
-    /** Het aantal tokens dat een claim nam, en het tijdvak waaruit. */
-    public record Genomen(int aantal, OffsetDateTime tijdvak) {
+    /** Het aantal tokens dat een claim nam, uit welk tijdvak en voor welk doel. */
+    public record Genomen(int aantal, OffsetDateTime tijdvak, BudgetDoel doel) {
     }
 
     private OffsetDateTime tijdvak() {

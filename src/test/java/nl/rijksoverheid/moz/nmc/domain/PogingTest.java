@@ -11,6 +11,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PogingTest {
 
+    private static final OffsetDateTime T0 = OffsetDateTime.parse("2026-09-01T10:00:00Z");
+
     @Test
     void markeerVerzonden_alVerzonden_weigertEnLaatDeEersteNotifyIdStaan() {
         Poging poging = new Poging(UUID.randomUUID(), 1);
@@ -21,5 +23,27 @@ class PogingTest {
                 () -> poging.markeerVerzonden(UUID.randomUUID(), OffsetDateTime.now(ZoneOffset.UTC)));
         assertEquals(eerste, poging.getNotifyId());
         assertEquals(PogingStatus.VERZONDEN, poging.getStatus());
+    }
+
+    @Test
+    void verwerkReceipt_tweedeBezorging_houdtHetEersteBezorgtijdstip() {
+        Poging poging = new Poging(UUID.randomUUID(), 1);
+
+        poging.verwerkReceipt(PogingStatus.BEZORGD, T0);
+        poging.verwerkReceipt(PogingStatus.BEZORGD, T0.plusHours(1));
+
+        assertEquals(T0, poging.getBezorgdOp());
+    }
+
+    // De vaststellingstermijn loopt vanaf de bezorging die de notificatie opnieuw bezorgd maakte.
+    @Test
+    void verwerkReceipt_bezorgingNaEenFout_begintEenNieuweTermijn() {
+        Poging poging = new Poging(UUID.randomUUID(), 1);
+
+        poging.verwerkReceipt(PogingStatus.BEZORGD, T0);
+        poging.verwerkReceipt(PogingStatus.TIJDELIJK_MISLUKT, T0.plusDays(1));
+        poging.verwerkReceipt(PogingStatus.BEZORGD, T0.plusDays(2));
+
+        assertEquals(T0.plusDays(2), poging.getBezorgdOp());
     }
 }
