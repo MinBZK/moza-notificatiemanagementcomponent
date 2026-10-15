@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -95,8 +96,8 @@ class NotificatieOvergangTriggerTest {
         UUID id = UUID.randomUUID();
 
         Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
-            sql("INSERT INTO notificatie (id, versie, status, laatste_status_update) "
-                    + "VALUES (?1, 0, 'VERZONDEN', CURRENT_TIMESTAMP)", id);
+            sql("INSERT INTO notificatie (id, dv_id, versie, status, laatste_status_update) "
+                    + "VALUES (?1, '00000000-0000-4000-8000-000000000001', 0, 'VERZONDEN', CURRENT_TIMESTAMP)", id);
             schrijfEvent(id, 0, null, NotificatieStatus.VERZONDEN);
         }));
 
@@ -108,15 +109,15 @@ class NotificatieOvergangTriggerTest {
         UUID id = UUID.randomUUID();
 
         Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() ->
-                sql("INSERT INTO notificatie (id, versie, status, laatste_status_update) "
-                        + "VALUES (?1, 0, 'AANGENOMEN', CURRENT_TIMESTAMP)", id)));
+                sql("INSERT INTO notificatie (id, dv_id, versie, status, laatste_status_update) "
+                        + "VALUES (?1, '00000000-0000-4000-8000-000000000001', 0, 'AANGENOMEN', CURRENT_TIMESTAMP)", id)));
 
         assertTrue(bevat(fout, "heeft geen event"), fout.toString());
     }
 
     private UUID aangenomenNotificatie() {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(null);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, null);
             overgangsfunctie.neemAan(notificatie);
 
             return notificatie.getId();

@@ -29,6 +29,10 @@ public class Event {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // De dienstverlener van de notificatie; de feed leest per dienstverlener.
+    @Column(name = "dv_id", nullable = false)
+    private UUID dvId;
+
     @Column(name = "notificatie_id", nullable = false)
     private UUID notificatieId;
 
@@ -56,7 +60,8 @@ public class Event {
         // Voor JPA
     }
 
-    public Event(UUID notificatieId, long volgnummer, NotificatieStatus van, NotificatieStatus naar, Reden reden) {
+    public Event(UUID dvId, UUID notificatieId, long volgnummer, NotificatieStatus van, NotificatieStatus naar, Reden reden) {
+        this.dvId = Objects.requireNonNull(dvId, "dvId is verplicht");
         this.notificatieId = Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
         this.volgnummer = volgnummer;
         this.van = van;
@@ -67,6 +72,10 @@ public class Event {
 
     public Long getId() {
         return id;
+    }
+
+    public UUID getDvId() {
+        return dvId;
     }
 
     public UUID getNotificatieId() {

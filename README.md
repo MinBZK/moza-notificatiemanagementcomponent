@@ -153,7 +153,8 @@ Geïmplementeerde componenten zijn vetgedrukt; de rest is toekomstig ontwerp.
 | **Profielservice-adapter** | Client | Haalt contactvoorkeur op bij de Profielservice en kan een e-mailadres invalideren. |
 | **Verzendadapter** | Client (bearer-JWT) | Verstuurt berichten via NotifyNL (`template_id` + `personalisation`). |
 | **Consument-callback-adapter** | Webhook-client (CloudEvents NL GOV) | Stuurt de afleverstatus asynchroon terug naar de aanroeper via de opgegeven `callbackUrl`. |
-| **notificatiedatabase** | PostgreSQL | Slaat notificaties met hun status, de verzendpogingen en het eventlog op; een retentiejob verwijdert notificaties `notificatie.retentie.bewaartermijn` na de laatste overgang. |
+| **Verzendverwerker** | Worker (`TaakWorker`, `TaakClaimer`) | Claimt taken uit de takentabel met `SKIP LOCKED`, verdeeld over dienstverleners en binnen het verzendbudget, en geeft ze aan de handler per soort. Er zijn nog geen handlers. |
+| **notificatiedatabase** | PostgreSQL | Slaat notificaties met hun status, de verzendpogingen, het eventlog, de takentabel, het verzendbudget en het dienstverlenerregister op; een retentiejob verwijdert notificaties `notificatie.retentie.bewaartermijn` na de laatste overgang. |
 | **Decentrale-regie-API** | REST (controller) | Inbound endpoint voor het decentraal profiel: intake op het meegegeven e-mailadres, zonder Profielservice-lookup. |
 | Adres-adapter | Client | Haalt een postadres op bij KvK Handelsregister of BRP als fallback bij contactherstel. |
 | Contactherstel-coordinator | Component | Coördineert de contactherselstroom bij onbereikbaarheid; initieert een nieuwe verzendpoging via een ander kanaal en meldt dit aan de Contactherstel-dienst. |
@@ -182,6 +183,18 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
   notificatie na de overgang. Elke rij draagt de transactie-id, zodat een latere
   feed het log op commitvolgorde kan lezen; het log is daarop gepartitioneerd,
   zodat het per partitie kan worden opgeruimd.
+- **`dienstverlener`** is het register uit de onboarding; nu één rij uit de
+  migratie, waarvan `dv_id` op elke notificatie en elk event staat.
+- **`taak`** draagt de bijwerkingen (verzenden, receipts verwerken, navraag,
+  vaststellen, terugkoppelen, ongeldig melden, wissen, controle, onderhoud) met
+  `due` als timer, een lease, een claim-epoch en een pogingenteller; per soort
+  gepartitioneerd. Een worker claimt met `FOR UPDATE SKIP LOCKED`; elke wijziging
+  daarna toetst het claim-epoch, zodat een worker die zijn lease verloor niets meer
+  kan afronden. Na het maximum aantal mislukkingen staat een taak op `MISLUKT` en
+  telt hij in de metriek `nmc_taken_mislukt`.
+- **`verzendbudget`** is een rij per Notify-service per minuut met de resterende
+  tokens; het verzenden en de navraag claimen ertegen, met een vast deel
+  gereserveerd voor de navraag.
 
 `Overgangsfunctie` is de enige schrijver van de status. Hij vergrendelt de
 notificatierij (`SELECT ... FOR UPDATE`), toetst de overgang aan
@@ -368,8 +381,11 @@ Bovenstaande draait de app in **dev-mode** (`%dev`-profiel: Postgres uit
 
 De NMC implementeert de centraal- en decentraal-profiel happy-flows inclusief de
 asynchrone bezorgstatus en consument-callback, zoals beschreven onder
-"Geïmplementeerde functionaliteit". Nog **niet** aanwezig:
+"Geïmplementeerde functionaliteit". De takentabel en de worker-lus uit ADR 0024
+staan, maar er zijn nog geen taakhandlers: de aanname plant nog geen verzendtaak en
+verstuurt synchroon. Nog **niet** aanwezig:
 
+- **Asynchrone aanname (202)** met verzendtaak, navraag en vaststelling
 - **Contactherstel** en **herverzending** (voor beide profielen)
 - Een koppeling met de **Templating Service** (het `template_id` wordt voorlopig
   bepaald door een lokale `BerichtType`-enum, niet via een externe Templating Service)
