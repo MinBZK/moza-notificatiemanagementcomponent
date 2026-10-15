@@ -4,7 +4,6 @@ import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.LockModeType;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
-import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
 import org.hibernate.query.NativeQuery;
 
 import java.time.OffsetDateTime;
@@ -38,10 +37,6 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
     /** Verhoogt de versie van een vergrendelde notificatie waarvan geen veld verandert. */
     public void verhoogVersie(Notificatie notificatie) {
         getEntityManager().lock(notificatie, LockModeType.PESSIMISTIC_FORCE_INCREMENT);
-    }
-
-    public Optional<Notificatie> findByExternalReference(UUID externalReference) {
-        return find(Notificatie_.EXTERNAL_REFERENCE, externalReference).singleResultOptional();
     }
 
     /**
@@ -84,11 +79,8 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
     }
 
     /**
-     * Verwijdert de opgegeven notificaties en hun statusgeschiedenis.
-     * <p>
-     * JPQL en geen native SQL, zodat Hibernate de {@code notificatie_status}-rijen zelf opruimt; de
-     * {@code ON DELETE CASCADE} op de foreignkey blijft het vangnet voor verwijderingen die Hibernate
-     * omzeilen.
+     * Verwijdert de opgegeven notificaties. De pogingen gaan mee via {@code ON DELETE CASCADE}; de
+     * events blijven staan, het eventlog wordt per partitie opgeruimd.
      */
     public int verwijderOpId(List<UUID> ids) {
         return getEntityManager()

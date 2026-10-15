@@ -125,9 +125,10 @@ Geïmplementeerd:
   stuurt `ConsumentCallbackAdapter` bij elke nieuw vastgelegde afleverstatus een CloudEvent naar
   die URL: maximaal drie pogingen met oplopende wachttijd. De `Notificatie` en
   zijn statusgeschiedenis blijven daarna staan.
-- **Statusmodel naast het oude model.** `Overgangsfunctie`, `poging` en het eventlog
-  (`event`) staan klaar, maar nog niets roept ze aan; de afleverstatus loopt nog via
-  `notificatie_status`.
+- **Statusmodel uit ADR 0024.** `notificatie` draagt de status en een versie,
+  `poging` de uitkomst per verzending, `event` het eventlog met één rij per
+  overgang. `Overgangsfunctie` is de enige schrijver van de status; een deferred
+  databasetrigger weigert een nieuwe versie zonder event.
 - **Adresselectie in de Profielservice-respons** (`ProfielServiceAdapter`): eerst
   een e-mailadres met exact de scope Dienstverlener + dienst, dan een met alleen
   de Dienstverlener als scope, dan het default-adres, dan een adres zonder scopes.

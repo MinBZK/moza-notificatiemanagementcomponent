@@ -68,7 +68,7 @@ class OvergangsfunctieTest {
             Notificatie herladen = notificatieRepository.findById(id);
             List<Event> events = eventRepository.findByNotificatie(id);
 
-            assertEquals(NotificatieStatus.AANGENOMEN, herladen.getNotificatieStatus());
+            assertEquals(NotificatieStatus.AANGENOMEN, herladen.getStatus());
             assertEquals(0, herladen.getVersie());
             assertEquals(1, events.size());
             assertEquals(0, events.getFirst().getVolgnummer());
@@ -96,17 +96,20 @@ class OvergangsfunctieTest {
         assertTrue(uitkomst.isUitgevoerd());
         assertEquals(van, uitkomst.van());
 
+        // Bij een herverzending blijft de reden van de rij staan; anders komt de meegegeven reden erop.
+        Reden verwachteReden = van == naar ? null : Reden.ONBEREIKBAAR;
+
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie herladen = notificatieRepository.findById(id);
             Event laatste = eventRepository.findByNotificatie(id).getLast();
 
-            assertEquals(naar, herladen.getNotificatieStatus());
-            assertEquals(van == naar ? null : Reden.ONBEREIKBAAR, herladen.getReden());
+            assertEquals(naar, herladen.getStatus());
+            assertEquals(verwachteReden, herladen.getReden());
             assertEquals(1, herladen.getVersie());
             assertEquals(1, laatste.getVolgnummer());
             assertEquals(van, laatste.getVan());
             assertEquals(naar, laatste.getNaar());
-            assertEquals(Reden.ONBEREIKBAAR, laatste.getReden());
+            assertEquals(verwachteReden, laatste.getReden());
         });
     }
 
@@ -123,7 +126,7 @@ class OvergangsfunctieTest {
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie herladen = notificatieRepository.findById(id);
 
-            assertEquals(van, herladen.getNotificatieStatus());
+            assertEquals(van, herladen.getStatus());
             assertEquals(0, herladen.getVersie());
             assertEquals(1, eventRepository.findByNotificatie(id).size());
         });
@@ -134,15 +137,16 @@ class OvergangsfunctieTest {
     void voerUit_herverzending_houdtStatusEnReden() {
         UUID id = aangenomenNotificatieMetStatus(NotificatieStatus.VERZONDEN);
 
-        QuarkusTransaction.requiringNew().run(() ->
-                overgangsfunctie.voerUit(id, NotificatieStatus.VERZONDEN, Reden.ONBEREIKBAAR));
+        // Een meegegeven reden mag bij een herverzending niet op het event belanden als hij niet op de rij staat.
+        QuarkusTransaction.requiringNew().run(() -> overgangsfunctie.voerUit(id, NotificatieStatus.VERZONDEN, Reden.TECHNISCH));
 
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie herladen = notificatieRepository.findById(id);
 
-            assertEquals(NotificatieStatus.VERZONDEN, herladen.getNotificatieStatus());
+            assertEquals(NotificatieStatus.VERZONDEN, herladen.getStatus());
             assertNull(herladen.getReden());
             assertEquals(1, herladen.getVersie());
+            assertNull(eventRepository.findByNotificatie(id).getLast().getReden());
         });
     }
 
@@ -161,22 +165,6 @@ class OvergangsfunctieTest {
             assertEquals(List.of(0L, 1L, 2L), volgnummers);
             assertEquals(2, notificatieRepository.findById(id).getVersie());
         });
-    }
-
-    @Test
-    void voerUit_notificatieZonderStatus_wordtGeweigerd() {
-        UUID id = QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(null);
-            notificatieRepository.persist(notificatie);
-
-            return notificatie.getId();
-        });
-
-        OvergangUitkomst uitkomst = QuarkusTransaction.requiringNew().call(() ->
-                overgangsfunctie.voerUit(id, NotificatieStatus.IN_VERZENDING, null));
-
-        assertFalse(uitkomst.isUitgevoerd());
-        assertNull(uitkomst.van());
     }
 
     @Test
@@ -226,20 +214,24 @@ class OvergangsfunctieTest {
             List<Long> volgnummers = eventRepository.findByNotificatie(id).stream().map(Event::getVolgnummer).toList();
 
             assertEquals(List.of(0L, 1L, 2L), volgnummers);
-            assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatieRepository.findById(id).getNotificatieStatus());
+            assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatieRepository.findById(id).getStatus());
         });
     }
 
     // Neemt een notificatie aan en zet de status daarna rechtstreeks, zodat elke status als
     // vertrekpunt te testen is zonder de hele keten te doorlopen. De versie blijft 0.
     private UUID aangenomenNotificatieMetStatus(NotificatieStatus status) {
-        return QuarkusTransaction.requiringNew().call(() -> {
+        UUID id = QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(null);
             overgangsfunctie.neemAan(notificatie);
-            NotificatieFixtures.zetStatus(notificatieRepository.getEntityManager(), notificatie.getId(), status);
 
             return notificatie.getId();
         });
+
+        QuarkusTransaction.requiringNew().run(() ->
+                NotificatieFixtures.zetStatus(notificatieRepository.getEntityManager(), id, status));
+
+        return id;
     }
 
     static Stream<Arguments> toegestaneOvergangen() {

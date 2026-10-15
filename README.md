@@ -230,7 +230,7 @@ nadat de rij weg is. De regel gebruikt `key=value` zodat er een dashboard op te
 bouwen is:
 
 ```
-Retentiejob: notificatie verlopen zonder eindstatus notificatieId=... notifyNlReferentie=... status=SENDING laatsteStatusUpdate=...
+Retentiejob: notificatie verlopen zonder eindstatus notificatieId=... status=VERZONDEN laatsteStatusUpdate=...
 ```
 
 De detailregels zijn begrensd op 100 per run; het totaal in de afsluitende
