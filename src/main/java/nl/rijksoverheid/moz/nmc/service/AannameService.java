@@ -34,11 +34,12 @@ public class AannameService {
     private final DienstverlenerRepository dienstverlenerRepository;
     private final NotificatieRepository notificatieRepository;
     private final TaakRepository taakRepository;
+    private final Verzendbeleid verzendbeleid;
     private final Optional<Integer> standaardQuotumPerDag;
 
     public AannameService(Overgangsfunctie overgangsfunctie, Sleutelbeheer sleutelbeheer, DvProvider dvProvider,
                           DienstverlenerRepository dienstverlenerRepository, NotificatieRepository notificatieRepository,
-                          TaakRepository taakRepository,
+                          TaakRepository taakRepository, Verzendbeleid verzendbeleid,
                           @ConfigProperty(name = "nmc.aanname.quotum-per-dag") Optional<Integer> standaardQuotumPerDag) {
         if (standaardQuotumPerDag.isPresent() && standaardQuotumPerDag.get() < 1) {
             throw new IllegalStateException("nmc.aanname.quotum-per-dag moet leeg of 1 of hoger zijn");
@@ -50,6 +51,7 @@ public class AannameService {
         this.dienstverlenerRepository = dienstverlenerRepository;
         this.notificatieRepository = notificatieRepository;
         this.taakRepository = taakRepository;
+        this.verzendbeleid = verzendbeleid;
         this.standaardQuotumPerDag = standaardQuotumPerDag;
     }
 
@@ -67,8 +69,10 @@ public class AannameService {
         notificatie.bewaarVersleuteldeGegevens(
                 sleutelbeheer.versleutel(notificatie.getId(), opdracht.ontvanger(), opdracht.berichtgegevens()));
         // Op de notificatie en niet in de taak, zodat ook een later geplande verzendtaak kan versturen.
-        notificatie.bewaarVerzendgegevens(opdracht.templateId(), opdracht.regie().name(), opdracht.dienstverlener(),
-                opdracht.dienst());
+        notificatie.bewaarVerzendgegevens(opdracht.berichtType().getTemplateId(), opdracht.regie().name(),
+                opdracht.dienstverlener(), opdracht.dienst());
+        notificatie.bewaarVerzendbeleid(opdracht.berichtType().name(),
+                notificatie.getAangenomenOp().plus(verzendbeleid.geldigheid(opdracht.berichtType())));
         overgangsfunctie.neemAan(notificatie);
 
         taakRepository.persist(new Taak(TaakSoort.VERZENDEN, dvId, notificatie.getId(),

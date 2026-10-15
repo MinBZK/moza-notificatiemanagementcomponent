@@ -146,6 +146,15 @@ Geïmplementeerd:
   `TaakHandler` van die soort. Handlers: `VerzendTaakHandler`, `ReceiptTaakHandler`,
   `NotifyNLNavraagTaakHandler`, `BezorgingVaststellenTaakHandler`, `ControleTaakHandler` en `TerugkoppelTaakHandler`; de
   overige soorten worden gepland maar nog niet uitgevoerd.
+- **Herverzending en `geldig_tot`.** Een notificatie krijgt `Verzendbeleid.maxHerverzendingen`
+  herverzendingen (standaard één): een `temporary-failure` of `technical-failure` op een
+  poging daarbinnen plant een verzendtaak na `Verzendbeleid.herverzendWachttijd`, en de
+  claim daarvan maakt de volgende poging aan (`verzonden` naar `verzonden`, met event). Op
+  de laatste toegestane poging leidt een fout tot een eindstatus.
+  `geldig_tot` (aanname plus `Verzendbeleid.geldigheid` van het berichttype) begrenst het
+  starten van een poging: daarna eindigt de notificatie in `verlopen`, ook na een uitstel;
+  een poging die al bij NotifyNL ligt loopt door. `ONGELDIG_MELDEN` bestaat als taaksoort
+  maar wordt niet gepland: de Profielservice kent die operatie nog niet.
 - **Navraag en vaststellen.** De verzend-commit plant per poging een navraagtaak volgens
   `NotifyNLNavraagmomenten` (`nmc.navraag.*`); `NotifyNLNavraagTaakHandler` vraagt de status op bij NotifyNL en
   geeft een uitkomst aan `ReceiptVerwerker`. Een 404 of het einde van de bewaartermijn
@@ -255,8 +264,8 @@ de logica die kiest tussen herverzending en contactherstel.
   tijdstip in de receipt (`completed_at`, met `sent_at` en `created_at` als terugval,
   begrensd op de eigen klok); een herhaalde of oudere receipt verandert niets. De
   poging wordt pas na het vergrendelen van de notificatie opnieuw gelezen, zodat een
-  receipt die op de vergrendeling wachtte de uitkomst van de eerste ziet. Tot er
-  herverzending is, leiden `temporary-failure` en `technical-failure` tot een eindstatus.
+  receipt die op de vergrendeling wachtte de uitkomst van de eerste ziet. Een faalreceipt
+  voor een poging die niet meer de laatste is, geeft geen overgang.
   Verder verandert een tussenstatus niets; een onbekende status wordt op ERROR gelogd en
   verandert niets.
 - **Receipttijd en registratietijd zijn gescheiden.** Het tijdstip uit de receipt staat
@@ -496,7 +505,8 @@ Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
 `nmc.dienstverlener.id` (de rij uit V8), `nmc.taak.*` (interval, batch, lease,
 max-pogingen van de worker-lus, en het uitstel na een storing),
 `nmc.navraag.*` (momenten en bewaartermijn van NotifyNL), `nmc.vaststelling.*` (termijn
-en callback-venster),
+en callback-venster), `nmc.beleid.*` (geldigheid, herverzend-wachttijd en
+max-herverzendingen, per berichttype te overschrijven als `nmc.beleid.<berichttype>.<sleutel>`),
 `nmc.controle.*` (interval en maximum per ronde van de controletaak),
 `nmc.aanname.quotum-per-dag` (quotum voor een dienstverlener zonder eigen quotum in
 het register; leeg is onbeperkt),

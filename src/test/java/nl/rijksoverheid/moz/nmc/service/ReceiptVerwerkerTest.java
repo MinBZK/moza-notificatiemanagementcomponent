@@ -61,12 +61,11 @@ class ReceiptVerwerkerTest {
         });
     }
 
+    // Een tijdelijke of technische fout op de eerste poging plant een herverzending; zie HerverzendingTest.
     @ParameterizedTest
     @CsvSource({
             "delivered, BEZORGD, BEZORGD, ",
             "permanent-failure, PERMANENT_MISLUKT, NIET_BEZORGBAAR, ONBEREIKBAAR",
-            "temporary-failure, TIJDELIJK_MISLUKT, NIET_BEZORGBAAR, ONBEREIKBAAR",
-            "technical-failure, TECHNISCH_MISLUKT, TECHNISCH_MISLUKT, TECHNISCH",
             "DELIVERED, BEZORGD, BEZORGD, "
     })
     void verwerk_uitkomst_legtVastOpPogingEnVoertOvergangUit(String receipt, PogingStatus pogingStatus,

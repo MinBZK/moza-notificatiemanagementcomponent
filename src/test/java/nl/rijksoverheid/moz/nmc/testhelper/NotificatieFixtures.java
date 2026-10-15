@@ -6,6 +6,7 @@ import nl.rijksoverheid.moz.nmc.domain.Event_;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
+import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.Poging_;
 
 import javax.sql.DataSource;
@@ -17,6 +18,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -147,6 +149,23 @@ public final class NotificatieFixtures {
                 .setParameter("kekVersie", kekVersie)
                 .setParameter("id", id)
                 .executeUpdate();
+    }
+
+    /** Zet geldig_tot terug, zodat er geen poging meer gestart mag worden. */
+    public static void verzetGeldigTot(EntityManager entityManager, UUID id, OffsetDateTime tijdstip) {
+        entityManager.createQuery("update Notificatie set " + Notificatie_.GELDIG_TOT + " = :tijdstip where "
+                        + Notificatie_.ID + " = :id")
+                .setParameter("tijdstip", tijdstip)
+                .setParameter("id", id)
+                .executeUpdate();
+    }
+
+    /** De pogingen van een notificatie, op nummer. */
+    public static List<Poging> pogingen(EntityManager entityManager, UUID notificatieId) {
+        return entityManager.createQuery("from Poging where " + Poging_.NOTIFICATIE_ID + " = :notificatieId order by "
+                        + Poging_.NUMMER, Poging.class)
+                .setParameter("notificatieId", notificatieId)
+                .getResultList();
     }
 
     public static long telPogingen(EntityManager entityManager, UUID notificatieId) {
