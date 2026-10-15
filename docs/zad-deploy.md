@@ -73,7 +73,7 @@ Benodigde env-vars op die deployment:
 > `application.properties` bevat hiervoor geen placeholders meer — alle prod-config loopt
 > uniform via deze `QUARKUS_*`-env-vars.
 
-> Migratie V17 zet `statement_timeout` (30s), `transaction_timeout` (1min) en
+> Migratie V16 zet `statement_timeout` (30s), `transaction_timeout` (1min) en
 > `idle_in_transaction_session_timeout` (30s) op de databaserol van de datasource, voor
 > deze database. Dat vraagt geen extra rechten: een rol mag zijn eigen defaults zetten.
 > `transaction_timeout` bestaat vanaf PostgreSQL 17. De onderhoudstaak maakt en verwijdert

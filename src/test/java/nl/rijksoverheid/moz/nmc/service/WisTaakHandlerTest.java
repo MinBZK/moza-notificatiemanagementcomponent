@@ -19,6 +19,7 @@ import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -106,8 +107,7 @@ class WisTaakHandlerTest {
         OffsetDateTime eerder = OffsetDateTime.now(ZoneOffset.UTC).minusDays(3);
         QuarkusTransaction.requiringNew().run(() -> {
             NotificatieFixtures.verzetEindstatusOp(entityManager, id, eerder);
-            entityManager.createNativeQuery("UPDATE taak SET due = ?1 WHERE soort = 'WISSEN'")
-                    .setParameter(1, eerder.plusDays(7)).executeUpdate();
+            TaakFixtures.zetDue(entityManager, TaakSoort.WISSEN, eerder.plusDays(7));
         });
 
         overgang(id, NotificatieStatus.NIET_BEZORGBAAR);
@@ -223,10 +223,8 @@ class WisTaakHandlerTest {
     }
 
     private void zetDueInVerleden() {
-        QuarkusTransaction.requiringNew().run(() -> entityManager
-                .createNativeQuery("UPDATE taak SET due = ?1 WHERE soort = 'WISSEN'")
-                .setParameter(1, OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1))
-                .executeUpdate());
+        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetDue(entityManager, TaakSoort.WISSEN,
+                OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1)));
     }
 
     private Notificatie notificatie(UUID id) {

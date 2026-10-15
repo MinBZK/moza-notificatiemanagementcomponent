@@ -23,7 +23,7 @@ import java.util.function.IntSupplier;
  * afleverbewijs en ruimt het eventlog op. Alles in kleine batches met een eigen, korte transactie,
  * omdat elke lopende schrijftransactie het watermerk van de feed vasthoudt.
  * <p>
- * De taak plant zichzelf na elke ronde opnieuw; migratie V17 zet de eerste rij. Een stap die faalt
+ * De taak plant zichzelf na elke ronde opnieuw; migratie V16 zet de eerste rij. Een stap die faalt
  * wordt gelogd en de volgende stappen lopen door, zodat bijvoorbeeld een bezet eventlog het wissen van
  * rijen niet ophoudt.
  */

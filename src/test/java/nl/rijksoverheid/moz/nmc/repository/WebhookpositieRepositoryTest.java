@@ -7,6 +7,7 @@ import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.domain.Webhookpositie;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -30,7 +31,7 @@ class WebhookpositieRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        QuarkusTransaction.requiringNew().run(() -> entityManager.createNativeQuery("DELETE FROM webhookpositie").executeUpdate());
+        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.verwijderWebhookposities(entityManager));
     }
 
     @Test
@@ -63,9 +64,6 @@ class WebhookpositieRepositoryTest {
     }
 
     private OffsetDateTime geleverdOp() {
-        return QuarkusTransaction.requiringNew().call(() -> (OffsetDateTime) entityManager
-                .createNativeQuery("SELECT geleverd_op FROM webhookpositie WHERE dv_id = ?1", OffsetDateTime.class)
-                .setParameter(1, NotificatieFixtures.DV_ID)
-                .getSingleResult());
+        return QuarkusTransaction.requiringNew().call(() -> TaakFixtures.geleverdOp(entityManager, NotificatieFixtures.DV_ID));
     }
 }

@@ -311,10 +311,10 @@ de logica die kiest tussen herverzending en contactherstel.
   wist met native SQL in `NotificatieRepository`, zonder versie en event. De versleutelde
   kolommen en `kek_versie` staan daarom op `updatable = false`: een overgang op een eerder
   geladen entity schrijft een gewiste of geherwrapte sleutel anders terug.
-  `OnderhoudTaakHandler` is een taak per systeem (eerste rij uit V17) die zichzelf opnieuw
+  `OnderhoudTaakHandler` is een taak per systeem (eerste rij uit V16) die zichzelf opnieuw
   plant; elke stap loopt in batches van `nmc.onderhoud.batch` met een eigen transactie, en
   een stap die faalt houdt de andere niet op.
-- **Het eventlog heeft bereikpartities op `transactie_id`.** V18 tot en met V20 maakten van de oude
+- **Het eventlog heeft bereikpartities op `transactie_id`.** V17 tot en met V19 maakten van de oude
   default-partitie `event_0` (tot de eerstvolgende transactie-id plus de Flyway-placeholder
   `event_marge`) en een nieuwe, lege `event_standaard`, in drie transacties zodat de scan van
   de oude partitie het schrijven niet blokkeert. `Partitiebeheer` maakt `event_<van>` aan
@@ -493,15 +493,15 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
   `CONCURRENTLY` kan niet in een transactie, dus zo'n statement krijgt een eigen migratie
   met `-- flyway:executeInTransaction=false`. Faalt de bouw halverwege, dan blijft er een
   `INVALID` index achter die handmatig gedropt moet worden. `V3__notificatie_retentie.sql`
-  doet het bewust zonder: die index is er vóór de eerste productiedata. V17 ook, omdat de
+  doet het bewust zonder: die index is er vóór de eerste productiedata. V16 ook, omdat de
   retentiejob het register tot dan op zeven dagen hield.
-- **De databaserol heeft timeouts** (V17): `statement_timeout` 30s, `transaction_timeout`
+- **De databaserol heeft timeouts** (V16): `statement_timeout` 30s, `transaction_timeout`
   1min en `idle_in_transaction_session_timeout` 30s, per database gezet met `ALTER ROLE`.
   Ze gelden ook voor Flyway. Een migratie die langer kan duren zet ze voor de eigen
   transactie uit met `SET LOCAL statement_timeout = 0` en `SET LOCAL transaction_timeout = 0`.
 - **Een `UPDATE` op `notificatie` in een migratie zet deferred triggercontroles klaar**, en
   zolang die openstaan weigert PostgreSQL DDL op die tabel ("pending trigger events"). Zet
-  na zo'n update `SET CONSTRAINTS notificatie_overgang IMMEDIATE`, zoals V17 doet.
+  na zo'n update `SET CONSTRAINTS notificatie_overgang IMMEDIATE`, zoals V16 doet.
 - **Houd de migratie en de entity gelijk.** In elk profiel staat
   `schema-management.strategy=validate`: wijkt een entity af van het gemigreerde
   schema, dan start de applicatie niet, en de testsuite dus ook niet.

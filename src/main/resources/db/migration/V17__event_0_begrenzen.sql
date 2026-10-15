@@ -1,5 +1,5 @@
 -- Stap 1 van 3: de default-partitie wordt de eerste bereikpartitie, event_0, tot een grens boven de
--- uitgedeelde transactie-ids. De marge vangt de events op die binnenkomen voordat V20 de partitie
+-- uitgedeelde transactie-ids. De marge vangt de events op die binnenkomen voordat V19 de partitie
 -- omzet. NOT VALID, zodat het toevoegen de tabel niet leest en het slot kort duurt.
 DO $$
 BEGIN

@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @QuarkusTest
-class V21MigratieTest {
+class V20MigratieTest {
 
     @Inject
     EntityManager entityManager;

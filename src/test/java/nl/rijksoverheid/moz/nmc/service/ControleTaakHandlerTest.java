@@ -123,8 +123,8 @@ class ControleTaakHandlerTest {
     // niet optellen tot mislukt.
     @Test
     void controle_geslaagdeRonde_zetDePogingenTerug() {
-        QuarkusTransaction.requiringNew().run(() -> taakRepository.getEntityManager()
-                .createNativeQuery("UPDATE taak SET pogingen = 1 WHERE soort = 'CONTROLE'").executeUpdate());
+        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetPogingen(taakRepository.getEntityManager(),
+                TaakSoort.CONTROLE, taakRepository.find(Taak_.TAAK_SOORT, TaakSoort.CONTROLE).singleResult().getId(), 1));
 
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 

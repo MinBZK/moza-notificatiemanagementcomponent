@@ -231,7 +231,7 @@ eindstatus heeft); wissen en verwijderen varen erop.
   niet meer te ontsleutelen en is de rij pseudoniem. Uit back-ups verdwijnt de
   sleutel pas met het verlopen van die back-ups.
 - **Onderhoudstaak.** `OnderhoudTaakHandler` draait elk `nmc.onderhoud.interval` als
-  taak per systeem (de eerste rij komt uit migratie V17) en werkt in batches van
+  taak per systeem (de eerste rij komt uit migratie V16) en werkt in batches van
   `nmc.onderhoud.batch` met elk een eigen transactie:
   - maakt de volgende partitie van `event` aan zodra de lopende voor 80% is gevuld
     (`nmc.onderhoud.partitie-omvang` transactie-ids per partitie, met `nmc.onderhoud.partitie-marge`
@@ -248,7 +248,7 @@ eindstatus heeft); wissen en verwijderen varen erop.
 
 De wettelijke bewaartermijn van het afleverbewijs is nog niet vastgesteld; tot die
 tijd is `nmc.afleverbewijs.bewaartermijn` een configuratiewaarde per omgeving, met
-365 dagen als default. De databaserol heeft sinds V17 een `statement_timeout`,
+365 dagen als default. De databaserol heeft sinds V16 een `statement_timeout`,
 `transaction_timeout` en `idle_in_transaction_session_timeout`, omdat elke lopende
 schrijftransactie het watermerk van de feed vasthoudt.
 

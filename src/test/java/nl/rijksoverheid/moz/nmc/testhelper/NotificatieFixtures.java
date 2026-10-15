@@ -86,6 +86,66 @@ public final class NotificatieFixtures {
                 .executeUpdate();
     }
 
+    /** De transactie-id waaronder het event van deze notificatie is geschreven. */
+    public static long transactieIdVan(EntityManager entityManager, UUID notificatieId) {
+        return entityManager.createQuery("select " + Event_.TRANSACTIE_ID + " from Event where " + Event_.NOTIFICATIE_ID
+                        + " = :notificatieId", Long.class)
+                .setParameter("notificatieId", notificatieId)
+                .getSingleResult();
+    }
+
+    /** Verwijdert de events onder deze transactie-id, in welke partitie ze ook staan. */
+    public static void verwijderEventsOnder(EntityManager entityManager, long transactieId) {
+        entityManager.createQuery("delete from Event where " + Event_.TRANSACTIE_ID + " < :transactieId")
+                .setParameter("transactieId", transactieId)
+                .executeUpdate();
+    }
+
+    public static long telEvents(EntityManager entityManager, UUID notificatieId) {
+        return entityManager.createQuery("select count(*) from Event where " + Event_.NOTIFICATIE_ID + " = :notificatieId",
+                        Long.class)
+                .setParameter("notificatieId", notificatieId)
+                .getSingleResult();
+    }
+
+    /** De partitie waarin het event van deze notificatie staat. */
+    public static String partitieVan(EntityManager entityManager, UUID notificatieId) {
+        // Native: tableoid bestaat alleen in SQL.
+        return (String) entityManager.createNativeQuery("SELECT tableoid::regclass::text FROM event WHERE notificatie_id = ?1")
+                .setParameter(1, notificatieId)
+                .getSingleResult();
+    }
+
+    /** Laat de lopende transactie een transactie-id uitdelen, zodat de reeks er één opschuift. */
+    public static void verbruikTransactieId(EntityManager entityManager) {
+        // Native: een PostgreSQL-functie zonder tabel.
+        entityManager.createNativeQuery("SELECT pg_current_xact_id()::text").getSingleResult();
+    }
+
+    /** De instellingen die de databaserol voor deze database heeft, als {@code naam=waarde}. */
+    @SuppressWarnings("unchecked")
+    public static List<String> rolinstellingen(EntityManager entityManager) {
+        // Native: de systeemcatalogus.
+        return entityManager.createNativeQuery("""
+                        SELECT unnest(s.setconfig)
+                          FROM pg_db_role_setting s
+                          JOIN pg_roles r ON r.oid = s.setrole
+                          JOIN pg_database d ON d.oid = s.setdatabase
+                         WHERE r.rolname = current_user AND d.datname = current_database()
+                        """, String.class)
+                .getResultList();
+    }
+
+    /** De kolommen van {@code notificatie} met deze namen. */
+    @SuppressWarnings("unchecked")
+    public static List<String> notificatiekolommen(EntityManager entityManager, List<String> namen) {
+        // Native: information_schema.
+        return entityManager.createNativeQuery("SELECT column_name::text FROM information_schema.columns "
+                        + "WHERE table_name = 'notificatie' AND column_name IN (:namen)", String.class)
+                .setParameter("namen", namen)
+                .getResultList();
+    }
+
     public static void verwijderNotificatie(EntityManager entityManager, UUID id) {
         entityManager.createQuery("delete from Notificatie where " + Notificatie_.ID + " = :id")
                 .setParameter("id", id)

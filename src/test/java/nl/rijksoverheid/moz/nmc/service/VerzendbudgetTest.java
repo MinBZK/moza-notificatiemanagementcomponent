@@ -78,8 +78,7 @@ class VerzendbudgetTest {
                 .call(() -> verzendbudget.ruimOpVoor(TIJDVAK_B.atOffset(ZoneOffset.UTC)));
 
         assertEquals(1, verwijderd);
-        assertEquals(1, ((Number) QuarkusTransaction.requiringNew().call(() -> entityManager
-                .createNativeQuery("SELECT COUNT(*) FROM verzendbudget").getSingleResult())).intValue());
+        assertEquals(1, QuarkusTransaction.requiringNew().call(() -> TaakFixtures.telBudgetrijen(entityManager)));
     }
 
     @Test
