@@ -3,6 +3,7 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
@@ -10,6 +11,7 @@ import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.GetMessageDataApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.GetMultipleMessagesResponse;
+import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailRequest;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
 import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
@@ -34,9 +36,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -44,6 +48,9 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -88,6 +95,12 @@ class HerverzendingTest {
     @Inject
     TaakRepository taakRepository;
 
+    @Inject
+    VerzendTaakHandler verzendTaakHandler;
+
+    @InjectSpy
+    Verzendbeleid verzendbeleid;
+
     @BeforeEach
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
@@ -97,7 +110,9 @@ class HerverzendingTest {
             notificatieRepository.deleteAll();
         });
         when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
-        when(sendAMessageApi.sendEmail(any())).thenAnswer(a -> new SendEmailResponse().id(UUID.randomUUID().toString()));
+        // Elke poging krijgt een eigen NotifyNL-id, afgeleid van haar reference: notify_id is uniek.
+        when(sendAMessageApi.sendEmail(any())).thenAnswer(a -> new SendEmailResponse().id(UUID.nameUUIDFromBytes(
+                a.<SendEmailRequest>getArgument(0).getReference().getBytes(StandardCharsets.UTF_8)).toString()));
     }
 
     @ParameterizedTest
@@ -138,11 +153,11 @@ class HerverzendingTest {
         Poging eerste = laatstePoging(id);
         OffsetDateTime fout = OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(2);
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure", fout);
-        when(sendAMessageApi.sendEmail(any())).thenAnswer(a -> {
+        doAnswer(a -> {
             receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "delivered", fout.plusMinutes(1));
 
             throw new WebApplicationException(Response.status(400).entity("{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}]}").build());
-        });
+        }).when(sendAMessageApi).sendEmail(any());
         maakDue();
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -183,10 +198,11 @@ class HerverzendingTest {
         assertEquals(List.of(TaakSoort.WISSEN), taken().stream().map(Taak::getTaakSoort).toList(), "alleen de wistaak van de eindstatus");
     }
 
-    // De stuurgroepagenda heeft in tests twee herverzendingen: een fout op de tweede poging geeft een derde,
-    // pas een fout op de derde leidt tot een eindstatus.
+    // Met twee herverzendingen geeft een fout op de tweede poging een derde; pas een fout op de derde
+    // leidt tot een eindstatus.
     @Test
     void meerHerverzendingenInHetBeleid_gevenMeerPogingen() {
+        doReturn(2).when(verzendbeleid).maxHerverzendingen(BerichtType.STUURGROEP_AGENDA.name());
         UUID id = aannameService.neemAan(opdracht(BerichtType.STUURGROEP_AGENDA));
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
@@ -269,7 +285,7 @@ class HerverzendingTest {
     // niet bij NotifyNL, dan verloopt de notificatie.
     @Test
     void uitstelVoorbijGeldigTot_verlooptAlsDePogingNietBijNotifyNLLigt() {
-        when(sendAMessageApi.sendEmail(any())).thenThrow(new WebApplicationException(Response.status(503).build()));
+        doThrow(new WebApplicationException(Response.status(503).build())).when(sendAMessageApi).sendEmail(any());
         when(getMessageDataApi.getMultipleMessagesStatus(any(), any(), any(), any(), any()))
                 .thenReturn(new GetMultipleMessagesResponse().notifications(List.of()));
         UUID id = aannameService.neemAan(opdracht());
@@ -328,12 +344,29 @@ class HerverzendingTest {
         assertEquals(List.of(TaakSoort.WISSEN), taken().stream().map(Taak::getTaakSoort).toList(), "alleen de wistaak van de eindstatus");
     }
 
+    // Kan de herverzending haar poging nooit aanmaken, dan krijgt de notificatie een eindstatus en plant de
+    // controletaak haar niet elke ronde opnieuw.
     @Test
-    void controletaak_plantDeOntbrekendeHerverzending() {
+    void uitgeputteHerverzendtaakZonderPoging_leidtTotTechnischMislukt() {
         UUID id = verzonden();
         Poging eerste = laatstePoging(id);
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure",
                 OffsetDateTime.now(ZoneOffset.UTC));
+        Taak herverzending = enigeTaak();
+
+        QuarkusTransaction.requiringNew().run(() -> verzendTaakHandler.handelUitputtingAf(herverzending));
+
+        assertEquals(NotificatieStatus.TECHNISCH_MISLUKT, notificatie(id).getStatus());
+        assertEquals(Reden.TECHNISCH, notificatie(id).getReden());
+        assertEquals(1, laatstePoging(id).getNummer());
+    }
+
+    @Test
+    void controletaak_plantDeOntbrekendeHerverzendingNaDeWachttijd() {
+        UUID id = verzonden();
+        Poging eerste = laatstePoging(id);
+        OffsetDateTime fout = OffsetDateTime.now(ZoneOffset.UTC);
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure", fout);
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
             taakRepository.persist(new Taak(TaakSoort.CONTROLE, null, null, OffsetDateTime.now(ZoneOffset.UTC), null, null));
@@ -341,18 +374,22 @@ class HerverzendingTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
-        assertTrue(taken().stream().anyMatch(t -> t.getTaakSoort() == TaakSoort.VERZENDEN && id.equals(t.getNotificatieId())));
+        Taak herverzending = taken().stream()
+                .filter(t -> t.getTaakSoort() == TaakSoort.VERZENDEN && id.equals(t.getNotificatieId()))
+                .findFirst().orElseThrow();
+        assertTrue(!herverzending.getDue().isBefore(fout.plusMinutes(59)), "herverzend-wachttijd vanaf de fout");
     }
 
     @Test
     void aanname_legtBerichttypeEnGeldigTotVast() {
-        OffsetDateTime voor = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime voor = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
         UUID id = aannameService.neemAan(opdracht());
 
         Notificatie notificatie = notificatie(id);
         assertEquals(BerichtType.DEMO_TEMPLATE.name(), notificatie.getBerichtType());
-        assertTrue(!notificatie.getGeldigTot().isBefore(voor.plusDays(7)), "standaardgeldigheid van zeven dagen");
+        assertEquals(notificatie.getAangenomenOp().plusDays(7), notificatie.getGeldigTot(), "aanname plus zeven dagen");
+        assertTrue(!notificatie.getGeldigTot().isBefore(voor.plusDays(7)));
     }
 
     // Een notificatie op verzonden, met een lopende eerste poging en haar navraagtaak.

@@ -72,7 +72,7 @@ public class AannameService {
         notificatie.bewaarVerzendgegevens(opdracht.berichtType().getTemplateId(), opdracht.regie().name(),
                 opdracht.dienstverlener(), opdracht.dienst());
         notificatie.bewaarVerzendbeleid(opdracht.berichtType().name(),
-                OffsetDateTime.now(ZoneOffset.UTC).plus(verzendbeleid.geldigheid(opdracht.berichtType())));
+                notificatie.getAangenomenOp().plus(verzendbeleid.geldigheid(opdracht.berichtType())));
         overgangsfunctie.neemAan(notificatie);
 
         taakRepository.persist(new Taak(TaakSoort.VERZENDEN, dvId, notificatie.getId(),
