@@ -10,6 +10,9 @@ import java.util.UUID;
 /**
  * Het register uit de onboarding. Nu één rij uit de migratie; de tokenvalidatie per dienstverlener
  * koppelt later het OIN uit het token aan deze rij.
+ * <p>
+ * De kolom {@code max_cursorleeftijd} (een {@code interval}, leeg is de default uit de configuratie) is
+ * niet gemapt: alleen het opruimen van het eventlog leest hem, in native SQL.
  */
 @Entity
 public class Dienstverlener {

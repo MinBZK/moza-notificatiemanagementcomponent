@@ -16,6 +16,7 @@ import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
@@ -246,8 +247,9 @@ class NotifyNLNavraagTaakHandlerTest {
         return QuarkusTransaction.requiringNew().call(() -> pogingRepository.findById(id));
     }
 
+    // Zonder de wistaak die elke eindstatus krijgt; die staat in WisTaakHandlerTest.
     private List<Taak> taken() {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.listAll());
+        return QuarkusTransaction.requiringNew().call(() -> taakRepository.list(Taak_.TAAK_SOORT + " != ?1", TaakSoort.WISSEN));
     }
 
     private List<NotificatieStatus> overgangen(UUID id) {

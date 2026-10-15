@@ -89,6 +89,15 @@ public class Verzendbudget {
                 .geefTerug(genomen.doel(), terug, tokensPerMinuut, navraagReservering);
     }
 
+    /**
+     * Verwijdert de rijen van tijdvakken vóór {@code grens}; hun tokens zijn met het tijdvak vervallen.
+     *
+     * @return het aantal verwijderde rijen
+     */
+    public int verwijderTijdvakkenOuderDan(OffsetDateTime grens) {
+        return verzendbudgetRepository.verwijderTijdvakkenOuderDan(grens);
+    }
+
     /** Het aantal tokens dat een claim nam, uit welk tijdvak en voor welk doel. */
     public record Genomen(int aantal, OffsetDateTime tijdvak, BudgetDoel doel) {
     }

@@ -164,6 +164,7 @@ public class TaakWorker {
                 case TaakUitkomst.Uitgesteld u when u.teltAlsPoging() && taak.getPogingen() + 1 >= maxPogingen ->
                         verwerkUitputting(handler, taak, null);
                 case TaakUitkomst.Uitgesteld u -> taakClaimer.stelUit(taak, u.due(), u.teltAlsPoging());
+                case TaakUitkomst.Herpland h -> taakClaimer.herplanNaSucces(taak, h.due());
                 case TaakUitkomst.AlAfgerond() -> {
                     // De handler heeft de rij in zijn eigen transactie afgerond.
                 }

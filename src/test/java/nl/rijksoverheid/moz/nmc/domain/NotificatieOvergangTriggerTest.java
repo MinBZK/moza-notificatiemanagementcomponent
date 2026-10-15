@@ -96,8 +96,8 @@ class NotificatieOvergangTriggerTest {
         UUID id = UUID.randomUUID();
 
         Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
-            sql("INSERT INTO notificatie (id, dv_id, versie, status, laatste_status_update) "
-                    + "VALUES (?1, '00000000-0000-4000-8000-000000000001', 0, 'VERZONDEN', CURRENT_TIMESTAMP)", id);
+            sql("INSERT INTO notificatie (id, dv_id, versie, status) "
+                    + "VALUES (?1, '00000000-0000-4000-8000-000000000001', 0, 'VERZONDEN')", id);
             schrijfEvent(id, 0, null, NotificatieStatus.VERZONDEN);
         }));
 
@@ -109,8 +109,8 @@ class NotificatieOvergangTriggerTest {
         UUID id = UUID.randomUUID();
 
         Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() ->
-                sql("INSERT INTO notificatie (id, dv_id, versie, status, laatste_status_update) "
-                        + "VALUES (?1, '00000000-0000-4000-8000-000000000001', 0, 'AANGENOMEN', CURRENT_TIMESTAMP)", id)));
+                sql("INSERT INTO notificatie (id, dv_id, versie, status) "
+                        + "VALUES (?1, '00000000-0000-4000-8000-000000000001', 0, 'AANGENOMEN')", id)));
 
         assertTrue(bevat(fout, "heeft geen event"), fout.toString());
     }

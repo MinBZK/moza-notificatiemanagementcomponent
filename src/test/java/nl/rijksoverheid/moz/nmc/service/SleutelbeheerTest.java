@@ -206,6 +206,36 @@ class SleutelbeheerTest {
         assertEquals(Ontvanger.email("ander@example.nl"), naRotatie.ontsleutelOntvanger(ID, nieuw));
     }
 
+    // Alleen de gewrapte sleutel verandert: dezelfde ciphertext gaat daarna open onder de nieuwe versie,
+    // ook als de oude KEK inmiddels uit de configuratie is.
+    @Test
+    void herwrap_naKekRotatie_laatDeGegevensOngewijzigdEnOntsleutelbaarOnderDeNieuweVersie() {
+        VersleuteldeGegevens oud = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of("naam", "Oud BV"));
+        Sleutelbeheer naRotatie = sleutelbeheer(2, Map.of(1, KEK_1, 2, KEK_2));
+
+        byte[] herwrapt = naRotatie.herwrap(ID, oud.sleutelGewrapt(), oud.kekVersie());
+
+        VersleuteldeGegevens nieuw = metSleutel(oud, herwrapt, naRotatie.huidigeKekVersie());
+        Sleutelbeheer zonderOudeKek = sleutelbeheer(2, Map.of(2, KEK_2));
+        assertEquals(2, naRotatie.huidigeKekVersie());
+        assertFalse(Arrays.equals(oud.sleutelGewrapt(), herwrapt));
+        assertEquals(Ontvanger.email("burger@example.nl"), zonderOudeKek.ontsleutelOntvanger(ID, nieuw));
+        assertEquals(Map.of("naam", "Oud BV"), zonderOudeKek.ontsleutelPersonalisation(ID, nieuw));
+    }
+
+    @Test
+    void herwrap_gewisteSleutel_gooitSleutelGewistException() {
+        assertThrows(SleutelGewistException.class, () -> sleutelbeheer.herwrap(ID, null, 1));
+    }
+
+    @Test
+    void herwrap_oudeKekNietGeconfigureerd_gooitOntsleutelenMisluktException() {
+        VersleuteldeGegevens oud = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
+        Sleutelbeheer zonderOudeKek = sleutelbeheer(2, Map.of(2, KEK_2));
+
+        assertThrows(OntsleutelenMisluktException.class, () -> zonderOudeKek.herwrap(ID, oud.sleutelGewrapt(), 1));
+    }
+
     @Test
     void ontsleutelPersonalisation_geenGeldigeJson_gooitZonderDeTekstTeNoemen() {
         // Kan alleen ontstaan door een fout buiten Sleutelbeheer. De melding van Jackson citeert de

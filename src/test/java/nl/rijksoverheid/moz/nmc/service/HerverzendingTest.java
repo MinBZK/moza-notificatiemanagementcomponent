@@ -195,7 +195,7 @@ class HerverzendingTest {
 
         assertEquals(naar, notificatie(id).getStatus());
         assertEquals(reden, notificatie(id).getReden());
-        assertTrue(taken().isEmpty());
+        assertEquals(List.of(TaakSoort.WISSEN), taken().stream().map(Taak::getTaakSoort).toList(), "alleen de wistaak van de eindstatus");
     }
 
     // Met twee herverzendingen geeft een fout op de tweede poging een derde; pas een fout op de derde
@@ -223,7 +223,7 @@ class HerverzendingTest {
 
         assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(id).getStatus());
         verify(sendAMessageApi, times(3)).sendEmail(any());
-        assertTrue(taken().isEmpty());
+        assertEquals(List.of(TaakSoort.WISSEN), taken().stream().map(Taak::getTaakSoort).toList(), "alleen de wistaak van de eindstatus");
     }
 
     @Test
@@ -249,7 +249,7 @@ class HerverzendingTest {
 
         assertEquals(NotificatieStatus.VERLOPEN, notificatie(id).getStatus());
         assertEquals(Reden.VERLOPEN, notificatie(id).getReden());
-        assertTrue(taken().isEmpty());
+        assertEquals(List.of(TaakSoort.WISSEN), taken().stream().map(Taak::getTaakSoort).toList(), "alleen de wistaak van de eindstatus");
     }
 
     @Test
@@ -266,7 +266,7 @@ class HerverzendingTest {
         assertEquals(NotificatieStatus.VERLOPEN, notificatie(id).getStatus());
         assertEquals(1, pogingen(id).size());
         verify(sendAMessageApi, times(1)).sendEmail(any());
-        assertTrue(taken().isEmpty());
+        assertEquals(List.of(TaakSoort.WISSEN), taken().stream().map(Taak::getTaakSoort).toList(), "alleen de wistaak van de eindstatus");
     }
 
     @Test
@@ -341,7 +341,7 @@ class HerverzendingTest {
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure", nu);
 
         assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(id).getStatus());
-        assertTrue(taken().isEmpty());
+        assertEquals(List.of(TaakSoort.WISSEN), taken().stream().map(Taak::getTaakSoort).toList(), "alleen de wistaak van de eindstatus");
     }
 
     // Kan de herverzending haar poging nooit aanmaken, dan krijgt de notificatie een eindstatus en plant de

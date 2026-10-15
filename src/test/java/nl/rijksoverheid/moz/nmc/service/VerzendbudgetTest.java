@@ -69,6 +69,19 @@ class VerzendbudgetTest {
     }
 
     @Test
+    void verwijderTijdvakkenOuderDan_verwijdertAlleenOudereTijdvakken() {
+        neem(BudgetDoel.VERZENDEN, 1);
+        when(clock.instant()).thenReturn(TIJDVAK_B);
+        neem(BudgetDoel.VERZENDEN, 1);
+
+        int verwijderd = QuarkusTransaction.requiringNew()
+                .call(() -> verzendbudget.verwijderTijdvakkenOuderDan(TIJDVAK_B.atOffset(ZoneOffset.UTC)));
+
+        assertEquals(1, verwijderd);
+        assertEquals(1, QuarkusTransaction.requiringNew().call(() -> TaakFixtures.telBudgetrijen(entityManager)));
+    }
+
+    @Test
     void geefTerug_navraag_komtTerugInHetAandeelVanDeNavraag() {
         Verzendbudget.Genomen genomen = QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.NAVRAAG, 5));
 
