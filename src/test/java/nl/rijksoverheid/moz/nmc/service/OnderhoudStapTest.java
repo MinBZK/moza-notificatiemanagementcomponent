@@ -88,10 +88,6 @@ class OnderhoudStapTest {
                 () -> new OnderhoudTaakHandler(null, null, null, termijnen, null, Duration.ofHours(1), 0, 1));
         assertThrows(IllegalStateException.class,
                 () -> new OnderhoudTaakHandler(null, null, null, termijnen, null, Duration.ofHours(1), 1, 0));
-        assertThrows(IllegalStateException.class,
-                () -> new Partitiebeheer(null, termijnen, 0, 0, Duration.ofSeconds(1), 1));
-        assertThrows(IllegalStateException.class,
-                () -> new Partitiebeheer(null, termijnen, 10, -1, Duration.ofSeconds(1), 1));
     }
 
     private static Taak taak() {

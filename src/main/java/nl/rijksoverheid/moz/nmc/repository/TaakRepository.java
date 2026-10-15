@@ -34,11 +34,13 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
     private static final String ZELFDE_CLAIM = Taak_.TAAK_SOORT + " = :taakSoort and " + Taak_.ID + " = :id and "
             + Taak_.CLAIM_EPOCH + " = :claimEpoch";
 
-    // Een latere overgang naar een eindstatus zet de open wistaak op de nieuwe termijn, ook als een worker hem
-    // net geclaimd heeft; die leest de termijn opnieuw onder de rijvergrendeling van de notificatie.
+    // Native: het conflictdoel is de partiële unieke index op open taken, en het predicaat achter ON
+    // CONFLICT moet letterlijk gelijk zijn aan dat van taak_open_per_notificatie_idx. Een latere overgang
+    // naar een eindstatus zet de open wistaak op de nieuwe termijn, ook als een worker hem net geclaimd
+    // heeft; die leest de termijn opnieuw onder de rijvergrendeling van de notificatie.
     private static final String PLAN_WISTAAK_SQL = """
             INSERT INTO taak (soort, dv_id, notificatie_id, due, status)
-            VALUES ('WISSEN', ?1, ?2, ?3, 'OPEN')
+            VALUES (?4, ?1, ?2, ?3, ?5)
             ON CONFLICT (notificatie_id, soort)
                   WHERE status = 'OPEN' AND notificatie_id IS NOT NULL AND soort <> 'RECEIPT_VERWERKEN'
             DO UPDATE SET due = EXCLUDED.due
@@ -50,6 +52,8 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
                 .setParameter(1, dvId)
                 .setParameter(2, notificatieId)
                 .setParameter(3, due)
+                .setParameter(4, TaakSoort.WISSEN.name())
+                .setParameter(5, TaakStatus.OPEN.name())
                 .executeUpdate();
     }
 

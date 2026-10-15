@@ -75,6 +75,7 @@ public class Partitiebeheer {
         });
     }
 
+    // Package-private zodat PartitieplanTest het plan zonder database kan toetsen.
     /**
      * De partitie die na {@code laatste} moet komen. Is de laatste nog niet voor 80% gevuld, dan geen.
      * Ligt de volgende transactie-id er al boven, dan begint de nieuwe {@code marge} daarboven: de
@@ -117,8 +118,8 @@ public class Partitiebeheer {
         return verwijderd;
     }
 
-    // Onder de vergrendeling opnieuw getoetst: een bevestiging die nog tussen de eerste toets en de
-    // vergrendeling committe, telt zo mee.
+    // Onder de vergrendeling opnieuw getoetst, zodat een bevestiging die tussen de eerste toets en de
+    // vergrendeling is gecommit meetelt.
     private boolean verwijderVergrendeld(EventPartitie partitie, OffsetDateTime nu) {
         return QuarkusTransaction.requiringNew().call(() -> {
             repository.zetLockTimeout(lockTimeout);

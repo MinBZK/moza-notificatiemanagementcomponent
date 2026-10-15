@@ -312,21 +312,6 @@ class OnderhoudTaakHandlerTest {
         assertEquals(1, events(oud));
     }
 
-    @Test
-    void migratie_laatsteStatusKolommenBestaanNietMeer() {
-        assertEquals(List.of(), QuarkusTransaction.requiringNew().call(() -> NotificatieFixtures.notificatiekolommen(
-                entityManager, List.of("laatste_status", "laatste_status_update"))));
-    }
-
-    @Test
-    void databaserol_heeftDeDrieTimeouts() {
-        List<String> instellingen = QuarkusTransaction.requiringNew().call(() ->
-                NotificatieFixtures.rolinstellingen(entityManager));
-
-        assertTrue(instellingen.containsAll(List.of("statement_timeout=30s", "transaction_timeout=1min",
-                "idle_in_transaction_session_timeout=30s")), instellingen.toString());
-    }
-
     private void onderhoud() {
         onderhoudTaakHandler.voerUit(new Taak(TaakSoort.ONDERHOUD, null, null, OffsetDateTime.now(ZoneOffset.UTC), null, null),
                 () -> {

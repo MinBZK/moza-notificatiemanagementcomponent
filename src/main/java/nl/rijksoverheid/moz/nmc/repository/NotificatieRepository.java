@@ -19,8 +19,9 @@ import java.util.UUID;
 @ApplicationScoped
 public class NotificatieRepository implements PanacheRepositoryBase<Notificatie, UUID> {
 
-    // SKIP LOCKED: een notificatie die een overgang of een andere pod vasthoudt, komt een volgende
-    // ronde aan de beurt. Pogingen en taken gaan mee via ON DELETE CASCADE.
+    // Native vanwege FOR UPDATE SKIP LOCKED in de subselect: een notificatie die een overgang of een
+    // andere pod vasthoudt, komt een volgende ronde aan de beurt. Pogingen en taken gaan mee via
+    // ON DELETE CASCADE.
     private static final String VERWIJDER_NA_BEWAARTERMIJN_SQL = """
             DELETE FROM notificatie
              WHERE id IN (SELECT id
@@ -31,8 +32,9 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
                              FOR UPDATE SKIP LOCKED)
             """;
 
-    // Op id, zodat een rij waarvan de oude KEK ontbreekt de ronde niet blokkeert: de volgende batch
-    // begint erachter.
+    // Native: een vergrendelde projectie (FOR UPDATE SKIP LOCKED) van alleen de sleutelkolommen, zodat
+    // niet de hele rij wordt geladen. Op id, zodat een rij waarvan de oude KEK ontbreekt de ronde niet
+    // blokkeert: de volgende batch begint erachter.
     private static final String HERWRAP_KANDIDATEN_SQL = """
             SELECT id, sleutel_gewrapt, kek_versie
               FROM notificatie
@@ -44,7 +46,8 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
                FOR UPDATE SKIP LOCKED
             """;
 
-    // Native SQL zonder de versie: wissen en herwrappen zijn geen overgang en schrijven geen event.
+    // Zonder de versie en zonder event: wissen en herwrappen zijn geen overgang. Native, omdat deze
+    // kolommen op de entity updatable = false staan.
     private static final String WIS_SLEUTEL_SQL =
             "UPDATE notificatie SET sleutel_gewrapt = NULL, kek_versie = NULL WHERE id = ?1";
 

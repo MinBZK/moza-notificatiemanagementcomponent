@@ -23,8 +23,7 @@ public class WebhookpositieRepository implements PanacheRepositoryBase<Webhookpo
         Optional<Cursor> cursor = positie.laatstGeleverd();
         // Hibernate leidt de parametertypen in een insert niet af uit de kolommen; met de types van de
         // attributen komen een lege positie of pauze als null van het juiste type aan. geleverdOp verschuift
-        // alleen als de positie verschuift: de leeftijd van de leverpositie, waarop het opruimen van het
-        // eventlog let, telt vanaf de laatste levering en niet vanaf een mislukking.
+        // alleen met de positie; het opruimen van het eventlog rekent daarmee de cursorleeftijd.
         getSession().createMutationQuery("insert into Webhookpositie w (" + Webhookpositie_.DV_ID + ", "
                         + Webhookpositie_.EPOCH + ", " + Webhookpositie_.TRANSACTIE_ID + ", " + Webhookpositie_.EVENT_ID + ", "
                         + Webhookpositie_.MISLUKKINGEN + ", " + Webhookpositie_.GEPAUZEERD_TOT + ", "

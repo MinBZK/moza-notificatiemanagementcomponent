@@ -3,12 +3,13 @@ package nl.rijksoverheid.moz.nmc.service;
 import nl.rijksoverheid.moz.nmc.repository.EventPartitie;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-// Welke partitie Partitiebeheer als volgende aanmaakt; de DDL zelf staat in PartitiebeheerTest.
+// Welke partitie Partitiebeheer als volgende aanmaakt; de DDL zelf staat in OnderhoudTaakHandlerTest.
 class PartitieplanTest {
 
     private static final EventPartitie LOPEND = EventPartitie.vanaf(1000, 2000);
@@ -39,6 +40,14 @@ class PartitieplanTest {
     void volgende_achterstand_begintEenMargeBovenDeVolgendeXid() {
         assertEquals(Optional.of(EventPartitie.vanaf(2400, 3400)), Partitiebeheer.volgende(Optional.of(LOPEND), 2345, 1000, 55));
         assertEquals(Optional.of(EventPartitie.vanaf(1250, 1350)), Partitiebeheer.volgende(Optional.empty(), 1234, 100, 16));
+    }
+
+    @Test
+    void constructor_ongeldigeOmvangOfMarge_weigert() {
+        Bewaartermijnen termijnen = new Bewaartermijnen(Duration.ofDays(1), Duration.ofDays(2), Duration.ofDays(3));
+
+        assertThrows(IllegalStateException.class, () -> new Partitiebeheer(null, termijnen, 0, 0, Duration.ofSeconds(1), 1));
+        assertThrows(IllegalStateException.class, () -> new Partitiebeheer(null, termijnen, 10, -1, Duration.ofSeconds(1), 1));
     }
 
     @Test
