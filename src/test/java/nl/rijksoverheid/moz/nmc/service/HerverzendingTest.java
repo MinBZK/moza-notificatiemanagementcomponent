@@ -37,6 +37,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -87,6 +88,9 @@ class HerverzendingTest {
 
     @Inject
     TaakRepository taakRepository;
+
+    @Inject
+    VerzendTaakHandler verzendTaakHandler;
 
     @BeforeEach
     void setUp() {
@@ -328,12 +332,29 @@ class HerverzendingTest {
         assertTrue(taken().isEmpty());
     }
 
+    // Kan de herverzending haar poging nooit aanmaken, dan krijgt de notificatie een eindstatus en plant de
+    // controletaak haar niet elke ronde opnieuw.
     @Test
-    void controletaak_plantDeOntbrekendeHerverzending() {
+    void uitgeputteHerverzendtaakZonderPoging_leidtTotTechnischMislukt() {
         UUID id = verzonden();
         Poging eerste = laatstePoging(id);
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure",
                 OffsetDateTime.now(ZoneOffset.UTC));
+        Taak herverzending = enigeTaak();
+
+        QuarkusTransaction.requiringNew().run(() -> verzendTaakHandler.handelUitputtingAf(herverzending));
+
+        assertEquals(NotificatieStatus.TECHNISCH_MISLUKT, notificatie(id).getStatus());
+        assertEquals(Reden.TECHNISCH, notificatie(id).getReden());
+        assertEquals(1, laatstePoging(id).getNummer());
+    }
+
+    @Test
+    void controletaak_plantDeOntbrekendeHerverzendingNaDeWachttijd() {
+        UUID id = verzonden();
+        Poging eerste = laatstePoging(id);
+        OffsetDateTime fout = OffsetDateTime.now(ZoneOffset.UTC);
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure", fout);
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
             taakRepository.persist(new Taak(TaakSoort.CONTROLE, null, null, OffsetDateTime.now(ZoneOffset.UTC), null, null));
@@ -341,18 +362,22 @@ class HerverzendingTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
-        assertTrue(taken().stream().anyMatch(t -> t.getTaakSoort() == TaakSoort.VERZENDEN && id.equals(t.getNotificatieId())));
+        Taak herverzending = taken().stream()
+                .filter(t -> t.getTaakSoort() == TaakSoort.VERZENDEN && id.equals(t.getNotificatieId()))
+                .findFirst().orElseThrow();
+        assertTrue(!herverzending.getDue().isBefore(fout.plusMinutes(59)), "herverzend-wachttijd vanaf de fout");
     }
 
     @Test
     void aanname_legtBerichttypeEnGeldigTotVast() {
-        OffsetDateTime voor = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime voor = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
         UUID id = aannameService.neemAan(opdracht());
 
         Notificatie notificatie = notificatie(id);
         assertEquals(BerichtType.DEMO_TEMPLATE.name(), notificatie.getBerichtType());
-        assertTrue(!notificatie.getGeldigTot().isBefore(voor.plusDays(7)), "standaardgeldigheid van zeven dagen");
+        assertEquals(notificatie.getAangenomenOp().plusDays(7), notificatie.getGeldigTot(), "aanname plus zeven dagen");
+        assertTrue(!notificatie.getGeldigTot().isBefore(voor.plusDays(7)));
     }
 
     // Een notificatie op verzonden, met een lopende eerste poging en haar navraagtaak.

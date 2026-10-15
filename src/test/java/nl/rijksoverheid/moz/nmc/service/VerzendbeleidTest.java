@@ -2,10 +2,15 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.smallrye.config.PropertiesConfigSource;
 import io.smallrye.config.SmallRyeConfigBuilder;
+import nl.rijksoverheid.moz.nmc.domain.Poging;
+import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -42,15 +47,22 @@ class VerzendbeleidTest {
 
     @Test
     void magHerverzenden_totEnMetDeLaatsteToegestanePoging() {
-        assertTrue(beleid.magHerverzenden("DEMO_TEMPLATE", 1));
-        assertFalse(beleid.magHerverzenden("DEMO_TEMPLATE", 2));
-        assertTrue(beleid.magHerverzenden("STUURGROEP_AGENDA", 3));
-        assertFalse(beleid.magHerverzenden("STUURGROEP_AGENDA", 4));
+        assertTrue(beleid.magHerverzenden(poging(1, PogingStatus.TIJDELIJK_MISLUKT), "DEMO_TEMPLATE"));
+        assertFalse(beleid.magHerverzenden(poging(2, PogingStatus.TIJDELIJK_MISLUKT), "DEMO_TEMPLATE"));
+        assertTrue(beleid.magHerverzenden(poging(3, PogingStatus.TECHNISCH_MISLUKT), "STUURGROEP_AGENDA"));
+        assertFalse(beleid.magHerverzenden(poging(4, PogingStatus.TECHNISCH_MISLUKT), "STUURGROEP_AGENDA"));
+    }
+
+    @Test
+    void magHerverzenden_alleenNaEenTijdelijkeOfTechnischeFout() {
+        assertFalse(beleid.magHerverzenden(poging(1, PogingStatus.PERMANENT_MISLUKT), "DEMO_TEMPLATE"));
+        assertFalse(beleid.magHerverzenden(poging(1, PogingStatus.BEZORGD), "DEMO_TEMPLATE"));
+        assertFalse(beleid.magHerverzenden(new Poging(UUID.randomUUID(), 1), "DEMO_TEMPLATE"), "een geplande poging");
     }
 
     @Test
     void geenHerverzendingen_laatDeEerstePogingDeLaatsteZijn() {
-        assertFalse(beleid(0, Map.of()).magHerverzenden("DEMO_TEMPLATE", 1));
+        assertFalse(beleid(0, Map.of()).magHerverzenden(poging(1, PogingStatus.TIJDELIJK_MISLUKT), "DEMO_TEMPLATE"));
     }
 
     @Test
@@ -58,6 +70,13 @@ class VerzendbeleidTest {
         assertThrows(IllegalStateException.class, () -> beleid(-1, Map.of()));
         assertThrows(IllegalStateException.class,
                 () -> beleid(1, Map.of("nmc.beleid.demo_template.max-herverzendingen", "-1")));
+    }
+
+    private static Poging poging(int nummer, PogingStatus uitkomst) {
+        Poging poging = new Poging(UUID.randomUUID(), nummer);
+        poging.verwerkReceipt(uitkomst, OffsetDateTime.now(ZoneOffset.UTC));
+
+        return poging;
     }
 
     private static Verzendbeleid beleid(int maxHerverzendingen, Map<String, String> config) {

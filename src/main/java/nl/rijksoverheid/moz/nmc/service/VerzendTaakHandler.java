@@ -90,8 +90,9 @@ public class VerzendTaakHandler implements TaakHandler {
     /**
      * Een uitgeputte verzendtaak eindigt in {@code technisch-mislukt} (ADR 0024, beslispunt 2), zodat de
      * Dienstverlener een eindstatus krijgt. Vanuit {@code aangenomen} loopt dat via
-     * {@code in-verzending}, omdat er geen directe overgang is. Een notificatie die al verder is, houdt
-     * haar status.
+     * {@code in-verzending}, omdat er geen directe overgang is. Dat geldt ook voor een herverzending die
+     * haar poging nooit kon aanmaken; anders plant de controletaak haar elke ronde opnieuw. Een notificatie
+     * die al verder is, houdt haar status.
      */
     @Override
     public boolean handelUitputtingAf(Taak taak) {
@@ -100,7 +101,7 @@ public class VerzendTaakHandler implements TaakHandler {
         if (notificatie.getStatus() == NotificatieStatus.AANGENOMEN) {
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
         } else if (pogingRepository.findLaatsteVan(notificatie.getId())
-                .filter(p -> isInVerzending(notificatie, p)).isEmpty()) {
+                .filter(p -> isInVerzending(notificatie, p) || isHerverzendbaar(notificatie, p)).isEmpty()) {
             Log.infof("Notificatie %s staat inmiddels op %s; uitgeputte verzendtaak afgerond zonder overgang",
                     notificatie.getId(), notificatie.getStatus());
 
@@ -201,9 +202,11 @@ public class VerzendTaakHandler implements TaakHandler {
     }
 
     /**
-     * Eerste transactie: {@code aangenomen} naar {@code in-verzending} met een geplande poging, of bij
-     * een herclaim de bestaande geplande poging. Is de notificatie inmiddels verder (een receipt vóór de
-     * verzend-commit, of geannuleerd), dan is er niets te verzenden en wordt de taak afgerond.
+     * Eerste transactie: {@code aangenomen} naar {@code in-verzending} met een geplande poging, bij een
+     * herverzending {@code verzonden} naar {@code verzonden} met de volgende poging, of bij een herclaim de
+     * bestaande geplande poging. Na {@code geldig_tot} wordt geen poging gestart en eindigt de notificatie
+     * in {@code verlopen}. Is de notificatie inmiddels verder (een receipt vóór de verzend-commit, of
+     * geannuleerd), dan is er niets te verzenden en wordt de taak afgerond.
      *
      * @return null als de taak is afgerond zonder verzending
      */
@@ -222,7 +225,7 @@ public class VerzendTaakHandler implements TaakHandler {
                 }
 
                 overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
-                poging = new Poging(notificatie.getId(), volgendPogingnummer(notificatie.getId()));
+                poging = new Poging(notificatie.getId(), volgendPogingnummer(laatste));
                 pogingRepository.persist(poging);
                 herclaim = false;
             }
@@ -236,13 +239,13 @@ public class VerzendTaakHandler implements TaakHandler {
                 if (laatste.filter(p -> p.getStatus() == PogingStatus.GEPLAND).isPresent()) {
                     poging = laatste.get();
                     herclaim = true;
-                } else if (laatste.filter(p -> magHerverzonden(p, verzendbeleid, notificatie.getBerichtType())).isPresent()) {
+                } else if (laatste.filter(p -> isHerverzendbaar(notificatie, p)).isPresent()) {
                     if (notificatie.isVerlopen(nu)) {
                         return verloop(taak, notificatie);
                     }
 
                     overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
-                    poging = new Poging(notificatie.getId(), volgendPogingnummer(notificatie.getId()));
+                    poging = new Poging(notificatie.getId(), volgendPogingnummer(laatste));
                     pogingRepository.persist(poging);
                     herclaim = false;
                 } else {
@@ -273,12 +276,6 @@ public class VerzendTaakHandler implements TaakHandler {
                 notificatie.getTemplateId(), personalisation, taak.getTraceId());
     }
 
-    // Alleen na een tijdelijke of technische fout, en zolang het beleid van het berichttype nog een herverzending toestaat.
-    static boolean magHerverzonden(Poging poging, Verzendbeleid verzendbeleid, String berichtType) {
-        return (poging.getStatus() == PogingStatus.TIJDELIJK_MISLUKT || poging.getStatus() == PogingStatus.TECHNISCH_MISLUKT)
-                && verzendbeleid.magHerverzenden(berichtType, poging.getNummer());
-    }
-
     private Verzending verloop(Taak taak, Notificatie notificatie) {
         Log.infof("Notificatie %s is verlopen (geldig tot %s); geen verzending gestart", notificatie.getId(),
                 notificatie.getGeldigTot());
@@ -296,8 +293,8 @@ public class VerzendTaakHandler implements TaakHandler {
         return null;
     }
 
-    private int volgendPogingnummer(UUID notificatieId) {
-        return pogingRepository.findLaatsteVan(notificatieId).map(p -> p.getNummer() + 1).orElse(1);
+    private static int volgendPogingnummer(Optional<Poging> laatste) {
+        return laatste.map(p -> p.getNummer() + 1).orElse(1);
     }
 
     /**
@@ -370,6 +367,11 @@ public class VerzendTaakHandler implements TaakHandler {
         });
 
         return TaakUitkomst.alAfgerond();
+    }
+
+    private boolean isHerverzendbaar(Notificatie notificatie, Poging poging) {
+        return notificatie.getStatus() == NotificatieStatus.VERZONDEN
+                && verzendbeleid.magHerverzenden(poging, notificatie.getBerichtType());
     }
 
     private static boolean isInVerzending(Notificatie notificatie, Poging poging) {

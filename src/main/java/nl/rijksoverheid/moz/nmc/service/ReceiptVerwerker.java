@@ -130,7 +130,7 @@ public class ReceiptVerwerker {
 
         OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
         Overgang overgang = Overgang.bij(uitkomst.get(),
-                verzendbeleid.magHerverzenden(notificatie.getBerichtType(), poging.getNummer()), notificatie.isVerlopen(nu));
+                verzendbeleid.magHerverzenden(poging, notificatie.getBerichtType()), notificatie.isVerlopen(nu));
 
         if (overgang.herverzending()) {
             // Een eerdere faalreceipt op deze poging heeft de herverzending al gepland.

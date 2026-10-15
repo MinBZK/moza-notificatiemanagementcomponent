@@ -2,6 +2,8 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
+import nl.rijksoverheid.moz.nmc.domain.Poging;
+import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
@@ -61,9 +63,13 @@ public class Verzendbeleid {
         return waarde(berichtType, "max-herverzendingen", Integer.class).orElse(maxHerverzendingen);
     }
 
-    /** Of na een fout op deze poging nog een herverzending volgt; poging 1 is de eerste verzending. */
-    public boolean magHerverzenden(String berichtType, int pogingnummer) {
-        return pogingnummer <= maxHerverzendingen(berichtType);
+    /**
+     * Of na deze poging een herverzending volgt: alleen na een tijdelijke of technische fout, en zolang het
+     * beleid van het berichttype er nog een toestaat. Poging 1 is de eerste verzending.
+     */
+    public boolean magHerverzenden(Poging poging, String berichtType) {
+        return (poging.getStatus() == PogingStatus.TIJDELIJK_MISLUKT || poging.getStatus() == PogingStatus.TECHNISCH_MISLUKT)
+                && poging.getNummer() <= maxHerverzendingen(berichtType);
     }
 
     private Duration waarde(String berichtType, String sleutel, Duration standaard) {

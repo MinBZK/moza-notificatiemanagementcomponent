@@ -103,7 +103,7 @@ public class ControleTaakHandler implements TaakHandler {
 
             Optional<Poging> laatste = pogingRepository.findLaatsteVan(notificatie.getId());
             taakRepository.persist(new Taak(soort.get(), notificatie.getDvId(), notificatie.getId(),
-                    due(soort.get(), laatste, nu), null, soort.get() == TaakSoort.VERZENDEN ? null : pogingPayload(laatste)));
+                    due(soort.get(), notificatie, laatste, nu), null, soort.get() == TaakSoort.VERZENDEN ? null : pogingPayload(laatste)));
             gepland++;
         }
 
@@ -129,7 +129,7 @@ public class ControleTaakHandler implements TaakHandler {
             return Optional.of(TaakSoort.RECONCILIEREN);
         }
 
-        return poging.getStatus() == PogingStatus.GEPLAND || VerzendTaakHandler.magHerverzonden(poging, verzendbeleid, berichtType)
+        return poging.getStatus() == PogingStatus.GEPLAND || verzendbeleid.magHerverzenden(poging, berichtType)
                 ? Optional.of(TaakSoort.VERZENDEN)
                 : Optional.empty();
     }
@@ -140,11 +140,19 @@ public class ControleTaakHandler implements TaakHandler {
     }
 
     // De vaststeltaak houdt de termijn vanaf de bezorging aan, ook als hij hier opnieuw wordt gepland;
-    // zonder bekend bezorgtijdstip loopt de termijn vanaf nu, zodat hij nooit te vroeg vaststelt.
-    private OffsetDateTime due(TaakSoort soort, Optional<Poging> laatste, OffsetDateTime nu) {
-        return soort == TaakSoort.BEZORGING_VASTSTELLEN
-                ? vaststellingstermijn.vaststellenOp(laatste.map(Poging::getBezorgdOp).orElse(nu))
-                : nu;
+    // zonder bekend bezorgtijdstip loopt de termijn vanaf nu, zodat hij nooit te vroeg vaststelt. Een
+    // herverzending wacht de herverzend-wachttijd vanaf de fout af.
+    private OffsetDateTime due(TaakSoort soort, Notificatie notificatie, Optional<Poging> laatste, OffsetDateTime nu) {
+        if (soort == TaakSoort.BEZORGING_VASTSTELLEN) {
+            return vaststellingstermijn.vaststellenOp(laatste.map(Poging::getBezorgdOp).orElse(nu));
+        }
+
+        Optional<OffsetDateTime> herverzendenOp = laatste
+                .filter(p -> verzendbeleid.magHerverzenden(p, notificatie.getBerichtType()))
+                .map(p -> Optional.ofNullable(p.getReceiptTijdstip()).orElse(nu)
+                        .plus(verzendbeleid.herverzendWachttijd(notificatie.getBerichtType())));
+
+        return herverzendenOp.filter(nu::isBefore).orElse(nu);
     }
 
     private static Map<String, String> pogingPayload(Optional<Poging> laatste) {
