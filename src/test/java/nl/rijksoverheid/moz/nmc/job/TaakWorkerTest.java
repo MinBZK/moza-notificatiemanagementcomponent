@@ -56,24 +56,24 @@ class TaakWorkerTest {
 
     @AfterEach
     void resetHandler() {
-        ControleTestHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.afgerond());
-        ControleTestHandler.BIJ_UITPUTTING.set(taak -> false);
-        ControleTestHandler.PERIODIEK.set(false);
+        WisTestHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.afgerond());
+        WisTestHandler.BIJ_UITPUTTING.set(taak -> false);
+        WisTestHandler.PERIODIEK.set(false);
     }
 
     @Test
     void verwerk_periodiekeTaakUitgeput_blijftOpenEnWordtOpnieuwGepland() {
-        long id = plan(TaakSoort.CONTROLE, nu().minusMinutes(1));
-        ControleTestHandler.PERIODIEK.set(true);
-        ControleTestHandler.GEDRAG.set((taak, lease) -> {
+        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
+        WisTestHandler.PERIODIEK.set(true);
+        WisTestHandler.GEDRAG.set((taak, lease) -> {
             throw new IllegalStateException("database weg");
         });
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        taakWorker.verwerk(TaakSoort.WISSEN);
         zetDue(id, nu().minusSeconds(1));
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        taakWorker.verwerk(TaakSoort.WISSEN);
 
-        Taak taak = zoek(TaakSoort.CONTROLE, id).orElseThrow();
+        Taak taak = zoek(TaakSoort.WISSEN, id).orElseThrow();
         assertEquals(TaakStatus.OPEN, taak.getStatus());
         assertTrue(taak.getDue().isAfter(nu()));
     }
@@ -82,51 +82,51 @@ class TaakWorkerTest {
     // handler die zijn eigen mislukking meldt eeuwig herhalen.
     @Test
     void verwerk_uitstelDatAlsPogingTelt_zetNaMaxPogingenOpMislukt() {
-        long id = plan(TaakSoort.CONTROLE, nu().minusMinutes(1));
-        ControleTestHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.uitgesteld(nu().minusSeconds(1), true));
+        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
+        WisTestHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.uitgesteld(nu().minusSeconds(1), true));
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
-        assertEquals(1, zoek(TaakSoort.CONTROLE, id).orElseThrow().getPogingen());
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        taakWorker.verwerk(TaakSoort.WISSEN);
+        assertEquals(1, zoek(TaakSoort.WISSEN, id).orElseThrow().getPogingen());
+        taakWorker.verwerk(TaakSoort.WISSEN);
 
-        assertEquals(TaakStatus.MISLUKT, zoek(TaakSoort.CONTROLE, id).orElseThrow().getStatus());
+        assertEquals(TaakStatus.MISLUKT, zoek(TaakSoort.WISSEN, id).orElseThrow().getStatus());
     }
 
     // Een handler die de uitputting afhandelt (de verzendtaak zet de notificatie op technisch-mislukt),
     // rondt de taak af in plaats van hem op mislukt te laten wachten.
     @Test
     void verwerk_uitputtingDoorDeHandlerAfgehandeld_rondtDeTaakAf() {
-        long id = plan(TaakSoort.CONTROLE, nu().minusMinutes(1));
-        ControleTestHandler.GEDRAG.set((taak, lease) -> {
+        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
+        WisTestHandler.GEDRAG.set((taak, lease) -> {
             throw new IllegalStateException("gesimuleerde fout");
         });
-        ControleTestHandler.BIJ_UITPUTTING.set(taak -> true);
+        WisTestHandler.BIJ_UITPUTTING.set(taak -> true);
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        taakWorker.verwerk(TaakSoort.WISSEN);
         zetDue(id, nu().minusSeconds(1));
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        taakWorker.verwerk(TaakSoort.WISSEN);
 
-        assertTrue(zoek(TaakSoort.CONTROLE, id).isEmpty());
+        assertTrue(zoek(TaakSoort.WISSEN, id).isEmpty());
     }
 
     @Test
     void verwerk_afgerond_verwijdertDeTaak() {
-        long id = plan(TaakSoort.CONTROLE, nu().minusMinutes(1));
+        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
 
-        assertEquals(1, taakWorker.verwerk(TaakSoort.CONTROLE));
+        assertEquals(1, taakWorker.verwerk(TaakSoort.WISSEN));
 
-        assertTrue(zoek(TaakSoort.CONTROLE, id).isEmpty());
+        assertTrue(zoek(TaakSoort.WISSEN, id).isEmpty());
     }
 
     @Test
     void verwerk_uitgesteldZonderPoging_zetDueEnLaatPogingenStaan() {
-        long id = plan(TaakSoort.CONTROLE, nu().minusMinutes(1));
+        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
         OffsetDateTime straks = nu().plusHours(1).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
-        ControleTestHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.uitgesteld(straks, false));
+        WisTestHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.uitgesteld(straks, false));
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        taakWorker.verwerk(TaakSoort.WISSEN);
 
-        Taak taak = zoek(TaakSoort.CONTROLE, id).orElseThrow();
+        Taak taak = zoek(TaakSoort.WISSEN, id).orElseThrow();
         assertEquals(straks.toInstant(), taak.getDue().toInstant());
         assertEquals(0, taak.getPogingen());
         assertNull(taak.getLeaseTot());
@@ -137,144 +137,142 @@ class TaakWorkerTest {
     // de taak op mislukt en telt hij in de metriek.
     @Test
     void verwerk_handlerGooit_steltUitEnZetNaMaxPogingenOpMislukt() {
-        long id = plan(TaakSoort.CONTROLE, nu().minusMinutes(1));
-        ControleTestHandler.GEDRAG.set((taak, lease) -> {
+        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
+        WisTestHandler.GEDRAG.set((taak, lease) -> {
             throw new IllegalStateException("gesimuleerde fout");
         });
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        taakWorker.verwerk(TaakSoort.WISSEN);
 
-        Taak naEerste = zoek(TaakSoort.CONTROLE, id).orElseThrow();
+        Taak naEerste = zoek(TaakSoort.WISSEN, id).orElseThrow();
         assertEquals(1, naEerste.getPogingen());
         assertEquals(TaakStatus.OPEN, naEerste.getStatus());
         assertTrue(naEerste.getDue().isAfter(nu().plusSeconds(20)), "uitstel met wachttijd");
         assertNull(naEerste.getLeaseTot());
 
         zetDue(id, nu().minusSeconds(1));
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        taakWorker.verwerk(TaakSoort.WISSEN);
 
-        Taak naTweede = zoek(TaakSoort.CONTROLE, id).orElseThrow();
+        Taak naTweede = zoek(TaakSoort.WISSEN, id).orElseThrow();
         assertEquals(TaakStatus.MISLUKT, naTweede.getStatus());
-        assertEquals(1.0, meterRegistry.get("nmc.taken.mislukt").tag("soort", "CONTROLE").gauge().value());
-        assertEquals(0, taakWorker.verwerk(TaakSoort.CONTROLE), "een mislukte taak wordt niet meer geclaimd");
+        assertEquals(1.0, meterRegistry.get("nmc.taken.mislukt").tag("soort", "WISSEN").gauge().value());
+        assertEquals(0, taakWorker.verwerk(TaakSoort.WISSEN), "een mislukte taak wordt niet meer geclaimd");
     }
 
     @Test
     void verwerk_alAfgerondDoorDeHandler_laatDeRijMetRust() {
-        long id = plan(TaakSoort.CONTROLE, nu().minusMinutes(1));
-        ControleTestHandler.GEDRAG.set((taak, lease) -> {
+        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
+        WisTestHandler.GEDRAG.set((taak, lease) -> {
             QuarkusTransaction.requiringNew().run(() -> taakClaimer.rondAf(taak));
 
             return TaakUitkomst.alAfgerond();
         });
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        taakWorker.verwerk(TaakSoort.WISSEN);
 
-        assertTrue(zoek(TaakSoort.CONTROLE, id).isEmpty());
+        assertTrue(zoek(TaakSoort.WISSEN, id).isEmpty());
     }
 
     @Test
     void verwerk_leaseVerlengen_zetDeLeaseVooruit() {
-        long id = plan(TaakSoort.CONTROLE, nu().minusMinutes(1));
-        ControleTestHandler.GEDRAG.set((taak, lease) -> {
+        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
+        WisTestHandler.GEDRAG.set((taak, lease) -> {
             zetLease(id, nu().plusSeconds(1));
             lease.verleng();
-            assertTrue(zoek(TaakSoort.CONTROLE, id).orElseThrow().getLeaseTot().isAfter(nu().plusMinutes(1)));
+            assertTrue(zoek(TaakSoort.WISSEN, id).orElseThrow().getLeaseTot().isAfter(nu().plusMinutes(1)));
 
             return TaakUitkomst.uitgesteld(nu().plusHours(1), false);
         });
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        taakWorker.verwerk(TaakSoort.WISSEN);
 
-        assertEquals(0, zoek(TaakSoort.CONTROLE, id).orElseThrow().getPogingen(), "de asserties in de handler zijn niet gegooid");
+        assertEquals(0, zoek(TaakSoort.WISSEN, id).orElseThrow().getPogingen(), "de asserties in de handler zijn niet gegooid");
     }
 
     // Een andere worker heeft de taak inmiddels: wat deze worker nog wil, wordt geweigerd en de rij
     // blijft zoals de nieuwe eigenaar hem achterliet.
     @Test
     void verwerk_leaseVerloren_laatDeTaakAanDeNieuweEigenaar() {
-        long id = plan(TaakSoort.CONTROLE, nu().minusMinutes(1));
-        ControleTestHandler.GEDRAG.set((taak, lease) -> {
+        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
+        WisTestHandler.GEDRAG.set((taak, lease) -> {
             QuarkusTransaction.requiringNew().run(() ->
-                    TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.CONTROLE, id));
+                    TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.WISSEN, id));
 
             return TaakUitkomst.afgerond();
         });
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        taakWorker.verwerk(TaakSoort.WISSEN);
 
-        assertTrue(zoek(TaakSoort.CONTROLE, id).isPresent(), "de afronding van de oude worker is geweigerd");
+        assertTrue(zoek(TaakSoort.WISSEN, id).isPresent(), "de afronding van de oude worker is geweigerd");
     }
 
     // Terwijl de worker de eerste taak van de batch uitvoert, claimt een andere worker de tweede.
     @Test
     void verwerk_latereTaakInDeBatchGeclaimdDoorAndereWorker_slaatDieOver() {
-        long eerste = plan(TaakSoort.CONTROLE, nu().minusMinutes(2));
-        long tweede = plan(TaakSoort.CONTROLE, nu().minusMinutes(1));
+        long eerste = plan(TaakSoort.WISSEN, nu().minusMinutes(2));
+        long tweede = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
         AtomicInteger uitgevoerd = new AtomicInteger();
-        ControleTestHandler.GEDRAG.set((taak, lease) -> {
+        WisTestHandler.GEDRAG.set((taak, lease) -> {
             uitgevoerd.incrementAndGet();
             QuarkusTransaction.requiringNew().run(() ->
-                    TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.CONTROLE, tweede));
+                    TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.WISSEN, tweede));
 
             return TaakUitkomst.afgerond();
         });
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        taakWorker.verwerk(TaakSoort.WISSEN);
 
         assertEquals(1, uitgevoerd.get());
-        assertTrue(zoek(TaakSoort.CONTROLE, eerste).isEmpty());
-        assertEquals(0, zoek(TaakSoort.CONTROLE, tweede).orElseThrow().getPogingen());
+        assertTrue(zoek(TaakSoort.WISSEN, eerste).isEmpty());
+        assertEquals(0, zoek(TaakSoort.WISSEN, tweede).orElseThrow().getPogingen());
     }
 
     @Test
     void verwerk_leaseVerlorenNaEenFout_laatDeTaakAanDeNieuweEigenaar() {
-        long id = plan(TaakSoort.CONTROLE, nu().minusMinutes(1));
-        ControleTestHandler.GEDRAG.set((taak, lease) -> {
+        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
+        WisTestHandler.GEDRAG.set((taak, lease) -> {
             QuarkusTransaction.requiringNew().run(() ->
-                    TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.CONTROLE, id));
+                    TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.WISSEN, id));
 
             throw new IllegalStateException("gesimuleerde fout");
         });
 
-        taakWorker.verwerk(TaakSoort.CONTROLE);
+        taakWorker.verwerk(TaakSoort.WISSEN);
 
-        assertEquals(0, zoek(TaakSoort.CONTROLE, id).orElseThrow().getPogingen(), "het uitstel van de oude worker is geweigerd");
+        assertEquals(0, zoek(TaakSoort.WISSEN, id).orElseThrow().getPogingen(), "het uitstel van de oude worker is geweigerd");
     }
 
     @Test
     void verwerk_zonderHandlerVoorDeSoort_claimtNiets() {
-        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
+        long id = plan(TaakSoort.ONDERHOUD, nu().minusMinutes(1));
 
-        assertEquals(0, taakWorker.verwerk(TaakSoort.WISSEN));
+        assertEquals(0, taakWorker.verwerk(TaakSoort.ONDERHOUD));
 
-        assertNull(zoek(TaakSoort.WISSEN, id).orElseThrow().getLeaseTot());
+        assertNull(zoek(TaakSoort.ONDERHOUD, id).orElseThrow().getLeaseTot());
     }
 
-    // De negen geplande rondes delegeren elk aan verwerk; zonder handler doen ze niets.
+    // De geplande rondes delegeren elk aan verwerk; zonder handler voor de soort doen ze niets.
     @Test
     void geplandeRondes_zonderHandler_latenTakenStaan() {
-        long id = plan(TaakSoort.VERZENDEN, nu().minusMinutes(1));
+        long id = plan(TaakSoort.ONDERHOUD, nu().minusMinutes(1));
 
-        taakWorker.verzenden();
         taakWorker.receiptVerwerken();
         taakWorker.reconcilieren();
         taakWorker.bezorgingVaststellen();
         taakWorker.terugkoppelen();
         taakWorker.ongeldigMelden();
-        taakWorker.wissen();
         taakWorker.onderhoud();
 
-        assertNull(zoek(TaakSoort.VERZENDEN, id).orElseThrow().getLeaseTot());
+        assertNull(zoek(TaakSoort.ONDERHOUD, id).orElseThrow().getLeaseTot());
     }
 
     @Test
-    void controle_taakAanDeBeurt_voertDeHandlerUit() {
-        long id = plan(TaakSoort.CONTROLE, nu().minusMinutes(1));
+    void wissen_taakAanDeBeurt_voertDeHandlerUit() {
+        long id = plan(TaakSoort.WISSEN, nu().minusMinutes(1));
 
-        taakWorker.controle();
+        taakWorker.wissen();
 
-        assertTrue(zoek(TaakSoort.CONTROLE, id).isEmpty());
+        assertTrue(zoek(TaakSoort.WISSEN, id).isEmpty());
     }
 
     @Test
@@ -290,16 +288,16 @@ class TaakWorkerTest {
     @Test
     void verwerk_meerdereTaken_biedtElkeTaakEenKeerAan() {
         for (int i = 0; i < 3; i++) {
-            plan(TaakSoort.CONTROLE, nu().minusMinutes(1));
+            plan(TaakSoort.WISSEN, nu().minusMinutes(1));
         }
         AtomicInteger aanroepen = new AtomicInteger();
-        ControleTestHandler.GEDRAG.set((taak, lease) -> {
+        WisTestHandler.GEDRAG.set((taak, lease) -> {
             aanroepen.incrementAndGet();
 
             return TaakUitkomst.afgerond();
         });
 
-        assertEquals(3, taakWorker.verwerk(TaakSoort.CONTROLE));
+        assertEquals(3, taakWorker.verwerk(TaakSoort.WISSEN));
         assertEquals(3, aanroepen.get());
         assertEquals(0, taakRepository.count());
     }
@@ -318,11 +316,11 @@ class TaakWorkerTest {
     }
 
     private void zetDue(long id, OffsetDateTime due) {
-        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetDue(entityManager, TaakSoort.CONTROLE, id, due));
+        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetDue(entityManager, TaakSoort.WISSEN, id, due));
     }
 
     private void zetLease(long id, OffsetDateTime tot) {
-        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetLeaseTot(entityManager, TaakSoort.CONTROLE, id, tot));
+        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetLeaseTot(entityManager, TaakSoort.WISSEN, id, tot));
     }
 
     private static OffsetDateTime nu() {

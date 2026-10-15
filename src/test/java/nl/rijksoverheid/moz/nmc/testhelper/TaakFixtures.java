@@ -1,84 +1,119 @@
 package nl.rijksoverheid.moz.nmc.testhelper;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import nl.rijksoverheid.moz.nmc.domain.Dienstverlener_;
+import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
+import nl.rijksoverheid.moz.nmc.domain.VerzendbudgetTijdvak_;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * Schrijft en leest de takentabel, het verzendbudget en de dienstverleners buiten Hibernate om, voor
- * tests die een toestand willen die de claim zelf niet maakt. Elke query op {@code taak} noemt de soort.
+ * Schrijft en leest de takentabel, het verzendbudget en de dienstverleners buiten de claim om, voor
+ * tests die een toestand willen die de claim zelf niet maakt. Elke query op {@code Taak} noemt de soort.
  */
 public final class TaakFixtures {
+
+    private static final String ZELFDE_TAAK = " where " + Taak_.TAAK_SOORT + " = :taakSoort and " + Taak_.ID + " = :id";
 
     private TaakFixtures() {
     }
 
     /** Verhoogt het claim-epoch, zoals een andere worker die de taak intussen claimt. */
     public static void claimDoorAndereWorker(EntityManager entityManager, TaakSoort taakSoort, long id) {
-        entityManager.createNativeQuery("UPDATE taak SET claim_epoch = claim_epoch + 1 WHERE soort = ?1 AND id = ?2")
-                .setParameter(1, taakSoort.name())
-                .setParameter(2, id)
+        entityManager.createQuery("update Taak set " + Taak_.CLAIM_EPOCH + " = " + Taak_.CLAIM_EPOCH + " + 1"
+                        + ZELFDE_TAAK)
+                .setParameter("taakSoort", taakSoort)
+                .setParameter("id", id)
                 .executeUpdate();
     }
 
     public static void zetDue(EntityManager entityManager, TaakSoort taakSoort, long id, OffsetDateTime due) {
-        entityManager.createNativeQuery("UPDATE taak SET due = ?3 WHERE soort = ?1 AND id = ?2")
-                .setParameter(1, taakSoort.name())
-                .setParameter(2, id)
-                .setParameter(3, due)
+        entityManager.createQuery("update Taak set " + Taak_.DUE + " = :due" + ZELFDE_TAAK)
+                .setParameter("due", due)
+                .setParameter("taakSoort", taakSoort)
+                .setParameter("id", id)
                 .executeUpdate();
     }
 
     public static void zetLeaseTot(EntityManager entityManager, TaakSoort taakSoort, long id, OffsetDateTime tot) {
-        entityManager.createNativeQuery("UPDATE taak SET lease_tot = ?3 WHERE soort = ?1 AND id = ?2")
-                .setParameter(1, taakSoort.name())
-                .setParameter(2, id)
-                .setParameter(3, tot)
+        entityManager.createQuery("update Taak set " + Taak_.LEASE_TOT + " = :tot" + ZELFDE_TAAK)
+                .setParameter("tot", tot)
+                .setParameter("taakSoort", taakSoort)
+                .setParameter("id", id)
+                .executeUpdate();
+    }
+
+    /** Zet de taak op {@code MISLUKT} zonder de pogingen uit te putten. */
+    public static void markeerMislukt(EntityManager entityManager, TaakSoort taakSoort, long id) {
+        entityManager.createQuery("update Taak set " + Taak_.STATUS + " = :mislukt" + ZELFDE_TAAK)
+                .setParameter("mislukt", TaakStatus.MISLUKT)
+                .setParameter("taakSoort", taakSoort)
+                .setParameter("id", id)
                 .executeUpdate();
     }
 
     /** Vergrendelt de taakrij tot het einde van de transactie van de aanroeper. */
     public static void vergrendel(EntityManager entityManager, TaakSoort taakSoort, long id) {
-        entityManager.createNativeQuery("SELECT id FROM taak WHERE soort = ?1 AND id = ?2 FOR UPDATE")
-                .setParameter(1, taakSoort.name())
-                .setParameter(2, id)
-                .getResultList();
+        entityManager.createQuery("from Taak" + ZELFDE_TAAK, Taak.class)
+                .setParameter("taakSoort", taakSoort)
+                .setParameter("id", id)
+                .setLockMode(LockModeType.PESSIMISTIC_WRITE)
+                .getSingleResult();
     }
 
     public static void leegVerzendbudget(EntityManager entityManager) {
-        entityManager.createNativeQuery("DELETE FROM verzendbudget").executeUpdate();
+        entityManager.createQuery("delete from VerzendbudgetTijdvak").executeUpdate();
     }
 
     /** De tokens van het enige tijdvak in de tabel. */
     public static int tokens(EntityManager entityManager) {
-        return ((Number) entityManager.createNativeQuery("SELECT tokens FROM verzendbudget").getSingleResult()).intValue();
+        return entityManager.createQuery("select " + VerzendbudgetTijdvak_.TOKENS + " from VerzendbudgetTijdvak",
+                        Integer.class)
+                .getSingleResult();
     }
 
     public static int tokens(EntityManager entityManager, OffsetDateTime tijdvak) {
-        return ((Number) entityManager.createNativeQuery("SELECT tokens FROM verzendbudget WHERE tijdvak = ?1")
-                .setParameter(1, tijdvak)
-                .getSingleResult()).intValue();
+        return entityManager.createQuery("select " + VerzendbudgetTijdvak_.TOKENS + " from VerzendbudgetTijdvak where "
+                        + VerzendbudgetTijdvak_.TIJDVAK + " = :tijdvak", Integer.class)
+                .setParameter("tijdvak", tijdvak)
+                .getSingleResult();
     }
 
     public static int telBudgetrijen(EntityManager entityManager) {
-        return ((Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM verzendbudget").getSingleResult()).intValue();
+        return entityManager.createQuery("select count(*) from VerzendbudgetTijdvak", Long.class)
+                .getSingleResult()
+                .intValue();
     }
 
     /** Voegt een dienstverlener toe als die er nog niet is. */
     public static void voegDienstverlenerToe(EntityManager entityManager, UUID id, String oin, String naam) {
-        entityManager.createNativeQuery("INSERT INTO dienstverlener (id, oin, naam) VALUES (?1, ?2, ?3) "
-                        + "ON CONFLICT (id) DO NOTHING")
-                .setParameter(1, id)
-                .setParameter(2, oin)
-                .setParameter(3, naam)
+        entityManager.createQuery("insert into Dienstverlener (" + Dienstverlener_.ID + ", " + Dienstverlener_.OIN
+                        + ", " + Dienstverlener_.NAAM + ") values (:id, :oin, :naam) on conflict do nothing")
+                .setParameter("id", id)
+                .setParameter("oin", oin)
+                .setParameter("naam", naam)
+                .executeUpdate();
+    }
+
+    /** Zet het quotum per dag; {@code null} betekent geen quotum. */
+    public static void zetQuotumPerDag(EntityManager entityManager, UUID dvId, Integer quotum) {
+        entityManager.createQuery("update Dienstverlener set " + Dienstverlener_.QUOTUM_PER_DAG + " = :quotum where "
+                        + Dienstverlener_.ID + " = :id")
+                .setParameter("quotum", quotum)
+                .setParameter("id", dvId)
                 .executeUpdate();
     }
 
     public static int telDienstverleners(EntityManager entityManager, UUID id) {
-        return ((Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM dienstverlener WHERE id = ?1")
-                .setParameter(1, id)
-                .getSingleResult()).intValue();
+        return entityManager.createQuery("select count(*) from Dienstverlener where " + Dienstverlener_.ID + " = :id",
+                        Long.class)
+                .setParameter("id", id)
+                .getSingleResult()
+                .intValue();
     }
 }

@@ -4,9 +4,13 @@ import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.LockModeType;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import org.hibernate.query.NativeQuery;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -61,6 +65,26 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
         }
 
         return query.getResultList();
+    }
+
+    /** Het aantal notificaties dat deze dienstverlener sinds {@code vanaf} heeft aangeboden. */
+    public long telAangenomenSinds(UUID dvId, OffsetDateTime vanaf) {
+        return count(Notificatie_.DV_ID + " = ?1 and " + Notificatie_.AANGENOMEN_OP + " >= ?2", dvId, vanaf);
+    }
+
+    /**
+     * Notificaties zonder eindstatus waarvoor geen taak open staat of mislukt is: die zijn blijven steken
+     * en krijgen van de controletaak de ontbrekende taak.
+     */
+    public List<Notificatie> zonderTaak(Collection<NotificatieStatus> eindstatussen, int limiet) {
+        // De subquery noemt geen soort: een taak van elke soort telt, dus hij leest elke partitie.
+        return getEntityManager()
+                .createQuery("select n from Notificatie n where n." + Notificatie_.STATUS + " not in :eindstatussen "
+                        + "and not exists (select t." + Taak_.ID + " from Taak t where t." + Taak_.NOTIFICATIE_ID
+                        + " = n." + Notificatie_.ID + ") order by n." + Notificatie_.LAATSTE_STATUS_UPDATE, Notificatie.class)
+                .setParameter("eindstatussen", eindstatussen)
+                .setMaxResults(limiet)
+                .getResultList();
     }
 
     /**

@@ -40,19 +40,20 @@ public class ReceiptVerwerker {
     }
 
     /**
+     * @param reference  de eigen referentie uit de receipt: het poging-id dat bij het versturen is
+     *                   meegegeven; null of onbruikbaar voor verzendingen van vóór die afspraak, dan
+     *                   geldt het NotifyNL-id
      * @param opgetreden het tijdstip van de status volgens NotifyNL; bij null of een tijdstip in de
      *        toekomst geldt de eigen klok
-     * @throws NotificatieNietGevondenException als geen poging dit NotifyNL-id heeft
+     * @throws NotificatieNietGevondenException als geen poging bij deze receipt hoort
      */
     @Transactional
-    public void verwerk(UUID notifyId, String status, OffsetDateTime opgetreden) {
-        Poging poging = pogingRepository.findByNotifyId(notifyId)
-                .orElseThrow(() -> new NotificatieNietGevondenException(
-                        "Geen poging gevonden voor NotifyNL-referentie " + notifyId));
-
+    public void verwerk(UUID notifyId, String reference, String status, OffsetDateTime opgetreden) {
+        Poging poging = zoekPoging(notifyId, reference);
         Optional<PogingStatus> uitkomst = parseStatus(status, notifyId);
 
-        if (uitkomst.isEmpty()) {
+        // Een tussenstatus voor een poging die haar id al heeft, verandert niets.
+        if (uitkomst.isEmpty() && poging.getNotifyId() != null) {
             return;
         }
 
@@ -60,8 +61,26 @@ public class ReceiptVerwerker {
         // elkaars uitkomst zien.
         Notificatie notificatie = overgangsfunctie.vergrendel(poging.getNotificatieId());
         pogingRepository.herlaad(poging);
+        OffsetDateTime tijdstip = begrens(opgetreden);
 
-        if (!poging.verwerkReceipt(uitkomst.get(), begrens(opgetreden))) {
+        if (poging.getNotifyId() == null) {
+            // De receipt is er eerder dan de verzend-commit van de worker: de poging neemt het id over
+            // en de overgang naar verzonden gebeurt hier, namens de worker.
+            poging.markeerVerzonden(notifyId, tijdstip);
+
+            if (notificatie.getStatus() == NotificatieStatus.IN_VERZENDING) {
+                overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
+            }
+        } else if (!poging.hoortBij(notifyId)) {
+            // Een tweede verzending na een herclaim: zelfde ontvanger en inhoud, dus dezelfde poging.
+            poging.registreerDuplicaat(notifyId);
+        }
+
+        if (uitkomst.isEmpty()) {
+            return;
+        }
+
+        if (!poging.verwerkReceipt(uitkomst.get(), tijdstip)) {
             Log.debugf("Receipt %s voor NotifyNL-referentie %s is een herhaling of ouder dan de vastgelegde "
                     + "uitkomst en wordt genegeerd", status, notifyId);
 
@@ -81,6 +100,28 @@ public class ReceiptVerwerker {
         // StatusUpdateVerzender pakt dit pas ná de commit op, zodat de Dienstverlener geen status
         // krijgt die daarna terugrolt.
         statusUpdateEvent.fire(StatusUpdateOpdracht.van(resultaat.event(), notificatie.getCallbackUrl()));
+    }
+
+    // Eerst op reference (het poging-id), dan op het NotifyNL-id voor verzendingen zonder reference.
+    private Poging zoekPoging(UUID notifyId, String reference) {
+        Optional<Poging> opReference = parseUuid(reference).map(pogingRepository::findById);
+
+        return opReference
+                .or(() -> pogingRepository.findByNotifyId(notifyId))
+                .orElseThrow(() -> new NotificatieNietGevondenException(
+                        "Geen poging gevonden voor NotifyNL-referentie " + notifyId + " (reference " + reference + ")"));
+    }
+
+    private static Optional<UUID> parseUuid(String waarde) {
+        if (waarde == null || waarde.isBlank()) {
+            return Optional.empty();
+        }
+
+        try {
+            return Optional.of(UUID.fromString(waarde.strip()));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
     }
 
     // De tussenstatussen van NotifyNL leveren geen uitkomst op. Een onbekende status wordt op ERROR

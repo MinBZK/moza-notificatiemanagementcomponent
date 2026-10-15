@@ -115,10 +115,11 @@ ook alleen een identificatie doorgeven en de NMC de regie laten.
 
 Geïmplementeerd:
 
-- `POST /api/nmc/v1/centraal/notificaties`: zoekt via de Profielservice het
-  e-mailadres op en verstuurt via NotifyNL.
-- `POST /api/nmc/v1/decentraal/notificaties`: de aanroeper levert het e-mailadres
-  zelf; geen Profielservice-lookup.
+- `POST /api/nmc/v1/centraal/notificaties`: neemt een notificatie aan op een
+  identificerend nummer en antwoordt 202 met `Location`; de verzendtaak haalt het
+  e-mailadres later op bij de Profielservice.
+- `POST /api/nmc/v1/decentraal/notificaties`: idem met een e-mailadres van de
+  aanroeper; geen Profielservice-lookup.
 - `POST /api/nmc/v1/notifynl-callback`: ontvangt de afleverstatus van NotifyNL,
   beveiligd met een bearer token (`NotifyNLCallbackAuthFilter`).
 - **Statusmodel uit ADR 0024.** `notificatie` draagt de status en een versie,
@@ -136,16 +137,29 @@ Geïmplementeerd:
   `FOR UPDATE SKIP LOCKED`, verdeeld over de dienstverleners met werk en voor het
   verzenden en de navraag binnen het `verzendbudget` per Notify-service per minuut.
   `TaakWorker` draait per soort een `@Scheduled`-ronde en geeft elke taak aan de
-  `TaakHandler` van die soort. Er zijn nog geen handlers: de tabel blijft leeg tot de
-  aannamestory de verzendtaak plant.
+  `TaakHandler` van die soort. Handlers: `VerzendTaakHandler` en
+  `ControleTaakHandler`; de overige soorten worden gepland maar nog niet uitgevoerd.
 - **Eén geconfigureerde dienstverlener.** `dienstverlener` heeft één rij uit de
   migratie; `DvProvider` levert die `dv_id`, die op elke notificatie en elk event
   staat. Tokenvalidatie per dienstverlener vervangt later alleen de provider.
 
-Beide create-flows delen `NotificatieService.verstuurNaarEmail(...)`: aannemen,
-een poging aanmaken, naar `in-verzending`, versturen bij NotifyNL en naar
-`verzonden`, alles nog synchroon in één transactie. De centrale flow doet eerst de
-Profielservice-lookup.
+Beide intakes gaan via `AannameService`: notificatie op `aangenomen` met event 0, de
+versleutelde payload en een verzendtaak in één transactie; het quotum per
+dienstverlener per dag (`dienstverlener.quotum_per_dag`, zonder waarde daar
+`nmc.aanname.quotum-per-dag`) geeft 429.
+De controllers antwoorden 202 met `Location` via `AannameResponse.notificatieAangenomen`; daarvoor genereert
+de `notificaties`-run in de pom met `returnResponse=true`. `VerzendTaakHandler` doet in een
+eerste transactie `aangenomen` naar `in-verzending` met een geplande poging, roept
+daarbuiten de Profielservice (bij centrale regie) en NotifyNL aan met het poging-id
+als `reference`, en doet in een tweede transactie `in-verzending` naar `verzonden`
+met een navraagtaak. Een `ValidationError` van NotifyNL op `email_address` en een
+partij zonder adres leiden tot een eindstatus (`niet-bezorgbaar`). Een andere 4xx, behalve
+429, ligt aan het NMC en kost een poging; 429, 5xx, een verbindingsfout en een
+ontbrekende KEK-versie stellen de taak uit zonder poging. Een herclaim zoekt eerst
+op `reference`. `ControleTaakHandler` plant zichzelf opnieuw
+en geeft een notificatie zonder taak de taak die bij haar status hoort. De
+verzendtaak schrijft nog geen LDV-registratie: de `@Logboek`-interceptor werkt alleen
+binnen een REST-aanroep.
 
 Nog niet gebouwd: een endpoint om de status op te vragen, contactherstel, de
 Templating Service-koppeling (templates staan als vaste NotifyNL-template-IDs in
@@ -207,13 +221,18 @@ de logica die kiest tussen herverzending en contactherstel.
   Output Management Systeem of Printstraat). Gebruik die swagger niet als contract
   voordat dat is opgehelderd.
 - **Afleverstatussen komen at-least-once en ongeordend binnen.** NotifyNL biedt een
-  callback opnieuw aan bij elke niet-2xx. `ReceiptVerwerker` ordent per poging op het
+  callback opnieuw aan bij elke niet-2xx. `ReceiptVerwerker` zoekt de poging op de
+  `reference` uit de receipt (het poging-id) en anders op het NotifyNL-id. Heeft de poging
+  nog geen NotifyNL-id, dan is de receipt er eerder dan de verzend-commit: de poging neemt
+  het id over en de verwerker doet de overgang naar `verzonden` namens de worker, ook bij een
+  tussenstatus. Een ander NotifyNL-id dan dat op de poging komt van een tweede verzending na
+  een herclaim en wordt als duplicaat op dezelfde poging vastgelegd. De verwerker ordent per poging op het
   tijdstip in de receipt (`completed_at`, met `sent_at` en `created_at` als terugval,
   begrensd op de eigen klok); een herhaalde of oudere receipt verandert niets. De
   poging wordt pas na het vergrendelen van de notificatie opnieuw gelezen, zodat een
   receipt die op de vergrendeling wachtte de uitkomst van de eerste ziet. Tot er
   herverzending is, leiden `temporary-failure` en `technical-failure` tot een eindstatus.
-  Tussenstatussen worden genegeerd; een onbekende status wordt op ERROR gelogd en
+  Verder verandert een tussenstatus niets; een onbekende status wordt op ERROR gelogd en
   verandert niets.
 - **Receipttijd en registratietijd zijn gescheiden.** Het tijdstip uit de receipt staat
   op `poging.receipt_tijdstip` en is het tijdstip voor het afleverbewijs; `event.geregistreerd`
@@ -423,8 +442,12 @@ nooit in `application.properties`. Onder `%test` staan dummywaarden.
 
 Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
 `nmc.dienstverlener.id` (de rij uit V8), `nmc.taak.*` (interval, batch, lease,
-max-pogingen van de worker-lus) en `nmc.verzendbudget.*` (Notify-service, tokens per
-minuut, reservering voor de navraag). Onder `%test` staat de lus uit en is het budget
+max-pogingen van de worker-lus, en het uitstel na een storing),
+`nmc.navraag.eerste-due` (wanneer de eerste navraag naar de afleverstatus gepland wordt),
+`nmc.controle.*` (interval en maximum per ronde van de controletaak),
+`nmc.aanname.quotum-per-dag` (quotum voor een dienstverlener zonder eigen quotum in
+het register; leeg is onbeperkt) en
+`nmc.verzendbudget.*` (Notify-service, tokens per minuut, reservering voor de navraag). Onder `%test` staat de lus uit en is het budget
 klein, zodat tests het uitputten.
 
 Ook `quarkus.rest-client.profielservice.url` en `quarkus.rest-client.notify.url`
