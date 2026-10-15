@@ -10,6 +10,7 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.PartijIdentificatie;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 
@@ -26,15 +27,18 @@ public class NotificatieService {
     private final NotifyNLVerzendAdapter verzendAdapter;
     private final PogingRepository pogingRepository;
     private final Overgangsfunctie overgangsfunctie;
+    private final Sleutelbeheer sleutelbeheer;
 
     public NotificatieService(ProfielServiceAdapter profielServiceAdapter,
                                NotifyNLVerzendAdapter verzendAdapter,
                                PogingRepository pogingRepository,
-                               Overgangsfunctie overgangsfunctie) {
+                               Overgangsfunctie overgangsfunctie,
+                               Sleutelbeheer sleutelbeheer) {
         this.profielServiceAdapter = profielServiceAdapter;
         this.verzendAdapter = verzendAdapter;
         this.pogingRepository = pogingRepository;
         this.overgangsfunctie = overgangsfunctie;
+        this.sleutelbeheer = sleutelbeheer;
     }
 
     // TODO (buiten scope): deze transactie blijft open over de synchrone Profielservice- en
@@ -46,19 +50,27 @@ public class NotificatieService {
                 opdracht.identificatieType(), opdracht.identificatieNummer(),
                 opdracht.dienstverlener(), opdracht.dienst()));
 
-        return verstuurNaarEmail(emailAdres, opdracht.templateId(), opdracht.berichtgegevens(), opdracht.callbackUrl());
+        // Het adres uit de Profielservice wordt niet opgeslagen; op de rij staat het identificerend nummer.
+        Ontvanger ontvanger = new Ontvanger(Ontvanger.Soort.valueOf(opdracht.identificatieType().name()),
+                opdracht.identificatieNummer());
+
+        return verstuurNaarEmail(emailAdres, ontvanger, opdracht.templateId(), opdracht.berichtgegevens(), opdracht.callbackUrl());
     }
 
     @Transactional
     public Notificatie verstuurDecentraal(DecentraleNotificatieVersturenOpdracht opdracht) {
-        return verstuurNaarEmail(opdracht.emailAdres(), opdracht.templateId(), opdracht.berichtgegevens(), opdracht.callbackUrl());
+        return verstuurNaarEmail(opdracht.emailAdres(), Ontvanger.email(opdracht.emailAdres()), opdracht.templateId(),
+                opdracht.berichtgegevens(), opdracht.callbackUrl());
     }
 
     // Aanname, poging en overgang naar in-verzending worden geflusht vóór het versturen, zodat een
     // schrijffout geen verstuurde e-mail zonder record oplevert. Een fout bij de commit daarna kan
-    // dat nog wel.
-    private Notificatie verstuurNaarEmail(String emailAdres, String templateId, Map<String, String> berichtgegevens, String callbackUrl) {
+    // dat nog wel. De versleutelde gegevens gaan vóór de aanname op de entity, zodat de insert ze
+    // meeneemt zonder tweede update.
+    private Notificatie verstuurNaarEmail(String emailAdres, Ontvanger ontvanger, String templateId,
+                                          Map<String, String> berichtgegevens, String callbackUrl) {
         Notificatie notificatie = new Notificatie(callbackUrl);
+        notificatie.bewaarVersleuteldeGegevens(sleutelbeheer.versleutel(notificatie.getId(), ontvanger, berichtgegevens));
         overgangsfunctie.neemAan(notificatie);
 
         Poging poging = new Poging(notificatie.getId(), 1);
