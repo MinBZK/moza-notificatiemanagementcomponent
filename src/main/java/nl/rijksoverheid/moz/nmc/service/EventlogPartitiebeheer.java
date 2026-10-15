@@ -24,16 +24,16 @@ import java.util.Optional;
  */
 @Startup
 @ApplicationScoped
-public class Partitiebeheer {
+public class EventlogPartitiebeheer {
 
     private final EventPartitieRepository repository;
-    private final Bewaartermijnen bewaartermijnen;
+    private final Opruimtermijnen opruimtermijnen;
     private final long omvang;
     private final long marge;
     private final Duration lockTimeout;
     private final int epoch;
 
-    public Partitiebeheer(EventPartitieRepository repository, Bewaartermijnen bewaartermijnen,
+    public EventlogPartitiebeheer(EventPartitieRepository repository, Opruimtermijnen opruimtermijnen,
                           @ConfigProperty(name = "nmc.onderhoud.partitie-omvang") long omvang,
                           @ConfigProperty(name = "nmc.onderhoud.partitie-marge") long marge,
                           @ConfigProperty(name = "nmc.onderhoud.lock-timeout") Duration lockTimeout,
@@ -47,7 +47,7 @@ public class Partitiebeheer {
         }
 
         this.repository = repository;
-        this.bewaartermijnen = bewaartermijnen;
+        this.opruimtermijnen = opruimtermijnen;
         this.omvang = omvang;
         this.marge = marge;
         this.lockTimeout = lockTimeout;
@@ -75,7 +75,7 @@ public class Partitiebeheer {
         });
     }
 
-    // Package-private zodat PartitieplanTest het plan zonder database kan toetsen.
+    // Package-private zodat EventlogPartitiebeheerTest het plan zonder database kan toetsen.
     /**
      * De partitie die na {@code laatste} moet komen. Is de laatste nog niet voor 80% gevuld, dan geen.
      * Ligt de volgende transactie-id er al boven, dan begint de nieuwe {@code marge} daarboven: de
@@ -108,7 +108,7 @@ public class Partitiebeheer {
 
         for (EventPartitie partitie : partities) {
             // Eerst zonder vergrendeling, zodat een partitie die nog moet blijven de feed niet ophoudt.
-            if (!QuarkusTransaction.requiringNew().call(() -> magWeg(partitie, nu)) || !verwijderVergrendeld(partitie, nu)) {
+            if (!QuarkusTransaction.requiringNew().call(() -> magWeg(partitie, nu)) || !verwijderOnderVergrendeling(partitie, nu)) {
                 break;
             }
 
@@ -121,7 +121,7 @@ public class Partitiebeheer {
     // Onder de vergrendeling opnieuw getoetst, zodat een bevestiging die tussen de eerste toets en de
     // vergrendeling is gecommit meetelt. Een cursor die pas daarna wordt bevestigd, kan in de verwijderde
     // partitie wijzen en krijgt bij de volgende aanroep 410; dat is de gedocumenteerde herstart.
-    private boolean verwijderVergrendeld(EventPartitie partitie, OffsetDateTime nu) {
+    private boolean verwijderOnderVergrendeling(EventPartitie partitie, OffsetDateTime nu) {
         return QuarkusTransaction.requiringNew().call(() -> {
             repository.zetLockTimeout(lockTimeout);
             repository.vergrendelEventlog();
@@ -146,12 +146,12 @@ public class Partitiebeheer {
         return QuarkusTransaction.requiringNew().call(() -> {
             // Onder de oudste bereikpartitie die er nog staat, zodat rijen daarboven niet verdwijnen
             // terwijl een oudere partitie blijft: een verlopen cursor zou dan over het gat heen lezen.
-            long onder = Math.min(repository.watermerk(),
+            long onderTransactieId = Math.min(repository.watermerk(),
                     repository.bereikpartities().stream().mapToLong(EventPartitie::van).min().orElse(Long.MAX_VALUE));
-            Optional<Long> beschermd = repository.oudsteBeschermdeTransactieId(epoch, nu, bewaartermijnen.maxCursorleeftijd());
+            Optional<Long> beschermd = repository.oudsteBeschermdeTransactieId(epoch, nu, opruimtermijnen.maxCursorleeftijd());
 
-            return repository.verwijderUitStandaardpartitie(bewaartermijnen.bewarenVanaf(nu),
-                    beschermd.map(transactieId -> Math.min(transactieId, onder)).orElse(onder), maximum);
+            return repository.verwijderUitStandaardpartitie(opruimtermijnen.bewaargrens(nu),
+                    beschermd.map(transactieId -> Math.min(transactieId, onderTransactieId)).orElse(onderTransactieId), maximum);
         });
     }
 
@@ -160,14 +160,14 @@ public class Partitiebeheer {
             return false;
         }
 
-        Optional<Long> beschermd = repository.oudsteBeschermdeTransactieId(epoch, nu, bewaartermijnen.maxCursorleeftijd());
+        Optional<Long> beschermd = repository.oudsteBeschermdeTransactieId(epoch, nu, opruimtermijnen.maxCursorleeftijd());
 
         if (beschermd.isPresent() && beschermd.get() < partitie.tot()) {
             return false;
         }
 
-        return repository.jongsteEvent(partitie)
-                .map(tijdstip -> tijdstip.isBefore(bewaartermijnen.bewarenVanaf(nu)))
+        return repository.registratieVanJongsteEvent(partitie)
+                .map(tijdstip -> tijdstip.isBefore(opruimtermijnen.bewaargrens(nu)))
                 .orElse(true);
     }
 }

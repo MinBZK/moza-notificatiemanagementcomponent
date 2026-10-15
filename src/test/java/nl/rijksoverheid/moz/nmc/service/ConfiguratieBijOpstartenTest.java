@@ -12,7 +12,7 @@ class ConfiguratieBijOpstartenTest {
 
     @ParameterizedTest
     @ValueSource(classes = {AannameService.class, TaakClaimer.class, Verzendbudget.class, NotifyNLNavraagmomenten.class,
-            Verzendbeleid.class, Bewaartermijnen.class, Partitiebeheer.class})
+            Verzendbeleid.class, Opruimtermijnen.class, EventlogPartitiebeheer.class})
     void beanMetConfiguratiecontrole_wordtBijHetOpstartenGemaakt(Class<?> bean) {
         assertTrue(bean.isAnnotationPresent(Startup.class), bean.getSimpleName() + " mist @Startup");
     }

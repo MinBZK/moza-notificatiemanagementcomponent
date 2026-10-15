@@ -31,7 +31,7 @@ public class VerzendbudgetRepository implements PanacheRepositoryBase<Verzendbud
     }
 
     /** Verwijdert de rijen van tijdvakken vóór {@code grens} en geeft het aantal terug. */
-    public int verwijderVoor(OffsetDateTime grens) {
+    public int verwijderTijdvakkenOuderDan(OffsetDateTime grens) {
         return (int) delete(VerzendbudgetTijdvak_.TIJDVAK + " < ?1", grens);
     }
 }

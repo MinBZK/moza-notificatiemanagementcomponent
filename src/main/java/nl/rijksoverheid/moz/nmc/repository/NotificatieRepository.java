@@ -22,7 +22,7 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
     // Native vanwege FOR UPDATE SKIP LOCKED in de subselect: een notificatie die een overgang of een
     // andere pod vasthoudt, komt een volgende ronde aan de beurt. Pogingen en taken gaan mee via
     // ON DELETE CASCADE.
-    private static final String VERWIJDER_NA_BEWAARTERMIJN_SQL = """
+    private static final String VERWIJDER_MET_EINDSTATUS_OUDER_DAN_SQL = """
             DELETE FROM notificatie
              WHERE id IN (SELECT id
                             FROM notificatie
@@ -35,7 +35,7 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
     // Native: een vergrendelde projectie (FOR UPDATE SKIP LOCKED) van alleen de sleutelkolommen, zodat
     // niet de hele rij wordt geladen. Op id, zodat een rij waarvan de oude KEK ontbreekt de ronde niet
     // blokkeert: de volgende batch begint erachter.
-    private static final String HERWRAP_KANDIDATEN_SQL = """
+    private static final String VERGRENDEL_OUDE_SLEUTELS_SQL = """
             SELECT id, sleutel_gewrapt, kek_versie
               FROM notificatie
              WHERE kek_versie < ?1
@@ -70,8 +70,8 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
      *
      * @return het aantal verwijderde notificaties
      */
-    public int verwijderMetEindstatusVoor(OffsetDateTime grens, int maximum) {
-        return getEntityManager().createNativeQuery(VERWIJDER_NA_BEWAARTERMIJN_SQL)
+    public int verwijderMetEindstatusOuderDan(OffsetDateTime grens, int maximum) {
+        return getEntityManager().createNativeQuery(VERWIJDER_MET_EINDSTATUS_OUDER_DAN_SQL)
                 .setParameter(1, grens)
                 .setParameter(2, maximum)
                 .executeUpdate();
@@ -83,7 +83,7 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
      */
     @SuppressWarnings("unchecked")
     public List<GewrapteSleutel> vergrendelOudeSleutels(int huidigeVersie, UUID naId, int maximum) {
-        List<Object[]> rijen = getEntityManager().createNativeQuery(HERWRAP_KANDIDATEN_SQL)
+        List<Object[]> rijen = getEntityManager().createNativeQuery(VERGRENDEL_OUDE_SLEUTELS_SQL)
                 .unwrap(NativeQuery.class)
                 .addScalar("id", UUID.class)
                 .addScalar("sleutel_gewrapt", StandardBasicTypes.BINARY)

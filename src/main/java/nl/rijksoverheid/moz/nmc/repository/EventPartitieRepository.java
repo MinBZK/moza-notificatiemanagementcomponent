@@ -116,7 +116,7 @@ public class EventPartitieRepository {
      * hooguit de transactie-timeout later geregistreerd zijn.
      */
     @SuppressWarnings("unchecked")
-    public Optional<OffsetDateTime> jongsteEvent(EventPartitie partitie) {
+    public Optional<OffsetDateTime> registratieVanJongsteEvent(EventPartitie partitie) {
         List<OffsetDateTime> rijen = entityManager.createNativeQuery("SELECT geregistreerd FROM " + partitie.naam()
                         + " ORDER BY transactie_id DESC, id DESC FETCH FIRST 1 ROWS ONLY")
                 .unwrap(NativeQuery.class)

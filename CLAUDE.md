@@ -318,7 +318,7 @@ de logica die kiest tussen herverzending en contactherstel.
   een stap die faalt houdt de andere niet op.
 - **Het eventlog heeft bereikpartities op `transactie_id`.** V16 maakte van de oude
   default-partitie `event_0` (tot de eerstvolgende transactie-id plus de Flyway-placeholder
-  `event_marge`) en een nieuwe, lege `event_standaard`. `Partitiebeheer` maakt `event_<van>` aan
+  `event_marge`) en een nieuwe, lege `event_standaard`. `EventlogPartitiebeheer` maakt `event_<van>` aan
   zodra de lopende partitie voor 80% gevuld is, en begint een nieuw bereik altijd boven de al
   uitgedeelde transactie-ids: PostgreSQL weigert een bereik waarvoor al rijen in de
   default-partitie staan. Liep het onderhoud achter, dan begint het nieuwe bereik

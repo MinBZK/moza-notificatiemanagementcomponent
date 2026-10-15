@@ -33,14 +33,14 @@ public class Overgangsfunctie {
     private final NotificatieRepository notificatieRepository;
     private final EventRepository eventRepository;
     private final TaakRepository taakRepository;
-    private final Bewaartermijnen bewaartermijnen;
+    private final Opruimtermijnen opruimtermijnen;
 
     public Overgangsfunctie(NotificatieRepository notificatieRepository, EventRepository eventRepository,
-                            TaakRepository taakRepository, Bewaartermijnen bewaartermijnen) {
+                            TaakRepository taakRepository, Opruimtermijnen opruimtermijnen) {
         this.notificatieRepository = notificatieRepository;
         this.eventRepository = eventRepository;
         this.taakRepository = taakRepository;
-        this.bewaartermijnen = bewaartermijnen;
+        this.opruimtermijnen = opruimtermijnen;
     }
 
     /** Slaat een nieuwe notificatie op als {@code AANGENOMEN}, met het event met volgnummer 0. */
@@ -86,7 +86,7 @@ public class Overgangsfunctie {
 
         if (naar.isEindstatus()) {
             taakRepository.planWistaak(notificatie.getDvId(), notificatie.getId(),
-                    bewaartermijnen.wissenOp(notificatie.getEindstatusOp()));
+                    opruimtermijnen.wissenOp(notificatie.getEindstatusOp()));
         } else if (van.isEindstatus()) {
             taakRepository.verwijderOpen(TaakSoort.WISSEN, notificatie.getId());
         }

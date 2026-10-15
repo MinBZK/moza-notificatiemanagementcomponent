@@ -145,7 +145,7 @@ Geïmplementeerde componenten zijn vetgedrukt; de rest is toekomstig ontwerp.
 | **Terugkoppeltaak** | Taakhandler (`TerugkoppelTaakHandler`, `WebhookDispatcher`) | Levert per dienstverlener de events vanaf de leverpositie als CloudEvents-batch aan de webhook uit het register, met een ondertekende bearer-JWT. |
 | **Consument-callback-adapter** | Webhook-client (CloudEvents NL GOV) | Doet de POST naar de webhook: één poging, zonder herhaling. |
 | **Verzendverwerker** | Worker (`TaakWorker`, `TaakClaimer`) | Claimt taken uit de takentabel met `SKIP LOCKED`, verdeeld over dienstverleners en binnen het verzendbudget, en geeft ze aan de handler per soort. |
-| **Wistaak en onderhoudstaak** | Taakhandlers (`WisTaakHandler`, `OnderhoudTaakHandler`, `Partitiebeheer`) | Wissen de sleutel per notificatie na de wistermijn; maken en verwijderen eventpartities, herwrappen sleutels na een KEK-rotatie en verwijderen notificaties na de bewaartermijn van het afleverbewijs. |
+| **Wistaak en onderhoudstaak** | Taakhandlers (`WisTaakHandler`, `OnderhoudTaakHandler`, `EventlogPartitiebeheer`) | Wissen de sleutel per notificatie na de wistermijn; maken en verwijderen eventpartities, herwrappen sleutels na een KEK-rotatie en verwijderen notificaties na de bewaartermijn van het afleverbewijs. |
 | **notificatiedatabase** | PostgreSQL | Slaat notificaties met hun status, de verzendpogingen, het eventlog, de takentabel, het verzendbudget en het dienstverlenerregister op. |
 | **Decentrale-regie-API** | REST (controller) | Inbound endpoint voor het decentraal profiel: intake op het meegegeven e-mailadres, zonder Profielservice-lookup. |
 | **Eventfeed-API** | REST (controller) | `GET /notificaties/wijzigingen`, de bevestiging en de JWKS. |

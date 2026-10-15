@@ -25,14 +25,14 @@ public class WisTaakHandler implements TaakHandler {
     private final Overgangsfunctie overgangsfunctie;
     private final NotificatieRepository notificatieRepository;
     private final TaakClaimer taakClaimer;
-    private final Bewaartermijnen bewaartermijnen;
+    private final Opruimtermijnen opruimtermijnen;
 
     public WisTaakHandler(Overgangsfunctie overgangsfunctie, NotificatieRepository notificatieRepository,
-                          TaakClaimer taakClaimer, Bewaartermijnen bewaartermijnen) {
+                          TaakClaimer taakClaimer, Opruimtermijnen opruimtermijnen) {
         this.overgangsfunctie = overgangsfunctie;
         this.notificatieRepository = notificatieRepository;
         this.taakClaimer = taakClaimer;
-        this.bewaartermijnen = bewaartermijnen;
+        this.opruimtermijnen = opruimtermijnen;
     }
 
     @Override
@@ -58,7 +58,7 @@ public class WisTaakHandler implements TaakHandler {
             return;
         }
 
-        OffsetDateTime wissenOp = bewaartermijnen.wissenOp(notificatie.getEindstatusOp());
+        OffsetDateTime wissenOp = opruimtermijnen.wissenOp(notificatie.getEindstatusOp());
 
         if (wissenOp.isAfter(OffsetDateTime.now(ZoneOffset.UTC))) {
             taakClaimer.stelUit(taak, wissenOp, false);

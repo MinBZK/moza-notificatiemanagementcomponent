@@ -8,7 +8,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 
 /**
- * De termijnen waarop gegevens verdwijnen. Na de wistermijn wordt de sleutel per notificatie gewist,
+ * De termijnen waarop het onderhoud gegevens opruimt. Na de wistermijn wordt de sleutel per notificatie gewist,
  * waarna de rij pseudoniem is; na de bewaartermijn van het afleverbewijs verdwijnen de notificatie, haar
  * pogingen en de partities van het eventlog. Een cursor ouder dan de maximale cursorleeftijd houdt het
  * opruimen van het eventlog niet meer tegen; het register kan die leeftijd per dienstverlener afwijkend
@@ -16,28 +16,28 @@ import java.time.OffsetDateTime;
  */
 @Startup
 @ApplicationScoped
-public class Bewaartermijnen {
+public class Opruimtermijnen {
 
     private final Duration wistermijn;
-    private final Duration afleverbewijs;
+    private final Duration afleverbewijstermijn;
     private final Duration maxCursorleeftijd;
 
-    public Bewaartermijnen(@ConfigProperty(name = "nmc.wissen.termijn") Duration wistermijn,
-                           @ConfigProperty(name = "nmc.afleverbewijs.bewaartermijn") Duration afleverbewijs,
+    public Opruimtermijnen(@ConfigProperty(name = "nmc.wissen.termijn") Duration wistermijn,
+                           @ConfigProperty(name = "nmc.afleverbewijs.bewaartermijn") Duration afleverbewijstermijn,
                            @ConfigProperty(name = "nmc.feed.max-cursorleeftijd") Duration maxCursorleeftijd) {
-        if (!isPositief(wistermijn) || !isPositief(afleverbewijs) || !isPositief(maxCursorleeftijd)) {
+        if (!isPositief(wistermijn) || !isPositief(afleverbewijstermijn) || !isPositief(maxCursorleeftijd)) {
             throw new IllegalStateException("nmc.wissen.termijn, nmc.afleverbewijs.bewaartermijn en "
                     + "nmc.feed.max-cursorleeftijd moeten positief zijn");
         }
 
         // De rij verdwijnt met de versleutelde gegevens; wissen moet dus eerder of tegelijk.
-        if (afleverbewijs.compareTo(wistermijn) < 0) {
-            throw new IllegalStateException("nmc.afleverbewijs.bewaartermijn (" + afleverbewijs
+        if (afleverbewijstermijn.compareTo(wistermijn) < 0) {
+            throw new IllegalStateException("nmc.afleverbewijs.bewaartermijn (" + afleverbewijstermijn
                     + ") mag niet korter zijn dan nmc.wissen.termijn (" + wistermijn + ")");
         }
 
         this.wistermijn = wistermijn;
-        this.afleverbewijs = afleverbewijs;
+        this.afleverbewijstermijn = afleverbewijstermijn;
         this.maxCursorleeftijd = maxCursorleeftijd;
     }
 
@@ -47,8 +47,8 @@ public class Bewaartermijnen {
     }
 
     /** Wat vóór dit tijdstip ligt, valt buiten de bewaartermijn van het afleverbewijs. */
-    public OffsetDateTime bewarenVanaf(OffsetDateTime nu) {
-        return nu.minus(afleverbewijs);
+    public OffsetDateTime bewaargrens(OffsetDateTime nu) {
+        return nu.minus(afleverbewijstermijn);
     }
 
     /** De maximale cursorleeftijd voor een dienstverlener zonder eigen afspraak in het register. */

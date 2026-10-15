@@ -54,7 +54,7 @@ class OnderhoudTaakHandlerTest {
     OnderhoudTaakHandler onderhoudTaakHandler;
 
     @Inject
-    Partitiebeheer partitiebeheer;
+    EventlogPartitiebeheer eventlogPartitiebeheer;
 
     @Inject
     EventPartitieRepository eventPartitieRepository;
@@ -175,11 +175,11 @@ class OnderhoudTaakHandlerTest {
         EventPartitie lopend = zorgVoorLopendePartitie();
         verbruikTransactieIdsTot(lopend.van() + 40);
 
-        Optional<EventPartitie> volgende = partitiebeheer.maakVolgendeAan();
+        Optional<EventPartitie> volgende = eventlogPartitiebeheer.maakVolgendeAan();
 
         assertEquals(Optional.of(EventPartitie.vanaf(lopend.tot(), lopend.tot() + 50)), volgende);
         assertTrue(partities().contains(volgende.get()));
-        assertEquals(Optional.empty(), partitiebeheer.maakVolgendeAan(), "de nieuwe is nog leeg");
+        assertEquals(Optional.empty(), eventlogPartitiebeheer.maakVolgendeAan(), "de nieuwe is nog leeg");
         assertEquals(lopend.naam(), partitieVan(nieuwEvent(OffsetDateTime.now(ZoneOffset.UTC))),
                 "een nieuw event landt in een bereikpartitie, niet in de default");
     }
@@ -188,7 +188,7 @@ class OnderhoudTaakHandlerTest {
     void ruimOp_oudePartitieZonderCursor_verwijdertHaar() {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
 
-        assertTrue(partitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
 
         assertFalse(partities().contains(oud.partitie()));
         assertEquals(0, events(oud.notificatieId()));
@@ -198,7 +198,7 @@ class OnderhoudTaakHandlerTest {
     void ruimOp_jongsteEventBinnenDeBewaartermijn_laatDePartitieStaan() {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(364));
 
-        assertFalse(partitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertFalse(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
 
         assertTrue(partities().contains(oud.partitie()));
     }
@@ -208,7 +208,7 @@ class OnderhoudTaakHandlerTest {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(1, oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC).minusDays(29));
 
-        assertFalse(partitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertFalse(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
 
         assertTrue(partities().contains(oud.partitie()));
     }
@@ -218,7 +218,7 @@ class OnderhoudTaakHandlerTest {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(1, oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
 
-        assertTrue(partitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
     }
 
     @Test
@@ -228,7 +228,7 @@ class OnderhoudTaakHandlerTest {
         QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetMaxCursorleeftijd(entityManager,
                 NotificatieFixtures.DV_ID, Duration.ofDays(90)));
 
-        assertFalse(partitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertFalse(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
 
         assertTrue(partities().contains(oud.partitie()));
     }
@@ -238,7 +238,7 @@ class OnderhoudTaakHandlerTest {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(0, oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC));
 
-        assertTrue(partitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
     }
 
     // Een cursor achter de partitie heeft haar events al gelezen.
@@ -247,7 +247,7 @@ class OnderhoudTaakHandlerTest {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(1, oud.partitie().tot(), OffsetDateTime.now(ZoneOffset.UTC));
 
-        assertTrue(partitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
     }
 
     @Test
@@ -255,7 +255,7 @@ class OnderhoudTaakHandlerTest {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         leverpositie(oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC).minusDays(1), OffsetDateTime.now(ZoneOffset.UTC));
 
-        assertFalse(partitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertFalse(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
 
         assertTrue(partities().contains(oud.partitie()));
     }
@@ -266,7 +266,7 @@ class OnderhoudTaakHandlerTest {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         leverpositie(oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), OffsetDateTime.now(ZoneOffset.UTC));
 
-        assertTrue(partitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
     }
 
     // Wat buiten de bereiken valt (de onderhoudstaak liep achter), gaat per rij weg uit de default-partitie.
@@ -278,9 +278,9 @@ class OnderhoudTaakHandlerTest {
         UUID jong = nieuwEvent(OffsetDateTime.now(ZoneOffset.UTC));
         assertEquals("event_standaard", partitieVan(oud));
         // De lege, oudere bereikpartities gaan eerst weg; pas dan komen de rijen erboven aan de beurt.
-        partitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC));
+        eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC));
 
-        partitiebeheer.ruimStandaardpartitieOp(OffsetDateTime.now(ZoneOffset.UTC), 100);
+        eventlogPartitiebeheer.ruimStandaardpartitieOp(OffsetDateTime.now(ZoneOffset.UTC), 100);
 
         assertEquals(0, events(oud));
         assertEquals(1, events(jong));
@@ -295,7 +295,7 @@ class OnderhoudTaakHandlerTest {
         UUID oud = nieuwEvent(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         assertEquals("event_standaard", partitieVan(oud));
 
-        partitiebeheer.ruimStandaardpartitieOp(OffsetDateTime.now(ZoneOffset.UTC), 100);
+        eventlogPartitiebeheer.ruimStandaardpartitieOp(OffsetDateTime.now(ZoneOffset.UTC), 100);
 
         assertEquals(1, events(oud));
     }
@@ -307,7 +307,7 @@ class OnderhoudTaakHandlerTest {
         UUID oud = nieuwEvent(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(1, transactieIdVan(oud), OffsetDateTime.now(ZoneOffset.UTC));
 
-        assertEquals(0, partitiebeheer.ruimStandaardpartitieOp(OffsetDateTime.now(ZoneOffset.UTC), 100));
+        assertEquals(0, eventlogPartitiebeheer.ruimStandaardpartitieOp(OffsetDateTime.now(ZoneOffset.UTC), 100));
 
         assertEquals(1, events(oud));
     }
@@ -335,7 +335,7 @@ class OnderhoudTaakHandlerTest {
 
     /** Een partitie die de volgende transactie-id bevat, zonder dat er een aansluitende nodig is. */
     private EventPartitie zorgVoorLopendePartitie() {
-        for (int i = 0; i < 5 && partitiebeheer.maakVolgendeAan().isPresent(); i++) {
+        for (int i = 0; i < 5 && eventlogPartitiebeheer.maakVolgendeAan().isPresent(); i++) {
             // Tot er een partitie is die nog niet voor 80% gevuld is.
         }
 
@@ -349,7 +349,7 @@ class OnderhoudTaakHandlerTest {
     private OudePartitie oudePartitie(OffsetDateTime tijdstip) {
         EventPartitie lopend = zorgVoorLopendePartitie();
         verbruikTransactieIdsTot(lopend.tot());
-        EventPartitie partitie = partitiebeheer.maakVolgendeAan().orElseThrow();
+        EventPartitie partitie = eventlogPartitiebeheer.maakVolgendeAan().orElseThrow();
         verbruikTransactieIdsTot(partitie.van());
         UUID notificatieId = nieuwEvent(tijdstip);
         assertEquals(partitie.naam(), partitieVan(notificatieId));

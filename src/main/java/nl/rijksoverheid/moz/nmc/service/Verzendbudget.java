@@ -94,8 +94,8 @@ public class Verzendbudget {
      *
      * @return het aantal verwijderde rijen
      */
-    public int ruimOpVoor(OffsetDateTime grens) {
-        return verzendbudgetRepository.verwijderVoor(grens);
+    public int verwijderTijdvakkenOuderDan(OffsetDateTime grens) {
+        return verzendbudgetRepository.verwijderTijdvakkenOuderDan(grens);
     }
 
     /** Het aantal tokens dat een claim nam, uit welk tijdvak en voor welk doel. */
