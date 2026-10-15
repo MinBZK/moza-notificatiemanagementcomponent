@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
+import jakarta.ws.rs.core.Response;
 import nl.rijksoverheid.moz.nmc.api.SleutelsApi;
 import nl.rijksoverheid.moz.nmc.api.model.JsonWebKey;
 import nl.rijksoverheid.moz.nmc.api.model.JsonWebKeySet;
@@ -17,9 +18,9 @@ public class SleutelsController implements SleutelsApi {
     }
 
     @Override
-    public JsonWebKeySet sleutelsOpvragen() {
-        return new JsonWebKeySet(List.of(new JsonWebKey(JsonWebKey.KtyEnum.RSA, JsonWebKey.UseEnum.SIG,
+    public Response sleutelsOpvragen() {
+        return Response.ok(new JsonWebKeySet(List.of(new JsonWebKey(JsonWebKey.KtyEnum.RSA, JsonWebKey.UseEnum.SIG,
                 JsonWebKey.AlgEnum.RS256, webhookSleutel.keyId(), webhookSleutel.modulus(),
-                webhookSleutel.publiekeExponent())));
+                webhookSleutel.publiekeExponent())))).build();
     }
 }

@@ -121,15 +121,14 @@ Geïmplementeerd:
 - `POST /api/nmc/v1/decentraal/notificaties`: idem met een e-mailadres van de
   aanroeper; geen Profielservice-lookup.
 - `POST /api/nmc/v1/notifynl-callback`: ontvangt de afleverstatus van NotifyNL,
-  beveiligd met een bearer token (`NotifyNLCallbackAuthFilter`). `InkomendEventOpslag`
+  beveiligd met een bearer token (`NotifyNLCallbackAuthFilter`). `ReceiptOpslag`
   slaat de receipt op als `RECEIPT_VERWERKEN`-taak (uniek op poging, status en
   tijdstip) en de controller antwoordt 204, ook bij een receipt die bij geen poging
   hoort (geteld in `nmc.receipts.afgewezen`). `ReceiptTaakHandler` verwerkt hem.
 - **Statusmodel uit ADR 0024.** `notificatie` draagt de status en een versie,
   `poging` de uitkomst per verzending, `event` het eventlog met één rij per
   overgang. `Overgangsfunctie` is de enige schrijver van de status; een deferred
-  databasetrigger weigert een nieuwe versie zonder event of een niet-toegestane
-  overgang.
+  databasetrigger weigert een nieuwe versie zonder event.
 - **Webhook als terugkoppeltaak.** Heeft een dienstverlener een `webhook_url` in het
   register, dan levert één `TERUGKOPPELEN`-taak per dienstverlener
   (`TerugkoppelTaakHandler`) de events na `webhookpositie` onder het watermerk van de
@@ -145,19 +144,19 @@ Geïmplementeerd:
   verzenden en de navraag binnen het `verzendbudget` per Notify-service per minuut.
   `TaakWorker` draait per soort een `@Scheduled`-ronde en geeft elke taak aan de
   `TaakHandler` van die soort. Handlers: `VerzendTaakHandler`, `ReceiptTaakHandler`,
-  `Reconciler` (navraag), `BezorgingVaststellenTaakHandler`, `ControleTaakHandler` en `TerugkoppelTaakHandler`; de
+  `NotifyNLNavraagTaakHandler`, `BezorgingVaststellenTaakHandler`, `ControleTaakHandler` en `TerugkoppelTaakHandler`; de
   overige soorten worden gepland maar nog niet uitgevoerd.
 - **Herverzending en `geldig_tot`.** Een notificatie krijgt `Verzendbeleid.maxHerverzendingen`
   herverzendingen (standaard één): een `temporary-failure` of `technical-failure` op een
   poging daarbinnen plant een verzendtaak na `Verzendbeleid.herverzendWachttijd`, en de
   claim daarvan maakt de volgende poging aan (`verzonden` naar `verzonden`, met event). Op
-  de laatste toegestane poging is een fout terminaal.
+  de laatste toegestane poging leidt een fout tot een eindstatus.
   `geldig_tot` (aanname plus `Verzendbeleid.geldigheid` van het berichttype) begrenst het
   starten van een poging: daarna eindigt de notificatie in `verlopen`, ook na een uitstel;
   een poging die al bij NotifyNL ligt loopt door. `ONGELDIG_MELDEN` bestaat als taaksoort
   maar wordt niet gepland: de Profielservice kent die operatie nog niet.
 - **Navraag en vaststellen.** De verzend-commit plant per poging een navraagtaak volgens
-  `Navraagschema` (`nmc.navraag.*`); `Reconciler` vraagt de status op bij NotifyNL en
+  `NotifyNLNavraagmomenten` (`nmc.navraag.*`); `NotifyNLNavraagTaakHandler` vraagt de status op bij NotifyNL en
   geeft een uitkomst aan `ReceiptVerwerker`. Een 404 of het einde van de bewaartermijn
   van NotifyNL zet de poging op `ONBEKEND` en de notificatie op `bezorgstatus-onbekend`.
   Een verwerkte receipt rondt de navraag af. `delivered` plant een vaststeltaak op het
@@ -172,20 +171,21 @@ Geïmplementeerd:
   eventlog van de dienstverlener op (transactie-id, event-id) onder het watermerk
   `pg_snapshot_xmin(pg_current_snapshot())`, zodat een cursor nooit een event overslaat
   dat later committet dan een event met een hogere transactie-id. De cursor is
-  base64url van `epoch:xid:eventId`; een ander epoch (`nmc.feed.cluster-epoch`) of een
+  base64url van `epoch:transactieId:eventId`; een ander epoch (`nmc.feed.cluster-epoch`) of een
   positie onder het oudste event geeft 410. `PUT .../wijzigingen/bevestiging` schrijft
   `bevestiging`, alleen vooruit. De aanroeplimiet (`Aanroeplimiet`) telt per pod.
 
 Beide intakes gaan via `AannameService`: notificatie op `aangenomen` met event 0, de
 versleutelde payload en een verzendtaak in één transactie; het quotum per
-dienstverlener per dag (`dienstverlener.quotum_per_dag`) geeft 429.
-`AannameResponseFilter` maakt van het antwoord een 202 met `Location`, omdat de
-gegenereerde interface geen `Response` teruggeeft. `VerzendTaakHandler` doet in een
+dienstverlener per dag (`dienstverlener.quotum_per_dag`, zonder waarde daar
+`nmc.aanname.quotum-per-dag`) geeft 429.
+De controllers antwoorden 202 met `Location` via `AannameResponse.notificatieAangenomen`; daarvoor genereert
+de `notificaties`-run in de pom met `returnResponse=true`. `VerzendTaakHandler` doet in een
 eerste transactie `aangenomen` naar `in-verzending` met een geplande poging, roept
 daarbuiten de Profielservice (bij centrale regie) en NotifyNL aan met het poging-id
 als `reference`, en doet in een tweede transactie `in-verzending` naar `verzonden`
 met een navraagtaak. Een `ValidationError` van NotifyNL op `email_address` en een
-partij zonder adres zijn terminaal (`niet-bezorgbaar`). Een andere 4xx, behalve
+partij zonder adres leiden tot een eindstatus (`niet-bezorgbaar`). Een andere 4xx, behalve
 429, ligt aan het NMC en kost een poging; 429, 5xx, een verbindingsfout en een
 ontbrekende KEK-versie stellen de taak uit zonder poging. Een herclaim zoekt eerst
 op `reference`. `ControleTaakHandler` plant zichzelf opnieuw, geeft een notificatie
@@ -221,18 +221,18 @@ de logica die kiest tussen herverzending en contactherstel.
   verhoogt de versie met precies één en schrijft het event, in de transactie van de
   aanroeper. De deferred constraint trigger `notificatie_overgang` (V5) bewaakt ook
   schrijvers buiten Hibernate, maar controleert minder: een nieuwe rij begint op
-  `AANGENOMEN`, en een nieuwe versie moet een toegestane overgang zijn met in dezelfde
-  transactie een event met die versie als volgnummer. Een stap van precies één en de
-  vergrendeling dwingt hij niet af. Let op: elke update van een
-  `notificatie`-rij via Hibernate verhoogt `@Version` en vraagt dus een event. Een
-  schrijver die geen overgang doet (bijvoorbeeld het wissen van een sleutel) moet
-  de versie buiten beschouwing laten. In tests zet je de trigger uit met
+  `AANGENOMEN`, de status verandert alleen met een nieuwe versie, en een nieuwe versie
+  heeft in dezelfde transactie een event met die versie als volgnummer. Welke overgang
+  toegestaan is, een stap van precies één en de vergrendeling dwingt hij niet af. Let
+  op: elke update van een `notificatie`-rij via Hibernate verhoogt `@Version` en
+  vraagt dus een event. Een schrijver die geen overgang doet (bijvoorbeeld het wissen
+  van een sleutel) moet de versie buiten beschouwing laten. In tests zet je de trigger uit met
   `SET LOCAL session_replication_role = replica`; de databasefout van een deferred
   trigger zit bij de commit als suppressed exception onder de `RollbackException`.
 - **Statussen.** `NotificatieStatus` (tien waarden, levenscyclus) en `PogingStatus`
   (zeven waarden, uitkomst per verzending) staan als `CHECK`-constraint in V4; een
   nieuwe waarde vraagt dus ook een migratie, en voor `NotificatieStatus` een regel in
-  `toegestane_overgang` en `Overgangsregels`. In de API en het CloudEvent gaan
+  `Overgangsregels`. In de API en het CloudEvent gaan
   statussen en redenen als kebab-case (`toApiValue`).
 - **Een test rekt zichtbaarheid hooguit op tot package-private.** `public` is nooit een
   testkeuze: dat maakt van een implementatiedetail een belofte aan elke aanroeper.
@@ -255,16 +255,21 @@ de logica die kiest tussen herverzending en contactherstel.
   voordat dat is opgehelderd.
 - **Afleverstatussen komen at-least-once en ongeordend binnen.** NotifyNL biedt een
   callback opnieuw aan bij elke niet-2xx; de NMC antwoordt 2xx zodra de receipt is
-  opgeslagen, en een fout in de verwerking laat de taak staan. `ReceiptVerwerker` ordent per poging op het
+  opgeslagen, en een fout in de verwerking laat de taak staan. `ReceiptVerwerker` zoekt de
+  poging op de `reference` uit de receipt (het poging-id) en anders op het NotifyNL-id. Heeft
+  de poging nog geen NotifyNL-id, dan is de receipt er eerder dan de verzend-commit: de poging
+  neemt het id over en de verwerker doet de overgang naar `verzonden` namens de worker, ook bij
+  een tussenstatus. Een ander NotifyNL-id dan dat op de poging komt van een tweede verzending na
+  een herclaim en wordt als duplicaat op dezelfde poging vastgelegd. De verwerker ordent per poging op het
   tijdstip in de receipt (`completed_at`, met `sent_at` en `created_at` als terugval,
   begrensd op de eigen klok); een herhaalde of oudere receipt verandert niets. De
   poging wordt pas na het vergrendelen van de notificatie opnieuw gelezen, zodat een
   receipt die op de vergrendeling wachtte de uitkomst van de eerste ziet. Een faalreceipt
   voor een poging die niet meer de laatste is, geeft geen overgang.
-  Tussenstatussen worden genegeerd; een onbekende status wordt op ERROR gelogd en
+  Verder verandert een tussenstatus niets; een onbekende status wordt op ERROR gelogd en
   verandert niets.
 - **Receipttijd en registratietijd zijn gescheiden.** Het tijdstip uit de receipt staat
-  op `poging.receipt_tijdstip` en is het tijdstip voor het afleverbewijs; `event.tijdstip`
+  op `poging.receipt_tijdstip` en is het tijdstip voor het afleverbewijs; `event.geregistreerd`
   en `notificatie.laatste_status_update` staan op de eigen klok.
 - **De webhook leest het eventlog; er is geen push per overgang.** Een
   `TERUGKOPPELEN`-taak per dienstverlener (`notificatie_id` leeg) plant zichzelf steeds
@@ -272,8 +277,9 @@ de logica die kiest tussen herverzending en contactherstel.
   binnen `nmc.controle.interval` leveren; een unieke index houdt het op één taak per
   dienstverlener, zodat met de claim nooit twee pods tegelijk aan dezelfde
   dienstverlener leveren. Per ronde: lees in een transactie register, positie en
-  events (`Eventfeed.leesVoorWebhook`, een positie uit een ander epoch begint bij het
-  oudste event), verleng de lease, POST buiten de transactie, en zet in één transactie
+  events (`Eventfeed.leesVoorWebhook`, `webhook_bundel` of anders `nmc.webhook.bundel`
+  per aanroep, ten hoogste `nmc.feed.max-pagina`; een positie uit een ander epoch begint
+  bij het oudste event), verleng de lease, POST buiten de transactie, en zet in één transactie
   met `TaakClaimer.stelUit` (epoch-getoetst) de positie vooruit of de mislukking vast.
   Een mislukte levering is een externe fout en kost de taak geen poging. Wachttijd:
   `nmc.webhook.herpoging-wachttijd` verdubbeld per mislukking; vanaf
@@ -285,16 +291,18 @@ de logica die kiest tussen herverzending en contactherstel.
   In tests laat `LokaleWebhookUrlControle` (`@Mock`) de http-URL van `WebhookOntvanger`
   op localhost toe.
 - **Webhook en feed leveren hetzelfde CloudEvent.** `NotificatieStatusEvent.van` bouwt
-  beide; `id` is het event-id uit het eventlog. `xid` staat niet op de entity `Event`:
-  de feed leest hem met native SQL via `xid::text::bigint`, omdat `xid8` geen cast naar
-  `bigint` kent. Om dezelfde reden is `webhookpositie`, net als `bevestiging`, geen
-  entity maar native SQL in een repository.
+  beide; `id` is het event-id uit het eventlog, zodat een Dienstverlener een event uit de
+  webhook in de feed herkent. `transactieId` staat als `Long` op `Event`, `Bevestiging` en
+  `Webhookpositie` via `TransactieIdType`, dat de waarde als tekst zonder type bindt, zodat
+  PostgreSQL er een `xid8` van maakt. In een rijvergelijking of een insert leidt Hibernate
+  het parametertype niet af; geef het dan mee met
+  `setParameter(naam, waarde, Event_.transactieId.getType())`.
 - **`NotificatieRetentieScheduler` ruimt verlopen notificaties op**, in batches met een
   eigen transactie per batch, `notificatie.retentie.bewaartermijn` na de laatste overgang
   (`laatste_status_update`) en los van de status en van de levering aan de
   Dienstverlener. De batch claimt met `FOR UPDATE SKIP LOCKED`, omdat er in
   productie minimaal drie pods draaien. De pogingen gaan mee via de foreignkey; de events
-  blijven staan. Een notificatie die verloopt zonder uitkomst (niet terminaal en niet
+  blijven staan. Een notificatie die verloopt zonder uitkomst (geen eindstatus en niet
   `BEZORGD`) wordt apart op WARN gemeld voordat de rij weggaat. Dit is een tussenstand:
   de wistaak en onderhoudstaak uit ADR 0024 vervangen deze job.
 
@@ -305,7 +313,7 @@ de logica die kiest tussen herverzending en contactherstel.
 - **API:** contract-first uit `META-INF/openapi.yaml` en
   `META-INF/notifynl-callback-openapi.yaml`, Quarkus REST + Jackson
 - **Uitgaande clients:** quarkus-openapi-generator voor Profielservice en
-  NotifyNL; een dynamisch gebouwde REST-client voor de webhook van de dienstverlener
+  NotifyNL; één REST-client voor de webhooks van de dienstverleners, met de URL per aanroep (`@Url`)
 - **Persistentie:** PostgreSQL 18 + Hibernate ORM Panache + Flyway; in tests een embedded PostgreSQL (Zonky)
 - **Test:** JUnit 5, REST-assured, Mockito, Jazzer (fuzzing)
 - **Fouten:** RFC 9457 `application/problem+json` via quarkus-http-problem
@@ -321,8 +329,10 @@ een eigen contract komt. Volg die indeling.
 ## Contract-first
 
 Er zijn twee servercontracten, elk met een eigen execution van de
-`openapi-generator-maven-plugin` (`jaxrs-spec`, `interfaceOnly=true`,
-`returnResponse=false`):
+`openapi-generator-maven-plugin` (`jaxrs-spec`, `interfaceOnly=true`). Voor
+`openapi.yaml` staat `returnResponse=true`, omdat de aanname 202 met een
+`Location`-header antwoordt; de controllers geven daar een `Response` terug. De
+NotifyNL-callback heeft `returnResponse=false`.
 
 | Contract | Interfaces en modellen in |
 |----------|---------------------------|
@@ -350,7 +360,8 @@ Aandachtspunten in de contracten:
 - **De webhook staat als callback bij `GET .../wijzigingen`**, met als sleutel
   `{webhookUrl}`: OpenAPI 3.0 kent geen losse webhooks, en de URL komt uit het register.
 - **`IdentificatieType`** is via `importMappings` gekoppeld aan de bestaande enum
-  in `controller/`, zodat er geen tweede klasse ontstaat.
+  in `controller/`, zodat er geen tweede klasse ontstaat. Zo ook
+  `NotificatieStatusEvent`: de feed levert hetzelfde record als de callback.
 - **De lijst geldige berichttypes staat op twee plekken**: in de `description` van
   `berichtType` in het contract en in de enum `BerichtType`. Houd ze gelijk.
 - **Contractversie op twee plekken**: `info.version` in `openapi.yaml` en
@@ -388,9 +399,10 @@ Tests hebben geen containers nodig: `EmbeddedPostgresTestResource` start een ech
 PostgreSQL 18 als kindproces van de test-JVM (Zonky) en geeft url en credentials aan
 Quarkus door; Flyway migreert die database bij het opstarten en `validate` controleert
 het schema tegen de entities. Elke `@QuarkusTest` deelt die ene database, dus een test
-ruimt zijn eigen rijen op. Tests die zonder Quarkus tegen de migraties werken
-(`V2MigratieTest`) starten hun eigen embedded PostgreSQL. Profielservice en NotifyNL
-worden gemockt; de webhook levert aan het testendpoint `WebhookOntvanger`.
+ruimt zijn eigen rijen op; een `@TestProfile` herstart Quarkus en krijgt een eigen
+database. Tests die zonder Quarkus tegen de migraties werken (`V2MigratieTest`) starten
+hun eigen embedded PostgreSQL. Profielservice en NotifyNL worden gemockt; de webhook
+levert aan het testendpoint `WebhookOntvanger`.
 
 Dev-mode draait standaard op poort 8080, en `%dev.quarkus.rest-client.profielservice.url`
 wijst óók naar `http://localhost:8080`. Draai je een echte Profielservice lokaal,
@@ -441,8 +453,10 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
 - **Expand/contract bij een kolomwijziging.** Voeg eerst de nieuwe kolom toe, vul hem
   in dezelfde migratie uit de oude, en laat de `DROP COLUMN` pas volgen als niets hem
   meer leest. V4 (expand), V5 (overstap en backfill) en V6 (contract) doen dat voor de
-  overstap naar het statusmodel uit ADR 0024; V8 voegt `dienstverlener`, `taak` en
-  `verzendbudget` toe en maakt `dv_id` op `notificatie` en `event` verplicht.
+  overstap naar het statusmodel uit ADR 0024. De contract-migratie gaat pas uit als geen pod
+  met de oude code meer draait, dus in een latere uitrol dan de expand. V8 voegt
+  `dienstverlener`, `taak` en `verzendbudget` toe en maakt `dv_id` op `notificatie` en
+  `event` verplicht.
 - **Gepartitioneerde tabellen (`event`, `taak`) hebben de partitiesleutel in de primary
   key.** Een query op `taak` noemt daarom altijd de `soort`, anders zoekt PostgreSQL in
   elke partitie; een nieuwe `TaakSoort` vraagt een migratie met een nieuwe partitie.
@@ -484,19 +498,23 @@ starten als ze ontbreken**:
 | `nmc.webhook.jwt.private-key` | `WebhookSleutel`: RSA-sleutel (PKCS#8-PEM, minstens 2048 bits, kop en regelafbrekingen mogen weg) voor de JWT op de webhook |
 | `nmc.webhook.jwt.key-id` | `WebhookSleutel`: `kid` in de JWT-header en in de JWKS |
 
-Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
-`nmc.dienstverlener.id` (de rij uit V8), `nmc.taak.*` (interval, batch, lease,
-max-pogingen van de worker-lus) en `nmc.verzendbudget.*` (Notify-service, tokens per
-minuut, het vaste aandeel van de navraag), `nmc.navraag.*` (momenten en bewaartermijn van
-NotifyNL), `nmc.vaststelling.*` (termijn en callback-venster), `nmc.beleid.*` (geldigheid,
-herverzend-wachttijd en max-herverzendingen, per berichttype te overschrijven als
-`nmc.beleid.<berichttype>.<sleutel>`) en `nmc.webhook.*` (interval,
-bundel, max-mislukkingen, herpoging- en pauzewachttijd, time-out, `jwt.issuer`,
-`jwt.geldigheid`). Onder `%test` staat de lus uit en is het budget klein, zodat tests
-het uitputten.
-
 Lokaal horen ze in een niet-ingecheckte `src/main/resources/application-dev.properties`,
 nooit in `application.properties`. Onder `%test` staan dummywaarden.
+
+Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
+`nmc.dienstverlener.id` (de rij uit V8), `nmc.taak.*` (interval, batch, lease,
+max-pogingen van de worker-lus, en het uitstel na een storing),
+`nmc.navraag.*` (momenten en bewaartermijn van NotifyNL), `nmc.vaststelling.*` (termijn
+en callback-venster), `nmc.beleid.*` (geldigheid, herverzend-wachttijd en
+max-herverzendingen, per berichttype te overschrijven als `nmc.beleid.<berichttype>.<sleutel>`),
+`nmc.controle.*` (interval en maximum per ronde van de controletaak),
+`nmc.aanname.quotum-per-dag` (quotum voor een dienstverlener zonder eigen quotum in
+het register; leeg is onbeperkt),
+`nmc.verzendbudget.*` (Notify-service, tokens per minuut, het vaste aandeel van de navraag),
+`nmc.feed.*` (grootste pagina, aanroepen per minuut, cluster-epoch) en `nmc.webhook.*`
+(interval, bundel, max-mislukkingen, herpoging- en pauzewachttijd, time-out,
+`jwt.issuer`, `jwt.geldigheid`). Onder `%test` staat de lus uit en is het budget klein,
+zodat tests het uitputten.
 
 Ook `quarkus.rest-client.profielservice.url` en `quarkus.rest-client.notify.url`
 hebben buiten `%dev`/`%test` geen default en moeten per omgeving gezet worden.

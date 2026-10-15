@@ -15,14 +15,14 @@ import java.util.Optional;
  */
 @Startup
 @ApplicationScoped
-public class Navraagschema {
+public class NotifyNLNavraagmomenten {
 
     private static final Duration DAGELIJKS = Duration.ofDays(1);
 
     private final List<Duration> momenten;
     private final Duration bewaartermijn;
 
-    public Navraagschema(@ConfigProperty(name = "nmc.navraag.momenten") List<Duration> momenten,
+    public NotifyNLNavraagmomenten(@ConfigProperty(name = "nmc.navraag.momenten") List<Duration> momenten,
                          @ConfigProperty(name = "nmc.navraag.bewaartermijn-notifynl") Duration bewaartermijn) {
         if (momenten.isEmpty() || momenten.stream().anyMatch(m -> m.isNegative() || m.isZero())) {
             throw new IllegalStateException("nmc.navraag.momenten moet positieve duren bevatten, is " + momenten);

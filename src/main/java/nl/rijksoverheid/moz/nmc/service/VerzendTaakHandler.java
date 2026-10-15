@@ -45,7 +45,7 @@ import java.util.UUID;
  * {@code geldig_tot} wordt geen poging meer gestart en eindigt de notificatie in {@code verlopen}; een
  * poging die al bij NotifyNL ligt loopt door.
  * <p>
- * Een fout over het adres of de partij is terminaal; een storing bij NotifyNL of de Profielservice
+ * Een fout over het adres of de partij leidt tot een eindstatus; een storing bij NotifyNL of de Profielservice
  * stelt de taak uit zonder dat het de notificatie een poging kost. Een herclaim na een verlopen lease
  * hergebruikt de poging en zoekt eerst op {@code reference}, zodat een al aangeboden e-mail niet nog
  * eens gaat.
@@ -63,13 +63,13 @@ public class VerzendTaakHandler implements TaakHandler {
     private final ProfielServiceAdapter profielServiceAdapter;
     private final NotifyNLVerzendAdapter verzendAdapter;
     private final Duration uitstel;
-    private final Navraagschema navraagschema;
+    private final NotifyNLNavraagmomenten notifyNLNavraagmomenten;
     private final Verzendbeleid verzendbeleid;
 
     public VerzendTaakHandler(Overgangsfunctie overgangsfunctie, PogingRepository pogingRepository,
                               TaakRepository taakRepository, TaakClaimer taakClaimer, Sleutelbeheer sleutelbeheer,
                               ProfielServiceAdapter profielServiceAdapter, NotifyNLVerzendAdapter verzendAdapter,
-                              Navraagschema navraagschema, Verzendbeleid verzendbeleid,
+                              NotifyNLNavraagmomenten notifyNLNavraagmomenten, Verzendbeleid verzendbeleid,
                               @ConfigProperty(name = "nmc.taak.uitstel") Duration uitstel) {
         this.overgangsfunctie = overgangsfunctie;
         this.pogingRepository = pogingRepository;
@@ -79,12 +79,12 @@ public class VerzendTaakHandler implements TaakHandler {
         this.profielServiceAdapter = profielServiceAdapter;
         this.verzendAdapter = verzendAdapter;
         this.uitstel = uitstel;
-        this.navraagschema = navraagschema;
+        this.notifyNLNavraagmomenten = notifyNLNavraagmomenten;
         this.verzendbeleid = verzendbeleid;
     }
 
     @Override
-    public TaakSoort soort() {
+    public TaakSoort taakSoort() {
         return TaakSoort.VERZENDEN;
     }
 
@@ -95,7 +95,7 @@ public class VerzendTaakHandler implements TaakHandler {
      * haar status.
      */
     @Override
-    public boolean uitgeput(Taak taak) {
+    public boolean handelUitputtingAf(Taak taak) {
         Notificatie notificatie = overgangsfunctie.vergrendel(taak.getNotificatieId());
 
         if (notificatie.getStatus() == NotificatieStatus.AANGENOMEN) {
@@ -302,7 +302,7 @@ public class VerzendTaakHandler implements TaakHandler {
     }
 
     /**
-     * @return het adres, of null als de partij of het adres er niet is (terminaal)
+     * @return het adres, of null als de partij of het adres er niet is (eindstatus)
      * @throws ProfielServiceException bij een storing, die uitstel oplevert
      */
     private String emailAdres(Verzending verzending) {
@@ -346,7 +346,7 @@ public class VerzendTaakHandler implements TaakHandler {
         // De navraag bewaakt de eindstatus als de receipt uitblijft; is die er al, dan is hij overbodig.
         if (notificatie.getStatus() == NotificatieStatus.VERZONDEN) {
             taakRepository.persist(new Taak(TaakSoort.RECONCILIEREN, verzending.dvId(), notificatie.getId(),
-                    navraagschema.eerste(poging.getVerzondenOp()), verzending.traceId(), Map.of(PAYLOAD_POGING_ID, poging.getId().toString())));
+                    notifyNLNavraagmomenten.eerste(poging.getVerzondenOp()), verzending.traceId(), Map.of(PAYLOAD_POGING_ID, poging.getId().toString())));
         }
 
         taakClaimer.rondAf(taak);

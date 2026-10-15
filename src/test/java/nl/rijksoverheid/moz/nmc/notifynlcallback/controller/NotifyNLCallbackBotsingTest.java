@@ -40,8 +40,6 @@ import static org.mockito.Mockito.doAnswer;
 @QuarkusTest
 class NotifyNLCallbackBotsingTest {
 
-    // Moet overeenkomen met %test.notify.callback.bearer-token in application.properties
-
     @InjectSpy
     Overgangsfunctie overgangsfunctie;
 
@@ -124,12 +122,11 @@ class NotifyNLCallbackBotsingTest {
             return resultaat;
         }).when(overgangsfunctie).vergrendel(any());
 
-        Future<Integer> eerste = executor.submit(() -> stuurReceipt(notifyId, eersteStatus, eersteTijdstip));
+        Future<?> eerste = executor.submit(() -> verwerkReceipt(notifyId, eersteStatus, eersteTijdstip));
         assertTrue(eersteHeeftVergrendeld.await(10, TimeUnit.SECONDS), "eerste receipt vergrendelde de notificatie niet");
-        int tweede = stuurReceipt(notifyId, tweedeStatus, tweedeTijdstip);
+        verwerkReceipt(notifyId, tweedeStatus, tweedeTijdstip);
 
-        assertEquals(204, eerste.get(10, TimeUnit.SECONDS));
-        assertEquals(204, tweede);
+        eerste.get(10, TimeUnit.SECONDS);
     }
 
     private UUID verzondenNotificatie() {
@@ -153,11 +150,8 @@ class NotifyNLCallbackBotsingTest {
                 .stream().map(Event::getNaar).toList());
     }
 
-    // Sinds de callback eerst opslaat, gebeurt de verwerking in de receipttaak; die roept deze
-    // methode aan, dus de botsing speelt zich hier af.
-    private int stuurReceipt(UUID notifyId, String status, String completedAt) {
+    // De callback slaat alleen op; de receipttaak roept de verwerker aan, dus daar botsen twee receipts.
+    private void verwerkReceipt(UUID notifyId, String status, String completedAt) {
         receiptVerwerker.verwerk(notifyId, null, status, OffsetDateTime.parse(completedAt));
-
-        return 204;
     }
 }

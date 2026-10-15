@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
 import io.quarkus.test.junit.QuarkusTest;
+import nl.rijksoverheid.moz.nmc.WebhookSleutelTestResource;
 import org.junit.jupiter.api.Test;
 
 import static io.restassured.RestAssured.given;
@@ -23,7 +24,7 @@ class SleutelsControllerTest {
                 .body("keys[0].kty", equalTo("RSA"))
                 .body("keys[0].use", equalTo("sig"))
                 .body("keys[0].alg", equalTo("RS256"))
-                .body("keys[0].kid", equalTo("test-webhook-sleutel-niet-voor-productie"))
+                .body("keys[0].kid", equalTo(WebhookSleutelTestResource.KEY_ID))
                 .body("keys[0].e", equalTo("AQAB"))
                 .body("keys[0].n", not(emptyString()))
                 .body("keys[0].d", equalTo(null));

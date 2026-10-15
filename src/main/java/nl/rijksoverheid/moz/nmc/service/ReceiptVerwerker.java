@@ -153,7 +153,7 @@ public class ReceiptVerwerker {
         // Een overgang weg van bezorgd rondt de open vaststeltaak af; een nieuwe bezorging plant een nieuwe.
         taakRepository.verwijderOpen(TaakSoort.BEZORGING_VASTSTELLEN, notificatie.getId());
 
-        if (overgang.naar() == NotificatieStatus.BEZORGD) {
+        if (overgang.status() == NotificatieStatus.BEZORGD) {
             taakRepository.persist(new Taak(TaakSoort.BEZORGING_VASTSTELLEN, notificatie.getDvId(), notificatie.getId(),
                     vaststellingstermijn.vaststellenOp(tijdstip), null,
                     Map.of(VerzendTaakHandler.PAYLOAD_POGING_ID, poging.getId().toString())));
@@ -192,7 +192,7 @@ public class ReceiptVerwerker {
 
     // De tussenstatussen van NotifyNL leveren geen uitkomst op. Een onbekende status wordt op ERROR
     // gelogd en verandert niets, zodat hij niet als een bekende uitkomst landt.
-    private static Optional<PogingStatus> parseStatus(String status, UUID notifyId) {
+    static Optional<PogingStatus> parseStatus(String status, UUID notifyId) {
         return switch (status.toLowerCase(Locale.ROOT)) {
             case "delivered" -> Optional.of(PogingStatus.BEZORGD);
             case "permanent-failure" -> Optional.of(PogingStatus.PERMANENT_MISLUKT);
@@ -218,7 +218,7 @@ public class ReceiptVerwerker {
     }
 
     // Een tijdelijke of technische fout plant een herverzending zolang het beleid er nog een toestaat, of
-    // geeft verlopen na geldig_tot. Op de laatste toegestane poging is elke fout terminaal.
+    // geeft verlopen na geldig_tot. Op de laatste toegestane poging leidt elke fout tot een eindstatus.
     private record Overgang(NotificatieStatus naar, Reden reden, boolean herverzending) {
 
         static Overgang bij(PogingStatus uitkomst, boolean herverzendbaar, boolean verlopen) {

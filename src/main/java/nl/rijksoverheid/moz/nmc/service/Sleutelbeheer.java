@@ -37,7 +37,9 @@ public class Sleutelbeheer {
 
     private static final String GCM = "AES/GCM/NoPadding";
     private static final int SLEUTEL_BITS = 256;
+    // Willekeurige nonce per versleuteling, opgeslagen vóór de versleutelde tekst.
     private static final int IV_BYTES = 12;
+    // Integriteitscontrole achter de versleutelde tekst; ontsleutelen faalt als data of AAD gewijzigd is.
     private static final int TAG_BITS = 128;
     private static final TypeReference<Map<String, String>> PERSONALISATION_TYPE = new TypeReference<>() {
     };
@@ -92,10 +94,12 @@ public class Sleutelbeheer {
         return leesJson(json, PERSONALISATION_TYPE, "personalisation");
     }
 
+    // Package-private zodat SleutelbeheerTest de gewrapte sleutel los kan toetsen.
     byte[] wrap(UUID notificatieId, SecretKey sleutel, int kekVersie) throws GeneralSecurityException {
         return versleutelVeld(kek(kekVersie), aadSleutel(kekVersie, notificatieId), sleutel.getEncoded());
     }
 
+    // Package-private zodat SleutelbeheerTest het uitpakken los kan toetsen.
     SecretKey pakUit(UUID notificatieId, VersleuteldeGegevens gegevens) {
         Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
         Objects.requireNonNull(gegevens, "gegevens is verplicht");
@@ -177,7 +181,7 @@ public class Sleutelbeheer {
         return personalisation != null ? personalisation : Map.of();
     }
 
-    // Zonder de Jackson-fout als oorzaak, om dezelfde reden als bij het lezen.
+    // Zonder de Jackson-fout als oorzaak, voor het geval de melding de waarde bevat.
     private byte[] serialiseer(Object waarde) {
         try {
             return objectMapper.writeValueAsBytes(waarde);

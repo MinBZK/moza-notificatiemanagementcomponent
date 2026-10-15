@@ -53,20 +53,20 @@ public class TaakClaimer {
      * laatste geval blijft elke taak onaangeraakt en komt hij in een volgende ronde weer aan de beurt.
      */
     @Transactional(Transactional.TxType.REQUIRES_NEW)
-    public List<Taak> claim(TaakSoort soort, int batch) {
+    public List<Taak> claim(TaakSoort taakSoort, int batch) {
         OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
-        List<UUID> dienstverleners = taakRepository.dienstverlenersMetOpenWerk(soort, nu);
+        List<UUID> dienstverleners = taakRepository.dienstverlenersMetOpenWerk(taakSoort, nu);
 
         if (dienstverleners.isEmpty()) {
             return List.of();
         }
 
-        Optional<BudgetDoel> doel = soort.budgetDoel();
+        Optional<BudgetDoel> doel = taakSoort.budgetDoel();
         Optional<Verzendbudget.Genomen> genomen = doel.map(d -> verzendbudget.neem(d, batch));
         int budget = genomen.map(Verzendbudget.Genomen::aantal).orElse(batch);
 
         if (budget == 0) {
-            Log.debugf("Claim van %s uitgesteld: verzendbudget voor dit tijdvak is op", soort);
+            Log.debugf("Claim van %s uitgesteld: verzendbudget voor dit tijdvak is op", taakSoort);
 
             return List.of();
         }
@@ -83,7 +83,7 @@ public class TaakClaimer {
                 break;
             }
 
-            geclaimd.addAll(taakRepository.claim(soort, dvId, Math.min(perDienstverlener, ruimte), nu, leaseTot));
+            geclaimd.addAll(taakRepository.claim(taakSoort, dvId, Math.min(perDienstverlener, ruimte), nu, leaseTot));
         }
 
         genomen.ifPresent(g -> verzendbudget.geefTerug(g, budget - geclaimd.size()));
@@ -118,8 +118,8 @@ public class TaakClaimer {
     }
 
     /**
-     * Voor een taak die zichzelf steeds opnieuw plant: na een geslaagde ronde telt alleen een nieuwe
-     * reeks fouten mee voor het maximum aantal pogingen.
+     * Laat de taak op {@code due} weer draaien en zet de pogingen op 0, zodat alleen opeenvolgende
+     * fouten tellen voor het maximum.
      *
      * @throws TaakVerlorenException als de taak inmiddels bij een andere worker ligt
      */
