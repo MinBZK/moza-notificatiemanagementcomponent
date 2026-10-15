@@ -71,7 +71,7 @@ public class AannameService {
         // Op de notificatie en niet in de taak, zodat ook een later geplande verzendtaak kan versturen.
         notificatie.bewaarVerzendgegevens(opdracht.berichtType().getTemplateId(), opdracht.regie().name(),
                 opdracht.dienstverlener(), opdracht.dienst());
-        notificatie.bewaarBeleid(opdracht.berichtType().name(),
+        notificatie.bewaarVerzendbeleid(opdracht.berichtType().name(),
                 OffsetDateTime.now(ZoneOffset.UTC).plus(verzendbeleid.geldigheid(opdracht.berichtType())));
         overgangsfunctie.neemAan(notificatie);
 

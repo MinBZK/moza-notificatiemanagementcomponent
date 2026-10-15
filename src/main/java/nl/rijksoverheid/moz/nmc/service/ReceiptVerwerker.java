@@ -160,7 +160,7 @@ public class ReceiptVerwerker {
         }
     }
 
-    // De herverzendtaak maakt bij de claim de tweede poging aan. Vanuit bezorgd (een faalreceipt binnen de
+    // De herverzendtaak maakt bij de claim de volgende poging aan. Vanuit bezorgd (een faalreceipt binnen de
     // vaststellingstermijn) gaat de notificatie terug naar verzonden en vervalt de vaststeltaak.
     private void planHerverzending(Notificatie notificatie, OffsetDateTime nu) {
         if (notificatie.getStatus() != NotificatieStatus.VERZONDEN && notificatie.getStatus() != NotificatieStatus.BEZORGD) {

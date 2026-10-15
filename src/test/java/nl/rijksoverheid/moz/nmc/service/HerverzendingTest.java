@@ -27,6 +27,7 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -91,7 +92,7 @@ class HerverzendingTest {
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
-            taakRepository.getEntityManager().createNativeQuery("DELETE FROM verzendbudget").executeUpdate();
+            TaakFixtures.leegVerzendbudget(taakRepository.getEntityManager());
             eventRepository.deleteAll();
             notificatieRepository.deleteAll();
         });
@@ -171,7 +172,7 @@ class HerverzendingTest {
             "temporary-failure, NIET_BEZORGBAAR, ONBEREIKBAAR",
             "technical-failure, TECHNISCH_MISLUKT, TECHNISCH"
     })
-    void faalOpDeTweedePoging_isTerminaal(String receipt, NotificatieStatus naar, Reden reden) {
+    void faalOpDeTweedePoging_leidtTotEenEindstatus(String receipt, NotificatieStatus naar, Reden reden) {
         UUID id = naHerverzending();
         Poging tweede = laatstePoging(id);
 
@@ -183,7 +184,7 @@ class HerverzendingTest {
     }
 
     // De stuurgroepagenda heeft in tests twee herverzendingen: een fout op de tweede poging geeft een derde,
-    // pas een fout op de derde is terminaal.
+    // pas een fout op de derde leidt tot een eindstatus.
     @Test
     void meerHerverzendingenInHetBeleid_gevenMeerPogingen() {
         UUID id = aannameService.neemAan(opdracht(BerichtType.STUURGROEP_AGENDA));
@@ -391,8 +392,8 @@ class HerverzendingTest {
     }
 
     private void maakDue() {
-        QuarkusTransaction.requiringNew().run(() -> taakRepository.update("due = ?1 where soort = ?2",
-                OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1), TaakSoort.VERZENDEN));
+        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetDue(taakRepository.getEntityManager(),
+                TaakSoort.VERZENDEN, OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1)));
     }
 
     private Notificatie notificatie(UUID id) {
@@ -408,7 +409,8 @@ class HerverzendingTest {
     }
 
     private List<Poging> pogingen(UUID notificatieId) {
-        return QuarkusTransaction.requiringNew().call(() -> pogingRepository.list("notificatieId = ?1 order by nummer", notificatieId));
+        return QuarkusTransaction.requiringNew().call(() -> NotificatieFixtures.pogingen(pogingRepository.getEntityManager(),
+                notificatieId));
     }
 
     private List<Taak> taken() {

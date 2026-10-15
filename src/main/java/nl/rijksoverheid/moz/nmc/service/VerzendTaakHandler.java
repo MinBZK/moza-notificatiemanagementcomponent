@@ -41,9 +41,8 @@ import java.util.UUID;
  * <p>
  * Dezelfde taak doet de herverzending: vanuit {@code verzonden} na een tijdelijke of technische fout, zolang
  * het {@link Verzendbeleid} nog een herverzending toestaat, maakt de claim de volgende poging aan
- * ({@code verzonden} naar {@code verzonden}). Na
- * {@code geldig_tot} wordt geen poging meer gestart en eindigt de notificatie in {@code verlopen}; een
- * poging die al bij NotifyNL ligt loopt door.
+ * ({@code verzonden} naar {@code verzonden}). Na {@code geldig_tot} wordt geen poging meer gestart en
+ * eindigt de notificatie in {@code verlopen}; een poging die al bij NotifyNL ligt loopt door.
  * <p>
  * Een fout over het adres of de partij leidt tot een eindstatus; een storing bij NotifyNL of de Profielservice
  * stelt de taak uit zonder dat het de notificatie een poging kost. Een herclaim na een verlopen lease

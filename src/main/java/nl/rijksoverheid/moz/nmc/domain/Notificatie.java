@@ -177,7 +177,7 @@ public class Notificatie {
     }
 
     /** Legt het verzendbeleid vast. Alleen bij de aanname, vóór de eerste opslag. */
-    public void bewaarBeleid(String berichtType, OffsetDateTime geldigTot) {
+    public void bewaarVerzendbeleid(String berichtType, OffsetDateTime geldigTot) {
         this.berichtType = Objects.requireNonNull(berichtType, "berichtType is verplicht");
         this.geldigTot = Objects.requireNonNull(geldigTot, "geldigTot is verplicht");
     }
