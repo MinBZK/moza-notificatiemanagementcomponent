@@ -35,7 +35,9 @@ import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.service.NotificatieNietGevondenException;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
+import nl.rijksoverheid.moz.nmc.service.ReceiptOpslag;
 import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.controller.NotifyNLCallbackController;
@@ -53,7 +55,12 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -107,6 +114,10 @@ public class NotificatieVerwerkingFuzzer {
     private static final GeheugenNotificatieRepository repository = new GeheugenNotificatieRepository();
 
     private static final GeheugenPogingRepository pogingen = new GeheugenPogingRepository();
+
+    private static final GeheugenTaakRepository taken = new GeheugenTaakRepository();
+
+    private static ReceiptVerwerker receiptVerwerker;
 
     private static final GeheugenOvergangsfunctie overgangsfunctie = new GeheugenOvergangsfunctie();
 
@@ -181,9 +192,9 @@ public class NotificatieVerwerkingFuzzer {
                 () -> NotificatieFixtures.DV_ID,
                 new GeheugenDienstverlenerRepository(),
                 repository,
-                new GeheugenTaakRepository(),
+                taken,
                 Optional.empty());
-        ReceiptVerwerker receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
+        receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
                 // No wait between callback retries.
                 new DirecteStatusUpdateEvent(new ConsumentCallbackAdapter(url -> callbackClientStandIn(), 0)));
 
@@ -192,7 +203,8 @@ public class NotificatieVerwerkingFuzzer {
 
         centraleController = new CentraleNotificatieController(aannameService, logboekContext, hashHelper);
         decentraleController = new DecentraleNotificatieController(aannameService, logboekContext, hashHelper);
-        callbackController = new NotifyNLCallbackController(receiptVerwerker);
+        callbackController = new NotifyNLCallbackController(new ReceiptOpslag(pogingen, repository, taken,
+                new SimpleMeterRegistry()));
     }
 
     public static void fuzzerTestOneInput(FuzzedDataProvider data) {
@@ -235,6 +247,8 @@ public class NotificatieVerwerkingFuzzer {
         UUID bekendeId = notificatieIsBekend ? bewaarVerzonden(melding.getId()) : null;
         // The callback adapter absorbs a failing callback; a 5xx on this route is always a finding.
         roepAan(() -> callbackController.verwerkAfleverstatus(melding));
+        // De callback slaat alleen op; verwerk wat hij opsloeg, zoals de receipttaak zou doen.
+        taken.verwerkOpgeslagen();
 
         // A delivery receipt never deletes the notificatie, whatever the outcome of the consumer
         // callback, and never takes it back to before the send.
@@ -351,16 +365,34 @@ public class NotificatieVerwerkingFuzzer {
     private static UUID bewaarVerzonden(UUID notifyId) {
         Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, "https://consument.example.invalid/callback");
         overgangsfunctie.neemAan(notificatie);
-        Poging poging = new Poging(notificatie.getId(), 1);
+        Poging poging = new GeheugenPoging(notificatie.getId(), 1);
         pogingen.persist(poging);
         overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
-        poging.markeerVerzonden(notifyId, java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC));
+        poging.markeerVerzonden(notifyId, OffsetDateTime.now(ZoneOffset.UTC));
         overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
 
         return notificatie.getId();
     }
 
     /** Pogingen in het geheugen; kolomconstraints worden niet afgedwongen. */
+    /**
+     * Een poging met een id vanaf het aanmaken. In productie deelt Hibernate het id uit bij persist; dit
+     * target heeft geen Hibernate.
+     */
+    private static final class GeheugenPoging extends Poging {
+
+        private final UUID id = UUID.randomUUID();
+
+        GeheugenPoging(UUID notificatieId, int nummer) {
+            super(notificatieId, nummer);
+        }
+
+        @Override
+        public UUID getId() {
+            return id;
+        }
+    }
+
     private static final class GeheugenPogingRepository extends PogingRepository {
 
         private final Map<UUID, Poging> opgeslagen = new HashMap<>();
@@ -384,7 +416,7 @@ public class NotificatieVerwerkingFuzzer {
         public Optional<Poging> findLaatsteVan(UUID notificatieId) {
             return opgeslagen.values().stream()
                     .filter(p -> notificatieId.equals(p.getNotificatieId()))
-                    .max(java.util.Comparator.comparingInt(Poging::getNummer));
+                    .max(Comparator.comparingInt(Poging::getNummer));
         }
 
         @Override
@@ -397,12 +429,31 @@ public class NotificatieVerwerkingFuzzer {
         }
     }
 
-    /** Neemt de verzendtaak aan die de aanname plant; niets in dit target leest hem terug. */
+    /** Neemt de verzendtaak aan die de aanname plant en bewaart receipttaken tot {@link #verwerkOpgeslagen()}. */
     private static final class GeheugenTaakRepository extends TaakRepository {
+
+        private final List<Map<String, String>> receipts = new ArrayList<>();
 
         @Override
         public void persist(Taak taak) {
             // Niets te doen: dit target heeft geen worker.
+        }
+
+        @Override
+        public boolean planReceipt(UUID dvId, UUID notificatieId, Map<String, String> payload, OffsetDateTime due) {
+            receipts.add(payload);
+
+            return true;
+        }
+
+        void verwerkOpgeslagen() {
+            for (Map<String, String> receipt : receipts) {
+                String tijdstip = receipt.get("tijdstip");
+                receiptVerwerker.verwerk(UUID.fromString(receipt.get("notifyId")), receipt.get("pogingId"), receipt.get("status"),
+                        tijdstip == null || tijdstip.isEmpty() ? null : OffsetDateTime.parse(tijdstip));
+            }
+
+            receipts.clear();
         }
     }
 

@@ -15,6 +15,7 @@ import org.hibernate.jpa.SpecHints;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -69,6 +70,26 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
         taken.forEach(taak -> taak.claim(leaseTot));
 
         return taken;
+    }
+
+    /**
+     * Plant een receipttaak, tenzij dezelfde receipt (poging, status en tijdstip) er al staat.
+     *
+     * @return false als het een herhaling was
+     */
+    public boolean planReceipt(UUID dvId, UUID notificatieId, Map<String, String> payload, OffsetDateTime due) {
+        // Hibernate leidt het parametertype in een insert niet af uit de kolom; zonder het type van het
+        // attribuut gaat de payload als bytea en weigert PostgreSQL hem voor jsonb.
+        return getSession().createMutationQuery("insert into Taak (" + Taak_.TAAK_SOORT + ", " + Taak_.DV_ID + ", "
+                        + Taak_.NOTIFICATIE_ID + ", " + Taak_.DUE + ", " + Taak_.STATUS + ", " + Taak_.PAYLOAD
+                        + ") values (:taakSoort, :dvId, :notificatieId, :due, :open, :payload) on conflict do nothing")
+                .setParameter("taakSoort", TaakSoort.RECEIPT_VERWERKEN)
+                .setParameter("dvId", dvId)
+                .setParameter("notificatieId", notificatieId)
+                .setParameter("due", due)
+                .setParameter("open", TaakStatus.OPEN)
+                .setParameter("payload", payload, Taak_.payload.getType())
+                .executeUpdate() == 1;
     }
 
     /** Verlengt de lease; false als de taak inmiddels door een andere worker is geclaimd. */
