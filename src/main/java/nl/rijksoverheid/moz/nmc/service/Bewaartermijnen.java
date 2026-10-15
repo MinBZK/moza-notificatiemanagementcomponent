@@ -41,9 +41,9 @@ public class Bewaartermijnen {
         this.maxCursorleeftijd = maxCursorleeftijd;
     }
 
-    /** Wanneer de sleutel van een notificatie die op {@code terminaalOp} terminaal werd, gewist wordt. */
-    public OffsetDateTime wissenOp(OffsetDateTime terminaalOp) {
-        return terminaalOp.plus(wistermijn);
+    /** Wanneer de sleutel van een notificatie die op {@code eindstatusOp} een eindstatus kreeg, gewist wordt. */
+    public OffsetDateTime wissenOp(OffsetDateTime eindstatusOp) {
+        return eindstatusOp.plus(wistermijn);
     }
 
     /** Wat vóór dit tijdstip ligt, valt buiten de bewaartermijn van het afleverbewijs. */

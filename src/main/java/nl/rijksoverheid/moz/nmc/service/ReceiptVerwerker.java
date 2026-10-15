@@ -129,7 +129,8 @@ public class ReceiptVerwerker {
         }
 
         OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
-        Overgang overgang = Overgang.bij(uitkomst.get(), poging.getNummer() == 1, notificatie.isVerlopen(nu));
+        Overgang overgang = Overgang.bij(uitkomst.get(),
+                verzendbeleid.magHerverzenden(notificatie.getBerichtType(), poging.getNummer()), notificatie.isVerlopen(nu));
 
         if (overgang.herverzending()) {
             // Een eerdere faalreceipt op deze poging heeft de herverzending al gepland.
@@ -159,7 +160,7 @@ public class ReceiptVerwerker {
         }
     }
 
-    // De herverzendtaak maakt bij de claim de tweede poging aan. Vanuit bezorgd (een faalreceipt binnen de
+    // De herverzendtaak maakt bij de claim de volgende poging aan. Vanuit bezorgd (een faalreceipt binnen de
     // vaststellingstermijn) gaat de notificatie terug naar verzonden en vervalt de vaststeltaak.
     private void planHerverzending(Notificatie notificatie, OffsetDateTime nu) {
         if (notificatie.getStatus() != NotificatieStatus.VERZONDEN && notificatie.getStatus() != NotificatieStatus.BEZORGD) {
@@ -191,7 +192,7 @@ public class ReceiptVerwerker {
 
     // De tussenstatussen van NotifyNL leveren geen uitkomst op. Een onbekende status wordt op ERROR
     // gelogd en verandert niets, zodat hij niet als een bekende uitkomst landt.
-    private static Optional<PogingStatus> parseStatus(String status, UUID notifyId) {
+    static Optional<PogingStatus> parseStatus(String status, UUID notifyId) {
         return switch (status.toLowerCase(Locale.ROOT)) {
             case "delivered" -> Optional.of(PogingStatus.BEZORGD);
             case "permanent-failure" -> Optional.of(PogingStatus.PERMANENT_MISLUKT);
@@ -216,18 +217,18 @@ public class ReceiptVerwerker {
         return tijdstip.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
     }
 
-    // Een notificatie krijgt één herverzending, ongeacht de faalsoort: een tijdelijke of technische fout op
-    // de eerste poging plant die, of geeft verlopen na geldig_tot. Op de tweede poging is elke fout terminaal.
+    // Een tijdelijke of technische fout plant een herverzending zolang het beleid er nog een toestaat, of
+    // geeft verlopen na geldig_tot. Op de laatste toegestane poging leidt elke fout tot een eindstatus.
     private record Overgang(NotificatieStatus naar, Reden reden, boolean herverzending) {
 
-        static Overgang bij(PogingStatus uitkomst, boolean eerstePoging, boolean verlopen) {
+        static Overgang bij(PogingStatus uitkomst, boolean herverzendbaar, boolean verlopen) {
             return switch (uitkomst) {
                 case BEZORGD -> new Overgang(NotificatieStatus.BEZORGD, null, false);
                 case PERMANENT_MISLUKT -> new Overgang(NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR, false);
-                case TIJDELIJK_MISLUKT -> eerstePoging
+                case TIJDELIJK_MISLUKT -> herverzendbaar
                         ? herverzendingOfVerlopen(verlopen)
                         : new Overgang(NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR, false);
-                case TECHNISCH_MISLUKT -> eerstePoging
+                case TECHNISCH_MISLUKT -> herverzendbaar
                         ? herverzendingOfVerlopen(verlopen)
                         : new Overgang(NotificatieStatus.TECHNISCH_MISLUKT, Reden.TECHNISCH, false);
                 case GEPLAND, VERZONDEN, ONBEKEND -> throw new IllegalArgumentException("Geen receiptuitkomst: " + uitkomst);

@@ -5,7 +5,7 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 
 /**
  * Voert taken van één soort uit. Per soort is er ten hoogste één handler; de worker vindt hem op
- * {@link #soort()}.
+ * {@link #taakSoort()}.
  * <p>
  * {@link #voerUit} draait buiten een transactie. Een handler die werk, taakafronding en event samen
  * wil committen opent zelf een transactie, rondt daarin de taak af via {@link TaakClaimer#rondAf} en
@@ -13,7 +13,7 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
  */
 public interface TaakHandler {
 
-    TaakSoort soort();
+    TaakSoort taakSoort();
 
     /**
      * @param lease verlengt de lease op de taak; aan te roepen vóór elke externe aanroep
@@ -29,7 +29,7 @@ public interface TaakHandler {
      * @return true als de handler de uitputting heeft afgehandeld en de taak af is; false laat de taak
      *         op mislukt gaan, waar hij op beheer wacht
      */
-    default boolean uitgeput(Taak taak) {
+    default boolean handelUitputtingAf(Taak taak) {
         return false;
     }
 

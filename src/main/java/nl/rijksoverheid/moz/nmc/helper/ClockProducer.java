@@ -7,11 +7,11 @@ import java.time.Clock;
 
 /** De klok als bean, zodat tijdvakken in tests op een vast moment gezet kunnen worden. */
 @ApplicationScoped
-public class KlokProducer {
+public class ClockProducer {
 
     @Produces
     @ApplicationScoped
-    public Clock klok() {
+    public Clock clock() {
         return Clock.systemUTC();
     }
 }

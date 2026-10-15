@@ -64,7 +64,7 @@ public class Partitiebeheer {
         return QuarkusTransaction.requiringNew().call(() -> {
             List<EventPartitie> partities = repository.bereikpartities();
             Optional<EventPartitie> volgende = volgende(partities.isEmpty() ? Optional.empty()
-                    : Optional.of(partities.getLast()), repository.volgendeXid(), omvang, marge);
+                    : Optional.of(partities.getLast()), repository.volgendeTransactieId(), omvang, marge);
 
             if (volgende.isPresent()) {
                 repository.zetLockTimeout(lockTimeout);
@@ -81,14 +81,14 @@ public class Partitiebeheer {
      * default-partitie kan rijen tussen de laatste en die transactie-id hebben, en een transactie die
      * tijdens het aanmaken een event schrijft, mag niet in het nieuwe bereik vallen.
      */
-    static Optional<EventPartitie> volgende(Optional<EventPartitie> laatste, long volgendeXid, long omvang, long marge) {
-        if (laatste.isEmpty() || volgendeXid >= laatste.get().tot()) {
-            return Optional.of(EventPartitie.vanaf(volgendeXid + marge, volgendeXid + marge + omvang));
+    static Optional<EventPartitie> volgende(Optional<EventPartitie> laatste, long volgendeTransactieId, long omvang, long marge) {
+        if (laatste.isEmpty() || volgendeTransactieId >= laatste.get().tot()) {
+            return Optional.of(EventPartitie.vanaf(volgendeTransactieId + marge, volgendeTransactieId + marge + omvang));
         }
 
         EventPartitie lopend = laatste.get();
 
-        if ((volgendeXid - lopend.van()) * 5 >= (lopend.tot() - lopend.van()) * 4) {
+        if ((volgendeTransactieId - lopend.van()) * 5 >= (lopend.tot() - lopend.van()) * 4) {
             return Optional.of(EventPartitie.vanaf(lopend.tot(), lopend.tot() + omvang));
         }
 
@@ -146,10 +146,10 @@ public class Partitiebeheer {
             // terwijl een oudere partitie blijft: een verlopen cursor zou dan over het gat heen lezen.
             long onder = Math.min(repository.watermerk(),
                     repository.bereikpartities().stream().mapToLong(EventPartitie::van).min().orElse(Long.MAX_VALUE));
-            Optional<Long> beschermd = repository.oudsteBeschermdeXid(epoch, nu, bewaartermijnen.maxCursorleeftijd());
+            Optional<Long> beschermd = repository.oudsteBeschermdeTransactieId(epoch, nu, bewaartermijnen.maxCursorleeftijd());
 
             return repository.verwijderUitStandaardpartitie(bewaartermijnen.bewarenVanaf(nu),
-                    beschermd.map(xid -> Math.min(xid, onder)).orElse(onder), maximum);
+                    beschermd.map(transactieId -> Math.min(transactieId, onder)).orElse(onder), maximum);
         });
     }
 
@@ -158,7 +158,7 @@ public class Partitiebeheer {
             return false;
         }
 
-        Optional<Long> beschermd = repository.oudsteBeschermdeXid(epoch, nu, bewaartermijnen.maxCursorleeftijd());
+        Optional<Long> beschermd = repository.oudsteBeschermdeTransactieId(epoch, nu, bewaartermijnen.maxCursorleeftijd());
 
         if (beschermd.isPresent() && beschermd.get() < partitie.tot()) {
             return false;

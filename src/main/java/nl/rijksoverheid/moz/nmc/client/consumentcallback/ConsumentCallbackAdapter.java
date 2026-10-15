@@ -1,25 +1,27 @@
 package nl.rijksoverheid.moz.nmc.client.consumentcallback;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import io.quarkus.logging.Log;
 import io.vertx.core.http.HttpClosedException;
 import io.vertx.core.http.StreamResetException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
-import org.eclipse.microprofile.rest.client.RestClientDefinitionException;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeoutException;
 
 /**
  * Levert een bundel CloudEvents in één POST aan de webhook van een Dienstverlener. Eén poging: de
  * terugkoppeltaak bepaalt wanneer het opnieuw gaat.
  * <p>
- * Een fout aan de kant van de Dienstverlener (geen 2xx, geen verbinding, een URL waar geen client van
- * te bouwen is) wordt een {@link WebhookLeveringException}; een fout in het NMC zelf, zoals een
- * serialisatiefout, gaat ongewijzigd door.
+ * Een fout aan de kant van de Dienstverlener (geen 2xx, geen verbinding) wordt een
+ * {@link WebhookLeveringException}; een fout in het NMC zelf, zoals een serialisatiefout, gaat
+ * ongewijzigd door.
  */
 @ApplicationScoped
 public class ConsumentCallbackAdapter {
@@ -27,10 +29,20 @@ public class ConsumentCallbackAdapter {
     // Begrenst het aflopen van een eventueel kringvormige oorzakenketen.
     private static final int MAX_OORZAAKDIEPTE = 20;
 
-    private final ConsumentCallbackClientFactory clientFactory;
+    private final ConsumentCallbackClient client;
+    private final Duration timeout;
 
-    public ConsumentCallbackAdapter(ConsumentCallbackClientFactory clientFactory) {
-        this.clientFactory = clientFactory;
+    public ConsumentCallbackAdapter(ConsumentCallbackClient client,
+                                    @ConfigProperty(name = "nmc.webhook.timeout") Duration timeout,
+                                    @ConfigProperty(name = "nmc.taak.lease") Duration lease) {
+        // Een aanroep die langer duurt dan de lease, laat een tweede worker dezelfde webhook beleveren.
+        if (timeout.isNegative() || timeout.isZero() || timeout.compareTo(lease) >= 0) {
+            throw new IllegalStateException("nmc.webhook.timeout moet positief en korter dan nmc.taak.lease ("
+                    + lease + ") zijn, is " + timeout);
+        }
+
+        this.client = client;
+        this.timeout = timeout;
     }
 
     /**
@@ -39,28 +51,26 @@ public class ConsumentCallbackAdapter {
      * @throws WebhookLeveringException als de Dienstverlener de levering niet aannam
      */
     public void lever(String url, String autorisatie, String cursor, List<NotificatieStatusEvent> events) {
-        ConsumentCallbackClient client;
-        try {
-            client = clientFactory.maakClient(url);
-        } catch (IllegalArgumentException | RestClientDefinitionException e) {
-            throw new WebhookLeveringException("Webhook-client kon niet worden gebouwd", e);
-        }
+        Objects.requireNonNull(url, "url is verplicht");
 
         try {
-            client.lever(autorisatie, cursor, events);
+            // De read-time-out van de client geldt tussen twee stukken antwoord; een webhook die blijft
+            // druppelen houdt de aanroep anders langer open dan de lease van de taak.
+            client.lever(url, autorisatie, cursor, events)
+                    .ifNoItem().after(timeout)
+                    .failWith(() -> new WebhookLeveringException("Webhook antwoordde niet binnen " + timeout))
+                    .await().indefinitely();
         } catch (WebApplicationException e) {
             throw new WebhookLeveringException("Webhook antwoordde met HTTP " + e.getResponse().getStatus(), e);
-        } catch (ProcessingException e) {
+        } catch (ProcessingException | CompletionException e) {
             throw vertaal(e);
-        } finally {
-            sluit(client);
         }
     }
 
-    // De rest-client pakt elke fout in als ProcessingException, ook een fout in het NMC zelf; alleen
-    // een transportfout ligt aan de Dienstverlener. Jacksons JsonProcessingException is een
-    // IOException, maar een serialisatiefout ligt aan het NMC.
-    private static RuntimeException vertaal(ProcessingException e) {
+    // Alleen een transportfout ligt aan de Dienstverlener. Een serialisatiefout is ook een IOException,
+    // maar ligt aan het NMC. Een fout zonder ProcessingException eromheen verpakt await in een
+    // CompletionException.
+    private static RuntimeException vertaal(RuntimeException e) {
         if (heeftOorzaak(e, InterruptedException.class)) {
             Thread.currentThread().interrupt();
 
@@ -73,15 +83,6 @@ public class ConsumentCallbackAdapter {
         }
 
         return new WebhookLeveringException("Webhook niet bereikbaar", e);
-    }
-
-    // Een fout bij het sluiten zegt niets over de levering.
-    private static void sluit(ConsumentCallbackClient client) {
-        try {
-            client.close();
-        } catch (RuntimeException e) {
-            Log.warn("Webhook-client niet netjes gesloten", e);
-        }
     }
 
     @SafeVarargs

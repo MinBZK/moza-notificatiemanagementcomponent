@@ -6,7 +6,7 @@ DO $$
 DECLARE
     tot text;
 BEGIN
-    SELECT substring(pg_get_constraintdef(oid) FROM 'xid < ''(\d+)''')
+    SELECT substring(pg_get_constraintdef(oid) FROM 'transactie_id < ''(\d+)''')
       INTO STRICT tot
       FROM pg_constraint
      WHERE conname = 'event_0_bereik';

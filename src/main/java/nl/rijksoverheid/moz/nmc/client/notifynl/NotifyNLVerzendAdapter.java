@@ -123,16 +123,16 @@ public class NotifyNLVerzendAdapter {
     }
 
     // Het eerste bruikbare tijdstip; een onleesbaar tijdstip telt als afwezig.
-    private static OffsetDateTime tijdstip(String... kandidaten) {
-        for (String kandidaat : kandidaten) {
-            if (kandidaat == null || kandidaat.isBlank()) {
+    private static OffsetDateTime tijdstip(String... tijdstippen) {
+        for (String tijdstip : tijdstippen) {
+            if (tijdstip == null || tijdstip.isBlank()) {
                 continue;
             }
 
             try {
-                return OffsetDateTime.parse(kandidaat);
+                return OffsetDateTime.parse(tijdstip);
             } catch (DateTimeParseException e) {
-                Log.debugf("Onleesbaar tijdstip '%s' van NotifyNL genegeerd", kandidaat);
+                Log.debugf("Onleesbaar tijdstip '%s' van NotifyNL genegeerd", tijdstip);
             }
         }
 

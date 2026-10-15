@@ -12,7 +12,7 @@ import java.util.Optional;
 
 /**
  * De partities van het eventlog en wat ze tegenhoudt. Alles is native SQL: het gaat om de catalogus,
- * DDL en de kolom xid (xid8), die Hibernate niet als getal leest.
+ * DDL, afzonderlijke partities en de transactie-ids van PostgreSQL zelf.
  * <p>
  * {@code event} is gepartitioneerd op bereiken van transactie-id, met {@code event_standaard} als
  * default-partitie voor wat buiten de bereiken valt.
@@ -36,16 +36,16 @@ public class EventPartitieRepository {
     // Alleen cursors uit het huidige epoch en jonger dan de maximale cursorleeftijd van hun
     // dienstverlener tellen; een webhookpositie telt vanaf de laatste levering, niet vanaf een
     // mislukte poging.
-    private static final String OUDSTE_BESCHERMDE_XID_SQL = """
-            SELECT min(c.xid::text::bigint) AS xid_nr
-              FROM (SELECT b.xid
+    private static final String OUDSTE_BESCHERMDE_TRANSACTIE_ID_SQL = """
+            SELECT min(c.transactie_id::text::bigint) AS transactie_id_nr
+              FROM (SELECT b.transactie_id
                       FROM bevestiging b
                       JOIN dienstverlener d ON d.id = b.dv_id
                      WHERE b.epoch = ?1
                        AND b.bevestigd_op > CAST(?2 AS timestamptz)
                            - COALESCE(d.max_cursorleeftijd, CAST(?3 AS bigint) * interval '1 second')
                     UNION ALL
-                    SELECT w.xid
+                    SELECT w.transactie_id
                       FROM webhookpositie w
                       JOIN dienstverlener d ON d.id = w.dv_id
                      WHERE w.epoch = ?1
@@ -55,10 +55,10 @@ public class EventPartitieRepository {
 
     private static final String VERWIJDER_UIT_STANDAARD_SQL = """
             DELETE FROM event_standaard
-             WHERE (xid, id) IN (SELECT xid, id
+             WHERE (transactie_id, id) IN (SELECT transactie_id, id
                                    FROM event_standaard
-                                  WHERE tijdstip < ?1
-                                    AND xid < CAST(CAST(?2 AS text) AS xid8)
+                                  WHERE geregistreerd < ?1
+                                    AND transactie_id < CAST(CAST(?2 AS text) AS xid8)
                                   FETCH FIRST ?3 ROWS ONLY)
             """;
 
@@ -82,13 +82,13 @@ public class EventPartitieRepository {
     }
 
     /** De transactie-id die als volgende wordt uitgedeeld. */
-    public long volgendeXid() {
-        return xid("SELECT pg_snapshot_xmax(pg_current_snapshot())::text::bigint AS xid_nr");
+    public long volgendeTransactieId() {
+        return transactieId("SELECT pg_snapshot_xmax(pg_current_snapshot())::text::bigint AS transactie_id_nr");
     }
 
     /** De oudste lopende transactie: onder deze transactie-id komt geen event meer bij. */
     public long watermerk() {
-        return xid("SELECT pg_snapshot_xmin(pg_current_snapshot())::text::bigint AS xid_nr");
+        return transactieId("SELECT pg_snapshot_xmin(pg_current_snapshot())::text::bigint AS transactie_id_nr");
     }
 
     /** Laat DDL in de lopende transactie opgeven in plaats van wachten als het eventlog bezet is. */
@@ -111,16 +111,16 @@ public class EventPartitieRepository {
     }
 
     /**
-     * Het tijdstip van het event met de hoogste transactie-id in de partitie; leeg als de partitie leeg
+     * De registratietijd van het event met de hoogste transactie-id in de partitie; leeg als de partitie leeg
      * is. Via de primary key, zonder de partitie te scannen; een event met een lagere transactie-id kan
      * hooguit de transactie-timeout later geregistreerd zijn.
      */
     @SuppressWarnings("unchecked")
     public Optional<OffsetDateTime> jongsteEvent(EventPartitie partitie) {
-        List<OffsetDateTime> rijen = entityManager.createNativeQuery("SELECT tijdstip FROM " + partitie.naam()
-                        + " ORDER BY xid DESC, id DESC FETCH FIRST 1 ROWS ONLY")
+        List<OffsetDateTime> rijen = entityManager.createNativeQuery("SELECT geregistreerd FROM " + partitie.naam()
+                        + " ORDER BY transactie_id DESC, id DESC FETCH FIRST 1 ROWS ONLY")
                 .unwrap(NativeQuery.class)
-                .addScalar("tijdstip", StandardBasicTypes.OFFSET_DATE_TIME)
+                .addScalar("geregistreerd", StandardBasicTypes.OFFSET_DATE_TIME)
                 .getResultList();
 
         return rijen.stream().findFirst();
@@ -133,37 +133,37 @@ public class EventPartitieRepository {
      * @param standaardLeeftijd de maximale cursorleeftijd voor een dienstverlener zonder eigen afspraak
      */
     @SuppressWarnings("unchecked")
-    public Optional<Long> oudsteBeschermdeXid(int epoch, OffsetDateTime nu, Duration standaardLeeftijd) {
-        List<Long> rijen = entityManager.createNativeQuery(OUDSTE_BESCHERMDE_XID_SQL)
+    public Optional<Long> oudsteBeschermdeTransactieId(int epoch, OffsetDateTime nu, Duration standaardLeeftijd) {
+        List<Long> rijen = entityManager.createNativeQuery(OUDSTE_BESCHERMDE_TRANSACTIE_ID_SQL)
                 .unwrap(NativeQuery.class)
-                .addScalar("xid_nr", StandardBasicTypes.LONG)
+                .addScalar("transactie_id_nr", StandardBasicTypes.LONG)
                 .setParameter(1, epoch)
                 .setParameter(2, nu)
                 .setParameter(3, standaardLeeftijd.toSeconds())
                 .getResultList();
 
-        return rijen.stream().filter(xid -> xid != null).findFirst();
+        return rijen.stream().filter(transactieId -> transactieId != null).findFirst();
     }
 
     /**
      * Verwijdert tot {@code maximum} events uit de default-partitie die vóór {@code grens} zijn
-     * geregistreerd en een transactie-id onder {@code onderXid} hebben.
+     * geregistreerd en een transactie-id onder {@code onderTransactieId} hebben.
      *
      * @return het aantal verwijderde events
      */
-    public int verwijderUitStandaardpartitie(OffsetDateTime grens, long onderXid, int maximum) {
+    public int verwijderUitStandaardpartitie(OffsetDateTime grens, long onderTransactieId, int maximum) {
         return entityManager.createNativeQuery(VERWIJDER_UIT_STANDAARD_SQL)
                 .setParameter(1, grens)
-                .setParameter(2, onderXid)
+                .setParameter(2, onderTransactieId)
                 .setParameter(3, maximum)
                 .executeUpdate();
     }
 
     @SuppressWarnings("unchecked")
-    private long xid(String sql) {
+    private long transactieId(String sql) {
         List<Long> rijen = entityManager.createNativeQuery(sql)
                 .unwrap(NativeQuery.class)
-                .addScalar("xid_nr", StandardBasicTypes.LONG)
+                .addScalar("transactie_id_nr", StandardBasicTypes.LONG)
                 .getResultList();
 
         return rijen.getFirst();

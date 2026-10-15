@@ -11,7 +11,9 @@ import nl.rijksoverheid.moz.nmc.domain.OvergangUitkomst;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.domain.VersleuteldeGegevens;
+import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
@@ -70,31 +72,31 @@ class WisTaakHandlerTest {
     }
 
     @Test
-    void overgangNaarTerminaal_plantDeWistaakOpDeWistermijn() {
-        UUID id = terminaal(NotificatieStatus.GEANNULEERD);
+    void overgangNaarEindstatus_plantDeWistaakOpDeWistermijn() {
+        UUID id = metEindstatus(NotificatieStatus.GEANNULEERD);
 
         Taak wistaak = wistaak(id);
-        assertEquals(notificatie(id).getTerminaalOp().plusDays(7).toInstant(), wistaak.getDue().toInstant());
+        assertEquals(notificatie(id).getEindstatusOp().plusDays(7).toInstant(), wistaak.getDue().toInstant());
     }
 
     @Test
-    void overgangNaarNietTerminaal_plantGeenWistaak() {
+    void overgangNaarGeenEindstatus_plantGeenWistaak() {
         UUID id = aangenomen();
         overgang(id, NotificatieStatus.IN_VERZENDING);
 
-        assertNull(notificatie(id).getTerminaalOp());
+        assertNull(notificatie(id).getEindstatusOp());
         assertTrue(taken(TaakSoort.WISSEN).isEmpty());
     }
 
     // Een late receipt corrigeert bezorgstatus-onbekend naar bezorgd; zonder open wistaak kan de
-    // controletaak de notificatie weer oppakken, en de volgende terminale status plant een nieuwe.
+    // controletaak de notificatie weer oppakken, en de volgende eindstatus plant een nieuwe.
     @Test
     void correctieVanBezorgstatusOnbekendNaarBezorgd_verwijdertDeWistaak() {
         UUID id = bezorgstatusOnbekend();
 
         overgang(id, NotificatieStatus.BEZORGD);
 
-        assertNull(notificatie(id).getTerminaalOp());
+        assertNull(notificatie(id).getEindstatusOp());
         assertTrue(taken(TaakSoort.WISSEN).isEmpty());
     }
 
@@ -103,27 +105,27 @@ class WisTaakHandlerTest {
         UUID id = bezorgstatusOnbekend();
         OffsetDateTime eerder = OffsetDateTime.now(ZoneOffset.UTC).minusDays(3);
         QuarkusTransaction.requiringNew().run(() -> {
-            NotificatieFixtures.verzetTerminaalOp(entityManager, id, eerder);
+            NotificatieFixtures.verzetEindstatusOp(entityManager, id, eerder);
             entityManager.createNativeQuery("UPDATE taak SET due = ?1 WHERE soort = 'WISSEN'")
                     .setParameter(1, eerder.plusDays(7)).executeUpdate();
         });
 
         overgang(id, NotificatieStatus.NIET_BEZORGBAAR);
 
-        OffsetDateTime terminaalOp = notificatie(id).getTerminaalOp();
-        assertTrue(terminaalOp.isAfter(eerder.plusDays(2)));
-        assertEquals(List.of(terminaalOp.plusDays(7).toInstant()),
+        OffsetDateTime eindstatusOp = notificatie(id).getEindstatusOp();
+        assertTrue(eindstatusOp.isAfter(eerder.plusDays(2)));
+        assertEquals(List.of(eindstatusOp.plusDays(7).toInstant()),
                 taken(TaakSoort.WISSEN).stream().map(t -> t.getDue().toInstant()).toList(), "één wistaak, verzet");
     }
 
     @Test
     void wistaak_naDeWistermijn_wistDeSleutelZonderVersieOfEvent() {
-        UUID id = terminaal(NotificatieStatus.GEANNULEERD);
+        UUID id = metEindstatus(NotificatieStatus.GEANNULEERD);
         Notificatie voor = notificatie(id);
         int eventsVoor = eventRepository.findByNotificatie(id).size();
         verzetNaarVerleden(id, 8);
 
-        assertEquals(1, taakWorker.verwerk(TaakSoort.WISSEN));
+        assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.WISSEN));
 
         Notificatie na = notificatie(id);
         VersleuteldeGegevens gegevens = na.getVersleuteldeGegevens();
@@ -140,25 +142,25 @@ class WisTaakHandlerTest {
 
     @Test
     void wistaak_voorDeWistermijn_steltUitTotDeTermijnZonderTeWissen() {
-        UUID id = terminaal(NotificatieStatus.GEANNULEERD);
+        UUID id = metEindstatus(NotificatieStatus.GEANNULEERD);
         zetDueInVerleden();
 
-        assertEquals(1, taakWorker.verwerk(TaakSoort.WISSEN));
+        assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.WISSEN));
 
         Taak wistaak = wistaak(id);
-        assertEquals(notificatie(id).getTerminaalOp().plusDays(7).toInstant(), wistaak.getDue().toInstant());
+        assertEquals(notificatie(id).getEindstatusOp().plusDays(7).toInstant(), wistaak.getDue().toInstant());
         assertEquals(0, wistaak.getPogingen());
         assertNull(wistaak.getLeaseTot());
         assertEquals(ONTVANGER, sleutelbeheer.ontsleutelOntvanger(id, notificatie(id).getVersleuteldeGegevens()));
     }
 
     @Test
-    void wistaak_notificatieNietTerminaal_rondtAfZonderTeWissen() {
+    void wistaak_notificatieZonderEindstatus_rondtAfZonderTeWissen() {
         UUID id = aangenomen();
         QuarkusTransaction.requiringNew().run(() -> taakRepository.persist(new Taak(TaakSoort.WISSEN,
                 NotificatieFixtures.DV_ID, id, OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1), null, null)));
 
-        assertEquals(1, taakWorker.verwerk(TaakSoort.WISSEN));
+        assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.WISSEN));
 
         assertTrue(taken(TaakSoort.WISSEN).isEmpty());
         assertNotNull(notificatie(id).getVersleuteldeGegevens().sleutelGewrapt());
@@ -191,7 +193,7 @@ class WisTaakHandlerTest {
         });
     }
 
-    private UUID terminaal(NotificatieStatus status) {
+    private UUID metEindstatus(NotificatieStatus status) {
         UUID id = aangenomen();
         overgang(id, status);
 
@@ -209,13 +211,13 @@ class WisTaakHandlerTest {
 
     private void overgang(UUID id, NotificatieStatus naar) {
         QuarkusTransaction.requiringNew().run(() -> {
-            OvergangUitkomst uitkomst = overgangsfunctie.voerUit(id, naar, naar.isTerminaal() ? Reden.TECHNISCH : null);
+            OvergangUitkomst uitkomst = overgangsfunctie.voerUit(id, naar, naar.isEindstatus() ? Reden.TECHNISCH : null);
             assertTrue(uitkomst.isUitgevoerd(), "overgang naar " + naar);
         });
     }
 
     private void verzetNaarVerleden(UUID id, int dagen) {
-        QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.verzetTerminaalOp(entityManager, id,
+        QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.verzetEindstatusOp(entityManager, id,
                 OffsetDateTime.now(ZoneOffset.UTC).minusDays(dagen)));
         zetDueInVerleden();
     }
@@ -239,7 +241,7 @@ class WisTaakHandlerTest {
         return wistaken.getFirst();
     }
 
-    private List<Taak> taken(TaakSoort soort) {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.list("soort", soort));
+    private List<Taak> taken(TaakSoort taakSoort) {
+        return QuarkusTransaction.requiringNew().call(() -> taakRepository.list(Taak_.TAAK_SOORT, taakSoort));
     }
 }

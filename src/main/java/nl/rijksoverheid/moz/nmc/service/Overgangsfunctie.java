@@ -1,8 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
@@ -12,6 +10,7 @@ import nl.rijksoverheid.moz.nmc.domain.Overgangsregels;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 
 import java.util.Objects;
@@ -22,23 +21,23 @@ import java.util.UUID;
  * het paar aan {@link Overgangsregels}, verhoogt de versie met precies één en schrijft een event met
  * die versie als volgnummer, in de transactie van de aanroeper.
  * <p>
- * Elke overgang naar een terminale status plant de wistaak op de wistermijn vanaf die overgang, of verzet
- * een open wistaak daarheen. Zo gaat geen schrijver van een terminale status aan het wissen voorbij, en
- * wist een correctie van {@code BEZORGSTATUS_ONBEKEND} niet op de termijn van de eerdere status. Een
- * overgang uit een terminale status terug naar een niet-terminale verwijdert de open wistaak.
+ * Elke overgang naar een eindstatus plant de wistaak op de wistermijn vanaf die overgang, of verzet een
+ * open wistaak daarheen. Zo gaat geen schrijver van een eindstatus aan het wissen voorbij, en wist een
+ * correctie van {@code BEZORGSTATUS_ONBEKEND} niet op de termijn van de eerdere status. Een overgang
+ * uit een eindstatus terug naar een status zonder eindstatus verwijdert de open wistaak.
  */
 @ApplicationScoped
 @Transactional(Transactional.TxType.MANDATORY)
 public class Overgangsfunctie {
 
-    private final EntityManager entityManager;
+    private final NotificatieRepository notificatieRepository;
     private final EventRepository eventRepository;
     private final TaakRepository taakRepository;
     private final Bewaartermijnen bewaartermijnen;
 
-    public Overgangsfunctie(EntityManager entityManager, EventRepository eventRepository,
+    public Overgangsfunctie(NotificatieRepository notificatieRepository, EventRepository eventRepository,
                             TaakRepository taakRepository, Bewaartermijnen bewaartermijnen) {
-        this.entityManager = entityManager;
+        this.notificatieRepository = notificatieRepository;
         this.eventRepository = eventRepository;
         this.taakRepository = taakRepository;
         this.bewaartermijnen = bewaartermijnen;
@@ -53,8 +52,7 @@ public class Overgangsfunctie {
         }
 
         notificatie.pasOvergangToe(NotificatieStatus.AANGENOMEN, null);
-        entityManager.persist(notificatie);
-        entityManager.flush();
+        notificatieRepository.persistAndFlush(notificatie);
 
         return schrijfEvent(notificatie, null);
     }
@@ -79,17 +77,17 @@ public class Overgangsfunctie {
         // alleen de force-increment de versie. Anders doet de flush dat, en een tweede ophoging zou
         // een gat in de volgnummers geven.
         if (van == naar) {
-            entityManager.lock(notificatie, LockModeType.PESSIMISTIC_FORCE_INCREMENT);
+            notificatieRepository.verhoogVersie(notificatie);
         } else {
             notificatie.pasOvergangToe(naar, reden);
         }
 
-        entityManager.flush();
+        notificatieRepository.flush();
 
-        if (naar.isTerminaal()) {
+        if (naar.isEindstatus()) {
             taakRepository.planWistaak(notificatie.getDvId(), notificatie.getId(),
-                    bewaartermijnen.wissenOp(notificatie.getTerminaalOp()));
-        } else if (van.isTerminaal()) {
+                    bewaartermijnen.wissenOp(notificatie.getEindstatusOp()));
+        } else if (van.isEindstatus()) {
             taakRepository.verwijderOpen(TaakSoort.WISSEN, notificatie.getId());
         }
 
@@ -103,13 +101,8 @@ public class Overgangsfunctie {
      * @throws NotificatieNietGevondenException als de notificatie niet bestaat
      */
     public Notificatie vergrendel(UUID notificatieId) {
-        Notificatie notificatie = entityManager.find(Notificatie.class, notificatieId, LockModeType.PESSIMISTIC_WRITE);
-
-        if (notificatie == null) {
-            throw new NotificatieNietGevondenException("Geen notificatie gevonden met id " + notificatieId);
-        }
-
-        return notificatie;
+        return notificatieRepository.vergrendel(notificatieId)
+                .orElseThrow(() -> new NotificatieNietGevondenException("Geen notificatie gevonden met id " + notificatieId));
     }
 
     // Status en reden komen van de rij, zodat het event nooit afwijkt van wat er vastligt; bij een

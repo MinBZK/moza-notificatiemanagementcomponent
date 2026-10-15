@@ -16,12 +16,14 @@ import java.util.UUID;
 @Entity
 public class Notificatie {
 
+    public static final String PAD = "/api/nmc/v1/notificaties/";
+
     // Toegekend bij het aanmaken en niet bij de persist: de versleutelde velden zijn aan deze id
     // gebonden en worden vóór de eerste opslag gezet.
     @Id
     private UUID id;
 
-    // Loopt per overgang met één op en is het volgnummer van het bijbehorende event; een
+    // Loopt per overgang op en is het volgnummer van het bijbehorende event; een
     // databasetrigger weigert een nieuwe versie zonder event.
     @Version
     private long versie;
@@ -38,10 +40,10 @@ public class Notificatie {
     @Column(length = 32)
     private Reden reden;
 
-    // Tijdstip van de laatste overgang naar een terminale status, op de eigen klok; leeg zolang de
-    // status niet terminaal is. Wistermijn en bewaartermijn lopen vanaf hier.
-    @Column(name = "terminaal_op")
-    private OffsetDateTime terminaalOp;
+    // Tijdstip van de laatste overgang naar een eindstatus, op de eigen klok; leeg zolang de
+    // notificatie geen eindstatus heeft. Wistermijn en bewaartermijn lopen vanaf hier.
+    @Column(name = "eindstatus_op")
+    private OffsetDateTime eindstatusOp;
 
     // Het quotum per dienstverlener telt op dit tijdstip.
     @Column(name = "aangenomen_op", nullable = false, updatable = false)
@@ -61,7 +63,6 @@ public class Notificatie {
     @Column(name = "kek_versie", updatable = false)
     private Integer kekVersie;
 
-    // Wat elke verzendtaak nodig heeft; geen persoonsgegevens.
     @Column(name = "template_id", length = 64)
     private String templateId;
 
@@ -117,19 +118,19 @@ public class Notificatie {
         return reden;
     }
 
-    /** Wanneer de notificatie terminaal werd; leeg zolang de status niet terminaal is. */
-    public OffsetDateTime getTerminaalOp() {
-        return terminaalOp;
+    /** Wanneer de notificatie haar eindstatus kreeg; leeg zolang ze er geen heeft. */
+    public OffsetDateTime getEindstatusOp() {
+        return eindstatusOp;
     }
 
     /**
      * Zet status en reden. Alleen voor Overgangsfunctie, die de rij vergrendelt, de overgang toetst en
      * het event schrijft.
      */
-    public void pasOvergangToe(NotificatieStatus naar, Reden reden) {
-        this.status = Objects.requireNonNull(naar, "naar is verplicht");
+    public void pasOvergangToe(NotificatieStatus status, Reden reden) {
+        this.status = Objects.requireNonNull(status, "status is verplicht");
         this.reden = reden;
-        this.terminaalOp = naar.isTerminaal()
+        this.eindstatusOp = status.isEindstatus()
                 ? OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS)
                 : null;
     }
@@ -172,7 +173,7 @@ public class Notificatie {
     }
 
     /** Legt het verzendbeleid vast. Alleen bij de aanname, vóór de eerste opslag. */
-    public void bewaarBeleid(String berichtType, OffsetDateTime geldigTot) {
+    public void bewaarVerzendbeleid(String berichtType, OffsetDateTime geldigTot) {
         this.berichtType = Objects.requireNonNull(berichtType, "berichtType is verplicht");
         this.geldigTot = Objects.requireNonNull(geldigTot, "geldigTot is verplicht");
     }

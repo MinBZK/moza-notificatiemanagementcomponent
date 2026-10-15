@@ -17,11 +17,11 @@ class AanroeplimietTest {
     private static final UUID DV_A = UUID.randomUUID();
     private static final UUID DV_B = UUID.randomUUID();
 
-    private final VerstelbareKlok klok = new VerstelbareKlok(Instant.parse("2030-01-01T10:00:05Z"));
+    private final VerstelbareClock clock = new VerstelbareClock(Instant.parse("2030-01-01T10:00:05Z"));
 
     @Test
     void registreer_binnenDeMinuut_teltTotDeLimietPerDienstverlener() {
-        Aanroeplimiet limiet = new Aanroeplimiet(klok, 2);
+        Aanroeplimiet limiet = new Aanroeplimiet(clock, 2);
 
         assertTrue(limiet.registreer(DV_A));
         assertTrue(limiet.registreer(DV_A));
@@ -31,25 +31,25 @@ class AanroeplimietTest {
 
     @Test
     void registreer_inEenNieuweMinuut_begintOpnieuw() {
-        Aanroeplimiet limiet = new Aanroeplimiet(klok, 1);
+        Aanroeplimiet limiet = new Aanroeplimiet(clock, 1);
         limiet.registreer(DV_A);
         assertFalse(limiet.registreer(DV_A));
 
-        klok.zet(Instant.parse("2030-01-01T10:01:00Z"));
+        clock.zet(Instant.parse("2030-01-01T10:01:00Z"));
 
         assertTrue(limiet.registreer(DV_A));
     }
 
     @Test
     void constructor_nietPositieveLimiet_weigert() {
-        assertThrows(IllegalStateException.class, () -> new Aanroeplimiet(klok, 0));
+        assertThrows(IllegalStateException.class, () -> new Aanroeplimiet(clock, 0));
     }
 
-    private static final class VerstelbareKlok extends Clock {
+    private static final class VerstelbareClock extends Clock {
 
         private Instant nu;
 
-        VerstelbareKlok(Instant nu) {
+        VerstelbareClock(Instant nu) {
             this.nu = nu;
         }
 

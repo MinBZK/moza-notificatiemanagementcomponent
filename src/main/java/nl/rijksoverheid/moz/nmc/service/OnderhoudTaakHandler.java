@@ -68,7 +68,7 @@ public class OnderhoudTaakHandler implements TaakHandler {
     }
 
     @Override
-    public TaakSoort soort() {
+    public TaakSoort taakSoort() {
         return TaakSoort.ONDERHOUD;
     }
 
@@ -82,7 +82,7 @@ public class OnderhoudTaakHandler implements TaakHandler {
         stap("sleutels herwrappen", () -> meld("sleutel(s) geherwrapt", herwrapSleutels(lease)));
         stap("notificaties verwijderen", () -> meld("notificatie(s) na de bewaartermijn verwijderd",
                 inBatches(lease, () -> QuarkusTransaction.requiringNew()
-                        .call(() -> notificatieRepository.verwijderTerminaalVoor(bewaartermijnen.bewarenVanaf(nu), batch)))));
+                        .call(() -> notificatieRepository.verwijderMetEindstatusVoor(bewaartermijnen.bewarenVanaf(nu), batch)))));
         lease.verleng();
         stap("eventpartities verwijderen", () -> partitiebeheer.ruimOp(nu).stream().map(EventPartitie::naam)
                 .forEach(naam -> Log.infof("Onderhoud: eventpartitie %s verwijderd", naam)));

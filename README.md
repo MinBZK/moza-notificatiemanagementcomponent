@@ -25,7 +25,7 @@ asynchrone bezorgstatus:
    leest die events als **CloudEvents NL GOV** uit de eventfeed, en heeft hij in het
    register een webhook, dan levert een terugkoppeltaak dezelfde events daarheen. Het
    slagen van die levering heeft geen invloed op wat de NMC vastlegt. Een wistaak
-   wist de sleutel van de notificatie `nmc.wissen.termijn` na de terminale status;
+   wist de sleutel van de notificatie `nmc.wissen.termijn` na de eindstatus;
    de onderhoudstaak verwijdert de notificatie na `nmc.afleverbewijs.bewaartermijn`
    (zie `application.properties`).
 
@@ -127,8 +127,8 @@ contactherstel-deel van beide profielen is nog niet gebouwd.
    centraal profiel volstaat een identificatie; bij een decentraal profiel
    worden ook het verzendkanaal en de ontvangergegevens meegegeven.
 2. **Versturen**: de NMC haalt (in een latere stap) de juiste template op en
-   stuurt het bericht via NotifyNL. De notificatie wordt opgeslagen met status
-   `sending`.
+   stuurt het bericht via NotifyNL. De notificatie gaat van `aangenomen` via
+   `in-verzending` naar `verzonden`.
 3. **Bezorgstatus verwerken**: NotifyNL meldt asynchroon terug of de
    bezorging is gelukt of mislukt. De NMC werkt de status bij; de overgang staat in de
    eventfeed en gaat naar de webhook van de Dienstverlener, als die er een heeft.
@@ -150,7 +150,7 @@ Geïmplementeerde componenten zijn vetgedrukt; de rest is toekomstig ontwerp.
 | **Afleverstatus-callback** | REST (controller) | Webhook waarop NotifyNL delivery receipts meldt. |
 | **Aanname** | Service (`AannameService`) | Legt notificatie, eerste event en verzendtaak vast in één transactie en dwingt het quotum per Dienstverlener af. |
 | **Verzendtaak** | Taakhandler (`VerzendTaakHandler`) | Haalt bij centrale regie het adres op, verstuurt via NotifyNL met het poging-id als `reference` en voert de overgangen uit. |
-| **Profielservice-adapter** | Client | Haalt contactvoorkeur op bij de Profielservice en kan een e-mailadres invalideren. |
+| **Profielservice-adapter** | Client | Haalt contactvoorkeur op bij de Profielservice. |
 | **Verzendadapter** | Client (bearer-JWT) | Verstuurt berichten via NotifyNL (`template_id` + `personalisation`). |
 | **Terugkoppeltaak** | Taakhandler (`TerugkoppelTaakHandler`, `WebhookDispatcher`) | Levert per dienstverlener de events vanaf de leverpositie als CloudEvents-batch aan de webhook uit het register, met een ondertekende bearer-JWT. |
 | **Consument-callback-adapter** | Webhook-client (CloudEvents NL GOV) | Doet de POST naar de webhook: één poging, zonder herhaling. |
@@ -187,8 +187,8 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
   zodat het per partitie kan worden opgeruimd.
 - **`dienstverlener`** is het register uit de onboarding; nu één rij uit de
   migratie, waarvan `dv_id` op elke notificatie en elk event staat. De optionele
-  `webhook_url`, `webhook_max_mislukkingen` en `max_cursorleeftijd` zet beheer; een
-  registratie-API is er nog niet.
+  `webhook_url`, `webhook_max_mislukkingen`, `webhook_bundel` en `max_cursorleeftijd`
+  zet beheer; een registratie-API is er nog niet.
 - **`taak`** draagt de bijwerkingen (verzenden, receipts verwerken, navraag,
   vaststellen, terugkoppelen, ongeldig melden, wissen, controle, onderhoud) met
   `due` als timer, een lease, een claim-epoch en een pogingenteller; per soort
@@ -209,22 +209,21 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
 notificatierij (`SELECT ... FOR UPDATE`), toetst de overgang aan
 `Overgangsregels` en schrijft in dezelfde transactie het event. Een deferred
 databasetrigger dwingt dat af voor elke schrijver, ook buiten Hibernate om: een
-nieuwe rij begint op `aangenomen`, een nieuwe versie moet een toegestane overgang
-zijn en in dezelfde transactie een event met die versie als volgnummer hebben.
-De toegestane paren staan in de tabel `toegestane_overgang`; een test houdt die
-gelijk aan `Overgangsregels`.
+nieuwe rij begint op `aangenomen`, de status verandert alleen met een nieuwe versie,
+en een nieuwe versie heeft in dezelfde transactie een event met die versie als
+volgnummer. Welke overgangen toegestaan zijn, staat alleen in `Overgangsregels`.
 
 Twee tijdstippen blijven uit elkaar: het tijdstip uit de receipt
 (`completed_at`, met `sent_at` en `created_at` als terugval) staat op de poging
 en bepaalt de volgorde van receipts; het tijdstip op het event is de
-registratietijd op de eigen klok. `terminaal_op` op `notificatie` is het tijdstip
-van de laatste overgang naar een terminale status (leeg zolang de status niet
-terminaal is); wissen en verwijderen varen erop.
+registratietijd op de eigen klok. `eindstatus_op` op `notificatie` is het tijdstip
+van de laatste overgang naar een eindstatus (leeg zolang de notificatie geen
+eindstatus heeft); wissen en verwijderen varen erop.
 
 ### Wissen en bewaren
 
-- **Wistaak.** Elke overgang naar een terminale status plant via `Overgangsfunctie`
-  een `WISSEN`-taak op `terminaal_op` plus `nmc.wissen.termijn` (7 dagen), of verzet
+- **Wistaak.** Elke overgang naar een eindstatus plant via `Overgangsfunctie`
+  een `WISSEN`-taak op `eindstatus_op` plus `nmc.wissen.termijn` (7 dagen), of verzet
   de open wistaak daarheen; een correctie van `bezorgstatus-onbekend` naar `bezorgd`
   verwijdert hem. `WisTaakHandler` bepaalt de termijn opnieuw onder de
   rijvergrendeling en zet dan `sleutel_gewrapt` en `kek_versie` op leeg, zonder
@@ -239,7 +238,7 @@ terminaal is); wissen en verwijderen varen erop.
     als afstand als het onderhoud achterliep);
   - herwrapt sleutels onder een oudere `kek_versie` met de huidige KEK, zonder de
     gegevens opnieuw te versleutelen;
-  - verwijdert notificaties (met pogingen en taken) waarvan `terminaal_op` ouder is
+  - verwijdert notificaties (met pogingen en taken) waarvan `eindstatus_op` ouder is
     dan `nmc.afleverbewijs.bewaartermijn`;
   - verwijdert eventpartities waarvan het jongste event ouder is dan die termijn en
     waar geen bevestiging of leverpositie meer in of onder wijst. Een cursor ouder
@@ -276,7 +275,8 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   Dienstverlener heeft verwerkt; een oudere cursor verandert niets. `204`, `400` of `410`.
 - **Webhook** (in het contract als callback bij de feed): heeft de Dienstverlener een
   `webhook_url` in het register, dan levert één terugkoppeltaak per Dienstverlener
-  dezelfde events als de feed, gebundeld per aanroep (`nmc.webhook.bundel`), als
+  dezelfde events als de feed, gebundeld per aanroep (`webhook_bundel` in het register,
+  anders `nmc.webhook.bundel`; ten hoogste `nmc.feed.max-pagina`), als
   `application/cloudevents-batch+json`. Elke aanroep draagt de header `Nmc-Cursor`
   met de cursor van het laatste event in de bundel en een bearer-JWT (RS256, `iss` het
   NMC, `aud` de webhook-URL, 5 minuten geldig). Een `2xx` zet de leverpositie vooruit
@@ -286,6 +286,8 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   wachttijd die verdubbelt tot ten hoogste een dag. Een geslaagde levering zet de
   teller terug. De URL gaat vóór elke levering door `CallbackUrlValidator`; een
   ongeldige URL pauzeert de webhook zonder aanroep en geeft een ERROR in het log.
+  Een gewijzigde URL heft de pauze niet op; dat doet beheer met
+  `update webhookpositie set gepauzeerd_tot = null, mislukkingen = 0 where dv_id = '…';`.
 - **`GET /.well-known/jwks.json`**: de publieke sleutel waarmee de Dienstverlener de
   JWT op de webhook controleert, gekozen op `kid`.
 - **`POST /notifynl-callback`**: webhook waarop NotifyNL de bezorgstatus
@@ -317,7 +319,7 @@ Gepland/toekomstig (nog niet aanwezig):
 - **`POST /centraal/notificaties/{id}/contactherstel`**: een nieuwe verzendpoging
   (contactherstel) starten voor een bestaande notificatie.
 
-De `openapi.yaml`-specificatie (`/centraal/notificaties` en `/decentraal/notificaties`)
+De `openapi.yaml`-specificatie (intake, eventfeed, bevestiging, webhook en JWKS)
 is beschikbaar via `/q/swagger-ui` wanneer de applicatie draait (`./mvnw quarkus:dev`);
 zie de toelichting bij
 "OpenAPI-specificatie & codegen" hieronder voor waarom `/notifynl-callback`
@@ -328,8 +330,9 @@ daar niet in staat.
 Het contract van `/api/nmc/v1` is **spec-first** en bestaat uit twee losse
 specificaties:
 
-- `src/main/resources/META-INF/openapi.yaml` — `POST /centraal/notificaties` en
-  `POST /decentraal/notificaties` (de centrale- en decentrale-regie-flow).
+- `src/main/resources/META-INF/openapi.yaml` — `POST /centraal/notificaties`,
+  `POST /decentraal/notificaties`, de eventfeed met de bevestiging en de webhook als
+  callback, en `GET /.well-known/jwks.json`.
 - `src/main/resources/META-INF/notifynl-callback-openapi.yaml` — `POST
   /notifynl-callback`, in een eigen bestand zodat het zelfstandig te verwijderen
   is zodra dit endpoint niet meer nodig is (zie de API-sectie hierboven).
@@ -343,13 +346,14 @@ specificaties:
   voor runtime-documentatie.
 - Bij elke build genereert de `openapi-generator-maven-plugin` (twee losse
   `<execution>`s, één per spec) hieruit de JAX-RS-interfaces
-  (`nl.rijksoverheid.moz.nmc.api.CentraleNotificatiesApi` en `DecentraleNotificatiesApi`,
+  (`nl.rijksoverheid.moz.nmc.api.CentraleNotificatiesApi`, `DecentraleNotificatiesApi`,
+  `WijzigingenApi` en `SleutelsApi`,
   `nl.rijksoverheid.moz.nmc.notifynlcallback.api.NotifyNlCallbackApi`) en de
   request/response-modellen (`nl.rijksoverheid.moz.nmc.api.model.*`,
   `nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.*`) in
   `target/generated-sources/openapi` (niet ingecheckt).
-  `CentraleNotificatieController` en `DecentraleNotificatieController` (package
-  `controller`) en `NotifyNLCallbackController` (package
+  `CentraleNotificatieController`, `DecentraleNotificatieController`,
+  `EventfeedController` en `SleutelsController` (package `controller`) en `NotifyNLCallbackController` (package
   `notifynlcallback.controller`) implementeren de gegenereerde interfaces.
 
 Om een contract aan te passen: wijzig `META-INF/openapi.yaml` of
@@ -433,8 +437,8 @@ verzendtaak. Blijft de receipt uit, dan vraagt de navraag de status op bij Notif
 (na 1, 6 en 24 uur, daarna dagelijks tot de bewaartermijn van NotifyNL; een 404 of het
 einde van die termijn geeft `bezorgstatus-onbekend`). Een `bezorgd` wordt na de
 vaststellingstermijn (7 dagen plus het callback-venster) `definitief-bezorgd`. Een
-tijdelijke of technische fout op de eerste poging geeft één herverzending; na `geldig_tot`
-(standaard 7 dagen na de aanname, per berichttype in te stellen) wordt geen poging meer
+tijdelijke of technische fout geeft een herverzending (standaard één, per berichttype in te
+stellen); na `geldig_tot` (standaard 7 dagen na de aanname, per berichttype in te stellen) wordt geen poging meer
 gestart en eindigt de notificatie in `verlopen`. Nog **niet** aanwezig:
 
 - **Contactherstel** (voor beide profielen)

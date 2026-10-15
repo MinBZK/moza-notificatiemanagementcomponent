@@ -2,9 +2,10 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
+import nl.rijksoverheid.moz.nmc.domain.VerzendbudgetTijdvak;
+import nl.rijksoverheid.moz.nmc.repository.VerzendbudgetRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Clock;
@@ -15,25 +16,24 @@ import java.time.temporal.ChronoUnit;
 /**
  * Tokens per Notify-service per tijdvak van een minuut, als rij in {@code verzendbudget}. De eerste
  * claim in een tijdvak maakt de rij aan met het volledige budget; elke claim neemt er tokens af. Een
- * vast aandeel ({@code navraag_tokens}) is voor de navraag: verzenden laat het staan en de navraag
- * neemt niet meer dan dat. Er
+ * vast aandeel is voor de navraag: verzenden laat het staan en de navraag neemt niet meer dan dat. Er
  * is één Notify-service; de sleutel blijft de service, zodat een tweede later een tweede rij is.
  * <p>
- * Loopt in de transactie van de claim: de {@code INSERT ... ON CONFLICT DO UPDATE} vergrendelt de
- * rij, zodat twee gelijktijdige claims elkaars tokens niet dubbel nemen.
+ * Loopt in de transactie van de claim: de rij van het tijdvak blijft tot de commit vergrendeld, zodat
+ * twee gelijktijdige claims elkaars tokens niet dubbel nemen.
  */
 @Startup
 @ApplicationScoped
 @Transactional(Transactional.TxType.MANDATORY)
 public class Verzendbudget {
 
-    private final EntityManager entityManager;
-    private final Clock klok;
+    private final VerzendbudgetRepository verzendbudgetRepository;
+    private final Clock clock;
     private final String notifyService;
     private final int tokensPerMinuut;
     private final int navraagReservering;
 
-    public Verzendbudget(EntityManager entityManager, Clock klok,
+    public Verzendbudget(VerzendbudgetRepository verzendbudgetRepository, Clock clock,
                          @ConfigProperty(name = "nmc.verzendbudget.notify-service") String notifyService,
                          @ConfigProperty(name = "nmc.verzendbudget.tokens-per-minuut") int tokensPerMinuut,
                          @ConfigProperty(name = "nmc.verzendbudget.navraag-reservering") int navraagReservering) {
@@ -46,8 +46,8 @@ public class Verzendbudget {
                     + tokensPerMinuut + " liggen, is " + navraagReservering);
         }
 
-        this.entityManager = entityManager;
-        this.klok = klok;
+        this.verzendbudgetRepository = verzendbudgetRepository;
+        this.clock = clock;
         this.notifyService = notifyService;
         this.tokensPerMinuut = tokensPerMinuut;
         this.navraagReservering = navraagReservering;
@@ -66,30 +66,10 @@ public class Verzendbudget {
             return new Genomen(0, tijdvak, doel);
         }
 
-        Object[] stand = (Object[]) entityManager.createNativeQuery(
-                        "INSERT INTO verzendbudget (notify_service, tijdvak, tokens, navraag_tokens) VALUES (?1, ?2, ?3, ?4) "
-                                + "ON CONFLICT (notify_service, tijdvak) DO UPDATE SET tokens = verzendbudget.tokens "
-                                + "RETURNING tokens, navraag_tokens")
-                .setParameter(1, notifyService)
-                .setParameter(2, tijdvak)
-                .setParameter(3, tokensPerMinuut)
-                .setParameter(4, navraagReservering)
-                .getSingleResult();
-        int beschikbaar = ((Number) stand[0]).intValue();
-        int navraag = ((Number) stand[1]).intValue();
-
-        int toegestaan = doel == BudgetDoel.NAVRAAG ? navraag : beschikbaar - navraag;
-        int genomen = Math.min(gevraagd, toegestaan);
-
-        if (genomen > 0) {
-            entityManager.createNativeQuery("UPDATE verzendbudget SET tokens = tokens - ?3, navraag_tokens = navraag_tokens - ?4 "
-                            + "WHERE notify_service = ?1 AND tijdvak = ?2")
-                    .setParameter(1, notifyService)
-                    .setParameter(2, tijdvak)
-                    .setParameter(3, genomen)
-                    .setParameter(4, doel == BudgetDoel.NAVRAAG ? genomen : 0)
-                    .executeUpdate();
-        }
+        VerzendbudgetTijdvak budget = verzendbudgetRepository.vergrendel(notifyService, tijdvak, tokensPerMinuut,
+                navraagReservering);
+        int genomen = Math.min(gevraagd, budget.beschikbaar(doel));
+        budget.neem(doel, genomen);
 
         return new Genomen(genomen, tijdvak, doel);
     }
@@ -99,38 +79,30 @@ public class Verzendbudget {
      * het tijdvak en het aandeel waaruit ze kwamen. Is dat tijdvak voorbij, dan vervallen ze met het tijdvak.
      */
     public void geefTerug(Genomen genomen, int aantal) {
-        if (aantal <= 0 || !genomen.tijdvak().equals(tijdvak())) {
+        int terug = Math.min(aantal, genomen.aantal());
+
+        if (terug <= 0 || !genomen.tijdvak().equals(tijdvak())) {
             return;
         }
 
-        int terug = Math.min(aantal, genomen.aantal());
-        entityManager.createNativeQuery("UPDATE verzendbudget SET tokens = LEAST(tokens + ?3, ?4), "
-                        + "navraag_tokens = LEAST(navraag_tokens + ?5, ?6) WHERE notify_service = ?1 AND tijdvak = ?2")
-                .setParameter(1, notifyService)
-                .setParameter(2, genomen.tijdvak())
-                .setParameter(3, terug)
-                .setParameter(4, tokensPerMinuut)
-                .setParameter(5, genomen.doel() == BudgetDoel.NAVRAAG ? terug : 0)
-                .setParameter(6, navraagReservering)
-                .executeUpdate();
+        verzendbudgetRepository.vergrendel(notifyService, genomen.tijdvak(), tokensPerMinuut, navraagReservering)
+                .geefTerug(genomen.doel(), terug, tokensPerMinuut, navraagReservering);
     }
 
-    /** Het aantal tokens dat een claim nam, uit welk tijdvak en voor welk doel. */
     /**
      * Verwijdert de rijen van tijdvakken vóór {@code grens}; hun tokens zijn met het tijdvak vervallen.
      *
      * @return het aantal verwijderde rijen
      */
     public int ruimOpVoor(OffsetDateTime grens) {
-        return entityManager.createNativeQuery("DELETE FROM verzendbudget WHERE tijdvak < ?1")
-                .setParameter(1, grens)
-                .executeUpdate();
+        return verzendbudgetRepository.verwijderVoor(grens);
     }
 
+    /** Het aantal tokens dat een claim nam, uit welk tijdvak en voor welk doel. */
     public record Genomen(int aantal, OffsetDateTime tijdvak, BudgetDoel doel) {
     }
 
     private OffsetDateTime tijdvak() {
-        return OffsetDateTime.now(klok).withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MINUTES);
+        return OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MINUTES);
     }
 }

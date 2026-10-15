@@ -12,12 +12,12 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
 /**
- * Wist de gewrapte sleutel van een notificatie de wistermijn na haar terminale status. Daarna zijn
+ * Wist de gewrapte sleutel van een notificatie de wistermijn na haar eindstatus. Daarna zijn
  * ontvanger en personalisation niet meer te ontsleutelen en is de rij pseudoniem; de rij zelf verdwijnt
  * pas na de bewaartermijn van het afleverbewijs.
  * <p>
- * De termijn wordt onder de rijvergrendeling opnieuw bepaald uit {@code terminaal_op}: een latere
- * terminale overgang verzet hem, en een notificatie die niet meer terminaal is wordt niet gewist.
+ * De termijn wordt onder de rijvergrendeling opnieuw bepaald uit {@code eindstatus_op}: een latere
+ * overgang naar een eindstatus verzet hem, en een notificatie zonder eindstatus wordt niet gewist.
  */
 @ApplicationScoped
 public class WisTaakHandler implements TaakHandler {
@@ -36,7 +36,7 @@ public class WisTaakHandler implements TaakHandler {
     }
 
     @Override
-    public TaakSoort soort() {
+    public TaakSoort taakSoort() {
         return TaakSoort.WISSEN;
     }
 
@@ -50,7 +50,7 @@ public class WisTaakHandler implements TaakHandler {
     private void wis(Taak taak) {
         Notificatie notificatie = overgangsfunctie.vergrendel(taak.getNotificatieId());
 
-        if (!notificatie.getStatus().isTerminaal()) {
+        if (!notificatie.getStatus().isEindstatus()) {
             Log.infof("Notificatie %s staat op %s; wistaak %d afgerond zonder te wissen",
                     notificatie.getId(), notificatie.getStatus(), taak.getId());
             taakClaimer.rondAf(taak);
@@ -58,7 +58,7 @@ public class WisTaakHandler implements TaakHandler {
             return;
         }
 
-        OffsetDateTime wissenOp = bewaartermijnen.wissenOp(notificatie.getTerminaalOp());
+        OffsetDateTime wissenOp = bewaartermijnen.wissenOp(notificatie.getEindstatusOp());
 
         if (wissenOp.isAfter(OffsetDateTime.now(ZoneOffset.UTC))) {
             taakClaimer.stelUit(taak, wissenOp, false);

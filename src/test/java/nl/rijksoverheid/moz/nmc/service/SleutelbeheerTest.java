@@ -275,7 +275,7 @@ class SleutelbeheerTest {
     }
 
     @Test
-    void versleutel_ciphertextBevatIvEnTag() throws Exception {
+    void versleutel_ontvanger_ciphertextBevatIvEnTag() throws Exception {
         Ontvanger ontvanger = Ontvanger.email("a@b.nl");
         VersleuteldeGegevens gegevens = sleutelbeheer.versleutel(ID, ontvanger, Map.of());
 

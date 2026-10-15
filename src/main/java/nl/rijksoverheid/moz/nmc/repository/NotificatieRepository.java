@@ -2,14 +2,18 @@ package nl.rijksoverheid.moz.nmc.repository;
 
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.persistence.LockModeType;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import org.hibernate.query.NativeQuery;
 import org.hibernate.type.StandardBasicTypes;
 
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -21,8 +25,8 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
             DELETE FROM notificatie
              WHERE id IN (SELECT id
                             FROM notificatie
-                           WHERE terminaal_op < ?1
-                           ORDER BY terminaal_op
+                           WHERE eindstatus_op < ?1
+                           ORDER BY eindstatus_op
                            FETCH FIRST ?2 ROWS ONLY
                              FOR UPDATE SKIP LOCKED)
             """;
@@ -47,13 +51,23 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
     private static final String ZET_SLEUTEL_SQL =
             "UPDATE notificatie SET sleutel_gewrapt = ?2, kek_versie = ?3 WHERE id = ?1";
 
+    /** Leest de notificatie met een rijlock die tot het einde van de transactie blijft staan. */
+    public Optional<Notificatie> vergrendel(UUID id) {
+        return findByIdOptional(id, LockModeType.PESSIMISTIC_WRITE);
+    }
+
+    /** Verhoogt de versie van een vergrendelde notificatie waarvan geen veld verandert. */
+    public void verhoogVersie(Notificatie notificatie) {
+        getEntityManager().lock(notificatie, LockModeType.PESSIMISTIC_FORCE_INCREMENT);
+    }
+
     /**
-     * Verwijdert tot {@code maximum} notificaties die vóór {@code grens} terminaal werden, met hun
+     * Verwijdert tot {@code maximum} notificaties die vóór {@code grens} een eindstatus kregen, met hun
      * pogingen en taken.
      *
      * @return het aantal verwijderde notificaties
      */
-    public int verwijderTerminaalVoor(OffsetDateTime grens, int maximum) {
+    public int verwijderMetEindstatusVoor(OffsetDateTime grens, int maximum) {
         return getEntityManager().createNativeQuery(VERWIJDER_NA_BEWAARTERMIJN_SQL)
                 .setParameter(1, grens)
                 .setParameter(2, maximum)
@@ -97,19 +111,20 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
 
     /** Het aantal notificaties dat deze dienstverlener sinds {@code vanaf} heeft aangeboden. */
     public long telAangenomenSinds(UUID dvId, OffsetDateTime vanaf) {
-        return count("dvId = ?1 and aangenomenOp >= ?2", dvId, vanaf);
+        return count(Notificatie_.DV_ID + " = ?1 and " + Notificatie_.AANGENOMEN_OP + " >= ?2", dvId, vanaf);
     }
 
     /**
-     * Notificaties zonder terminale status waarvoor geen taak open staat of mislukt is: die zijn
-     * blijven steken en krijgen van de controletaak de ontbrekende taak.
+     * Notificaties zonder eindstatus waarvoor geen taak open staat of mislukt is: die zijn blijven steken
+     * en krijgen van de controletaak de ontbrekende taak.
      */
-    public List<Notificatie> zonderTaak(Collection<NotificatieStatus> terminaal, int limiet) {
+    public List<Notificatie> zonderTaak(Collection<NotificatieStatus> eindstatussen, int limiet) {
+        // De subquery noemt geen soort: een taak van elke soort telt, dus hij leest elke partitie.
         return getEntityManager()
-                .createQuery("SELECT n FROM Notificatie n WHERE n.status NOT IN :terminaal "
-                        + "AND NOT EXISTS (SELECT t.id FROM Taak t WHERE t.notificatieId = n.id) "
-                        + "ORDER BY n.aangenomenOp", Notificatie.class)
-                .setParameter("terminaal", terminaal)
+                .createQuery("select n from Notificatie n where n." + Notificatie_.STATUS + " not in :eindstatussen "
+                        + "and not exists (select t." + Taak_.ID + " from Taak t where t." + Taak_.NOTIFICATIE_ID
+                        + " = n." + Notificatie_.ID + ") order by n." + Notificatie_.AANGENOMEN_OP, Notificatie.class)
+                .setParameter("eindstatussen", eindstatussen)
                 .setMaxResults(limiet)
                 .getResultList();
     }

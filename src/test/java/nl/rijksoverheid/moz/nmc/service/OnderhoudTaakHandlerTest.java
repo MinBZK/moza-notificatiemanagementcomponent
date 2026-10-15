@@ -11,6 +11,7 @@ import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.VersleuteldeGegevens;
+import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.EventPartitie;
 import nl.rijksoverheid.moz.nmc.repository.EventPartitieRepository;
@@ -92,7 +93,7 @@ class OnderhoudTaakHandlerTest {
     }
 
     // Zeven verlopen notificaties bij batches van twee en hoogstens drie batches: zes in de eerste
-    // ronde, de zevende in de volgende. Een recente terminale en een niet-terminale blijven staan.
+    // ronde, de zevende in de volgende. Een recente met en een zonder eindstatus blijven staan.
     @Test
     void onderhoud_naDeBewaartermijn_verwijdertNotificatiesEnPogingenInBatches() {
         OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
@@ -154,7 +155,7 @@ class OnderhoudTaakHandlerTest {
             return taak.getId();
         });
 
-        assertEquals(1, taakWorker.verwerk(TaakSoort.ONDERHOUD));
+        assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.ONDERHOUD));
 
         Taak taak = QuarkusTransaction.requiringNew().call(() -> taakRepository.zoek(TaakSoort.ONDERHOUD, id)).orElseThrow();
         assertTrue(taak.getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(59)));
@@ -365,7 +366,7 @@ class OnderhoudTaakHandlerTest {
         assertEquals(partitie.naam(), partitieVan(notificatieId));
         verbruikXidsTot(partitie.tot());
         QuarkusTransaction.requiringNew().run(() -> entityManager
-                .createNativeQuery("DELETE FROM event WHERE xid < CAST(CAST(?1 AS text) AS xid8)")
+                .createNativeQuery("DELETE FROM event WHERE transactie_id < CAST(CAST(?1 AS text) AS xid8)")
                 .setParameter(1, partitie.van())
                 .executeUpdate());
 
@@ -382,7 +383,7 @@ class OnderhoudTaakHandlerTest {
 
     // Elke transactie die een xid vraagt, verbruikt er een.
     private void verbruikXidsTot(long xid) {
-        while (QuarkusTransaction.requiringNew().call(eventPartitieRepository::volgendeXid) < xid) {
+        while (QuarkusTransaction.requiringNew().call(eventPartitieRepository::volgendeTransactieId) < xid) {
             QuarkusTransaction.requiringNew().run(() -> entityManager
                     .createNativeQuery("SELECT pg_current_xact_id()::text").getSingleResult());
         }
@@ -400,12 +401,12 @@ class OnderhoudTaakHandlerTest {
     }
 
     private long xidVan(UUID notificatieId) {
-        return tel("SELECT xid::text::bigint FROM event WHERE notificatie_id = '" + notificatieId + "'");
+        return tel("SELECT transactie_id::text::bigint FROM event WHERE notificatie_id = '" + notificatieId + "'");
     }
 
     private void bevestiging(int epoch, long xid, OffsetDateTime bevestigdOp) {
         QuarkusTransaction.requiringNew().run(() -> entityManager.createNativeQuery("""
-                        INSERT INTO bevestiging (dv_id, epoch, xid, event_id, bevestigd_op)
+                        INSERT INTO bevestiging (dv_id, epoch, transactie_id, event_id, bevestigd_op)
                         VALUES (?1, ?2, CAST(CAST(?3 AS text) AS xid8), 1, ?4)
                         """)
                 .setParameter(1, NotificatieFixtures.DV_ID)
@@ -417,7 +418,7 @@ class OnderhoudTaakHandlerTest {
 
     private void leverpositie(long xid, OffsetDateTime geleverdOp, OffsetDateTime bijgewerktOp) {
         QuarkusTransaction.requiringNew().run(() -> entityManager.createNativeQuery("""
-                        INSERT INTO webhookpositie (dv_id, epoch, xid, event_id, mislukkingen, bijgewerkt_op, geleverd_op)
+                        INSERT INTO webhookpositie (dv_id, epoch, transactie_id, event_id, mislukkingen, bijgewerkt_op, geleverd_op)
                         VALUES (?1, 1, CAST(CAST(?2 AS text) AS xid8), 1, 3, ?3, ?4)
                         """)
                 .setParameter(1, NotificatieFixtures.DV_ID)

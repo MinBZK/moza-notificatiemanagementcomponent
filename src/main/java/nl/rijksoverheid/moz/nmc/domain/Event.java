@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import org.hibernate.annotations.Type;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -18,9 +19,6 @@ import java.util.UUID;
  * Eén statusovergang van een notificatie in het eventlog. Het volgnummer is de versie van de
  * notificatie na de overgang. Bevat geen contactgegevens, identificerende nummers of referentie van
  * de Dienstverlener.
- * <p>
- * De kolom {@code xid} (transactie-id, gevuld door de database) is hier niet gemapt; de feed leest
- * hem met SQL.
  */
 @Entity
 public class Event {
@@ -52,9 +50,15 @@ public class Event {
     @Column(length = 32)
     private Reden reden;
 
-    // Registratietijd op de klok van het NMC; het tijdstip uit een receipt staat op de poging.
+    // Op de klok van het NMC; het tijdstip uit een receipt staat op de poging.
     @Column(nullable = false)
-    private OffsetDateTime tijdstip;
+    private OffsetDateTime geregistreerd;
+
+    // Transactie-id van de schrijvende transactie, gevuld door de database; de feed leest het log
+    // op (transactie-id, id). Leeg op een event dat in deze sessie is aangemaakt.
+    @Type(TransactieIdType.class)
+    @Column(name = "transactie_id", insertable = false, updatable = false)
+    private Long transactieId;
 
     protected Event() {
         // Voor JPA
@@ -67,7 +71,7 @@ public class Event {
         this.van = van;
         this.naar = Objects.requireNonNull(naar, "naar is verplicht");
         this.reden = reden;
-        this.tijdstip = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        this.geregistreerd = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
     }
 
     public Long getId() {
@@ -98,7 +102,11 @@ public class Event {
         return reden;
     }
 
-    public OffsetDateTime getTijdstip() {
-        return tijdstip;
+    public OffsetDateTime getGeregistreerd() {
+        return geregistreerd;
+    }
+
+    public Long getTransactieId() {
+        return transactieId;
     }
 }

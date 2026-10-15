@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * Draait V17 over een database met terminale en lopende notificaties, events in de oude default-partitie
+ * Draait V17 over een database met notificaties met en zonder eindstatus, events in de oude default-partitie
  * en een webhookpositie. Eigen embedded PostgreSQL, omdat de database op V15 stilgezet moet worden.
  */
 class V17MigratieTest {
@@ -47,23 +47,23 @@ class V17MigratieTest {
     }
 
     @Test
-    void v17_vultTerminaalOpPlantWistakenEnVerplaatstHetEventlogNaarEenBereikpartitie() throws SQLException {
+    void v17_vultEindstatusOpPlantWistakenEnVerplaatstHetEventlogNaarEenBereikpartitie() throws SQLException {
         String jdbcUrl = nieuweDatabase();
         migreerTot(jdbcUrl, "15");
 
-        UUID terminaal = UUID.randomUUID();
-        UUID terminaalGewist = UUID.randomUUID();
+        UUID eindstatus = UUID.randomUUID();
+        UUID eindstatusGewist = UUID.randomUUID();
         UUID lopend = UUID.randomUUID();
 
         try (Connection verbinding = DriverManager.getConnection(jdbcUrl, DB_USER, DB_PASSWORD)) {
             verbinding.setAutoCommit(false);
             voerUit(verbinding, "SET LOCAL session_replication_role = replica");
-            notificatie(verbinding, terminaal, "NIET_BEZORGBAAR", new byte[]{1, 2, 3});
-            notificatie(verbinding, terminaalGewist, "GEANNULEERD", null);
+            notificatie(verbinding, eindstatus, "NIET_BEZORGBAAR", new byte[]{1, 2, 3});
+            notificatie(verbinding, eindstatusGewist, "GEANNULEERD", null);
             notificatie(verbinding, lopend, "VERZONDEN", new byte[]{4, 5, 6});
-            event(verbinding, terminaal);
+            event(verbinding, eindstatus);
             event(verbinding, lopend);
-            voerUit(verbinding, "INSERT INTO webhookpositie (dv_id, epoch, xid, event_id, bijgewerkt_op) "
+            voerUit(verbinding, "INSERT INTO webhookpositie (dv_id, epoch, transactie_id, event_id, bijgewerkt_op) "
                     + "VALUES ('" + DV_ID + "', 1, '3', 1, '2026-09-02T10:00:00Z')");
             verbinding.commit();
         }
@@ -71,13 +71,13 @@ class V17MigratieTest {
         migreerTot(jdbcUrl, "20");
 
         try (Connection verbinding = DriverManager.getConnection(jdbcUrl, DB_USER, DB_PASSWORD)) {
-            assertEquals(LAATSTE_OVERGANG.toInstant(), terminaalOp(verbinding, terminaal).toInstant());
-            assertEquals(LAATSTE_OVERGANG.toInstant(), terminaalOp(verbinding, terminaalGewist).toInstant());
-            assertNull(terminaalOp(verbinding, lopend));
-            assertEquals(List.of(terminaal + " " + LAATSTE_OVERGANG.toInstant()),
+            assertEquals(LAATSTE_OVERGANG.toInstant(), eindstatusOp(verbinding, eindstatus).toInstant());
+            assertEquals(LAATSTE_OVERGANG.toInstant(), eindstatusOp(verbinding, eindstatusGewist).toInstant());
+            assertNull(eindstatusOp(verbinding, lopend));
+            assertEquals(List.of(eindstatus + " " + LAATSTE_OVERGANG.toInstant()),
                     tekst(verbinding, "SELECT notificatie_id || ' ' || to_char(due AT TIME ZONE 'UTC', "
                             + "'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM taak WHERE soort = 'WISSEN'"),
-                    "alleen de terminale notificatie met een sleutel krijgt een wistaak");
+                    "alleen de notificatie met een eindstatus en een sleutel krijgt een wistaak");
             assertEquals(List.of("1"), tekst(verbinding, "SELECT count(*)::text FROM taak WHERE soort = 'ONDERHOUD'"));
             assertEquals(List.of(), tekst(verbinding, "SELECT column_name::text FROM information_schema.columns "
                     + "WHERE table_name = 'notificatie' AND column_name LIKE 'laatste_status%'"));
@@ -87,7 +87,7 @@ class V17MigratieTest {
                     + "WHERE c.relname = 'event_standaard'"));
             assertEquals(List.of("true"), tekst(verbinding, "SELECT (substring(pg_get_expr(c.relpartbound, c.oid) "
                     + "FROM 'TO \\(''(\\d+)''\\)')::bigint > pg_snapshot_xmax(pg_current_snapshot())::text::bigint + 900)::text "
-                    + "FROM pg_class c WHERE c.relname = 'event_0'"), "event_0 loopt tot boven de uitgedeelde xids plus de marge");
+                    + "FROM pg_class c WHERE c.relname = 'event_0'"), "event_0 loopt tot boven de uitgedeelde transactie-ids plus de marge");
             assertEquals(List.of(), tekst(verbinding, "SELECT conname::text FROM pg_constraint WHERE conname = 'event_0_bereik'"),
                     "de hulpconstraint is na de ATTACH weg");
             assertEquals(List.of("2026-09-02 10:00:00+00"), tekst(verbinding,
@@ -138,7 +138,7 @@ class V17MigratieTest {
 
     private static void event(Connection verbinding, UUID notificatieId) throws SQLException {
         try (PreparedStatement insert = verbinding.prepareStatement("INSERT INTO event "
-                + "(tijdstip, dv_id, notificatie_id, volgnummer, naar) VALUES (?, ?, ?, 0, 'AANGENOMEN')")) {
+                + "(geregistreerd, dv_id, notificatie_id, volgnummer, naar) VALUES (?, ?, ?, 0, 'AANGENOMEN')")) {
             insert.setObject(1, LAATSTE_OVERGANG);
             insert.setObject(2, DV_ID);
             insert.setObject(3, notificatieId);
@@ -146,8 +146,8 @@ class V17MigratieTest {
         }
     }
 
-    private static OffsetDateTime terminaalOp(Connection verbinding, UUID id) throws SQLException {
-        try (PreparedStatement select = verbinding.prepareStatement("SELECT terminaal_op FROM notificatie WHERE id = ?")) {
+    private static OffsetDateTime eindstatusOp(Connection verbinding, UUID id) throws SQLException {
+        try (PreparedStatement select = verbinding.prepareStatement("SELECT eindstatus_op FROM notificatie WHERE id = ?")) {
             select.setObject(1, id);
 
             try (ResultSet rij = select.executeQuery()) {

@@ -28,7 +28,7 @@ public class BezorgingVaststellenTaakHandler implements TaakHandler {
     }
 
     @Override
-    public TaakSoort soort() {
+    public TaakSoort taakSoort() {
         return TaakSoort.BEZORGING_VASTSTELLEN;
     }
 

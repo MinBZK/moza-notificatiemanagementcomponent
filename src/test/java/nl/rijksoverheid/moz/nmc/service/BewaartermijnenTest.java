@@ -14,7 +14,7 @@ class BewaartermijnenTest {
     private static final OffsetDateTime MOMENT = OffsetDateTime.parse("2026-09-01T10:00:00Z");
 
     @Test
-    void wissenOp_ligtDeWistermijnNaDeTerminaleStatus() {
+    void wissenOp_ligtDeWistermijnNaDeEindstatus() {
         Bewaartermijnen termijnen = new Bewaartermijnen(Duration.ofDays(7), Duration.ofDays(365), Duration.ofDays(30));
 
         assertEquals(MOMENT.plusDays(7), termijnen.wissenOp(MOMENT));

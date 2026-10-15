@@ -51,7 +51,7 @@ class TaakWorkerUnitTest {
 
     private static TaakHandler handler(TaakSoort soort) {
         TaakHandler handler = mock(TaakHandler.class);
-        when(handler.soort()).thenReturn(soort);
+        when(handler.taakSoort()).thenReturn(soort);
 
         return handler;
     }

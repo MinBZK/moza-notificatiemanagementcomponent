@@ -16,12 +16,15 @@ import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
+import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,7 +46,7 @@ import static org.mockito.Mockito.when;
 
 // %test: 20 tokens per minuut, waarvan 5 voor de navraag.
 @QuarkusTest
-class ReconcilerTest {
+class NotifyNLNavraagTaakHandlerTest {
 
     @InjectMock
     @RestClient
@@ -77,7 +80,7 @@ class ReconcilerTest {
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
-            taakRepository.getEntityManager().createNativeQuery("DELETE FROM verzendbudget").executeUpdate();
+            TaakFixtures.leegVerzendbudget(taakRepository.getEntityManager());
             eventRepository.deleteAll();
             notificatieRepository.deleteAll();
         });
@@ -91,13 +94,13 @@ class ReconcilerTest {
         when(getMessageDataApi.getMessageData(verzonden.notifyId().toString()))
                 .thenReturn(new GetOneMessageResponse().status("delivered").completedAt(afgeleverd.toString()));
 
-        assertEquals(1, taakWorker.verwerk(TaakSoort.RECONCILIEREN));
+        assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN));
 
         assertEquals(NotificatieStatus.BEZORGD, notificatie(verzonden.notificatieId()).getStatus());
         assertEquals(PogingStatus.BEZORGD, poging(verzonden.pogingId()).getStatus());
         List<Taak> taken = taken();
         assertEquals(1, taken.size(), "de navraag is af, de vaststeltaak staat");
-        assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, taken.getFirst().getSoort());
+        assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, taken.getFirst().getTaakSoort());
         assertEquals(afgeleverd.plusDays(8).toInstant(), taken.getFirst().getDue().toInstant(),
                 "vaststellingstermijn plus callback-venster na het tijdstip uit NotifyNL");
     }
@@ -108,7 +111,7 @@ class ReconcilerTest {
         when(getMessageDataApi.getMessageData(verzonden.notifyId().toString()))
                 .thenThrow(new WebApplicationException(Response.status(404).build()));
 
-        taakWorker.verwerk(TaakSoort.RECONCILIEREN);
+        TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN);
 
         assertEquals(NotificatieStatus.BEZORGSTATUS_ONBEKEND, notificatie(verzonden.notificatieId()).getStatus());
         assertEquals(PogingStatus.ONBEKEND, poging(verzonden.pogingId()).getStatus());
@@ -129,10 +132,10 @@ class ReconcilerTest {
         when(getMessageDataApi.getMessageData(verzonden.notifyId().toString()))
                 .thenReturn(new GetOneMessageResponse().status("sending"));
 
-        taakWorker.verwerk(TaakSoort.RECONCILIEREN);
+        TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN);
 
         Taak navraag = taken().getFirst();
-        assertEquals(TaakSoort.RECONCILIEREN, navraag.getSoort());
+        assertEquals(TaakSoort.RECONCILIEREN, navraag.getTaakSoort());
         assertEquals(verzondenOp.plusHours(6).toInstant(), navraag.getDue().toInstant());
         assertEquals(0, navraag.getPogingen());
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(verzonden.notificatieId()).getStatus());
@@ -145,7 +148,7 @@ class ReconcilerTest {
         when(getMessageDataApi.getMessageData(verzonden.notifyId().toString()))
                 .thenReturn(new GetOneMessageResponse().status("pending"));
 
-        taakWorker.verwerk(TaakSoort.RECONCILIEREN);
+        TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN);
 
         assertEquals(NotificatieStatus.BEZORGSTATUS_ONBEKEND, notificatie(verzonden.notificatieId()).getStatus());
         assertTrue(taken().isEmpty());
@@ -157,7 +160,7 @@ class ReconcilerTest {
         when(getMessageDataApi.getMessageData(verzonden.notifyId().toString()))
                 .thenThrow(new WebApplicationException(Response.status(503).build()));
 
-        taakWorker.verwerk(TaakSoort.RECONCILIEREN);
+        TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN);
 
         Taak navraag = taken().getFirst();
         assertEquals(0, navraag.getPogingen());
@@ -172,7 +175,7 @@ class ReconcilerTest {
         when(getMessageDataApi.getMessageData(verzonden.notifyId().toString()))
                 .thenThrow(new WebApplicationException(Response.status(403).build()));
 
-        taakWorker.verwerk(TaakSoort.RECONCILIEREN);
+        TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN);
 
         assertEquals(NotificatieStatus.BEZORGSTATUS_ONBEKEND, notificatie(verzonden.notificatieId()).getStatus());
         assertTrue(taken().isEmpty());
@@ -184,7 +187,7 @@ class ReconcilerTest {
         QuarkusTransaction.requiringNew().run(() -> pogingRepository.findById(verzonden.pogingId())
                 .verwerkReceipt(PogingStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC)));
 
-        taakWorker.verwerk(TaakSoort.RECONCILIEREN);
+        TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN);
 
         verify(getMessageDataApi, never()).getMessageData(any());
         assertTrue(taken().isEmpty());
@@ -209,8 +212,8 @@ class ReconcilerTest {
 
         when(getMessageDataApi.getMessageData(any())).thenReturn(new GetOneMessageResponse().status("sending"));
 
-        assertEquals(5, taakWorker.verwerk(TaakSoort.RECONCILIEREN));
-        assertEquals(0, taakWorker.verwerk(TaakSoort.RECONCILIEREN), "het aandeel voor dit tijdvak is op");
+        assertEquals(5, TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN));
+        assertEquals(0, TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN), "het aandeel voor dit tijdvak is op");
     }
 
     private record Verzonden(UUID notificatieId, UUID pogingId, UUID notifyId) {
@@ -244,9 +247,9 @@ class ReconcilerTest {
         return QuarkusTransaction.requiringNew().call(() -> pogingRepository.findById(id));
     }
 
-    // Zonder de wistaak die elke terminale status krijgt; die staat in WisTaakHandlerTest.
+    // Zonder de wistaak die elke eindstatus krijgt; die staat in WisTaakHandlerTest.
     private List<Taak> taken() {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.list("soort != ?1", TaakSoort.WISSEN));
+        return QuarkusTransaction.requiringNew().call(() -> taakRepository.list(Taak_.TAAK_SOORT + " != ?1", TaakSoort.WISSEN));
     }
 
     private List<NotificatieStatus> overgangen(UUID id) {

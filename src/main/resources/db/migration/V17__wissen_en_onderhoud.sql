@@ -1,13 +1,13 @@
 -- V17: wistaak en onderhoudstaak uit ADR 0024 vervangen de retentiejob. Wistermijn en bewaartermijn
--- lopen vanaf de terminale status (terminaal_op) in plaats van vanaf de laatste overgang, en het
+-- lopen vanaf de eindstatus (eindstatus_op) in plaats van vanaf de laatste overgang, en het
 -- eventlog krijgt bereikpartities die de onderhoudstaak aanmaakt en opruimt (V18 tot en met V20).
 
--- Wanneer de notificatie terminaal werd; leeg zolang ze dat niet is. Voor bestaande terminale rijen is
--- de laatste overgang de terminale.
-ALTER TABLE notificatie ADD COLUMN terminaal_op timestamp(6) with time zone;
+-- Wanneer de notificatie haar eindstatus kreeg; leeg zolang ze er geen heeft. Voor bestaande rijen met
+-- een eindstatus is de laatste overgang die naar de eindstatus.
+ALTER TABLE notificatie ADD COLUMN eindstatus_op timestamp(6) with time zone;
 
 UPDATE notificatie
-   SET terminaal_op = laatste_status_update
+   SET eindstatus_op = laatste_status_update
  WHERE status IN ('DEFINITIEF_BEZORGD', 'NIET_BEZORGBAAR', 'TECHNISCH_MISLUKT', 'BEZORGSTATUS_ONBEKEND',
                   'VERLOPEN', 'GEANNULEERD');
 
@@ -16,14 +16,14 @@ UPDATE notificatie
 SET CONSTRAINTS notificatie_overgang IMMEDIATE;
 
 -- Geen CONCURRENTLY: de retentiejob hield het register tot nu toe op zeven dagen, dus de tabel is klein.
-CREATE INDEX notificatie_terminaal_op_idx ON notificatie (terminaal_op) WHERE terminaal_op IS NOT NULL;
+CREATE INDEX notificatie_eindstatus_op_idx ON notificatie (eindstatus_op) WHERE eindstatus_op IS NOT NULL;
 
--- Een wistaak voor elke terminale notificatie die nog een sleutel heeft; de taak wacht zelf de
--- wistermijn vanaf terminaal_op af.
+-- Een wistaak voor elke notificatie met een eindstatus die nog een sleutel heeft; de taak wacht zelf de
+-- wistermijn vanaf eindstatus_op af.
 INSERT INTO taak (soort, dv_id, notificatie_id, due, status)
-SELECT 'WISSEN', dv_id, id, terminaal_op, 'OPEN'
+SELECT 'WISSEN', dv_id, id, eindstatus_op, 'OPEN'
   FROM notificatie
- WHERE terminaal_op IS NOT NULL
+ WHERE eindstatus_op IS NOT NULL
    AND sleutel_gewrapt IS NOT NULL
 ON CONFLICT DO NOTHING;
 
@@ -39,7 +39,7 @@ ALTER TABLE dienstverlener ADD COLUMN max_cursorleeftijd interval CHECK (max_cur
 -- levering en zegt dus niet hoe oud de positie is.
 ALTER TABLE webhookpositie ADD COLUMN geleverd_op timestamp(6) with time zone;
 
-UPDATE webhookpositie SET geleverd_op = bijgewerkt_op WHERE xid IS NOT NULL;
+UPDATE webhookpositie SET geleverd_op = bijgewerkt_op WHERE transactie_id IS NOT NULL;
 
 -- De onderhoudstaak per systeem; daarna plant ze zichzelf steeds opnieuw.
 INSERT INTO taak (soort, due, status) VALUES ('ONDERHOUD', now(), 'OPEN');

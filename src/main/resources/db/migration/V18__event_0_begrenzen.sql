@@ -4,7 +4,7 @@
 DO $$
 BEGIN
     EXECUTE format('ALTER TABLE event_standaard ADD CONSTRAINT event_0_bereik '
-                   'CHECK (xid >= %L::xid8 AND xid < %L::xid8) NOT VALID',
+                   'CHECK (transactie_id >= %L::xid8 AND transactie_id < %L::xid8) NOT VALID',
                    '0', (pg_snapshot_xmax(pg_current_snapshot())::text::bigint + ${event_marge})::text);
 END;
 $$;

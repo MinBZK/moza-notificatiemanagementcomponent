@@ -32,12 +32,12 @@ public class TestTaakHandler implements TaakHandler {
     }
 
     @Override
-    public boolean uitgeput(Taak taak) {
+    public boolean handelUitputtingAf(Taak taak) {
         return BIJ_UITPUTTING.get().test(taak);
     }
 
     @Override
-    public TaakSoort soort() {
+    public TaakSoort taakSoort() {
         return TaakSoort.ONGELDIG_MELDEN;
     }
 
