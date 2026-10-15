@@ -2,8 +2,8 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
-import io.quarkus.test.InjectSpy;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
@@ -11,6 +11,7 @@ import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.GetMessageDataApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.GetMultipleMessagesResponse;
+import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailRequest;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
 import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
@@ -35,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -106,7 +108,9 @@ class HerverzendingTest {
             notificatieRepository.deleteAll();
         });
         when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
-        when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
+        // Elke poging krijgt een eigen NotifyNL-id, afgeleid van haar reference: notify_id is uniek.
+        when(sendAMessageApi.sendEmail(any())).thenAnswer(a -> new SendEmailResponse().id(UUID.nameUUIDFromBytes(
+                a.<SendEmailRequest>getArgument(0).getReference().getBytes(StandardCharsets.UTF_8)).toString()));
     }
 
     @ParameterizedTest
