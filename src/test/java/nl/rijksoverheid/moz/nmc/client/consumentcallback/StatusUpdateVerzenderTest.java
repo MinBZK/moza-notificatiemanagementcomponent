@@ -83,7 +83,7 @@ class StatusUpdateVerzenderTest {
     }
 
     private static StatusUpdateOpdracht opdracht(String callbackUrl) {
-        return new StatusUpdateOpdracht(UUID.randomUUID(), callbackUrl, 3L,
+        return new StatusUpdateOpdracht(7L, UUID.randomUUID(), callbackUrl, 3L,
                 NotificatieStatus.VERZONDEN, NotificatieStatus.BEZORGD, null, OffsetDateTime.parse("2026-01-15T10:00:00Z"));
     }
 }

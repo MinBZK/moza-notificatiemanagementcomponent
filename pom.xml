@@ -261,6 +261,7 @@
                             </configOptions>
                             <importMappings>
                                 <importMapping>IdentificatieType=nl.rijksoverheid.moz.nmc.controller.IdentificatieType</importMapping>
+                                <importMapping>NotificatieStatusEvent=nl.rijksoverheid.moz.nmc.client.consumentcallback.NotificatieStatusEvent</importMapping>
                             </importMappings>
                             <generateSupportingFiles>false</generateSupportingFiles>
                             <generateApiTests>false</generateApiTests>
