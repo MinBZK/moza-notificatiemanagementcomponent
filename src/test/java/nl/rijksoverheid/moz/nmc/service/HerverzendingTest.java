@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
+import io.quarkus.test.InjectSpy;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
@@ -45,6 +46,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -91,6 +93,9 @@ class HerverzendingTest {
 
     @Inject
     VerzendTaakHandler verzendTaakHandler;
+
+    @InjectSpy
+    Verzendbeleid verzendbeleid;
 
     @BeforeEach
     void setUp() {
@@ -187,10 +192,11 @@ class HerverzendingTest {
         assertTrue(taken().isEmpty());
     }
 
-    // De stuurgroepagenda heeft in tests twee herverzendingen: een fout op de tweede poging geeft een derde,
-    // pas een fout op de derde leidt tot een eindstatus.
+    // Met twee herverzendingen geeft een fout op de tweede poging een derde; pas een fout op de derde
+    // leidt tot een eindstatus.
     @Test
     void meerHerverzendingenInHetBeleid_gevenMeerPogingen() {
+        doReturn(2).when(verzendbeleid).maxHerverzendingen(BerichtType.STUURGROEP_AGENDA.name());
         UUID id = aannameService.neemAan(opdracht(BerichtType.STUURGROEP_AGENDA));
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
