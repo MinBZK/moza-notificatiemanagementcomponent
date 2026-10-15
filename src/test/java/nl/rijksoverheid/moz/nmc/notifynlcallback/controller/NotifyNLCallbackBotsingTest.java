@@ -8,7 +8,7 @@ import io.restassured.http.ContentType;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.StatusRegistratie;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -132,7 +132,7 @@ class NotifyNLCallbackBotsingTest {
     private List<StatusWaarde> geschiedenis(UUID id) {
         return QuarkusTransaction.requiringNew().call(() ->
                 notificatieRepository.findById(id).getStatusGeschiedenis().stream()
-                        .map(NotificatieStatus::status).toList());
+                        .map(StatusRegistratie::status).toList());
     }
 
     private List<StatusWaarde> verstuurdeStatussen(int aantal) {

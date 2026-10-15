@@ -3,6 +3,7 @@ package nl.rijksoverheid.moz.nmc.testhelper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.StatusRegistratie;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 
 import java.time.OffsetDateTime;
@@ -22,7 +23,7 @@ public final class NotificatieFixtures {
     public static void voegNotificatieMetEenStatusregelToe(EntityManager entityManager, UUID id, UUID externalReference,
                                                            StatusWaarde status, OffsetDateTime tijdstip) {
         voegNotificatieToe(entityManager, id, externalReference, null,
-                List.of(NotificatieStatus.opEigenKlok(status, tijdstip)));
+                List.of(StatusRegistratie.opEigenKlok(status, tijdstip)));
     }
 
     /**
@@ -31,8 +32,8 @@ public final class NotificatieFixtures {
      * De kopie op {@code notificatie} volgt het laatste record, net als in productie.
      */
     public static void voegNotificatieToe(EntityManager entityManager, UUID id, UUID externalReference,
-                                          String callbackUrl, List<NotificatieStatus> geschiedenis) {
-        NotificatieStatus laatste = geschiedenis.getLast();
+                                          String callbackUrl, List<StatusRegistratie> geschiedenis) {
+        StatusRegistratie laatste = geschiedenis.getLast();
         entityManager.createNativeQuery("INSERT INTO notificatie (id, versie, external_reference, callback_url, "
                         + "laatste_status, laatste_status_update) VALUES (?1, 0, ?2, ?3, ?4, ?5)")
                 .setParameter(1, id)
@@ -43,7 +44,7 @@ public final class NotificatieFixtures {
                 .executeUpdate();
 
         for (int volgnummer = 0; volgnummer < geschiedenis.size(); volgnummer++) {
-            NotificatieStatus record = geschiedenis.get(volgnummer);
+            StatusRegistratie record = geschiedenis.get(volgnummer);
             voegStatusregelToe(entityManager, id, volgnummer, record.status(), record.tijdstip());
         }
     }
@@ -69,6 +70,21 @@ public final class NotificatieFixtures {
     public static void verwijderNotificatie(EntityManager entityManager, UUID id) {
         entityManager.createNativeQuery("DELETE FROM notificatie WHERE id = ?1")
                 .setParameter(1, id)
+                .executeUpdate();
+    }
+
+    /** Zet de status rechtstreeks, zonder overgang en zonder de versie te verhogen. */
+    /** Het aantal transacties op deze database dat op een vergrendeling wacht. */
+    public static long telTransactiesWachtendOpLock(EntityManager entityManager) {
+        // Native: de systeemcatalogus.
+        return ((Number) entityManager.createNativeQuery("SELECT count(*) FROM pg_stat_activity "
+                + "WHERE datname = current_database() AND wait_event_type = 'Lock'").getSingleResult()).longValue();
+    }
+
+    public static void zetStatus(EntityManager entityManager, UUID id, NotificatieStatus status) {
+        entityManager.createNativeQuery("UPDATE notificatie SET status = ?1 WHERE id = ?2")
+                .setParameter(1, status.name())
+                .setParameter(2, id)
                 .executeUpdate();
     }
 
