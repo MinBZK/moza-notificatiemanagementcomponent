@@ -42,8 +42,7 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
      */
     @SuppressWarnings("unchecked")
     public List<UUID> claimVerlopen(OffsetDateTime grens, int maximum, List<UUID> uitgesloten) {
-        // addScalar is nodig omdat een native query een uuid-kolom per dialect anders oplevert:
-        // PostgreSQL een UUID, H2 een byte[].
+        // addScalar legt het resultaattype vast op UUID, los van wat de driver voor een uuid-kolom kiest.
         NativeQuery<UUID> query = getEntityManager()
                 .createNativeQuery(CLAIM_VERLOPEN_SQL.formatted(uitgesloten.isEmpty() ? "" : UITSLUITING_SQL))
                 .unwrap(NativeQuery.class)
