@@ -136,7 +136,7 @@ public class ReceiptVerwerker {
 
     // De tussenstatussen van NotifyNL leveren geen uitkomst op. Een onbekende status wordt op ERROR
     // gelogd en verandert niets, zodat hij niet als een bekende uitkomst landt.
-    private static Optional<PogingStatus> parseStatus(String status, UUID notifyId) {
+    static Optional<PogingStatus> parseStatus(String status, UUID notifyId) {
         return switch (status.toLowerCase(Locale.ROOT)) {
             case "delivered" -> Optional.of(PogingStatus.BEZORGD);
             case "permanent-failure" -> Optional.of(PogingStatus.PERMANENT_MISLUKT);

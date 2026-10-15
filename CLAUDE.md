@@ -144,10 +144,10 @@ Geïmplementeerd:
   verzenden en de navraag binnen het `verzendbudget` per Notify-service per minuut.
   `TaakWorker` draait per soort een `@Scheduled`-ronde en geeft elke taak aan de
   `TaakHandler` van die soort. Handlers: `VerzendTaakHandler`, `ReceiptTaakHandler`,
-  `Reconciler` (navraag), `BezorgingVaststellenTaakHandler`, `ControleTaakHandler` en `TerugkoppelTaakHandler`; de
+  `NotifyNLNavraagTaakHandler`, `BezorgingVaststellenTaakHandler`, `ControleTaakHandler` en `TerugkoppelTaakHandler`; de
   overige soorten worden gepland maar nog niet uitgevoerd.
 - **Navraag en vaststellen.** De verzend-commit plant per poging een navraagtaak volgens
-  `Navraagschema` (`nmc.navraag.*`); `Reconciler` vraagt de status op bij NotifyNL en
+  `NotifyNLNavraagmomenten` (`nmc.navraag.*`); `NotifyNLNavraagTaakHandler` vraagt de status op bij NotifyNL en
   geeft een uitkomst aan `ReceiptVerwerker`. Een 404 of het einde van de bewaartermijn
   van NotifyNL zet de poging op `ONBEKEND` en de notificatie op `bezorgstatus-onbekend`.
   Een verwerkte receipt rondt de navraag af. `delivered` plant een vaststeltaak op het

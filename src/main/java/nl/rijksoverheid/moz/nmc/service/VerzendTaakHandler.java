@@ -57,12 +57,12 @@ public class VerzendTaakHandler implements TaakHandler {
     private final ProfielServiceAdapter profielServiceAdapter;
     private final NotifyNLVerzendAdapter verzendAdapter;
     private final Duration uitstel;
-    private final Navraagschema navraagschema;
+    private final NotifyNLNavraagmomenten notifyNLNavraagmomenten;
 
     public VerzendTaakHandler(Overgangsfunctie overgangsfunctie, PogingRepository pogingRepository,
                               TaakRepository taakRepository, TaakClaimer taakClaimer, Sleutelbeheer sleutelbeheer,
                               ProfielServiceAdapter profielServiceAdapter, NotifyNLVerzendAdapter verzendAdapter,
-                              Navraagschema navraagschema,
+                              NotifyNLNavraagmomenten notifyNLNavraagmomenten,
                               @ConfigProperty(name = "nmc.taak.uitstel") Duration uitstel) {
         this.overgangsfunctie = overgangsfunctie;
         this.pogingRepository = pogingRepository;
@@ -72,7 +72,7 @@ public class VerzendTaakHandler implements TaakHandler {
         this.profielServiceAdapter = profielServiceAdapter;
         this.verzendAdapter = verzendAdapter;
         this.uitstel = uitstel;
-        this.navraagschema = navraagschema;
+        this.notifyNLNavraagmomenten = notifyNLNavraagmomenten;
     }
 
     @Override
@@ -292,7 +292,7 @@ public class VerzendTaakHandler implements TaakHandler {
         // De navraag bewaakt de eindstatus als de receipt uitblijft; is die er al, dan is hij overbodig.
         if (notificatie.getStatus() == NotificatieStatus.VERZONDEN) {
             taakRepository.persist(new Taak(TaakSoort.RECONCILIEREN, verzending.dvId(), notificatie.getId(),
-                    navraagschema.eerste(poging.getVerzondenOp()), verzending.traceId(), Map.of(PAYLOAD_POGING_ID, poging.getId().toString())));
+                    notifyNLNavraagmomenten.eerste(poging.getVerzondenOp()), verzending.traceId(), Map.of(PAYLOAD_POGING_ID, poging.getId().toString())));
         }
 
         taakClaimer.rondAf(taak);

@@ -19,40 +19,35 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.Locale;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 /**
  * De afleverstatus-navraag: vraagt bij NotifyNL de status op van een poging waarvoor de receipt
  * uitblijft. Een uitkomst gaat door {@link ReceiptVerwerker}, zoals een receipt. Zonder uitkomst volgt
- * de volgende navraag volgens het {@link Navraagschema}; een 404 of het einde van de bewaartermijn van
+ * de volgende navraag volgens {@link NotifyNLNavraagmomenten}; een 404 of het einde van de bewaartermijn van
  * NotifyNL brengt de poging naar {@code onbekend} en de notificatie naar {@code bezorgstatus-onbekend}.
  */
 @ApplicationScoped
-public class Reconciler implements TaakHandler {
-
-    // Een tussenstatus of een status die het NMC niet kent is geen uitkomst; de navraag loopt dan door.
-    private static final Set<String> UITKOMSTEN = Set.of("delivered", "permanent-failure", "temporary-failure", "technical-failure");
+public class NotifyNLNavraagTaakHandler implements TaakHandler {
 
     private final PogingRepository pogingRepository;
     private final Overgangsfunctie overgangsfunctie;
     private final ReceiptVerwerker receiptVerwerker;
     private final TaakClaimer taakClaimer;
     private final NotifyNLVerzendAdapter verzendAdapter;
-    private final Navraagschema navraagschema;
+    private final NotifyNLNavraagmomenten notifyNLNavraagmomenten;
     private final Duration uitstel;
 
-    public Reconciler(PogingRepository pogingRepository, Overgangsfunctie overgangsfunctie, ReceiptVerwerker receiptVerwerker,
-                      TaakClaimer taakClaimer, NotifyNLVerzendAdapter verzendAdapter, Navraagschema navraagschema,
+    public NotifyNLNavraagTaakHandler(PogingRepository pogingRepository, Overgangsfunctie overgangsfunctie, ReceiptVerwerker receiptVerwerker,
+                      TaakClaimer taakClaimer, NotifyNLVerzendAdapter verzendAdapter, NotifyNLNavraagmomenten notifyNLNavraagmomenten,
                       @ConfigProperty(name = "nmc.taak.uitstel") Duration uitstel) {
         this.pogingRepository = pogingRepository;
         this.overgangsfunctie = overgangsfunctie;
         this.receiptVerwerker = receiptVerwerker;
         this.taakClaimer = taakClaimer;
         this.verzendAdapter = verzendAdapter;
-        this.navraagschema = navraagschema;
+        this.notifyNLNavraagmomenten = notifyNLNavraagmomenten;
         this.uitstel = uitstel;
     }
 
@@ -77,7 +72,7 @@ public class Reconciler implements TaakHandler {
             afleverstatus = verzendAdapter.vraagStatusOp(navraag.notifyId());
         } catch (NotifyNLConfiguratieException | NotifyNLVerzendException e) {
             // Ook een navraag die blijft mislukken houdt op bij het einde van de bewaartermijn van NotifyNL.
-            if (navraagschema.volgende(navraag.verzondenOp(), OffsetDateTime.now(ZoneOffset.UTC)).isEmpty()) {
+            if (notifyNLNavraagmomenten.volgende(navraag.verzondenOp(), OffsetDateTime.now(ZoneOffset.UTC)).isEmpty()) {
                 Log.warnf(e, "Navraag voor poging %s (NotifyNL-id %s) blijft mislukken en de bewaartermijn is "
                         + "verstreken; bezorgstatus onbekend", navraag.pogingId(), navraag.notifyId());
 
@@ -89,7 +84,8 @@ public class Reconciler implements TaakHandler {
             return TaakUitkomst.uitgesteld(OffsetDateTime.now(ZoneOffset.UTC).plus(uitstel), false);
         }
 
-        if (afleverstatus.isPresent() && UITKOMSTEN.contains(afleverstatus.get().status().toLowerCase(Locale.ROOT))) {
+        // Een tussenstatus of een status die het NMC niet kent is geen uitkomst; de navraag loopt dan door.
+        if (afleverstatus.isPresent() && ReceiptVerwerker.parseStatus(afleverstatus.get().status(), navraag.notifyId()).isPresent()) {
             // Eerst afronden: de verwerking ruimt open navraagtaken op en zou deze anders ook raken.
             QuarkusTransaction.requiringNew().run(() -> {
                 taakClaimer.rondAf(taak);
@@ -102,7 +98,7 @@ public class Reconciler implements TaakHandler {
 
         Optional<OffsetDateTime> volgende = afleverstatus.isEmpty()
                 ? Optional.empty()
-                : navraagschema.volgende(navraag.verzondenOp(), OffsetDateTime.now(ZoneOffset.UTC));
+                : notifyNLNavraagmomenten.volgende(navraag.verzondenOp(), OffsetDateTime.now(ZoneOffset.UTC));
 
         if (volgende.isPresent()) {
             return TaakUitkomst.uitgesteld(volgende.get(), false);

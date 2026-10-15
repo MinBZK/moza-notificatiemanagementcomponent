@@ -45,7 +45,7 @@ import static org.mockito.Mockito.when;
 
 // %test: 20 tokens per minuut, waarvan 5 voor de navraag.
 @QuarkusTest
-class ReconcilerTest {
+class NotifyNLNavraagTaakHandlerTest {
 
     @InjectMock
     @RestClient
