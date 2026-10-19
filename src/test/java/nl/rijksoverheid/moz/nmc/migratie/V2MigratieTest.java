@@ -55,6 +55,7 @@ class V2MigratieTest {
     void setUp() throws SQLException {
         String database = "v2migratie_" + UUID.randomUUID().toString().replace("-", "");
         String beheerUrl = "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres";
+
         try (Connection beheer = DriverManager.getConnection(beheerUrl, DB_USER, DB_PASSWORD);
              var statement = beheer.createStatement()) {
             statement.execute("CREATE DATABASE " + database);
