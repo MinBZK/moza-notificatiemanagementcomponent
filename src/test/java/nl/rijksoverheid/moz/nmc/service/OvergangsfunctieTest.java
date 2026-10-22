@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -58,7 +59,7 @@ class OvergangsfunctieTest {
     @Test
     void neemAan_nieuweNotificatie_staatOpAangenomenMetEventNul() {
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(null);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, null);
             overgangsfunctie.neemAan(notificatie);
 
             return notificatie.getId();
@@ -259,7 +260,7 @@ class OvergangsfunctieTest {
     // vertrekpunt te testen is zonder de hele keten te doorlopen. De versie blijft 0.
     private UUID aangenomenNotificatieMetStatus(NotificatieStatus status) {
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(null);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, null);
             overgangsfunctie.neemAan(notificatie);
 
             return notificatie.getId();
