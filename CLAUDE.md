@@ -18,7 +18,7 @@ De grens tussen Nederlands en Engels loopt door de code heen:
 - **Vast technisch idioom blijft Engels.** Adapter, filter, retry, callback,
   factory, repository. Vertalen maakt die termen minder herkenbaar, niet meer.
 - **Testnamen beschrijven het gedrag in het Nederlands**, in de vorm
-  `methode_situatie_verwachting`: `stuurStatusUpdate_allePogingenMislukt_retourneertFalse`,
+  `methode_situatie_verwachting`: `stuurStatusUpdate_allePogingenMislukt_gooitNietMaarStoptNaMaxPogingen`,
   `interneHostnaam_wordtGeweigerd`.
 
 ## Wat de NMC is
@@ -115,10 +115,11 @@ ook alleen een identificatie doorgeven en de NMC de regie laten.
 
 Geïmplementeerd:
 
-- `POST /api/nmc/v1/centraal/notificaties`: zoekt via de Profielservice het
-  e-mailadres op en verstuurt via NotifyNL.
-- `POST /api/nmc/v1/decentraal/notificaties`: de aanroeper levert het e-mailadres
-  zelf; geen Profielservice-lookup.
+- `POST /api/nmc/v1/centraal/notificaties`: neemt een notificatie aan op een
+  identificerend nummer en antwoordt 202; de verzendtaak haalt het
+  e-mailadres later op bij de Profielservice.
+- `POST /api/nmc/v1/decentraal/notificaties`: idem met een e-mailadres van de
+  aanroeper; geen Profielservice-lookup.
 - `POST /api/nmc/v1/notifynl-callback`: ontvangt de afleverstatus van NotifyNL,
   beveiligd met een bearer token (`NotifyNLCallbackAuthFilter`).
 - **Statusmodel uit ADR 0024.** `notificatie` draagt de status en een versie,
@@ -137,19 +138,34 @@ Geïmplementeerd:
   de Dienstverlener als scope, dan het default-adres, dan een adres zonder scopes.
 - **Takentabel en worker-lus.** `taak` (per soort gepartitioneerd) draagt de
   bijwerkingen met `due` als timer; `TaakClaimer` claimt per ronde met
-  `FOR UPDATE SKIP LOCKED`, verdeeld over de dienstverleners met werk en voor het
+  `PESSIMISTIC_WRITE` en de skip-locked-hint (`FOR NO KEY UPDATE SKIP LOCKED`),
+  verdeeld over de dienstverleners met werk en voor het
   verzenden en de navraag binnen het `verzendbudget` per Notify-service per minuut.
   `TaakWorker` draait per soort een `@Scheduled`-ronde en geeft elke taak aan de
-  `TaakHandler` van die soort. Er zijn nog geen handlers: de tabel blijft leeg tot de
-  aannamestory de verzendtaak plant.
+  `TaakHandler` van die soort. Handlers: `VerzendTaakHandler` en
+  `ControleTaakHandler`; de navraag- en vaststellingstaak worden al gepland maar nog
+  niet uitgevoerd, de overige soorten hebben nog geen handler.
 - **Eén geconfigureerde dienstverlener.** `dienstverlener` heeft één rij uit de
   migratie; `DvProvider` levert die `dv_id`, die op elke notificatie en elk event
   staat. Tokenvalidatie per dienstverlener vervangt later alleen de provider.
 
-Beide create-flows delen `NotificatieService.verstuurNaarEmail(...)`: aannemen,
-een poging aanmaken, naar `in-verzending`, versturen bij NotifyNL en naar
-`verzonden`, alles nog synchroon in één transactie. De centrale flow doet eerst de
-Profielservice-lookup.
+Beide intakes gaan via `AannameService`: notificatie op `aangenomen` met event 0, de
+versleutelde payload en een verzendtaak in één transactie; het quotum per
+dienstverlener per dag (`dienstverlener.quotum_per_dag`, zonder waarde daar
+`nmc.aanname.quotum-per-dag`) geeft 429.
+De controllers antwoorden 202 via `AannameResponse.notificatieAangenomen`; daarvoor genereert
+de `notificaties`-run in de pom met `returnResponse=true`. `VerzendTaakHandler` doet in een
+eerste transactie `aangenomen` naar `in-verzending` met een geplande poging, roept
+daarbuiten de Profielservice (bij centrale regie) en NotifyNL aan met het poging-id
+als `reference`, en doet in een tweede transactie `in-verzending` naar `verzonden`
+met een navraagtaak. Een `ValidationError` van NotifyNL op `email_address` en een
+partij zonder adres leiden tot een eindstatus (`niet-bezorgbaar`). Een andere 4xx, behalve
+429, ligt aan het NMC en kost een poging; 429, 5xx, een verbindingsfout en een
+ontbrekende KEK-versie stellen de taak uit zonder poging. Een herclaim zoekt eerst
+op `reference`. `ControleTaakHandler` plant zichzelf opnieuw
+en geeft een notificatie zonder taak de taak die bij haar status hoort. De
+verzendtaak schrijft nog geen LDV-registratie: de `@Logboek`-interceptor werkt alleen
+binnen een REST-aanroep.
 
 Nog niet gebouwd: een endpoint om de status op te vragen, contactherstel, de
 Templating Service-koppeling (templates staan als vaste NotifyNL-template-IDs in
@@ -203,16 +219,22 @@ de logica die kiest tussen herverzending en contactherstel.
   `NotificatieRepository`. Entiteiten krijgen geen finders en geen native SQL, en
   `getEntityManager()` verlaat de repository niet. Tests mogen wél rechtstreeks SQL
   schrijven wanneer ze een toestand nodig hebben die de overgangsfunctie niet maakt; die
-  statements staan gebundeld in `NotificatieFixtures`, die de trigger voor de eigen
-  transactie uitzet.
+  statements staan gebundeld in `NotificatieFixtures` (die de trigger voor de eigen
+  transactie uitzet) en `TaakFixtures`.
 - **Afleverstatussen komen at-least-once en ongeordend binnen.** NotifyNL biedt een
-  callback opnieuw aan bij elke niet-2xx. `ReceiptVerwerker` ordent per poging op het
+  callback opnieuw aan bij elke niet-2xx. `ReceiptVerwerker` zoekt de poging op de
+  `reference` uit de receipt (het poging-id) en anders op het NotifyNL-id. Heeft de poging
+  nog geen NotifyNL-id, dan is de receipt er eerder dan de verzend-commit: de poging neemt
+  het id over en de verwerker doet de overgang naar `verzonden` namens de worker, ook bij een
+  tussenstatus. Een ander NotifyNL-id dan dat op de poging komt van een tweede verzending na
+  een herclaim en wordt als duplicaat op dezelfde poging vastgelegd. De verwerker ordent per poging op het
   tijdstip in de receipt (`completed_at`, met `sent_at` en `created_at` als terugval,
-  begrensd op de eigen klok); een herhaalde of oudere receipt verandert niets. De
+  zonder tijdstip geldt het moment van ontvangst en gaat de receipt nooit vóór een al
+  vastgelegde uitkomst); een herhaalde of oudere receipt verandert niets. De
   poging wordt pas na het vergrendelen van de notificatie opnieuw gelezen, zodat een
   receipt die op de vergrendeling wachtte de uitkomst van de eerste ziet. Tot er
   herverzending is, leiden `temporary-failure` en `technical-failure` tot een eindstatus.
-  Tussenstatussen worden genegeerd; een onbekende status wordt op ERROR gelogd en
+  Verder verandert een tussenstatus niets; een onbekende status wordt op ERROR gelogd en
   verandert niets.
 - **Receipttijd en registratietijd zijn gescheiden.** Het tijdstip uit de receipt staat
   op `poging.receipt_tijdstip` en is het tijdstip voor het afleverbewijs; `event.geregistreerd`
@@ -244,7 +266,7 @@ de logica die kiest tussen herverzending en contactherstel.
 - **Test:** JUnit 5, REST-assured, Mockito, Jazzer (fuzzing)
 - **Fouten:** RFC 9457 `application/problem+json` via quarkus-http-problem
 - **Audit:** LDV-wrapper (`logboekdataverwerking`), standaard uitgeschakeld
-- **Image:** jib (geen Dockerfile), `eclipse-temurin:25-jre`, draait als uid 1001
+- **Image:** jib (de Dockerfiles in `src/main/docker` worden niet gebruikt), `eclipse-temurin:25-jre`, draait als uid 1001
 - **Health:** smallrye-health op `/q/health`; readiness bevat een datasource-check
 
 Packages zijn **technisch** ingedeeld: `controller/`, `service/`, `domain/`,
@@ -255,8 +277,8 @@ een eigen contract komt. Volg die indeling.
 ## Contract-first
 
 Er zijn twee servercontracten, elk met een eigen execution van de
-`openapi-generator-maven-plugin` (`jaxrs-spec`, `interfaceOnly=true`,
-`returnResponse=false`):
+`openapi-generator-maven-plugin` (`jaxrs-spec`, `interfaceOnly=true`; `returnResponse=true`
+voor de notificaties, zodat de controllers 202 antwoorden, `false` voor de callback):
 
 | Contract | Interfaces en modellen in |
 |----------|---------------------------|
@@ -289,8 +311,8 @@ Aandachtspunten in de contracten:
 - **Contractversie op twee plekken**: `info.version` in `openapi.yaml` en
   `mp.openapi.info.version` in `application.properties`, die `ApiVersionFilter`
   als `API-Version`-header meestuurt. Geen test controleert dat ze gelijk zijn.
-- **Bewust geen `servers:`-blok**, zodat "Try it out" in Swagger UI op elke
-  omgeving naar de eigen host wijst.
+- **Bewust geen `servers:`-blok in `openapi.yaml`**, zodat "Try it out" in Swagger UI op
+  elke omgeving naar de eigen host wijst; het callbackcontract heeft er wel een, met voorbeeldhosts.
 
 De clientcontracten staan in `src/main/resources/openapi/`
 (`profielservice_api.json`, `notifynl_api.yaml`). quarkus-openapi-generator bouwt
@@ -379,8 +401,9 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
   `dienstverlener`, `taak` en `verzendbudget` toe en maakt `dv_id` op `notificatie` en
   `event` verplicht.
 - **Gepartitioneerde tabellen (`event`, `taak`) hebben de partitiesleutel in de primary
-  key.** Een query op `taak` noemt daarom altijd de `soort`, anders zoekt PostgreSQL in
-  elke partitie; een nieuwe `TaakSoort` vraagt een migratie met een nieuwe partitie.
+  key.** Een query op `taak` noemt daarom de `soort`, anders zoekt PostgreSQL in
+  elke partitie (de controletaak doet dat bewust: een taak van elke soort telt); een
+  nieuwe `TaakSoort` vraagt een migratie met een nieuwe partitie.
 - **SQL is PostgreSQL 18.** Dev, test en prod draaien hetzelfde dialect, dus
   PostgreSQL-eigen SQL is toegestaan en draait ook in de tests.
 - **Een index op een gevulde tabel gaat met `CREATE INDEX CONCURRENTLY`.** Een gewone
@@ -388,8 +411,9 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
   `INSERT`, `UPDATE` en `DELETE` wacht tot de index klaar is, bij miljoenen rijen minuten.
   `CONCURRENTLY` kan niet in een transactie, dus zo'n statement krijgt een eigen migratie
   met `-- flyway:executeInTransaction=false`. Faalt de bouw halverwege, dan blijft er een
-  `INVALID` index achter die handmatig gedropt moet worden. `V3__notificatie_retentie.sql`
-  doet het bewust zonder: die index is er vóór de eerste productiedata.
+  `INVALID` index achter die handmatig gedropt moet worden. `V3__notificatie_retentie.sql` en
+  `V9__aanname_verzendtaak.sql` doen het bewust zonder: die indexen zijn er vóór de eerste
+  productiedata.
 - **Houd de migratie en de entity gelijk.** In elk profiel staat
   `schema-management.strategy=validate`: wijkt een entity af van het gemigreerde
   schema, dan start de applicatie niet, en de testsuite dus ook niet.
@@ -406,8 +430,9 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
 
 ## Configuratie en secrets
 
-Deze waarden staan leeg in `application.properties` en **laten de applicatie niet
-starten als ze ontbreken**:
+Deze waarden staan leeg in `application.properties` en zijn **verplicht**: ontbreken ze,
+dan faalt de applicatie bij het opstarten (`nmc.kek.*`) of bij het eerste gebruik van de
+klasse die ze leest:
 
 | Property | Gebruikt door |
 |----------|---------------|
@@ -422,12 +447,17 @@ nooit in `application.properties`. Onder `%test` staan dummywaarden.
 
 Met een default, en dus alleen per omgeving te overschrijven als dat nodig is:
 `nmc.dienstverlener.id` (de rij uit V8), `nmc.taak.*` (interval, batch, lease,
-max-pogingen van de worker-lus) en `nmc.verzendbudget.*` (Notify-service, tokens per
-minuut, reservering voor de navraag). Onder `%test` staat de lus uit en is het budget
+max-pogingen van de worker-lus, en het uitstel na een storing),
+`nmc.navraag.eerste-due` (wanneer de eerste navraag naar de afleverstatus gepland wordt),
+`nmc.controle.*` (interval en maximum per ronde van de controletaak),
+`nmc.aanname.quotum-per-dag` (quotum voor een dienstverlener zonder eigen quotum in
+het register; leeg is onbeperkt) en
+`nmc.verzendbudget.*` (Notify-service, tokens per minuut, reservering voor de navraag). Onder `%test` staat de lus uit en is het budget
 klein, zodat tests het uitputten.
 
 Ook `quarkus.rest-client.profielservice.url` en `quarkus.rest-client.notify.url`
-hebben buiten `%dev`/`%test` geen default en moeten per omgeving gezet worden.
+hebben buiten `%test` geen default (alleen de Profielservice-URL heeft ook een
+`%dev`-waarde) en moeten per omgeving gezet worden.
 Alle prod-config loopt via `QUARKUS_*`- en andere env-vars; de volledige lijst
 staat in `docs/zad-deploy.md`.
 
