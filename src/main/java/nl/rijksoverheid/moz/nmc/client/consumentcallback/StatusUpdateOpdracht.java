@@ -13,16 +13,18 @@ import java.util.UUID;
  * na de commit uitgevoerd door StatusUpdateVerzender. Bevat platte waarden: de observer draait
  * buiten de transactie waarin de entities geladen zijn.
  *
- * @param versie   het volgnummer van de overgang; de Dienstverlener ordent daarop
- * @param tijdstip wanneer de overgang is vastgelegd, op de klok van de NMC
+ * @param eventUuid de UUID van het event in het eventlog; wordt het {@code id} van het CloudEvent
+ * @param versie    het volgnummer van de overgang; de Dienstverlener ordent daarop
+ * @param tijdstip  wanneer de overgang is vastgelegd, op de klok van de NMC
  */
-public record StatusUpdateOpdracht(UUID notificatieId, String callbackUrl, long versie,
+public record StatusUpdateOpdracht(UUID eventUuid, UUID notificatieId, String callbackUrl, long versie,
                                    NotificatieStatus vorigeStatus, NotificatieStatus nieuweStatus, Reden reden,
                                    OffsetDateTime tijdstip) {
 
     public StatusUpdateOpdracht {
         // Hier controleren en niet pas bij het versturen: in de AFTER_SUCCESS-observer zou een NPE ná
         // de commit afgaan, waar de transactiemanager hem opslokt.
+        Objects.requireNonNull(eventUuid, "eventUuid is verplicht");
         Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
         Objects.requireNonNull(nieuweStatus, "nieuweStatus is verplicht");
         Objects.requireNonNull(tijdstip, "tijdstip is verplicht");
@@ -30,7 +32,7 @@ public record StatusUpdateOpdracht(UUID notificatieId, String callbackUrl, long 
     }
 
     public static StatusUpdateOpdracht van(Event event, String callbackUrl) {
-        return new StatusUpdateOpdracht(event.getNotificatieId(), callbackUrl, event.getVolgnummer(),
+        return new StatusUpdateOpdracht(event.getUuid(), event.getNotificatieId(), callbackUrl, event.getVolgnummer(),
                 event.getVan(), event.getNaar(), event.getReden(), event.getGeregistreerd());
     }
 }
