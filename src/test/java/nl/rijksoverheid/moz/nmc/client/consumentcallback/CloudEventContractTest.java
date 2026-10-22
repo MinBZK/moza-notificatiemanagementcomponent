@@ -49,7 +49,7 @@ class CloudEventContractTest {
 
         assertTrue(json.get("time").isTextual(), "time hoort een ISO-8601-string te zijn, geen getal");
         assertDoesNotThrow(() -> OffsetDateTime.parse(json.get("time").asText()));
-        assertDoesNotThrow(() -> UUID.fromString(json.get("id").asText()));
+        assertDoesNotThrow(() -> UUID.fromString(json.get("id").asText()), "id hoort de UUID van het event te zijn");
         assertDoesNotThrow(() -> UUID.fromString(json.get("subject").asText()));
         assertTrue(json.get("sequence").isTextual(), "sequence hoort volgens de CloudEvents-extensie een string te zijn");
         // Met voorloopnullen, zodat de tekstvergelijking uit de sequence-extensie de volgorde geeft.
@@ -104,7 +104,7 @@ class CloudEventContractTest {
 
     private static NotificatieStatusEvent verstuurdEvent(NotificatieStatus naar, Reden reden) {
         ConsumentCallbackClient client = Mockito.mock(ConsumentCallbackClient.class);
-        new ConsumentCallbackAdapter(url -> client, 0L).stuurStatusUpdate(new StatusUpdateOpdracht(UUID.randomUUID(),
+        new ConsumentCallbackAdapter(url -> client, 0L).stuurStatusUpdate(new StatusUpdateOpdracht(UUID.randomUUID(), UUID.randomUUID(),
                 "https://omc.example.nl/callback", 3L, NotificatieStatus.VERZONDEN, naar, reden, OffsetDateTime.parse("2026-01-15T10:00:00Z")));
 
         ArgumentCaptor<NotificatieStatusEvent> captor = ArgumentCaptor.forClass(NotificatieStatusEvent.class);
