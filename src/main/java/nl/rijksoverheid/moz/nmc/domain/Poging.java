@@ -92,4 +92,64 @@ public class Poging {
     public OffsetDateTime getReceiptTijdstip() {
         return receiptTijdstip;
     }
+
+    /**
+     * Legt vast dat NotifyNL de poging heeft aangenomen.
+     *
+     * @throws IllegalStateException als de poging niet meer op {@code GEPLAND} staat
+     */
+    public void markeerVerzonden(UUID notifyId, OffsetDateTime op) {
+        Objects.requireNonNull(notifyId, "notifyId is verplicht");
+
+        if (status != PogingStatus.GEPLAND) {
+            throw new IllegalStateException("Poging " + id + " is al verzonden (status " + status + ")");
+        }
+
+        this.notifyId = notifyId;
+        this.verzondenOp = Objects.requireNonNull(op, "op is verplicht");
+        this.status = PogingStatus.VERZONDEN;
+    }
+
+    /**
+     * Legt de uitkomst uit een receipt vast als die nieuwer is dan de laatst vastgelegde. Receipts
+     * komen ongeordend binnen; de volgorde komt uit het tijdstip in de receipt zelf, op de klok van
+     * NotifyNL. Dezelfde uitkomst nog eens is een herhaling.
+     *
+     * @return false als de receipt een herhaling of ouder is en dus niets heeft veranderd
+     */
+    public boolean verwerkReceipt(PogingStatus uitkomst, OffsetDateTime opgetreden) {
+        Objects.requireNonNull(uitkomst, "uitkomst is verplicht");
+        Objects.requireNonNull(opgetreden, "opgetreden is verplicht");
+
+        if (receiptTijdstip != null && (uitkomst == status || !opgetreden.isAfter(receiptTijdstip))) {
+            return false;
+        }
+
+        this.status = uitkomst;
+        this.receiptTijdstip = opgetreden;
+
+        return true;
+    }
+
+    /**
+     * Legt de uitkomst uit een receipt zonder eigen tijdstip vast, met het moment van ontvangst als
+     * tijdstip. Zonder tijdstip van NotifyNL is de volgorde niet te bepalen, dus zo'n receipt gaat
+     * nooit vóór een al vastgelegde uitkomst. Het moment van ontvangst telt daarna wel als tijdstip
+     * voor latere receipts, al staat het op de eigen klok.
+     *
+     * @return false als er al een uitkomst was
+     */
+    public boolean verwerkReceiptZonderTijdstip(PogingStatus uitkomst, OffsetDateTime ontvangen) {
+        Objects.requireNonNull(uitkomst, "uitkomst is verplicht");
+        Objects.requireNonNull(ontvangen, "ontvangen is verplicht");
+
+        if (receiptTijdstip != null) {
+            return false;
+        }
+
+        this.status = uitkomst;
+        this.receiptTijdstip = ontvangen;
+
+        return true;
+    }
 }
