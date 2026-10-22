@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Vangnet voor notificaties die zijn blijven steken: elke notificatie zonder eindstatus en
@@ -92,11 +93,19 @@ public class ControleTaakHandler implements TaakHandler {
 
     private int herstelOntbrekendeTaken() {
         OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
-        List<Notificatie> zonderTaak = notificatieRepository.zonderTaak(OPEN_STATUSSEN, nu, maxPerRonde);
+        List<UUID> zonderTaak = notificatieRepository.zonderTaak(OPEN_STATUSSEN, nu, maxPerRonde);
 
         int gepland = 0;
 
-        for (Notificatie notificatie : zonderTaak) {
+        for (UUID id : zonderTaak) {
+            // De selectie is niet vergrendeld: een receipt of navraag kan intussen een taak hebben gepland of
+            // de status hebben verzet. Onder de rijvergrendeling is dat afgerond en zichtbaar.
+            Notificatie notificatie = overgangsfunctie.vergrendel(id);
+
+            if (!notificatieRepository.isZonderTaak(id, OPEN_STATUSSEN, nu)) {
+                continue;
+            }
+
             Optional<Poging> laatste = pogingRepository.findLaatsteVan(notificatie.getId());
 
             // De navraag gaf geen uitkomst, maar de overgang bleef uit omdat de notificatie op dat moment
