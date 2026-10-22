@@ -96,6 +96,24 @@ class ControleTaakHandlerTest {
         assertEquals(0, controle.getPogingen());
     }
 
+    // Geen taak kan haar nog verder brengen, dus ze krijgt een eindstatus; daarmee volgen de wistaak en
+    // het opruimen.
+    @Test
+    void controle_verzondenZonderLopendeOfHerverzendbarePoging_eindigtInTechnischMislukt() {
+        UUID id = notificatie(NotificatieStatus.VERZONDEN, UUID.randomUUID());
+        QuarkusTransaction.requiringNew().run(() -> pogingRepository.findLaatsteVan(id).orElseThrow()
+                .verwerkReceipt(PogingStatus.PERMANENT_MISLUKT, OffsetDateTime.now(ZoneOffset.UTC)));
+
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
+
+        Notificatie notificatie = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findById(id));
+        assertEquals(NotificatieStatus.TECHNISCH_MISLUKT, notificatie.getStatus());
+        assertEquals(Reden.TECHNISCH, notificatie.getReden());
+        assertFalse(perNotificatie().containsKey(id), "geen andere taak dan de wistaak");
+        assertEquals(1, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(
+                Taak_.TAAK_SOORT + " = ?1 and " + Taak_.NOTIFICATIE_ID + " = ?2", TaakSoort.WISSEN, id)));
+    }
+
     // Opnieuw gepland houdt de vaststeltaak de termijn vanaf de bezorging aan.
     @Test
     void controle_bezorgdMetReceipt_plantDeVaststeltaakNaDeTermijn() {
@@ -119,6 +137,20 @@ class ControleTaakHandlerTest {
         assertTrue(perNotificatie().get(id).getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusDays(7)));
     }
 
+    // De controletaak plant zichzelf zijn hele levensduur opnieuw; fouten verspreid over die tijd mogen
+    // niet optellen tot mislukt.
+    @Test
+    void controle_geslaagdeRonde_zetDePogingenTerug() {
+        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetPogingen(taakRepository.getEntityManager(),
+                TaakSoort.CONTROLE, taakRepository.find(Taak_.TAAK_SOORT, TaakSoort.CONTROLE).singleResult().getId(), 1));
+
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
+
+        Taak controle = QuarkusTransaction.requiringNew().call(() -> taakRepository.find(Taak_.TAAK_SOORT, TaakSoort.CONTROLE).singleResult());
+        assertEquals(0, controle.getPogingen());
+        assertEquals(TaakStatus.OPEN, controle.getStatus());
+    }
+
     @Test
     void controle_laatNotificatiesMetEenOpenOfMislukteTaakMetRust() {
         UUID metOpenTaak = notificatie(NotificatieStatus.AANGENOMEN, null);
@@ -137,6 +169,26 @@ class ControleTaakHandlerTest {
 
         assertEquals(3, QuarkusTransaction.requiringNew().call(() -> taakRepository.count()),
                 "controletaak plus de twee bestaande taken, geen nieuwe");
+    }
+
+    // Na geldig_tot houdt een mislukte taak de notificatie niet meer tegen: ze krijgt de taak die bij haar
+    // status hoort en loopt zo naar een eindstatus, zodat de wistaak en het opruimen er nog aan toekomen.
+    @Test
+    void controle_mislukteTaakNaGeldigTot_plantDeOntbrekendeTaakAlsnog() {
+        UUID id = notificatie(NotificatieStatus.AANGENOMEN, null);
+        QuarkusTransaction.requiringNew().run(() -> {
+            Taak mislukt = new Taak(TaakSoort.VERZENDEN, NotificatieFixtures.DV_ID, id, OffsetDateTime.now(ZoneOffset.UTC), null, null);
+            taakRepository.persist(mislukt);
+            taakRepository.flush();
+            TaakFixtures.markeerMislukt(taakRepository.getEntityManager(), TaakSoort.VERZENDEN, mislukt.getId());
+            NotificatieFixtures.verzetGeldigTot(taakRepository.getEntityManager(), id, OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1));
+        });
+
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
+
+        assertEquals(1L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT + " = ?1 and "
+                + Taak_.NOTIFICATIE_ID + " = ?2 and " + Taak_.STATUS + " = ?3", TaakSoort.VERZENDEN, id, TaakStatus.OPEN)),
+                "een nieuwe verzendtaak naast de mislukte");
     }
 
     @AfterEach
@@ -212,8 +264,9 @@ class ControleTaakHandlerTest {
         });
     }
 
+    // Zonder de wistaak die de overgangsfunctie bij elke eindstatus plant.
     private Map<UUID, Taak> perNotificatie() {
-        List<Taak> taken = QuarkusTransaction.requiringNew().call(() -> taakRepository.listAll());
+        List<Taak> taken = QuarkusTransaction.requiringNew().call(() -> taakRepository.list(Taak_.TAAK_SOORT + " != ?1", TaakSoort.WISSEN));
         Map<UUID, Taak> map = new HashMap<>();
 
         for (Taak taak : taken) {
