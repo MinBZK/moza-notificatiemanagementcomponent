@@ -42,6 +42,14 @@ public final class TaakFixtures {
                 .executeUpdate();
     }
 
+    /** Zet de {@code due} van alle taken van deze soort. */
+    public static void zetDue(EntityManager entityManager, TaakSoort taakSoort, OffsetDateTime due) {
+        entityManager.createQuery("update Taak set " + Taak_.DUE + " = :due where " + Taak_.TAAK_SOORT + " = :taakSoort")
+                .setParameter("due", due)
+                .setParameter("taakSoort", taakSoort)
+                .executeUpdate();
+    }
+
     public static void zetLeaseTot(EntityManager entityManager, TaakSoort taakSoort, long id, OffsetDateTime tot) {
         entityManager.createQuery("update Taak set " + Taak_.LEASE_TOT + " = :tot" + ZELFDE_TAAK)
                 .setParameter("tot", tot)

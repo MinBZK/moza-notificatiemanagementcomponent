@@ -26,6 +26,7 @@ import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.service.ReceiptOpslag;
 import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
 import nl.rijksoverheid.moz.nmc.service.Vaststellingstermijn;
+import nl.rijksoverheid.moz.nmc.service.Verzendbeleid;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
@@ -38,10 +39,12 @@ import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.domain.Dienstverlener;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.service.Sleutelbeheer;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -116,6 +119,8 @@ public class NotificatieVerwerkingFuzzer {
         // Application logging off.
         Logger.getLogger("").setLevel(Level.OFF);
 
+        Verzendbeleid verzendbeleid = new Verzendbeleid(Duration.ofDays(7), Duration.ofHours(1), 1,
+                ConfigProvider.getConfig());
         // De aanname roept de Profielservice en NotifyNL niet meer aan; dat doet de verzendtaak, die
         // buiten dit target valt.
         AannameService aannameService = new AannameService(
@@ -125,10 +130,11 @@ public class NotificatieVerwerkingFuzzer {
                 new GeheugenDienstverlenerRepository(),
                 repository,
                 taken,
+                verzendbeleid,
                 Optional.empty());
         receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
-                taken, new Vaststellingstermijn(java.time.Duration.ofDays(7), java.time.Duration.ofDays(1)),
-                java.time.Duration.ofMinutes(5));
+                taken, new Vaststellingstermijn(Duration.ofDays(7), Duration.ofDays(1)), verzendbeleid,
+                Duration.ofMinutes(5));
 
         LogboekContext logboekContext = new LogboekContext();
         HashHelper hashHelper = new HashHelper(Optional.of("fuzz-pepper-niet-voor-productie"));

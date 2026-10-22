@@ -16,12 +16,12 @@ public record AannameOpdracht(Regie regie,
                               Ontvanger ontvanger,
                               String dienstverlener,
                               String dienst,
-                              String templateId,
+                              BerichtType berichtType,
                               Map<String, String> berichtgegevens) {
 
     public AannameOpdracht {
         Objects.requireNonNull(regie, "regie is verplicht");
         Objects.requireNonNull(ontvanger, "ontvanger is verplicht");
-        Objects.requireNonNull(templateId, "templateId is verplicht");
+        Objects.requireNonNull(berichtType, "berichtType is verplicht");
     }
 }

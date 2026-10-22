@@ -7,6 +7,7 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
@@ -60,11 +61,18 @@ class AannameQuotumTest {
 
     private AannameService aannameService(Optional<Integer> standaardQuotum) {
         return new AannameService(mock(Overgangsfunctie.class), mock(Sleutelbeheer.class), () -> DV_ID,
-                dienstverlenerRepository, notificatieRepository, mock(TaakRepository.class), standaardQuotum);
+                dienstverlenerRepository, notificatieRepository, mock(TaakRepository.class), verzendbeleid(), standaardQuotum);
+    }
+
+    private static Verzendbeleid verzendbeleid() {
+        Verzendbeleid verzendbeleid = mock(Verzendbeleid.class);
+        when(verzendbeleid.geldigheid(any())).thenReturn(Duration.ofDays(7));
+
+        return verzendbeleid;
     }
 
     private static AannameOpdracht opdracht() {
         return new AannameOpdracht(Regie.DECENTRAAL, Ontvanger.email("burger@example.nl"), null, null,
-                "test-template-id", null);
+                BerichtType.DEMO_TEMPLATE, null);
     }
 }
