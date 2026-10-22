@@ -3,17 +3,20 @@ package nl.rijksoverheid.moz.nmc.client.notifynl;
 import io.quarkus.logging.Log;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 
+import java.time.OffsetDateTime;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Vertaalt de afleverstatus uit een NotifyNL-receipt naar de uitkomst van een poging.
+ * De afleverstatus van een verzending zoals NotifyNL hem geeft, in een receipt of bij een navraag, en
+ * de vertaling daarvan naar de uitkomst van een poging.
+ *
+ * @param status   de NotifyNL-status, zoals {@code delivered} of {@code sending}
+ * @param tijdstip {@code completed_at}, met {@code sent_at} en {@code created_at} als terugval; null
+ *                 als geen van drieën bruikbaar is
  */
-public final class NotifyNLAfleverstatus {
-
-    private NotifyNLAfleverstatus() {
-    }
+public record NotifyNLAfleverstatus(String status, OffsetDateTime tijdstip) {
 
     /**
      * De tussenstatussen van NotifyNL leveren geen uitkomst op. Een onbekende status wordt op ERROR
@@ -35,5 +38,18 @@ public final class NotifyNLAfleverstatus {
                 yield Optional.empty();
             }
         };
+    }
+
+    /** Of NotifyNL deze status als tussenstatus gebruikt: de verzending loopt nog. */
+    public static boolean isTussenstatus(String status) {
+        return switch (status.toLowerCase(Locale.ROOT)) {
+            case "created", "sending", "pending" -> true;
+            default -> false;
+        };
+    }
+
+    /** De uitkomst van deze status voor de poging; leeg voor een tussenstatus of een onbekende status. */
+    public Optional<PogingStatus> uitkomst(UUID notifyId) {
+        return naarUitkomst(status, notifyId);
     }
 }

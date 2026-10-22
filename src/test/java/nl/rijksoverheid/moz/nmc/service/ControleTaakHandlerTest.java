@@ -6,6 +6,7 @@ import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
+import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
@@ -92,6 +93,29 @@ class ControleTaakHandlerTest {
         assertEquals(TaakStatus.OPEN, controle.getStatus());
         assertTrue(controle.getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(1)), "opnieuw gepland");
         assertEquals(0, controle.getPogingen());
+    }
+
+    // Opnieuw gepland houdt de vaststeltaak de termijn vanaf de bezorging aan.
+    @Test
+    void controle_bezorgdMetReceipt_plantDeVaststeltaakNaDeTermijn() {
+        UUID id = notificatie(NotificatieStatus.BEZORGD, UUID.randomUUID());
+        OffsetDateTime bezorgdOp = OffsetDateTime.parse("2030-01-01T10:00:00Z");
+        QuarkusTransaction.requiringNew().run(() -> pogingRepository.findLaatsteVan(id).orElseThrow()
+                .verwerkReceipt(PogingStatus.BEZORGD, bezorgdOp));
+
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
+
+        assertEquals(bezorgdOp.plusDays(8).toInstant(), perNotificatie().get(id).getDue().toInstant());
+    }
+
+    // Zonder bekend bezorgtijdstip loopt de termijn vanaf nu, zodat de taak nooit te vroeg vaststelt.
+    @Test
+    void controle_bezorgdZonderBezorgtijdstip_plantDeVaststeltaakEenVolleTermijnVooruit() {
+        UUID id = notificatie(NotificatieStatus.BEZORGD, UUID.randomUUID());
+
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
+
+        assertTrue(perNotificatie().get(id).getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusDays(7)));
     }
 
     @Test

@@ -1,12 +1,12 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
 /**
- * Waarvoor een claim tokens uit het verzendbudget neemt. Een vast aandeel van elk tijdvak is
- * gereserveerd voor de navraag, zodat een piek in het verzenden de navraag niet verdringt.
+ * Waarvoor een claim tokens uit het verzendbudget neemt. Elk doel heeft per tijdvak een reservering
+ * die het andere laat staan, zodat een piek in het ene het andere niet verdringt; de rest delen ze.
  */
 public enum BudgetDoel {
-    /** Verzenden bij NotifyNL; mag de reservering voor de navraag niet aanspreken. */
+    /** Verzenden bij NotifyNL. */
     VERZENDEN,
-    /** Statussen opvragen bij NotifyNL; mag alle resterende tokens gebruiken. */
+    /** Statussen opvragen bij NotifyNL. */
     NAVRAAG
 }

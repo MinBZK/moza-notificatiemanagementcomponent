@@ -199,8 +199,9 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
   kan afronden. Na het maximum aantal mislukkingen staat een taak op `MISLUKT` en
   telt hij in de metriek `nmc_taken_mislukt`.
 - **`verzendbudget`** is een rij per Notify-service per minuut met de resterende
-  tokens; het verzenden en de navraag claimen ertegen, met een vast deel
-  gereserveerd voor de navraag.
+  tokens; het verzenden en de navraag claimen ertegen. Elk heeft een reservering
+  (`verzend_tokens`, `navraag_tokens`) die de ander laat staan; de rest is voor wie
+  het eerst claimt.
 - **`bevestiging`** is per dienstverlener de feedcursor die hij zelf terugschrijft;
   hij gaat alleen vooruit.
 - **`webhookpositie`** is per dienstverlener het laatst aan de webhook geleverde
@@ -305,7 +306,8 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   niets. De uitkomst gaat op de poging; daarna volgt de overgang van de
   notificatie als die vanuit de huidige status is toegestaan (een eindstatus is
   absorberend, behalve `bezorgstatus-onbekend`; `bezorgd` is geen eindstatus). Tussenstatussen van NotifyNL worden genegeerd en
-  een onbekende status wordt op ERROR gelogd zonder iets te wijzigen. Een
+  een onbekende status komt op `laatste_notify_status` van de poging en wordt op ERROR
+  gelogd, zonder overgang. Een
   uitgevoerde overgang staat als event in het log, en komt zo in de feed en op de
   webhook, met `sequence` het volgnummer waarop de Dienstverlener ordent. Retourneert `204`
   op succes, ook bij een herhaling of een receipt die bij geen poging hoort (die wordt
@@ -435,10 +437,12 @@ Bovenstaande draait de app in **dev-mode** (`%dev`-profiel: Postgres uit
 De NMC implementeert de centraal- en decentraal-profiel happy-flows inclusief de
 asynchrone bezorgstatus, de eventfeed en de webhook, zoals beschreven onder
 "Geïmplementeerde functionaliteit". De aanname is asynchroon (202) met een
-verzendtaak; de navraagtaak wordt gepland maar nog niet uitgevoerd. Nog **niet**
-aanwezig:
+verzendtaak. Blijft de receipt uit, dan vraagt de navraag de status op bij NotifyNL
+(na 1, 6 en 24 uur, daarna dagelijks tot de bewaartermijn van NotifyNL; een 404 of het
+einde van die termijn geeft `bezorgstatus-onbekend`). Een `bezorgd` wordt na de
+vaststellingstermijn (7 dagen plus het callback-venster) `definitief-bezorgd`. Nog
+**niet** aanwezig:
 
-- **Navraag** bij NotifyNL en **vaststelling** van de bezorging
 - **Contactherstel** en **herverzending** (voor beide profielen)
 - Een koppeling met de **Templating Service** (het `template_id` wordt voorlopig
   bepaald door een lokale `BerichtType`-enum, niet via een externe Templating Service)
