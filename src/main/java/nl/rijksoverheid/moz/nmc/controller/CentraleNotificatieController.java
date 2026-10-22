@@ -62,7 +62,7 @@ public class CentraleNotificatieController implements CentraleNotificatiesApi {
                 new Ontvanger(soort(request.getIdentificatieType()), request.getIdentificatieNummer()),
                 request.getDienstverlener(),
                 request.getDienst(),
-                BerichtType.vanNaam(request.getBerichtType()).getTemplateId(),
+                BerichtType.vanNaam(request.getBerichtType()),
                 request.getBerichtgegevens());
     }
 

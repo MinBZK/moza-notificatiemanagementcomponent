@@ -38,7 +38,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 @QuarkusTest
 class AannameServiceTest {
 
-    private static final String TEMPLATE_ID = "test-template-id";
+    private static final String TEMPLATE_ID = BerichtType.DEMO_TEMPLATE.getTemplateId();
 
     @InjectMock
     @RestClient
@@ -117,7 +117,7 @@ class AannameServiceTest {
     @Test
     void neemAan_decentraal_bewaartHetAdresVersleuteldEnLaatDienstverlenerUitDePayload() {
         UUID id = aannameService.neemAan(new AannameOpdracht(Regie.DECENTRAAL, Ontvanger.email("burger@example.nl"),
-                null, null, TEMPLATE_ID, null));
+                null, null, BerichtType.DEMO_TEMPLATE, null));
 
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie notificatie = notificatieRepository.findById(id);
@@ -155,12 +155,12 @@ class AannameServiceTest {
     @Test
     void aannameOpdracht_zonderOntvanger_weigert() {
         assertThrows(NullPointerException.class,
-                () -> new AannameOpdracht(Regie.DECENTRAAL, null, null, null, TEMPLATE_ID, null));
+                () -> new AannameOpdracht(Regie.DECENTRAAL, null, null, null, BerichtType.DEMO_TEMPLATE, null));
     }
 
     private static AannameOpdracht centraal() {
         return new AannameOpdracht(Regie.CENTRAAL, new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
-                "Gemeente Voorbeeld", "Parkeervergunning", TEMPLATE_ID, Map.of("naam", "Voorbeeld BV"));
+                "Gemeente Voorbeeld", "Parkeervergunning", BerichtType.DEMO_TEMPLATE, Map.of("naam", "Voorbeeld BV"));
     }
 
     private void zetQuotum(Integer quotum) {

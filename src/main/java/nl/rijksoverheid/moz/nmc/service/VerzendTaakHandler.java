@@ -39,6 +39,11 @@ import java.util.UUID;
  * transactie de overgang naar {@code verzonden}, het NotifyNL-id op de poging, de navraagtaak en het
  * afronden van de verzendtaak. De HTTP-aanroep naar NotifyNL valt nooit binnen een transactie.
  * <p>
+ * Dezelfde taak doet de herverzending: vanuit {@code verzonden} na een tijdelijke of technische fout, zolang
+ * het {@link Verzendbeleid} nog een herverzending toestaat, maakt de claim de volgende poging aan
+ * ({@code verzonden} naar {@code verzonden}). Na {@code geldig_tot} wordt geen poging meer gestart en
+ * eindigt de notificatie in {@code verlopen}; een poging die al bij NotifyNL ligt loopt door.
+ * <p>
  * Een fout over het adres of de partij leidt tot een eindstatus; een storing bij NotifyNL of de Profielservice
  * stelt de taak uit zonder dat het de notificatie een poging kost. Een herclaim na een verlopen lease
  * hergebruikt de poging en zoekt eerst op {@code reference}, zodat een al aangeboden e-mail niet nog
@@ -58,11 +63,12 @@ public class VerzendTaakHandler implements TaakHandler {
     private final NotifyNLVerzendAdapter verzendAdapter;
     private final Duration uitstel;
     private final NotifyNLNavraagmomenten notifyNLNavraagmomenten;
+    private final Verzendbeleid verzendbeleid;
 
     public VerzendTaakHandler(Overgangsfunctie overgangsfunctie, PogingRepository pogingRepository,
                               TaakRepository taakRepository, TaakClaimer taakClaimer, Sleutelbeheer sleutelbeheer,
                               ProfielServiceAdapter profielServiceAdapter, NotifyNLVerzendAdapter verzendAdapter,
-                              NotifyNLNavraagmomenten notifyNLNavraagmomenten,
+                              NotifyNLNavraagmomenten notifyNLNavraagmomenten, Verzendbeleid verzendbeleid,
                               @ConfigProperty(name = "nmc.taak.uitstel") Duration uitstel) {
         this.overgangsfunctie = overgangsfunctie;
         this.pogingRepository = pogingRepository;
@@ -73,6 +79,7 @@ public class VerzendTaakHandler implements TaakHandler {
         this.verzendAdapter = verzendAdapter;
         this.uitstel = uitstel;
         this.notifyNLNavraagmomenten = notifyNLNavraagmomenten;
+        this.verzendbeleid = verzendbeleid;
     }
 
     @Override
@@ -83,8 +90,9 @@ public class VerzendTaakHandler implements TaakHandler {
     /**
      * Een uitgeputte verzendtaak eindigt in {@code technisch-mislukt} (ADR 0024, beslispunt 2), zodat de
      * Dienstverlener een eindstatus krijgt. Vanuit {@code aangenomen} loopt dat via
-     * {@code in-verzending}, omdat er geen directe overgang is. Een notificatie die al verder is, houdt
-     * haar status.
+     * {@code in-verzending}, omdat er geen directe overgang is. Dat geldt ook voor een herverzending die
+     * haar poging nooit kon aanmaken; anders plant de controletaak haar elke ronde opnieuw. Een notificatie
+     * die al verder is, houdt haar status.
      */
     @Override
     public boolean handelUitputtingAf(Taak taak) {
@@ -93,7 +101,7 @@ public class VerzendTaakHandler implements TaakHandler {
         if (notificatie.getStatus() == NotificatieStatus.AANGENOMEN) {
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
         } else if (pogingRepository.findLaatsteVan(notificatie.getId())
-                .filter(p -> p.getStatus() == PogingStatus.GEPLAND).isEmpty()) {
+                .filter(p -> isInVerzending(notificatie, p) || isHerverzendbaar(notificatie, p)).isEmpty()) {
             Log.infof("Notificatie %s staat inmiddels op %s; uitgeputte verzendtaak afgerond zonder overgang",
                     notificatie.getId(), notificatie.getStatus());
 
@@ -136,6 +144,9 @@ public class VerzendTaakHandler implements TaakHandler {
 
             if (alAangeboden.isPresent()) {
                 notifyId = alAangeboden.get();
+            } else if (verzending.verlopen()) {
+                // Het uitstel na een storing liep voorbij geldig_tot, en de poging ligt niet bij NotifyNL.
+                return rondAfAls(taak, verzending, NotificatieStatus.VERLOPEN, Reden.VERLOPEN);
             } else {
                 String emailAdres = emailAdres(verzending);
 
@@ -191,37 +202,59 @@ public class VerzendTaakHandler implements TaakHandler {
     }
 
     /**
-     * Eerste transactie: {@code aangenomen} naar {@code in-verzending} met een geplande poging, of bij
-     * een herclaim de bestaande geplande poging. Is de notificatie inmiddels verder (een receipt vóór de
-     * verzend-commit, of geannuleerd), dan is er niets te verzenden en wordt de taak afgerond.
+     * Eerste transactie: {@code aangenomen} naar {@code in-verzending} met een geplande poging, bij een
+     * herverzending {@code verzonden} naar {@code verzonden} met de volgende poging, of bij een herclaim de
+     * bestaande geplande poging. Na {@code geldig_tot} wordt geen poging gestart en eindigt de notificatie
+     * in {@code verlopen}. Is de notificatie inmiddels verder (een receipt vóór de verzend-commit, of
+     * geannuleerd), dan is er niets te verzenden en wordt de taak afgerond.
      *
      * @return null als de taak is afgerond zonder verzending
      */
     private Verzending bereidVoor(Taak taak) {
-        taakClaimer.eisClaim(taak);
+        // Eerst de notificatierij, dan de taakrij: dezelfde volgorde als een receipt die de taak verwijdert.
         Notificatie notificatie = overgangsfunctie.vergrendel(taak.getNotificatieId());
+        taakClaimer.eisClaim(taak);
+        Optional<Poging> laatste = pogingRepository.findLaatsteVan(notificatie.getId());
+        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
         Poging poging;
         boolean herclaim;
 
         switch (notificatie.getStatus()) {
             case AANGENOMEN -> {
+                if (notificatie.isVerlopen(nu)) {
+                    return verloop(taak, notificatie);
+                }
+
                 overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
-                poging = new Poging(notificatie.getId(), volgendPogingnummer(notificatie.getId()));
+                poging = new Poging(notificatie.getId(), volgendPogingnummer(laatste));
                 pogingRepository.persist(poging);
                 herclaim = false;
             }
             case IN_VERZENDING -> {
-                poging = pogingRepository.findLaatsteVan(notificatie.getId())
-                        .orElseThrow(() -> new IllegalStateException(
-                                "Notificatie " + notificatie.getId() + " staat op in-verzending zonder poging"));
+                poging = laatste.orElseThrow(() -> new IllegalStateException(
+                        "Notificatie " + notificatie.getId() + " staat op in-verzending zonder poging"));
                 herclaim = true;
             }
-            default -> {
-                Log.infof("Notificatie %s staat op %s; verzendtaak %d afgerond zonder verzending",
-                        notificatie.getId(), notificatie.getStatus(), taak.getId());
-                taakClaimer.rondAf(taak);
+            case VERZONDEN -> {
+                // Een herverzending: de volgende poging, of bij een herclaim de al geplande.
+                if (laatste.filter(p -> p.getStatus() == PogingStatus.GEPLAND).isPresent()) {
+                    poging = laatste.get();
+                    herclaim = true;
+                } else if (laatste.filter(p -> isHerverzendbaar(notificatie, p)).isPresent()) {
+                    if (notificatie.isVerlopen(nu)) {
+                        return verloop(taak, notificatie);
+                    }
 
-                return null;
+                    overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
+                    poging = new Poging(notificatie.getId(), volgendPogingnummer(laatste));
+                    pogingRepository.persist(poging);
+                    herclaim = false;
+                } else {
+                    return rondAfZonderVerzending(taak, notificatie);
+                }
+            }
+            default -> {
+                return rondAfZonderVerzending(taak, notificatie);
             }
         }
 
@@ -238,13 +271,31 @@ public class VerzendTaakHandler implements TaakHandler {
         Map<String, String> personalisation = sleutelbeheer.ontsleutelPersonalisation(notificatie.getId(),
                 notificatie.getVersleuteldeGegevens());
 
-        return new Verzending(notificatie.getId(), notificatie.getDvId(), poging.getId(), herclaim, ontvanger,
+        return new Verzending(notificatie.getId(), notificatie.getDvId(), poging.getId(), herclaim,
+                herclaim && notificatie.isVerlopen(nu), ontvanger,
                 Regie.valueOf(notificatie.getRegie()), notificatie.getDienstverlenerNaam(), notificatie.getDienst(),
                 notificatie.getTemplateId(), personalisation, taak.getTraceId());
     }
 
-    private int volgendPogingnummer(UUID notificatieId) {
-        return pogingRepository.findLaatsteVan(notificatieId).map(p -> p.getNummer() + 1).orElse(1);
+    private Verzending verloop(Taak taak, Notificatie notificatie) {
+        Log.infof("Notificatie %s is verlopen (geldig tot %s); geen verzending gestart", notificatie.getId(),
+                notificatie.getGeldigTot());
+        overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERLOPEN, Reden.VERLOPEN);
+        taakClaimer.rondAf(taak);
+
+        return null;
+    }
+
+    private Verzending rondAfZonderVerzending(Taak taak, Notificatie notificatie) {
+        Log.infof("Notificatie %s staat op %s; verzendtaak %d afgerond zonder verzending",
+                notificatie.getId(), notificatie.getStatus(), taak.getId());
+        taakClaimer.rondAf(taak);
+
+        return null;
+    }
+
+    private static int volgendPogingnummer(Optional<Poging> laatste) {
+        return laatste.map(p -> p.getNummer() + 1).orElse(1);
     }
 
     /**
@@ -304,9 +355,9 @@ public class VerzendTaakHandler implements TaakHandler {
             Poging poging = pogingRepository.findById(verzending.pogingId());
             pogingRepository.herlaad(poging);
 
-            // Kwam er tussen de twee transacties een receipt binnen, dan is de poging niet meer gepland
-            // en gaat die uitkomst voor.
-            if (poging.getStatus() == PogingStatus.GEPLAND) {
+            // Kwam er tussen de twee transacties een receipt binnen, voor deze poging of bij een
+            // herverzending een bezorging van de eerste, dan gaat die uitkomst voor.
+            if (isInVerzending(notificatie, poging)) {
                 overgangsfunctie.voerUit(notificatie.getId(), naar, reden);
             } else {
                 Log.infof("Notificatie %s staat inmiddels op %s; uitkomst %s van de verzendtaak niet toegepast",
@@ -317,6 +368,17 @@ public class VerzendTaakHandler implements TaakHandler {
         });
 
         return TaakUitkomst.alAfgerond();
+    }
+
+    private boolean isHerverzendbaar(Notificatie notificatie, Poging poging) {
+        return notificatie.getStatus() == NotificatieStatus.VERZONDEN
+                && verzendbeleid.magHerverzenden(poging, notificatie.getBerichtType());
+    }
+
+    private static boolean isInVerzending(Notificatie notificatie, Poging poging) {
+        return poging.getStatus() == PogingStatus.GEPLAND
+                && (notificatie.getStatus() == NotificatieStatus.IN_VERZENDING
+                    || notificatie.getStatus() == NotificatieStatus.VERZONDEN);
     }
 
     private TaakUitkomst uitgesteld() {
@@ -331,8 +393,8 @@ public class VerzendTaakHandler implements TaakHandler {
         return status >= 400 && status < 500 && status != 429;
     }
 
-    private record Verzending(UUID notificatieId, UUID dvId, UUID pogingId, boolean herclaim, Ontvanger ontvanger,
-                              Regie regie, String dienstverlener, String dienst, String templateId,
+    private record Verzending(UUID notificatieId, UUID dvId, UUID pogingId, boolean herclaim, boolean verlopen,
+                              Ontvanger ontvanger, Regie regie, String dienstverlener, String dienst, String templateId,
                               Map<String, String> personalisation, String traceId) {
     }
 }

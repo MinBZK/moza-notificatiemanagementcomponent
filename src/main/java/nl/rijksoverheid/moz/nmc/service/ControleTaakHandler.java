@@ -39,17 +39,20 @@ public class ControleTaakHandler implements TaakHandler {
     private final PogingRepository pogingRepository;
     private final TaakRepository taakRepository;
     private final Vaststellingstermijn vaststellingstermijn;
+    private final Verzendbeleid verzendbeleid;
     private final Duration interval;
     private final int maxPerRonde;
 
     public ControleTaakHandler(NotificatieRepository notificatieRepository, PogingRepository pogingRepository,
                                TaakRepository taakRepository, Vaststellingstermijn vaststellingstermijn,
+                               Verzendbeleid verzendbeleid,
                                @ConfigProperty(name = "nmc.controle.interval") Duration interval,
                                @ConfigProperty(name = "nmc.controle.max-per-ronde") int maxPerRonde) {
         this.notificatieRepository = notificatieRepository;
         this.pogingRepository = pogingRepository;
         this.taakRepository = taakRepository;
         this.vaststellingstermijn = vaststellingstermijn;
+        this.verzendbeleid = verzendbeleid;
         this.interval = interval;
         this.maxPerRonde = maxPerRonde;
     }
@@ -92,14 +95,15 @@ public class ControleTaakHandler implements TaakHandler {
             Optional<TaakSoort> soort = ontbrekendeSoort(notificatie);
 
             if (soort.isEmpty()) {
-                Log.errorf("Controletaak: notificatie %s staat op %s zonder lopende poging; geen taak gepland",
+                Log.errorf("Controletaak: notificatie %s staat op %s zonder lopende of herverzendbare poging; "
+                        + "geen taak gepland",
                         notificatie.getId(), notificatie.getStatus());
                 continue;
             }
 
             Optional<Poging> laatste = pogingRepository.findLaatsteVan(notificatie.getId());
             taakRepository.persist(new Taak(soort.get(), notificatie.getDvId(), notificatie.getId(),
-                    due(soort.get(), laatste, nu), null, soort.get() == TaakSoort.VERZENDEN ? null : pogingPayload(laatste)));
+                    due(soort.get(), notificatie, laatste, nu), null, soort.get() == TaakSoort.VERZENDEN ? null : pogingPayload(laatste)));
             gepland++;
         }
 
@@ -107,18 +111,27 @@ public class ControleTaakHandler implements TaakHandler {
     }
 
     // Aangenomen of in-verzending: verzenden (een herclaim hergebruikt de poging). Verzonden met een
-    // lopende poging: navraag. Bezorgd: vaststellen. Verzonden zonder lopende poging vraagt een
-    // herverzending, die er nog niet is; daarvoor wordt niets gepland, zodat de controletaak niet
-    // elke ronde een verzendtaak aanmaakt die niets kan doen.
+    // lopende poging: navraag; met een geplande of herverzendbare poging: verzenden. Bezorgd: vaststellen.
+    // Verzonden zonder een van die pogingen kan niets meer doen; daarvoor wordt niets gepland, zodat de
+    // controletaak niet elke ronde een taak aanmaakt die direct afrondt.
     private Optional<TaakSoort> ontbrekendeSoort(Notificatie notificatie) {
         return switch (notificatie.getStatus()) {
             case AANGENOMEN, IN_VERZENDING -> Optional.of(TaakSoort.VERZENDEN);
             case VERZONDEN -> pogingRepository.findLaatsteVan(notificatie.getId())
-                    .filter(ControleTaakHandler::isLopend)
-                    .map(p -> TaakSoort.RECONCILIEREN);
+                    .flatMap(poging -> soortBijPoging(poging, notificatie.getBerichtType()));
             case BEZORGD -> Optional.of(TaakSoort.BEZORGING_VASTSTELLEN);
             default -> throw new IllegalStateException("Eindstatus " + notificatie.getStatus() + " hoort hier niet");
         };
+    }
+
+    private Optional<TaakSoort> soortBijPoging(Poging poging, String berichtType) {
+        if (isLopend(poging)) {
+            return Optional.of(TaakSoort.RECONCILIEREN);
+        }
+
+        return poging.getStatus() == PogingStatus.GEPLAND || verzendbeleid.magHerverzenden(poging, berichtType)
+                ? Optional.of(TaakSoort.VERZENDEN)
+                : Optional.empty();
     }
 
     private static boolean isLopend(Poging poging) {
@@ -127,11 +140,19 @@ public class ControleTaakHandler implements TaakHandler {
     }
 
     // De vaststeltaak houdt de termijn vanaf de bezorging aan, ook als hij hier opnieuw wordt gepland;
-    // zonder bekend bezorgtijdstip loopt de termijn vanaf nu, zodat hij nooit te vroeg vaststelt.
-    private OffsetDateTime due(TaakSoort soort, Optional<Poging> laatste, OffsetDateTime nu) {
-        return soort == TaakSoort.BEZORGING_VASTSTELLEN
-                ? vaststellingstermijn.vaststellenOp(laatste.map(Poging::getBezorgdOp).orElse(nu))
-                : nu;
+    // zonder bekend bezorgtijdstip loopt de termijn vanaf nu, zodat hij nooit te vroeg vaststelt. Een
+    // herverzending wacht de herverzend-wachttijd vanaf de fout af.
+    private OffsetDateTime due(TaakSoort soort, Notificatie notificatie, Optional<Poging> laatste, OffsetDateTime nu) {
+        if (soort == TaakSoort.BEZORGING_VASTSTELLEN) {
+            return vaststellingstermijn.vaststellenOp(laatste.map(Poging::getBezorgdOp).orElse(nu));
+        }
+
+        Optional<OffsetDateTime> herverzendenOp = laatste
+                .filter(p -> verzendbeleid.magHerverzenden(p, notificatie.getBerichtType()))
+                .map(p -> Optional.ofNullable(p.getReceiptTijdstip()).orElse(nu)
+                        .plus(verzendbeleid.herverzendWachttijd(notificatie.getBerichtType())));
+
+        return herverzendenOp.filter(nu::isBefore).orElse(nu);
     }
 
     private static Map<String, String> pogingPayload(Optional<Poging> laatste) {
