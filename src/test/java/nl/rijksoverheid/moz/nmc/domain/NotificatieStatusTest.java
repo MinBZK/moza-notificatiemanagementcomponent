@@ -8,11 +8,10 @@ import java.time.ZoneOffset;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Bewaakt dat NotificatieStatus zijn tijdstippen normaliseert naar wat de database kan bewaren.
- * Zonder die normalisatie verschilt het gedrag per dialect: PostgreSQL bewaart in een timestamptz
- * alleen het moment en levert UTC terug, H2 (de teststack) bewaart de offset wel. Een test die op
- * H2 slaagt zou dan op PostgreSQL kunnen falen — precies het soort verschil dat pas in productie
- * opvalt.
+ * Bewaakt dat NotificatieStatus zijn tijdstippen normaliseert naar wat de database kan bewaren:
+ * PostgreSQL bewaart in een timestamptz alleen het moment en levert UTC terug, en de kolommen zijn
+ * timestamp(6). Zonder normalisatie verschilt een net aangemaakt record van datzelfde record na
+ * herladen.
  */
 class NotificatieStatusTest {
 

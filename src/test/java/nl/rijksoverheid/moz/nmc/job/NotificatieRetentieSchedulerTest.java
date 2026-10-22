@@ -648,10 +648,8 @@ class NotificatieRetentieSchedulerTest {
 
     // Deze test dekt wat Hibernate zelf al doet: bij een JPQL bulk-delete ruimt Hibernate de
     // @ElementCollection-rijen (notificatie_status) zelf op vóórdat het notificatie-record
-    // verdwijnt, de ON DELETE CASCADE-foreignkey wordt hier niet aangesproken. Let op: dit draait
-    // op H2 (de teststack), dat een andere mutation-strategy gebruikt dan Postgres (productie); de
-    // FK is en blijft het vangnet dat op beide dialecten hoort te werken (zie de aparte
-    // ...ViaForeignKeyCascade-test hieronder, die de FK zelf dwingt, dialect-onafhankelijk).
+    // verdwijnt, de ON DELETE CASCADE-foreignkey wordt hier niet aangesproken. De FK blijft het
+    // vangnet; de aparte ...ViaForeignKeyCascade-test hieronder dwingt die zelf.
     @Test
     void verwijderVerlopenNotificaties_verwijdertOokDeStatusGeschiedenis() {
         UUID verlopenId = maakNotificatie(null, StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));

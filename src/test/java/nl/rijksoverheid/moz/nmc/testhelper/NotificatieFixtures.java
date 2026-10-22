@@ -91,17 +91,17 @@ public final class NotificatieFixtures {
      * Plant in één statement {@code aantalRijen} notificaties met dezelfde statusreeks, voor tests die
      * meer rijen nodig hebben dan een batch groot is.
      * <p>
-     * H2-specifiek: {@code SYSTEM_RANGE} levert de rijen en het id wordt uit het rijnummer afgeleid,
-     * zodat beide tabellen naar hetzelfde id verwijzen. De laatst meegegeven status geldt als de
-     * huidige, want deze fixture slaat {@code Notificatie#registreerStatus} bewust over.
+     * {@code generate_series} levert de rijen en het id wordt uit het rijnummer afgeleid, zodat beide
+     * tabellen naar hetzelfde id verwijzen. De laatst meegegeven status geldt als de huidige, want
+     * deze fixture slaat {@code Notificatie#registreerStatus} bewust over.
      */
     public static void plantNotificaties(EntityManager entityManager, int aantalRijen, OffsetDateTime tijdstip,
                                          StatusWaarde... statussen) {
-        String idExpressie = "CAST(('00000000-0000-0000-0000-' || LPAD(CAST(X AS VARCHAR), 12, '0')) AS UUID)";
+        String idExpressie = "('00000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid";
         StatusWaarde laatsteStatus = statussen[statussen.length - 1];
         QuarkusTransaction.requiringNew().run(() -> {
             entityManager.createNativeQuery("INSERT INTO notificatie (id, laatste_status, laatste_status_update) "
-                            + "SELECT " + idExpressie + ", ?3, ?1 FROM SYSTEM_RANGE(1, ?2)")
+                            + "SELECT " + idExpressie + ", ?3, ?1 FROM generate_series(1, ?2) AS g")
                     .setParameter(1, tijdstip)
                     .setParameter(2, aantalRijen)
                     .setParameter(3, laatsteStatus.name())
@@ -109,7 +109,7 @@ public final class NotificatieFixtures {
             for (int volgnummer = 0; volgnummer < statussen.length; volgnummer++) {
                 entityManager.createNativeQuery("INSERT INTO notificatie_status (notificatie_id, volgnummer, status, "
                                 + "tijdstip, geregistreerd) SELECT " + idExpressie + ", ?3, ?4, ?1, ?1 "
-                                + "FROM SYSTEM_RANGE(1, ?2)")
+                                + "FROM generate_series(1, ?2) AS g")
                         .setParameter(1, tijdstip)
                         .setParameter(2, aantalRijen)
                         .setParameter(3, volgnummer)
