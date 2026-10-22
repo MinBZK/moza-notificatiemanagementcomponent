@@ -3,7 +3,7 @@ info:
   title: NotificatieManagementComponent API
   description: |
     API voor het versturen van notificaties namens een Dienstverlener.
-  version: 0.1.0
+  version: 0.2.0
   contact:
     name: MijnOverheid Zakelijk Team
     email: moza@minbzk.nl
@@ -23,6 +23,14 @@ tags:
     description: >-
       Decentrale notificaties (decentraal profiel / doorgeefluik); de aanroeper heeft
       de contactgegevens zelf al bepaald en levert het e-mailadres rechtstreeks aan.
+  - name: Wijzigingen
+    description: >-
+      De eventfeed: de statusovergangen van de notificaties van de Dienstverlener als
+      CloudEvents, gelezen met een cursor en bevestigd door die cursor terug te schrijven.
+  - name: Sleutels
+    description: >-
+      De publieke sleutels waarmee een Dienstverlener de JWT op een webhook-aanroep van
+      het NMC controleert.
 
 paths:
   /api/nmc/v1/centraal/notificaties:
@@ -30,9 +38,12 @@ paths:
       operationId: notificatieVersturen
       summary: Notificatie versturen
       description: |
-        Haalt de contactgegevens op bij de Profielservice, verstuurt de notificatie
-        en slaat de notificatie op. Als een callbackUrl is meegegeven, stuurt de
-        NMC asynchroon een statusupdate (CloudEvents) zodra de bezorgstatus bekend is.
+        Neemt de notificatie aan op een identificerend nummer en antwoordt 202 zodra ze
+        duurzaam is opgeslagen. De verzending volgt asynchroon: het NMC haalt dan het
+        e-mailadres op bij de Profielservice en biedt het bericht aan bij NotifyNL. Is
+        er geen partij of geen e-mailadres, dan eindigt de notificatie in
+        `niet-bezorgbaar` met reden `geen-contactgegevens`. Elke statusovergang staat in de
+        eventfeed en gaat naar de webhook van de Dienstverlener, als die er een heeft.
       tags:
         - CentraleNotificaties
       requestBody:
@@ -41,40 +52,11 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/NotificatieAanvraagRequest'
-      # Bewust dubbel met de callbackUrl-beschrijving: die ziet een afnemer in Swagger UI direct
-      # bij het veld, dit blok pas na doorklikken.
-      callbacks:
-        statusupdate:
-          '{$request.body#/callbackUrl}':
-            post:
-              summary: Statusupdate (CloudEvents NL GOV)
-              description: |
-                De NMC stuurt deze callback zodra NotifyNL de bezorgstatus terugmeldt,
-                en alleen als bij de aanvraag een `callbackUrl` is meegegeven. De
-                callback gaat pas uit nadat de status is vastgelegd.
-
-                De NMC doet maximaal drie pogingen met oplopende tussenpozen. Slagen
-                die geen van alle, dan wordt de statusupdate niet opnieuw aangeboden;
-                de Dienstverlener kan de status dan alleen nog zelf opvragen (nog niet beschikbaar).
-
-                Alleen een herhaling van de huidige status levert geen callback op. Ná een
-                uitkomst kan wél een andere uitkomst volgen — NotifyNL kan na een bezorging
-                alsnog een fout melden — en die wordt dan ook doorgegeven, ook als die status
-                eerder al voorbijkwam (bijvoorbeeld `delivered`, `permanent-failure`, weer
-                `delivered`). De laatst ontvangen status is de meest recente melding, niet
-                per definitie de eindtoestand.
-              requestBody:
-                required: true
-                content:
-                  application/cloudevents+json:
-                    schema:
-                      $ref: '#/components/schemas/NotificatieStatusEvent'
-              responses:
-                '2XX':
-                  description: Statusupdate ontvangen
       responses:
-        '200':
-          description: Notificatie succesvol verstuurd
+        '202':
+          description: >-
+            Notificatie aangenomen en duurzaam opgeslagen; de verzending volgt asynchroon. De
+            uitkomst komt via de eventfeed en, als de Dienstverlener er een heeft, via de webhook.
           headers:
             API-Version:
               schema:
@@ -86,16 +68,22 @@ paths:
                 $ref: '#/components/schemas/NotificatieResponse'
         '400':
           description: >-
-            Ongeldige aanvraag, of er kon geen notificatie worden gedaan voor de
-            opgegeven partij (geen partij of geen e-mailadres gevonden voor de
-            opgegeven identificatie). Bij bean-validatie, zoals een ongeldige
-            callbackUrl, is `violations` gevuld.
+            Ongeldige aanvraag, zoals een ontbrekend identificatienummer of een onbekend
+            berichttype. Bij een ongeldig veld noemt `violations` het veld.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          description: >-
+            Het quotum van de Dienstverlener voor vandaag is bereikt
+            (`type` `https://mijnoverheidzakelijk.nl/nmc/problemen/quotum-overschreden`).
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '500':
-          description: De notificatie kon niet (succesvol) verzonden worden
+          description: De notificatie kon niet worden aangenomen
           content:
             application/problem+json:
               schema:
@@ -106,11 +94,10 @@ paths:
       operationId: decentraleNotificatieVersturen
       summary: Notificatie versturen op basis van een e-mailadres
       description: |
-        Verstuurt een notificatie rechtstreeks naar het opgegeven e-mailadres, zonder
-        de Profielservice te raadplegen (decentraal profiel / doorgeefluik). De aanroeper
-        heeft de contactgegevens zelf al bepaald en geeft het e-mailadres mee. Als een
-        callbackUrl is meegegeven, stuurt de NMC asynchroon een statusupdate (CloudEvents)
-        zodra de bezorgstatus bekend is.
+        Neemt een notificatie aan voor het opgegeven e-mailadres en antwoordt 202 zodra
+        ze duurzaam is opgeslagen. De verzending bij NotifyNL volgt asynchroon. Elke
+        statusovergang staat in de eventfeed en gaat naar de webhook van de Dienstverlener,
+        als die er een heeft.
       tags:
         - DecentraleNotificaties
       requestBody:
@@ -119,40 +106,11 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DecentraleNotificatieAanvraagRequest'
-      # Bewust dubbel met de callbackUrl-beschrijving: die ziet een afnemer in Swagger UI direct
-      # bij het veld, dit blok pas na doorklikken.
-      callbacks:
-        statusupdate:
-          '{$request.body#/callbackUrl}':
-            post:
-              summary: Statusupdate (CloudEvents NL GOV)
-              description: |
-                De NMC stuurt deze callback zodra NotifyNL de bezorgstatus terugmeldt,
-                en alleen als bij de aanvraag een `callbackUrl` is meegegeven. De
-                callback gaat pas uit nadat de status is vastgelegd.
-
-                De NMC doet maximaal drie pogingen met oplopende tussenpozen. Slagen
-                die geen van alle, dan wordt de statusupdate niet opnieuw aangeboden;
-                de Dienstverlener kan de status dan alleen nog zelf opvragen (nog niet beschikbaar).
-
-                Alleen een herhaling van de huidige status levert geen callback op. Ná een
-                uitkomst kan wél een andere uitkomst volgen — NotifyNL kan na een bezorging
-                alsnog een fout melden — en die wordt dan ook doorgegeven, ook als die status
-                eerder al voorbijkwam (bijvoorbeeld `delivered`, `permanent-failure`, weer
-                `delivered`). De laatst ontvangen status is de meest recente melding, niet
-                per definitie de eindtoestand.
-              requestBody:
-                required: true
-                content:
-                  application/cloudevents+json:
-                    schema:
-                      $ref: '#/components/schemas/NotificatieStatusEvent'
-              responses:
-                '2XX':
-                  description: Statusupdate ontvangen
       responses:
-        '200':
-          description: Notificatie succesvol verstuurd
+        '202':
+          description: >-
+            Notificatie aangenomen en duurzaam opgeslagen; de verzending volgt asynchroon. De
+            uitkomst komt via de eventfeed en, als de Dienstverlener er een heeft, via de webhook.
           headers:
             API-Version:
               schema:
@@ -164,19 +122,208 @@ paths:
                 $ref: '#/components/schemas/NotificatieResponse'
         '400':
           description: >-
-            Ongeldige aanvraag (bijv. ontbrekend/ongeldig e-mailadres of onbekend
-            berichttype). Bij bean-validatie, zoals een ongeldig e-mailadres of een
-            ongeldige callbackUrl, is `violations` gevuld.
+            Ongeldige aanvraag, zoals een ontbrekend of ongeldig e-mailadres of een onbekend
+            berichttype. Bij een ongeldig veld noemt `violations` het veld.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          description: >-
+            Het quotum van de Dienstverlener voor vandaag is bereikt
+            (`type` `https://mijnoverheidzakelijk.nl/nmc/problemen/quotum-overschreden`).
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '500':
-          description: De notificatie kon niet (succesvol) verzonden worden
+          description: De notificatie kon niet worden aangenomen
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+
+  /api/nmc/v1/notificaties/wijzigingen:
+    get:
+      operationId: wijzigingenLezen
+      summary: Statusovergangen lezen vanaf een cursor
+      description: |
+        Geeft de statusovergangen van de notificaties van de Dienstverlener terug als
+        CloudEvents (NL GOV profiel), op volgorde van transactie-id, vanaf de meegegeven cursor. Zonder
+        cursor begint de pagina bij het oudste beschikbare event. Elk antwoord draagt de
+        cursor voor de volgende pagina; een lege pagina betekent dat er op dit moment niets
+        nieuws is.
+
+        Een event verschijnt pas in de feed nadat elke oudere transactie is afgerond, zodat
+        een cursor nooit een laat gecommit event overslaat. De feed garandeert geen volgorde
+        tussen events van dezelfde notificatie: verwerk per `subject` op `sequence` en negeer
+        een lager volgnummer na een hoger.
+
+        De cursor is een ondoorzichtige tekst. Hij vervalt (410) wanneer het cluster na een
+        herstel uit back-up een nieuw epoch heeft gekregen, wanneer hij onder het oudste
+        beschikbare event wijst omdat dat deel van het log is opgeruimd, of wanneer hij boven
+        de jongste transactie wijst; lees dan opnieuw zonder cursor. De paginagrootte is
+        begrensd op een geconfigureerd maximum en het aantal aanroepen per Dienstverlener per
+        minuut ook (429, met `Retry-After`).
+      tags:
+        - Wijzigingen
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          description: De cursor uit het vorige antwoord; weglaten om bij het oudste beschikbare event te beginnen
+          schema:
+            type: string
+            maxLength: 200
+        - name: limiet
+          in: query
+          required: false
+          description: Het gewenste aantal events per pagina; meer dan het geconfigureerde maximum levert het maximum
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+      callbacks:
+        webhook:
+          '{webhookUrl}':
+            post:
+              summary: Statusovergangen leveren aan de webhook (CloudEvents NL GOV)
+              description: |
+                Is bij de onboarding een webhook geregistreerd, dan levert het NMC de events
+                van deze feed ook als CloudEvents-batch aan die URL.
+
+                Na een `2xx` volgen de volgende events; anders komen dezelfde events later
+                opnieuw. Na herhaalde mislukkingen pauzeert de webhook, tot ten hoogste een dag.
+                Een `2xx` is geen bevestiging: bevestig de cursor uit `Nmc-Cursor` via
+                `PUT /api/nmc/v1/notificaties/wijzigingen/bevestiging`. Een event kan dubbel
+                aankomen; herken het aan `id`.
+
+                De bearer token is een JWT (RS256) met de webhook-URL als `aud`; controleer hem
+                met de sleutel uit `GET /api/nmc/v1/.well-known/jwks.json`.
+              parameters:
+                - name: Authorization
+                  in: header
+                  required: true
+                  description: '`Bearer` gevolgd door de door het NMC ondertekende JWT'
+                  schema:
+                    type: string
+                - name: Nmc-Cursor
+                  in: header
+                  required: true
+                  description: >-
+                    De cursor van het laatste event in deze aanroep, in dezelfde vorm als de
+                    cursor van de feed
+                  schema:
+                    type: string
+              requestBody:
+                required: true
+                content:
+                  application/cloudevents-batch+json:
+                    schema:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/NotificatieStatusEvent'
+              responses:
+                '2XX':
+                  description: Levering ontvangen; de leverpositie gaat vooruit
+      responses:
+        '200':
+          description: Een pagina events met de cursor voor de volgende pagina
+          headers:
+            API-Version:
+              schema:
+                type: string
+              description: Versie van de API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WijzigingenPagina'
+        '400':
+          description: De cursor is niet te ontleden of `limiet` is kleiner dan 1
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '410':
+          description: >-
+            De cursor is vervallen: een ander cluster-epoch, onder het oudste beschikbare
+            event of boven de jongste transactie. Lees opnieuw zonder cursor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/CursorVervallenProblem'
+        '429':
+          description: De aanroeplimiet per Dienstverlener per minuut is bereikt
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Na hoeveel seconden de limiet opnieuw telt
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AanroeplimietProblem'
+
+  /api/nmc/v1/notificaties/wijzigingen/bevestiging:
+    put:
+      operationId: wijzigingenBevestigen
+      summary: Verwerkte statusovergangen bevestigen
+      description: |
+        Legt vast tot welke cursor de Dienstverlener de events heeft verwerkt. De NMC bewaart
+        per Dienstverlener één bevestiging en zet die alleen vooruit: een cursor die ouder is
+        dan de bewaarde bevestiging verandert niets en krijgt toch `204`. Een vervallen cursor
+        (ander cluster-epoch, onder het oudste beschikbare event of boven de jongste transactie)
+        krijgt `410`.
+      tags:
+        - Wijzigingen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BevestigingRequest'
+      responses:
+        '204':
+          description: Bevestiging vastgelegd, of ouder dan de bewaarde bevestiging en daarom ongewijzigd
+          headers:
+            API-Version:
+              schema:
+                type: string
+              description: Versie van de API
+        '400':
+          description: De cursor ontbreekt of is niet te ontleden
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '410':
+          description: De cursor is vervallen; lees de feed opnieuw zonder cursor
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/CursorVervallenProblem'
+
+  /api/nmc/v1/.well-known/jwks.json:
+    get:
+      operationId: sleutelsOpvragen
+      summary: Publieke sleutels voor de webhook-JWT
+      description: |
+        De JSON Web Key Set (RFC 7517) met de publieke sleutel waarmee het NMC de JWT op elke
+        webhook-aanroep ondertekent. Kies de sleutel op de `kid` uit de JWT-header.
+      tags:
+        - Sleutels
+      responses:
+        '200':
+          description: De publieke sleutels
+          headers:
+            API-Version:
+              schema:
+                type: string
+              description: Versie van de API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonWebKeySet'
 
 components:
   schemas:
@@ -202,6 +349,7 @@ components:
         identificatieNummer:
           type: string
           minLength: 1
+          pattern: '^.*\S.*$'
           description: BSN-, KVK- of RSIN-nummer van de ontvanger
         dienstverlener:
           type: string
@@ -217,50 +365,13 @@ components:
           description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template"
         berichtgegevens:
           type: object
-          description: Templatevariabelen voor het bericht
+          description: Templatevariabelen voor het bericht, ten hoogste 50 met waarden tot 2000 tekens
+          maxProperties: 50
           additionalProperties:
             type: string
-        callbackUrl:
-          type: string
-          format: uri
-          # `format: uri` typeert het veld als java.net.URI, waar Hibernate Validator geen
-          # @Size-validator voor heeft (HV000030). Vandaar een eigen constraint in plaats van
-          # maxLength; die dekt meteen de scheme-, host- en poortregels uit de description.
-          x-field-extra-annotation: "@nl.rijksoverheid.moz.nmc.validation.ValidCallbackUrl"
-          # Literal block (|) en geen folded (>-): een folded scalar plakt gelijk-ingesprongen
-          # regels aan elkaar met spaties, waardoor de markdown-tabel hieronder als één
-          # doorlopende regel in het gepubliceerde document belandt en Swagger UI er geen tabel
-          # van maakt.
-          description: |
-            Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
-            terugstuurt zodra de bezorgstatus bekend is.
-
-            De statusupdate is een CloudEvent met in `data` het `notificatieId` en een
-            `status`. Mogelijke waarden, met hun betekenis:
-
-            | Waarde | Betekenis |
-            |---|---|
-            | `delivered` | Bezorgd |
-            | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
-            | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
-            | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
-            | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
-
-            `created` en `sending` komen in een statusupdate niet voor.
-
-            `onbekend` zegt niets over de notificatie zelf: er is wél een terugmelding
-            ontvangen, maar die viel buiten de statussen die dit component kent.
-
-            Alleen een herhaling van de huidige status levert geen statusupdate op. Ná een
-            uitkomst kan wél een andere uitkomst volgen, bijvoorbeeld een fout na een
-            bezorging, en ook een status die eerder al voorbijkwam. Dat geldt voor
-            `onbekend` net zo. De NMC doet maximaal drie pogingen en biedt daarna niet
-            opnieuw aan.
-
-            Weglaten als de Dienstverlener geen statusupdates wil ontvangen.
-            Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
-            tekens, zonder gebruikersinfo) wordt geaccepteerd; IP-adressen en interne
-            hostnamen worden geweigerd (400).
+            maxLength: 2000
+          # De generator maakt hier een Map zonder validatie van; de grenzen zitten in de annotatie.
+          x-field-extra-annotation: "@nl.rijksoverheid.moz.nmc.validation.ValidBerichtgegevens"
 
     DecentraleNotificatieAanvraagRequest:
       type: object
@@ -284,46 +395,13 @@ components:
           description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template"
         berichtgegevens:
           type: object
-          description: Templatevariabelen voor het bericht
+          description: Templatevariabelen voor het bericht, ten hoogste 50 met waarden tot 2000 tekens
+          maxProperties: 50
           additionalProperties:
             type: string
-        callbackUrl:
-          type: string
-          format: uri
-          # Zie de toelichting bij NotificatieAanvraagRequest.callbackUrl.
-          x-field-extra-annotation: "@nl.rijksoverheid.moz.nmc.validation.ValidCallbackUrl"
-          # Literal block (|) en geen folded (>-): een folded scalar plakt gelijk-ingesprongen
-          # regels aan elkaar met spaties, waardoor de markdown-tabel hieronder als één
-          # doorlopende regel in het gepubliceerde document belandt en Swagger UI er geen tabel
-          # van maakt.
-          description: |
-            Optionele URL waarop de NMC asynchroon een statusupdate (CloudEvents NL GOV)
-            terugstuurt zodra de bezorgstatus bekend is.
-
-            De statusupdate is een CloudEvent met in `data` het `notificatieId` en een
-            `status`. Mogelijke waarden, met hun betekenis:
-
-            | Waarde | Betekenis |
-            |---|---|
-            | `delivered` | Bezorgd |
-            | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
-            | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
-            | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
-            | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
-
-            `created` en `sending` komen in een statusupdate niet voor.
-
-            `onbekend` zegt niets over de notificatie zelf: er is wél een terugmelding
-            ontvangen, maar die viel buiten de statussen die dit component kent.
-
-            Alleen een herhaling van de huidige status levert geen statusupdate op. Ná een
-            uitkomst kan wél een andere uitkomst volgen, bijvoorbeeld een fout na een
-            bezorging, en ook een status die eerder al voorbijkwam. Dat geldt voor
-            `onbekend` net zo. De NMC doet maximaal drie pogingen en biedt daarna niet
-            opnieuw aan.
-            Alleen een absolute https-URL naar een publieke hostnaam (maximaal 2048
-            tekens, zonder gebruikersinfo) wordt geaccepteerd; IP-adressen en interne
-            hostnamen worden geweigerd (400).
+            maxLength: 2000
+          # De generator maakt hier een Map zonder validatie van; de grenzen zitten in de annotatie.
+          x-field-extra-annotation: "@nl.rijksoverheid.moz.nmc.validation.ValidBerichtgegevens"
 
     NotificatieResponse:
       type: object
@@ -338,15 +416,17 @@ components:
     NotificatieStatusEvent:
       type: object
       description: >-
-        Statusupdate als CloudEvent (NL GOV profiel). De envelop volgt CloudEvents 1.0;
-        de bezorgstatus zelf staat in `data`.
+        Statusovergang als CloudEvent (NL GOV profiel). De envelop volgt CloudEvents 1.0;
+        de overgang zelf staat in `data`.
       required:
         - specversion
         - id
         - type
         - source
+        - subject
         - time
         - datacontenttype
+        - sequence
         - data
       properties:
         specversion:
@@ -355,73 +435,214 @@ components:
         id:
           type: string
           format: uuid
-          description: Unieke identificatie van dit event, niet van de notificatie
+          description: >-
+            De UUID van het event in het eventlog. Hetzelfde event heeft in de feed en op de
+            webhook hetzelfde `id`, zodat een Dienstverlener die beide gebruikt dubbele
+            verwerking kan herkennen.
+          example: 'f4c3c0a2-6d7e-4b1a-9c3e-2f1d0b8a7e65'
         type:
           type: string
-          example: nl.rijksoverheid.moz.nmc.notificatie.status
+          description: >-
+            `nl.mijnoverheidzakelijk.nmc.notificatie.status.` gevolgd door de nieuwe status, bijvoorbeeld
+            `nl.mijnoverheidzakelijk.nmc.notificatie.status.bezorgd`.
+          example: nl.mijnoverheidzakelijk.nmc.notificatie.status.bezorgd
         source:
           type: string
           format: uri-reference
           example: /api/nmc/v1/notificaties/3f1a...
         subject:
           type: string
-          example: notificatie/3f1a...
+          description: De notificatie-id die bij de aanvraag is teruggegeven
+          example: 3f1a...
         time:
           type: string
           format: date-time
-          description: Tijdstip waarop de NMC dit event verstuurde
+          description: Tijdstip waarop de NMC de statusovergang vastlegde
         datacontenttype:
           type: string
           example: application/json
+        sequence:
+          type: string
+          pattern: '^[0-9]{19}$'
+          description: >-
+            Volgnummer van de overgang, per notificatie oplopend, als string van negentien
+            cijfers met voorloopnullen volgens de sequence-extensie van CloudEvents, zodat
+            een tekstvergelijking de volgorde geeft. Numeriek gelijk aan `data.versie`.
+          example: '0000000000000000003'
         data:
           $ref: '#/components/schemas/NotificatieStatusData'
 
     NotificatieStatusData:
       type: object
+      description: >-
+        Eén statusovergang. `vorigeStatus` ontbreekt bij het eerste event van een notificatie en
+        `reden` ontbreekt bij een overgang zonder reden, zoals naar `bezorgd`.
       required:
-        - notificatieId
-        - status
+        - nieuweStatus
+        - versie
       properties:
-        notificatieId:
-          type: string
-          format: uuid
-          description: De NMC-interne referentie die bij de aanvraag is teruggegeven
-        status:
+        vorigeStatus:
           $ref: '#/components/schemas/NotificatieStatus'
+        nieuweStatus:
+          $ref: '#/components/schemas/NotificatieStatus'
+        reden:
+          $ref: '#/components/schemas/Reden'
+        versie:
+          type: integer
+          format: int64
+          description: Het volgnummer van de overgang, gelijk aan `sequence` in de envelop
 
     NotificatieStatus:
       type: string
       description: |
-        Bezorgstatus van de notificatie.
-
-        De eerste zes waarden komen overeen met het delivery-receiptmodel van
-        NotifyNL voor e-mail. `onbekend` is een waarde van de NMC zelf.
+        Status van de notificatie.
 
         | Waarde | Betekenis |
         |---|---|
-        | `created` | Door de NMC vastgelegd, nog niet aangeboden bij NotifyNL |
-        | `sending` | Aangeboden bij NotifyNL, nog geen uitkomst |
-        | `delivered` | Bezorgd |
-        | `temporary-failure` | Niet bezorgd; de e-mailprovider is tot 72 uur blijven proberen |
-        | `permanent-failure` | Niet bezorgd; het adres is ongeldig |
-        | `technical-failure` | Niet bezorgd door een storing aan de verzendkant |
-        | `onbekend` | NotifyNL meldde een status die de NMC niet kent |
+        | `aangenomen` | Door de NMC vastgelegd, nog niet aangeboden bij NotifyNL |
+        | `in-verzending` | Wordt aangeboden bij NotifyNL |
+        | `verzonden` | Aangeboden bij NotifyNL, nog geen uitkomst |
+        | `bezorgd` | Bezorgd; NotifyNL kan tot zeven dagen daarna nog een fout melden |
+        | `definitief-bezorgd` | Bezorgd en niet herroepen binnen de vaststellingstermijn |
+        | `niet-bezorgbaar` | Niet bezorgd; zie `reden` |
+        | `technisch-mislukt` | Niet bezorgd door een storing aan de verzendkant |
+        | `bezorgstatus-onbekend` | NotifyNL heeft geen uitkomst gemeld; een latere melding kan dit nog corrigeren |
+        | `verlopen` | Niet meer verzonden omdat de geldigheid verstreek |
+        | `geannuleerd` | Geannuleerd vóór de verzending |
 
-        `onbekend` betekent niet dat er iets mis is met de notificatie zelf: de NMC
-        heeft wél een terugmelding ontvangen, maar die viel buiten de statussen die
-        dit component kent. Dat gebeurt bijvoorbeeld als NotifyNL zijn vocabulaire
-        uitbreidt of als er een ander kanaal dan e-mail in het spel komt. De melding
-        wordt vastgelegd en de NMC logt hem, zodat de waarde alsnog toegevoegd kan
-        worden. Net als elke andere uitkomst kan `onbekend` nog door een andere
-        uitkomst gevolgd worden.
+        `aangenomen`, `in-verzending`, `verzonden` en `bezorgd` zijn geen eindstatus.
       enum:
-        - created
-        - sending
-        - delivered
-        - temporary-failure
-        - permanent-failure
-        - technical-failure
-        - onbekend
+        - aangenomen
+        - in-verzending
+        - verzonden
+        - bezorgd
+        - definitief-bezorgd
+        - niet-bezorgbaar
+        - technisch-mislukt
+        - bezorgstatus-onbekend
+        - verlopen
+        - geannuleerd
+
+    Reden:
+      type: string
+      description: |
+        Reden bij een status waarin de notificatie niet bezorgd is.
+
+        | Waarde | Betekenis |
+        |---|---|
+        | `onbereikbaar` | Het adres bestaat niet of de ontvanger is niet bereikbaar |
+        | `geen-contactgegevens` | Geen bruikbaar adres voor de opgegeven partij |
+        | `verlopen` | De geldigheid van de notificatie verstreek |
+        | `geannuleerd` | De Dienstverlener heeft geannuleerd |
+        | `technisch` | Een storing aan de verzendkant |
+      enum:
+        - onbereikbaar
+        - geen-contactgegevens
+        - verlopen
+        - geannuleerd
+        - technisch
+
+    WijzigingenPagina:
+      type: object
+      description: >-
+        Eén pagina uit de eventfeed. `events` zijn de CloudEvents op volgorde van transactie-id; `cursor`
+        is de positie ná het laatste event van deze pagina, mee te geven bij de volgende aanroep
+        en terug te schrijven als bevestiging. Bij een lege pagina is `cursor` gelijk aan de
+        meegegeven cursor en ontbreekt hij als er nog geen event is.
+      required:
+        - events
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificatieStatusEvent'
+        cursor:
+          type: string
+          description: De cursor voor de volgende pagina; een ondoorzichtige tekst
+          example: MTo0MjoxMDQy
+
+    BevestigingRequest:
+      type: object
+      required:
+        - cursor
+      properties:
+        cursor:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: De cursor uit de laatste volledig verwerkte pagina
+
+    CursorVervallenProblem:
+      description: >-
+        De cursor is vervallen: het cluster-epoch in de cursor is niet het huidige, of de
+        cursor wijst onder het oudste beschikbare event of boven de jongste transactie. Lees
+        de feed opnieuw zonder cursor.
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - https://mijnoverheidzakelijk.nl/nmc/problemen/cursor-vervallen
+
+    AanroeplimietProblem:
+      description: >-
+        De Dienstverlener heeft in de lopende minuut meer aanroepen op de feed gedaan dan
+        toegestaan. Probeer het in de volgende minuut opnieuw.
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - https://mijnoverheidzakelijk.nl/nmc/problemen/aanroeplimiet-overschreden
+
+    JsonWebKeySet:
+      type: object
+      description: JSON Web Key Set (RFC 7517)
+      required:
+        - keys
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/JsonWebKey'
+
+    JsonWebKey:
+      type: object
+      description: Een publieke RSA-sleutel als JSON Web Key (RFC 7517, RFC 7518)
+      required:
+        - kty
+        - use
+        - alg
+        - kid
+        - n
+        - e
+      properties:
+        kty:
+          type: string
+          enum:
+            - RSA
+        use:
+          type: string
+          enum:
+            - sig
+        alg:
+          type: string
+          enum:
+            - RS256
+        kid:
+          type: string
+          description: De sleutel-id, gelijk aan `kid` in de JWT-header
+        n:
+          type: string
+          description: De modulus, base64url
+        e:
+          type: string
+          description: De publieke exponent, base64url
+          example: AQAB
 
     Problem:
       type: object
@@ -444,7 +665,7 @@ components:
           type: array
           description: >-
             Gevuld als de aanvraag door bean-validatie is afgekeurd, bijvoorbeeld bij een
-            ongeldig e-mailadres of een ongeldige callbackUrl. `detail` blijft dan leeg;
+            ongeldig e-mailadres. `detail` blijft dan leeg;
             de reden staat per veld in deze lijst.
           items:
             $ref: '#/components/schemas/Violation'
@@ -456,7 +677,7 @@ components:
         field:
           type: string
           description: Het veld waarop de validatie is mislukt
-          example: notificatieAanvraagRequest.callbackUrl
+          example: decentraleNotificatieAanvraagRequest.emailAdres
         in:
           type: string
           description: >-
