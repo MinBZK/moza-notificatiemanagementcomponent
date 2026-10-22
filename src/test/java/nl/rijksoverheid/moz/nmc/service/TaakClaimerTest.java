@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
-// %test: 20 tokens per minuut, 5 gereserveerd voor de navraag, lease 2m.
+// %test: 20 tokens per minuut, 10 gereserveerd voor het verzenden en 5 voor de navraag, lease 2m.
 @QuarkusTest
 class TaakClaimerTest {
 

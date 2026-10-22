@@ -51,6 +51,14 @@ public class Poging {
     @Column(name = "receipt_tijdstip")
     private OffsetDateTime receiptTijdstip;
 
+    // Het tijdstip uit de eerste verwerkte delivered-receipt; een latere faalreceipt laat het staan.
+    @Column(name = "bezorgd_op")
+    private OffsetDateTime bezorgdOp;
+
+    // Letterlijk wat NotifyNL het laatst meldde, ook een status die het NMC niet kent.
+    @Column(name = "laatste_notify_status", length = 64)
+    private String laatsteNotifyStatus;
+
     protected Poging() {
         // Voor JPA
     }
@@ -93,6 +101,19 @@ public class Poging {
         return receiptTijdstip;
     }
 
+    /** Het tijdstip van de bezorging waarop de vaststellingstermijn loopt; null als er geen delivered was. */
+    public String getLaatsteNotifyStatus() {
+        return laatsteNotifyStatus;
+    }
+
+    public void registreerNotifyStatus(String status) {
+        this.laatsteNotifyStatus = Objects.requireNonNull(status, "status is verplicht");
+    }
+
+    public OffsetDateTime getBezorgdOp() {
+        return bezorgdOp;
+    }
+
     /**
      * Legt vast dat NotifyNL de poging heeft aangenomen.
      *
@@ -132,6 +153,20 @@ public class Poging {
     }
 
     /**
+     * Sluit de navraag af zonder uitkomst: NotifyNL kent de verzending niet meer. Een later
+     * binnengekomen receipt mag de poging nog corrigeren.
+     *
+     * @throws IllegalStateException als de poging niet op {@code VERZONDEN} staat
+     */
+    public void markeerOnbekend() {
+        if (status != PogingStatus.VERZONDEN) {
+            throw new IllegalStateException("Poging " + id + " staat op " + status + " en kan niet onbekend worden");
+        }
+
+        this.status = PogingStatus.ONBEKEND;
+    }
+
+    /**
      * Legt de uitkomst uit een receipt vast als die nieuwer is dan de laatst vastgelegde. Receipts
      * komen ongeordend binnen; de volgorde komt uit het tijdstip in de receipt zelf, op de klok van
      * NotifyNL. Dezelfde uitkomst nog eens is een herhaling.
@@ -144,6 +179,11 @@ public class Poging {
 
         if (receiptTijdstip != null && (uitkomst == status || !opgetreden.isAfter(receiptTijdstip))) {
             return false;
+        }
+
+        // Een bezorging na een fout begint een nieuwe vaststellingstermijn.
+        if (uitkomst == PogingStatus.BEZORGD && (bezorgdOp == null || status != PogingStatus.BEZORGD)) {
+            this.bezorgdOp = opgetreden;
         }
 
         this.status = uitkomst;
@@ -166,6 +206,10 @@ public class Poging {
 
         if (receiptTijdstip != null) {
             return false;
+        }
+
+        if (uitkomst == PogingStatus.BEZORGD) {
+            this.bezorgdOp = ontvangen;
         }
 
         this.status = uitkomst;

@@ -212,6 +212,7 @@ class ReceiptVerwerkerTest {
 
         assertEquals(PogingStatus.VERZONDEN, poging(notifyId).getStatus());
         assertNull(poging(notifyId).getReceiptTijdstip());
+        assertEquals("een-rare-status", poging(notifyId).getLaatsteNotifyStatus(), "wat NotifyNL meldde blijft zichtbaar");
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(notifyId).getStatus());
         overgangenNaVerzending(notifyId, 0);
         assertEquals(1, fouten.size());
