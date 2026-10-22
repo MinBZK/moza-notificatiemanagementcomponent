@@ -9,14 +9,17 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * Bewaakt dat de statuswaarden en redenen die een Dienstverlener in de callback kan krijgen als echte
- * enum in het gepubliceerde document staan.
+ * Bewaakt dat de statuswaarden en redenen die een Dienstverlener in de feed en op de webhook kan krijgen
+ * als echte enum in het gepubliceerde document staan, en wat er van de intakecontracten verdwenen is.
  * <p>
  * Toetst tegen {@code /q/openapi} en niet tegen {@code META-INF/openapi.yaml}: wat in de bron staat
  * zegt niets over wat een afnemer krijgt.
@@ -49,6 +52,23 @@ class GepubliceerdeSpecTest {
         List<String> verwacht = Arrays.stream(Reden.values()).map(Reden::toApiValue).sorted().toList();
 
         assertEquals(verwacht, gepubliceerdeEnum("Reden"));
+    }
+
+    // De statusupdate gaat naar de webhook uit het register; een callbackUrl per aanvraag bestaat niet meer.
+    @Test
+    void deIntakecontractenKennenGeenCallbackUrlMeer() {
+        for (String schema : List.of("NotificatieAanvraagRequest", "DecentraleNotificatieAanvraagRequest")) {
+            Map<String, Object> velden = spec.getMap("components.schemas." + schema + ".properties");
+            assertNotNull(velden, "het schema " + schema + " ontbreekt in /q/openapi");
+            assertFalse(velden.containsKey("callbackUrl"), schema + " hoort geen callbackUrl te hebben");
+        }
+
+        for (String pad : List.of("/api/nmc/v1/centraal/notificaties", "/api/nmc/v1/decentraal/notificaties")) {
+            assertNull(spec.get("paths.'" + pad + "'.post.callbacks"), pad + " hoort geen callback te beschrijven");
+        }
+
+        assertNotNull(spec.get("paths.'/api/nmc/v1/notificaties/wijzigingen'.get.callbacks.webhook"));
+        assertNotNull(spec.get("paths.'/api/nmc/v1/.well-known/jwks.json'.get"));
     }
 
     private List<String> gepubliceerdeEnum(String schema) {

@@ -13,7 +13,6 @@ import nl.rijksoverheid.moz.nmc.helper.Problems;
 import nl.rijksoverheid.moz.nmc.service.AannameOpdracht;
 import nl.rijksoverheid.moz.nmc.service.AannameService;
 import nl.rijksoverheid.moz.nmc.service.BerichtType;
-import nl.rijksoverheid.moz.nmc.service.CallbackUrlValidator;
 import nl.rijksoverheid.moz.nmc.service.OnbekendBerichtTypeException;
 import nl.rijksoverheid.moz.nmc.service.QuotumOverschredenException;
 import nl.rijksoverheid.moz.nmc.service.Regie;
@@ -64,8 +63,7 @@ public class CentraleNotificatieController implements CentraleNotificatiesApi {
                 request.getDienstverlener(),
                 request.getDienst(),
                 BerichtType.vanNaam(request.getBerichtType()).getTemplateId(),
-                request.getBerichtgegevens(),
-                CallbackUrlValidator.normaliseer(request.getCallbackUrl()));
+                request.getBerichtgegevens());
     }
 
     // Een switch zonder default: een nieuw IdentificatieType zonder Soort breekt de build.

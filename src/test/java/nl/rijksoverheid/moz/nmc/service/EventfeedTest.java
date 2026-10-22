@@ -10,6 +10,7 @@ import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.repository.BevestigingRepository;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -156,6 +158,50 @@ class EventfeedTest {
         schrijfEvent(NotificatieFixtures.DV_ID);
 
         assertThrows(CursorVervallenException.class, () -> eventfeed.lees(NotificatieFixtures.DV_ID, new Cursor(1, 1, 1), null));
+    }
+
+    // Na een herstel uit back-up zegt een oude positie niets meer; de webhook begint opnieuw.
+    @Test
+    void leesVoorWebhook_positieUitEenAnderEpoch_begintBijHetOudsteEvent() {
+        long eerste = schrijfEvent(NotificatieFixtures.DV_ID);
+        long tweede = schrijfEvent(NotificatieFixtures.DV_ID);
+
+        EventPagina pagina = eventfeed.leesVoorWebhook(NotificatieFixtures.DV_ID, new Cursor(2, Long.MAX_VALUE, 1), 50);
+
+        assertEquals(List.of(eerste, tweede), ids(pagina));
+        assertEquals(1, pagina.cursor().epoch());
+    }
+
+    // Onder het oudste event is alles al opgeruimd: verder lezen geeft geen 410 zoals de feed, maar wel
+    // een waarschuwing, want de dienstverlener mist wat ertussen lag.
+    @Test
+    void leesVoorWebhook_positieOnderHetOudsteEvent_leestVerderMetEenWaarschuwing() {
+        long eerste = schrijfEvent(NotificatieFixtures.DV_ID);
+        Cursor na;
+        List<String> waarschuwingen;
+        try (LogVanger vanger = LogVanger.van(Eventfeed.class)) {
+            na = eventfeed.leesVoorWebhook(NotificatieFixtures.DV_ID, new Cursor(1, 1, 1), 1).cursor();
+            waarschuwingen = vanger.regelsOpNiveau(Level.WARNING);
+        }
+        long tweede = schrijfEvent(NotificatieFixtures.DV_ID);
+
+        assertEquals(eerste, na.eventId());
+        assertEquals(1, waarschuwingen.size());
+        assertTrue(waarschuwingen.getFirst().contains("onder het oudste beschikbare event"));
+        assertEquals(List.of(tweede), ids(eventfeed.leesVoorWebhook(NotificatieFixtures.DV_ID, na, 50)));
+    }
+
+    // De registratiepositie van een webhook: na het jongste event, of het begin van een leeg log.
+    @Test
+    void kopVanHetLog_isHetJongsteEventOfHetBeginVanEenLeegLog() {
+        assertEquals(new Cursor(1, 0, 0), eventfeed.kopVanHetLog());
+
+        schrijfEvent(NotificatieFixtures.DV_ID);
+        long jongste = schrijfEvent(TWEEDE_DV);
+
+        Cursor kop = eventfeed.kopVanHetLog();
+        assertEquals(jongste, kop.eventId());
+        assertTrue(ids(eventfeed.leesVoorWebhook(NotificatieFixtures.DV_ID, kop, 50)).isEmpty());
     }
 
     @Test

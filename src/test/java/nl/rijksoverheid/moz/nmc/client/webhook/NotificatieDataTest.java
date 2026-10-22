@@ -1,4 +1,4 @@
-package nl.rijksoverheid.moz.nmc.client.consumentcallback;
+package nl.rijksoverheid.moz.nmc.client.webhook;
 
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import org.junit.jupiter.api.Test;

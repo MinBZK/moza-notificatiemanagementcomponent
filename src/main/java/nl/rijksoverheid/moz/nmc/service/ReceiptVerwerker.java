@@ -2,9 +2,7 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.event.Event;
 import jakarta.transaction.Transactional;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLAfleverstatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
@@ -35,11 +33,9 @@ public class ReceiptVerwerker {
 
     private final PogingRepository pogingRepository;
     private final Overgangsfunctie overgangsfunctie;
-    private final Event<StatusUpdateOpdracht> statusUpdateEvent;
     private final Duration klokmarge;
 
     public ReceiptVerwerker(PogingRepository pogingRepository, Overgangsfunctie overgangsfunctie,
-                            Event<StatusUpdateOpdracht> statusUpdateEvent,
                             @ConfigProperty(name = "nmc.receipt.klokmarge") Duration klokmarge) {
         if (klokmarge.isNegative()) {
             throw new IllegalStateException("nmc.receipt.klokmarge mag niet negatief zijn, is " + klokmarge);
@@ -47,7 +43,6 @@ public class ReceiptVerwerker {
 
         this.pogingRepository = pogingRepository;
         this.overgangsfunctie = overgangsfunctie;
-        this.statusUpdateEvent = statusUpdateEvent;
         this.klokmarge = klokmarge;
     }
 
@@ -116,13 +111,7 @@ public class ReceiptVerwerker {
         if (!resultaat.isUitgevoerd()) {
             Log.debugf("Notificatie %s blijft op %s; receipt %s (NotifyNL-referentie %s) is op de poging vastgelegd",
                     notificatie.getId(), resultaat.van(), status, notifyId);
-
-            return;
         }
-
-        // StatusUpdateVerzender pakt dit pas ná de commit op, zodat de Dienstverlener geen status
-        // krijgt die daarna terugrolt.
-        statusUpdateEvent.fire(StatusUpdateOpdracht.van(resultaat.event(), notificatie.getCallbackUrl()));
     }
 
     private Poging zoekPoging(UUID notifyId, String reference) {

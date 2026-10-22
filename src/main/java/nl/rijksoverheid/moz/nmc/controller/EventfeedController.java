@@ -6,7 +6,7 @@ import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
 import nl.rijksoverheid.moz.nmc.api.WijzigingenApi;
 import nl.rijksoverheid.moz.nmc.api.model.BevestigingRequest;
 import nl.rijksoverheid.moz.nmc.api.model.WijzigingenPagina;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.NotificatieStatusEvent;
+import nl.rijksoverheid.moz.nmc.client.webhook.NotificatieStatusEvent;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.domain.OngeldigeCursorException;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
