@@ -125,17 +125,31 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
      * notificatie alsnog een eindstatus krijgt en gewist kan worden. De open statussen gaan als lijst mee en de volgorde is het
      * aannametijdstip, passend bij de partiële index op de open rijen uit V9.
      */
-    public List<Notificatie> zonderTaak(Collection<NotificatieStatus> openStatussen, OffsetDateTime nu, int limiet) {
-        // De subquery noemt geen soort: een taak van elke soort telt, dus hij leest elke partitie.
+    public List<UUID> zonderTaak(Collection<NotificatieStatus> openStatussen, OffsetDateTime nu, int limiet) {
         return getEntityManager()
-                .createQuery("select n from Notificatie n where n." + Notificatie_.STATUS + " in :statussen "
-                        + "and not exists (select t." + Taak_.ID + " from Taak t where t." + Taak_.NOTIFICATIE_ID
-                        + " = n." + Notificatie_.ID + " and (t." + Taak_.STATUS + " = :open or n." + Notificatie_.GELDIG_TOT
-                        + " is null or n." + Notificatie_.GELDIG_TOT + " > :nu)) order by n." + Notificatie_.AANGENOMEN_OP, Notificatie.class)
+                .createQuery("select n." + Notificatie_.ID + " from Notificatie n where " + ZONDER_TAAK
+                        + " order by n." + Notificatie_.AANGENOMEN_OP, UUID.class)
                 .setParameter("statussen", openStatussen)
                 .setParameter("open", TaakStatus.OPEN)
                 .setParameter("nu", nu)
                 .setMaxResults(limiet)
                 .getResultList();
     }
+
+    /** Of deze notificatie nog altijd een open status heeft zonder taak, volgens dezelfde regel als {@link #zonderTaak}. */
+    public boolean isZonderTaak(UUID id, Collection<NotificatieStatus> openStatussen, OffsetDateTime nu) {
+        return getEntityManager()
+                .createQuery("select count(n) from Notificatie n where n." + Notificatie_.ID + " = :id and " + ZONDER_TAAK, Long.class)
+                .setParameter("id", id)
+                .setParameter("statussen", openStatussen)
+                .setParameter("open", TaakStatus.OPEN)
+                .setParameter("nu", nu)
+                .getSingleResult() > 0;
+    }
+
+    // De subquery noemt geen soort: een taak van elke soort telt, dus hij leest elke partitie.
+    private static final String ZONDER_TAAK = "n." + Notificatie_.STATUS + " in :statussen "
+            + "and not exists (select t." + Taak_.ID + " from Taak t where t." + Taak_.NOTIFICATIE_ID
+            + " = n." + Notificatie_.ID + " and (t." + Taak_.STATUS + " = :open or n." + Notificatie_.GELDIG_TOT
+            + " is null or n." + Notificatie_.GELDIG_TOT + " > :nu))";
 }
