@@ -5,7 +5,6 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
-import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
 import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
@@ -16,6 +15,7 @@ import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
+import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.junit.jupiter.api.AfterEach;
@@ -33,7 +33,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -48,9 +47,6 @@ import static org.mockito.Mockito.verify;
 @QuarkusTest
 class NotifyNLCallbackBotsingTest {
 
-    // Moet overeenkomen met %test.notify.callback.bearer-token in application.properties
-    private static final String CALLBACK_BEARER_TOKEN = "test-callback-token-niet-voor-productie";
-
     @InjectSpy
     Overgangsfunctie overgangsfunctie;
 
@@ -62,6 +58,9 @@ class NotifyNLCallbackBotsingTest {
 
     @Inject
     PogingRepository pogingRepository;
+
+    @Inject
+    ReceiptVerwerker receiptVerwerker;
 
     @Inject
     EventRepository eventRepository;
@@ -136,12 +135,11 @@ class NotifyNLCallbackBotsingTest {
             return resultaat;
         }).when(overgangsfunctie).vergrendel(any());
 
-        Future<Integer> eerste = executor.submit(() -> stuurReceipt(notifyId, eersteStatus, eersteTijdstip));
+        Future<?> eerste = executor.submit(() -> verwerkReceipt(notifyId, eersteStatus, eersteTijdstip));
         assertTrue(eersteHeeftVergrendeld.await(10, TimeUnit.SECONDS), "eerste receipt vergrendelde de notificatie niet");
-        int tweede = stuurReceipt(notifyId, tweedeStatus, tweedeTijdstip);
+        verwerkReceipt(notifyId, tweedeStatus, tweedeTijdstip);
 
-        assertEquals(204, eerste.get(10, TimeUnit.SECONDS));
-        assertEquals(204, tweede);
+        eerste.get(10, TimeUnit.SECONDS);
     }
 
     private void wachtTotEenTransactieOpDeLockWacht() throws InterruptedException {
@@ -184,14 +182,8 @@ class NotifyNLCallbackBotsingTest {
         return captor.getAllValues().stream().map(StatusUpdateOpdracht::versie).toList();
     }
 
-    private static int stuurReceipt(UUID notifyId, String status, String completedAt) {
-        return given()
-                .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
-                .body("""
-                        {"id": "%s", "status": "%s", "completed_at": "%s"}
-                        """.formatted(notifyId, status, completedAt))
-                .when().post("/api/nmc/v1/notifynl-callback")
-                .then().extract().statusCode();
+    // De callback slaat alleen op; de receipttaak roept de verwerker aan, dus daar botsen twee receipts.
+    private void verwerkReceipt(UUID notifyId, String status, String completedAt) {
+        receiptVerwerker.verwerk(notifyId, null, status, OffsetDateTime.parse(completedAt));
     }
 }
