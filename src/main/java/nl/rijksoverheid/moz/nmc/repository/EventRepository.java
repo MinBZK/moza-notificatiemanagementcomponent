@@ -37,6 +37,17 @@ public class EventRepository implements PanacheRepositoryBase<Event, Long> {
                 .getResultList();
     }
 
+    /** Het jongste event onder de oudste lopende transactie, over alle dienstverleners; leeg zonder events. */
+    public Optional<Event> jongsteOnderWatermerk() {
+        return getSession().createSelectionQuery("from Event where " + Event_.TRANSACTIE_ID
+                        + " < function('pg_snapshot_xmin', function('pg_current_snapshot')) order by "
+                        + Event_.TRANSACTIE_ID + " desc, " + Event_.ID + " desc", Event.class)
+                .setMaxResults(1)
+                .getResultList()
+                .stream()
+                .findFirst();
+    }
+
     /**
      * De bovengrens van de huidige snapshot: één hoger dan de jongste toegekende transactie-id. Een
      * cursor op of boven deze grens kan niet door dit cluster zijn uitgegeven. Bewust niet

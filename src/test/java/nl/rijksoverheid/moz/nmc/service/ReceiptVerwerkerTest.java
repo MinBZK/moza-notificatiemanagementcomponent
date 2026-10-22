@@ -2,11 +2,9 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import io.quarkus.narayana.jta.QuarkusTransaction;
-import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
+import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLAfleverstatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
@@ -21,7 +19,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.mockito.ArgumentCaptor;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -35,10 +32,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 
 @QuarkusTest
 class ReceiptVerwerkerTest {
@@ -61,9 +54,6 @@ class ReceiptVerwerkerTest {
     @Inject
     EventRepository eventRepository;
 
-    @InjectMock
-    ConsumentCallbackAdapter consumentCallbackAdapter;
-
     @BeforeEach
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
@@ -82,7 +72,7 @@ class ReceiptVerwerkerTest {
     })
     void verwerk_uitkomst_legtVastOpPogingEnVoertOvergangUit(String receipt, PogingStatus pogingStatus,
                                                              NotificatieStatus naar, Reden reden) {
-        UUID notifyId = verzondenNotificatie("https://omc.example.nl/callback");
+        UUID notifyId = verzondenNotificatie();
 
         receiptVerwerker.verwerk(notifyId, null, receipt, T1);
 
@@ -92,43 +82,42 @@ class ReceiptVerwerkerTest {
         assertEquals(naar, notificatie(notifyId).getStatus());
         assertEquals(reden, notificatie(notifyId).getReden());
 
-        StatusUpdateOpdracht statusUpdateOpdracht = verstuurdeOpdrachten(1).getFirst();
-        assertEquals(NotificatieStatus.VERZONDEN, statusUpdateOpdracht.vorigeStatus());
-        assertEquals(naar, statusUpdateOpdracht.nieuweStatus());
-        assertEquals(reden, statusUpdateOpdracht.reden());
-        assertEquals(3, statusUpdateOpdracht.versie());
-        assertEquals("https://omc.example.nl/callback", statusUpdateOpdracht.callbackUrl());
+        Event event = overgangenNaVerzending(notifyId, 1).getFirst();
+        assertEquals(NotificatieStatus.VERZONDEN, event.getVan());
+        assertEquals(naar, event.getNaar());
+        assertEquals(reden, event.getReden());
+        assertEquals(3, event.getVolgnummer());
     }
 
     @Test
     void verwerk_zelfdeReceiptTweeKeer_voertEenOvergangUit() {
-        UUID notifyId = verzondenNotificatie(null);
+        UUID notifyId = verzondenNotificatie();
 
         receiptVerwerker.verwerk(notifyId, null, "delivered", T1);
         receiptVerwerker.verwerk(notifyId, null, "delivered", T1);
 
         assertEquals(3, notificatie(notifyId).getVersie());
-        verstuurdeOpdrachten(1);
+        overgangenNaVerzending(notifyId, 1);
     }
 
     // Dezelfde uitkomst nog eens, met een later tijdstip: het eerste tijdstip blijft het afleverbewijs.
     @Test
     void verwerk_zelfdeUitkomstMetLaterTijdstip_laatDeVastgelegdeReceiptStaan() {
-        UUID notifyId = verzondenNotificatie(null);
+        UUID notifyId = verzondenNotificatie();
 
         receiptVerwerker.verwerk(notifyId, null, "delivered", T1);
         receiptVerwerker.verwerk(notifyId, null, "delivered", T2);
 
         assertEquals(T1, poging(notifyId).getReceiptTijdstip());
         assertEquals(3, notificatie(notifyId).getVersie());
-        verstuurdeOpdrachten(1);
+        overgangenNaVerzending(notifyId, 1);
     }
 
     // Een receipt zonder tijdstip krijgt de eigen klok en zou anders altijd de nieuwste zijn: een
     // herhaalde oudere faalreceipt mag bezorgd niet alsnog naar niet-bezorgbaar brengen.
     @Test
     void verwerk_receiptZonderTijdstipNaEenVastgelegdeUitkomst_wordtGenegeerd() {
-        UUID notifyId = verzondenNotificatie(null);
+        UUID notifyId = verzondenNotificatie();
 
         receiptVerwerker.verwerk(notifyId, null, "delivered", T1);
         receiptVerwerker.verwerk(notifyId, null, "permanent-failure", null);
@@ -136,13 +125,13 @@ class ReceiptVerwerkerTest {
         assertEquals(PogingStatus.BEZORGD, poging(notifyId).getStatus());
         assertEquals(T1, poging(notifyId).getReceiptTijdstip());
         assertEquals(NotificatieStatus.BEZORGD, notificatie(notifyId).getStatus());
-        verstuurdeOpdrachten(1);
+        overgangenNaVerzending(notifyId, 1);
     }
 
     // Binnen de klokmarge (%test: 5m) telt de klok van NotifyNL, ook als die vóór loopt op de eigen.
     @Test
     void verwerk_tijdstipBinnenDeKlokmarge_blijftStaan() {
-        UUID notifyId = verzondenNotificatie(null);
+        UUID notifyId = verzondenNotificatie();
         OffsetDateTime ietsVooruit = OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(1).truncatedTo(ChronoUnit.MICROS);
 
         receiptVerwerker.verwerk(notifyId, null, "delivered", ietsVooruit);
@@ -154,7 +143,7 @@ class ReceiptVerwerkerTest {
     // ontvangst geldt, zodat een latere receipt (hier binnen de marge) alsnog telt.
     @Test
     void verwerk_tijdstipVoorbijDeKlokmarge_krijgtHetMomentVanOntvangst() {
-        UUID notifyId = verzondenNotificatie(null);
+        UUID notifyId = verzondenNotificatie();
         OffsetDateTime voorOntvangst = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
         receiptVerwerker.verwerk(notifyId, null, "delivered", voorOntvangst.plusHours(1));
@@ -166,13 +155,12 @@ class ReceiptVerwerkerTest {
 
         assertEquals(PogingStatus.PERMANENT_MISLUKT, poging(notifyId).getStatus());
         assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(notifyId).getStatus());
-        verstuurdeOpdrachten(2);
     }
 
     // De volgorde komt uit het tijdstip in de receipt, niet uit de aankomst.
     @Test
     void verwerk_oudereReceiptNaEenNieuwere_wordtGenegeerd() {
-        UUID notifyId = verzondenNotificatie(null);
+        UUID notifyId = verzondenNotificatie();
 
         receiptVerwerker.verwerk(notifyId, null, "delivered", T2);
         receiptVerwerker.verwerk(notifyId, null, "permanent-failure", T1);
@@ -180,26 +168,26 @@ class ReceiptVerwerkerTest {
         assertEquals(PogingStatus.BEZORGD, poging(notifyId).getStatus());
         assertEquals(T2, poging(notifyId).getReceiptTijdstip());
         assertEquals(NotificatieStatus.BEZORGD, notificatie(notifyId).getStatus());
-        verstuurdeOpdrachten(1);
+        overgangenNaVerzending(notifyId, 1);
     }
 
     // NotifyNL kan na delivered nog een fout melden; bezorgd is geen eindstatus.
     @Test
     void verwerk_faalreceiptNaDelivered_brengtDeNotificatieNaarNietBezorgbaar() {
-        UUID notifyId = verzondenNotificatie(null);
+        UUID notifyId = verzondenNotificatie();
 
         receiptVerwerker.verwerk(notifyId, null, "delivered", T1);
         receiptVerwerker.verwerk(notifyId, null, "permanent-failure", T2);
 
         assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(notifyId).getStatus());
-        List<StatusUpdateOpdracht> opdrachten = verstuurdeOpdrachten(2);
-        assertEquals(List.of(3L, 4L), opdrachten.stream().map(StatusUpdateOpdracht::versie).toList());
+        List<Event> events = overgangenNaVerzending(notifyId, 2);
+        assertEquals(List.of(3L, 4L), events.stream().map(Event::getVolgnummer).toList());
     }
 
     // Een eindstatus is absorberend: de latere receipt staat op de poging, de notificatie blijft staan.
     @Test
     void verwerk_receiptNaEenEindstatus_legtVastOpDePogingZonderOvergang() {
-        UUID notifyId = verzondenNotificatie(null);
+        UUID notifyId = verzondenNotificatie();
 
         receiptVerwerker.verwerk(notifyId, null, "permanent-failure", T1);
         receiptVerwerker.verwerk(notifyId, null, "delivered", T2);
@@ -207,14 +195,14 @@ class ReceiptVerwerkerTest {
         assertEquals(PogingStatus.BEZORGD, poging(notifyId).getStatus());
         assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(notifyId).getStatus());
         assertEquals(3, notificatie(notifyId).getVersie());
-        verstuurdeOpdrachten(1);
+        overgangenNaVerzending(notifyId, 1);
     }
 
     // Een status die de NMC niet kent verandert niets; hij hoort op ERROR op te vallen, met de ruwe
     // waarde en de referentie, zodat de lijst uitgebreid kan worden.
     @Test
     void verwerk_onbekendeStatus_wijzigtNietsEnLogtOpError() {
-        UUID notifyId = verzondenNotificatie(null);
+        UUID notifyId = verzondenNotificatie();
 
         List<String> fouten;
         try (LogVanger vanger = LogVanger.van(NotifyNLAfleverstatus.class)) {
@@ -225,7 +213,7 @@ class ReceiptVerwerkerTest {
         assertEquals(PogingStatus.VERZONDEN, poging(notifyId).getStatus());
         assertNull(poging(notifyId).getReceiptTijdstip());
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(notifyId).getStatus());
-        verify(consumentCallbackAdapter, never()).stuurStatusUpdate(any());
+        overgangenNaVerzending(notifyId, 0);
         assertEquals(1, fouten.size());
         assertTrue(fouten.getFirst().contains("een-rare-status"));
         assertTrue(fouten.getFirst().contains(notifyId.toString()));
@@ -233,12 +221,12 @@ class ReceiptVerwerkerTest {
 
     @Test
     void verwerk_tussenstatus_wijzigtNiets() {
-        UUID notifyId = verzondenNotificatie(null);
+        UUID notifyId = verzondenNotificatie();
 
         receiptVerwerker.verwerk(notifyId, null, "sending", T1);
 
         assertEquals(PogingStatus.VERZONDEN, poging(notifyId).getStatus());
-        verify(consumentCallbackAdapter, never()).stuurStatusUpdate(any());
+        overgangenNaVerzending(notifyId, 0);
     }
 
     @Test
@@ -249,7 +237,7 @@ class ReceiptVerwerkerTest {
 
     @Test
     void verwerk_zonderTijdstip_gebruiktDeEigenKlok() {
-        UUID notifyId = verzondenNotificatie(null);
+        UUID notifyId = verzondenNotificatie();
         OffsetDateTime ervoor = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
         receiptVerwerker.verwerk(notifyId, null, "delivered", null);
@@ -257,10 +245,10 @@ class ReceiptVerwerkerTest {
         assertFalse(poging(notifyId).getReceiptTijdstip().isBefore(ervoor));
     }
 
-    private UUID verzondenNotificatie(String callbackUrl) {
+    private UUID verzondenNotificatie() {
         UUID notifyId = UUID.randomUUID();
         QuarkusTransaction.requiringNew().run(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, callbackUrl);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
             overgangsfunctie.neemAan(notificatie);
             Poging poging = new Poging(notificatie.getId(), 1);
             pogingRepository.persist(poging);
@@ -281,10 +269,13 @@ class ReceiptVerwerkerTest {
                 notificatieRepository.findById(pogingRepository.findByNotifyId(notifyId).orElseThrow().getNotificatieId()));
     }
 
-    private List<StatusUpdateOpdracht> verstuurdeOpdrachten(int aantal) {
-        ArgumentCaptor<StatusUpdateOpdracht> captor = ArgumentCaptor.forClass(StatusUpdateOpdracht.class);
-        verify(consumentCallbackAdapter, times(aantal)).stuurStatusUpdate(captor.capture());
+    // De events na de overgang naar verzonden (volgnummer 2): wat de receipts hebben vastgelegd.
+    private List<Event> overgangenNaVerzending(UUID notifyId, int aantal) {
+        List<Event> events = QuarkusTransaction.requiringNew().call(() -> eventRepository
+                .findByNotificatie(pogingRepository.findByNotifyId(notifyId).orElseThrow().getNotificatieId())
+                .stream().filter(e -> e.getVolgnummer() > 2).toList());
+        assertEquals(aantal, events.size());
 
-        return captor.getAllValues();
+        return events;
     }
 }

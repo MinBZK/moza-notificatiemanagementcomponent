@@ -74,8 +74,8 @@ class NotificatieRetentieSchedulerTest {
     @ParameterizedTest
     @EnumSource(NotificatieStatus.class)
     void verwijderVerlopenNotificaties_verwijdertElkeStatusOuderDanDeBewaartermijn(NotificatieStatus status) {
-        UUID verlopenId = maakNotificatie(null, status, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
-        UUID nietVerlopenId = maakNotificatie(null, status, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+        UUID verlopenId = maakNotificatie(status, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
+        UUID nietVerlopenId = maakNotificatie(status, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
 
         scheduler.verwijderVerlopenNotificaties();
 
@@ -89,8 +89,8 @@ class NotificatieRetentieSchedulerTest {
     // ouderdom bepaalt of een rij weg moet, de status zelf doet er niet toe.
     @Test
     void verwijderVerlopenNotificaties_metGemengdePopulatie_verwijdertAlleenDeVerlopenRijen() {
-        UUID verlopenId = maakNotificatie(null, NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
-        UUID nietVerlopenId = maakNotificatie(null, NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+        UUID verlopenId = maakNotificatie(NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
+        UUID nietVerlopenId = maakNotificatie(NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
 
         scheduler.verwijderVerlopenNotificaties();
 
@@ -105,8 +105,8 @@ class NotificatieRetentieSchedulerTest {
     // scheduler die de geconfigureerde 2 dagen gebruikt laat de rij van 3 dagen oud verdwijnen.
     @Test
     void verwijderVerlopenNotificaties_metEenAfwijkendeBewaartermijn_gebruiktDieAlsGrens() {
-        UUID verlopenId = maakNotificatie(null, NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(3));
-        UUID nietVerlopenId = maakNotificatie(null, NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+        UUID verlopenId = maakNotificatie(NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(3));
+        UUID nietVerlopenId = maakNotificatie(NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
 
         new NotificatieRetentieScheduler(notificatieRepository, new RetentieConfiguratie(Duration.ofDays(2), 10_000)).verwijderVerlopenNotificaties();
 
@@ -313,7 +313,7 @@ class NotificatieRetentieSchedulerTest {
     // bijwerken, waarna een notificatie met een verse status alsnog verdwijnt.
     @Test
     void claimVerlopen_houdtDeRijenVastVoorEenTweedeTransactie() throws Exception {
-        UUID id = maakNotificatie(null, NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
+        UUID id = maakNotificatie(NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
         CountDownLatch geclaimd = new CountDownLatch(1);
         CountDownLatch losgelaten = new CountDownLatch(1);
         ExecutorService claimer = Executors.newSingleThreadExecutor();
@@ -459,8 +459,8 @@ class NotificatieRetentieSchedulerTest {
     // test valt, terwijl dit het enige signaal is dat overblijft nadat de rij weg is.
     @Test
     void verwijderVerlopenNotificaties_meldtAlleenDeNotificatiesZonderEindstatus() {
-        UUID bezorgdId = maakNotificatie(null, NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
-        UUID sendingId = maakNotificatie(null, NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31),
+        UUID bezorgdId = maakNotificatie(NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
+        UUID sendingId = maakNotificatie(NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31),
                 UUID.randomUUID());
 
         List<String> meldingen;
@@ -489,7 +489,7 @@ class NotificatieRetentieSchedulerTest {
     // elke notificatie die nog onderweg is.
     @Test
     void verwijderVerlopenNotificaties_meldtGeenNietVerlopenNotificatie() {
-        maakNotificatie(null, NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+        maakNotificatie(NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
 
         List<String> meldingen;
         try (LogVanger vanger = LogVanger.vanPakket(NotificatieRetentieScheduler.class.getPackage())) {
@@ -525,9 +525,9 @@ class NotificatieRetentieSchedulerTest {
     // claim-query is de volgorde die de database teruggeeft niet gegarandeerd.
     @Test
     void verwijderVerlopenNotificaties_meldtDeOudsteEerst() {
-        UUID jongsteId = maakNotificatie(null, NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
-        UUID oudsteId = maakNotificatie(null, NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(90));
-        UUID middelsteId = maakNotificatie(null, NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(60));
+        UUID jongsteId = maakNotificatie(NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
+        UUID oudsteId = maakNotificatie(NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(90));
+        UUID middelsteId = maakNotificatie(NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(60));
 
         List<String> meldingen;
         try (LogVanger vanger = LogVanger.vanPakket(NotificatieRetentieScheduler.class.getPackage())) {
@@ -547,7 +547,7 @@ class NotificatieRetentieSchedulerTest {
     // recentere overgang is geweest.
     @Test
     void verwijderVerlopenNotificaties_notificatieMetOudeAannameMaarRecenteStatus_wordtNietVerwijderd() {
-        UUID id = maakNotificatie(null, NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+        UUID id = maakNotificatie(NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
         QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.voegEventToe(
                 notificatieRepository.getEntityManager(), id, 0, null, NotificatieStatus.AANGENOMEN,
                 OffsetDateTime.now(ZoneOffset.UTC).minusDays(40)));
@@ -581,7 +581,7 @@ class NotificatieRetentieSchedulerTest {
     // tegenhanger zou de eerste assertie ook slagen als de DELETE nooit meer iets verwijdert.
     @Test
     void verwijderBatch_metEenNotificatieDieNietVerlopenIs_verwijdertDieNiet() {
-        UUID nietVerlopenId = maakNotificatie(null, NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC));
+        UUID nietVerlopenId = maakNotificatie(NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC));
         OffsetDateTime grens = OffsetDateTime.now(ZoneOffset.UTC).minusDays(30);
 
         int verwijderd = QuarkusTransaction.requiringNew().call(() -> verwijderBatchOp(grens));
@@ -593,7 +593,7 @@ class NotificatieRetentieSchedulerTest {
 
     @Test
     void verwijderBatch_metEenVerlopenNotificatie_verwijdertDieWel() {
-        UUID verlopenId = maakNotificatie(null, NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
+        UUID verlopenId = maakNotificatie(NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
         OffsetDateTime grens = OffsetDateTime.now(ZoneOffset.UTC).minusDays(30);
 
         int verwijderd = QuarkusTransaction.requiringNew().call(() -> verwijderBatchOp(grens));
@@ -603,27 +603,13 @@ class NotificatieRetentieSchedulerTest {
                 assertTrue(notificatieRepository.findByIdOptional(verlopenId).isEmpty()));
     }
 
-    // Bewust vastgelegd gedrag, geen toevalstreffer: een notificatie mét callbackUrl waarvan de
-    // callback naar de Dienstverlener nooit is gelukt, wordt na de bewaartermijn alsnog verwijderd.
-    // Verwijderen is volledig losgekoppeld van het afleveren van de callback.
-    @Test
-    void verwijderVerlopenNotificaties_verwijdertOokNotificatiesWaarvanDeCallbackNooitIsGelukt() {
-        UUID verlopenIdMetCallbackUrl = maakNotificatie("https://omc.example.nl/callback-die-nooit-lukt",
-                NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
-
-        scheduler.verwijderVerlopenNotificaties();
-
-        QuarkusTransaction.requiringNew().run(() ->
-                assertTrue(notificatieRepository.findByIdOptional(verlopenIdMetCallbackUrl).isEmpty()));
-    }
-
     // De positieve helft naast de test hierboven: een binnenkomende receipt voert een overgang uit en
     // zet de bewaartermijn terug op nu. De notificatie start ruim verlopen (31 dagen), dus zonder dat
     // effect zou de retentiejob hem hier weghalen.
     @Test
     void verwerkReceipt_voorEenVerlopenNotificatie_verzetDeBewaartermijnZodatDeRetentiejobHemLaatStaan() {
         UUID notifyId = UUID.randomUUID();
-        UUID id = maakNotificatie(null, NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31),
+        UUID id = maakNotificatie(NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31),
                 notifyId);
 
         // Met een completed_at die zelf al buiten de bewaartermijn valt: de gebeurtenistijd komt van
@@ -641,7 +627,7 @@ class NotificatieRetentieSchedulerTest {
     // ON DELETE CASCADE op de foreignkey doet dat.
     @Test
     void verwijderVerlopenNotificaties_verwijdertOokDePogingen() {
-        UUID verlopenId = maakNotificatie(null, NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31),
+        UUID verlopenId = maakNotificatie(NotificatieStatus.BEZORGD, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31),
                 UUID.randomUUID());
 
         assertTrue(aantalPogingenVoor(verlopenId) > 0);
@@ -654,7 +640,7 @@ class NotificatieRetentieSchedulerTest {
     // Buiten Hibernate om: een rechtstreekse SQL DELETE op notificatie dwingt de foreignkey zelf.
     @Test
     void notificatieVerwijderenViaRuweSql_verwijdertPogingenViaForeignKeyCascade() {
-        UUID id = maakNotificatie(null, NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC), UUID.randomUUID());
+        UUID id = maakNotificatie(NotificatieStatus.VERZONDEN, OffsetDateTime.now(ZoneOffset.UTC), UUID.randomUUID());
         assertTrue(aantalPogingenVoor(id) > 0);
 
         QuarkusTransaction.requiringNew().run(() ->
@@ -663,18 +649,17 @@ class NotificatieRetentieSchedulerTest {
         assertEquals(0L, aantalPogingenVoor(id));
     }
 
-    private UUID maakNotificatie(String callbackUrl, NotificatieStatus status, OffsetDateTime laatsteStatusUpdate) {
-        return maakNotificatie(callbackUrl, status, laatsteStatusUpdate, null);
+    private UUID maakNotificatie(NotificatieStatus status, OffsetDateTime laatsteStatusUpdate) {
+        return maakNotificatie(status, laatsteStatusUpdate, null);
     }
 
     // De overgangsfunctie stempelt altijd de eigen klok van nu; deze fixtures willen een bewust
     // terug- of vooruitgedateerde registratietijd. Die schrijft NotificatieFixtures met SQL, met een
     // poging op het gegeven NotifyNL-id als dat is meegegeven.
-    private UUID maakNotificatie(String callbackUrl, NotificatieStatus status, OffsetDateTime laatsteStatusUpdate,
-            UUID notifyId) {
+    private UUID maakNotificatie(NotificatieStatus status, OffsetDateTime laatsteStatusUpdate, UUID notifyId) {
         UUID id = UUID.randomUUID();
         QuarkusTransaction.requiringNew().run(() -> {
-            NotificatieFixtures.voegNotificatieToe(notificatieRepository.getEntityManager(), id, callbackUrl, status,
+            NotificatieFixtures.voegNotificatieToe(notificatieRepository.getEntityManager(), id, status,
                     laatsteStatusUpdate);
 
             if (notifyId != null) {
@@ -687,7 +672,7 @@ class NotificatieRetentieSchedulerTest {
     }
 
     private UUID maakNotificatieMetPogingen(NotificatieStatus status, OffsetDateTime laatsteStatusUpdate, int aantalPogingen) {
-        UUID id = maakNotificatie(null, status, laatsteStatusUpdate);
+        UUID id = maakNotificatie(status, laatsteStatusUpdate);
         QuarkusTransaction.requiringNew().run(() -> {
             for (int nummer = 1; nummer <= aantalPogingen; nummer++) {
                 NotificatieFixtures.voegPogingToe(notificatieRepository.getEntityManager(), id, nummer, UUID.randomUUID(),

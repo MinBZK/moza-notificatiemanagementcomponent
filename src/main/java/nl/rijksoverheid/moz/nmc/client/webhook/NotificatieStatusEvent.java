@@ -1,4 +1,4 @@
-package nl.rijksoverheid.moz.nmc.client.consumentcallback;
+package nl.rijksoverheid.moz.nmc.client.webhook;
 
 import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
@@ -9,7 +9,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * Eén statusovergang als CloudEvent (NL GOV profiel), gelijk in de callback en in de feed. {@code id}
+ * Eén statusovergang als CloudEvent (NL GOV profiel), gelijk in de webhook en in de feed. {@code id}
  * is de UUID van het event uit het eventlog, zodat een Dienstverlener die beide gebruikt hetzelfde
  * event herkent.
  */

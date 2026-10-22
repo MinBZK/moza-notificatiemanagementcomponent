@@ -7,7 +7,7 @@ asynchrone bezorgstatus:
 
 1. Een Dienstverlener (rechtstreeks, of via een OMC) roept
    `POST /api/nmc/v1/centraal/notificaties` aan met een identificatie (BSN/KVK/RSIN),
-   dienstverlener/dienst, berichttype, optionele berichtgegevens en optioneel een `callbackUrl`.
+   dienstverlener/dienst, berichttype en optionele berichtgegevens.
 2. De NMC slaat de notificatie (status `aangenomen`, versleutelde ontvanger en
    berichtgegevens) en een verzendtaak op in één transactie en antwoordt `202` met
    het `notificatieId`.
@@ -20,15 +20,13 @@ asynchrone bezorgstatus:
    stelt de taak uit.
 5. NotifyNL roept asynchroon `POST /api/nmc/v1/notifynl-callback` aan met de
    bezorgstatus (delivery receipt).
-6. De NMC legt de uitkomst op de verzendpoging vast, voert de bijbehorende
-   statusovergang uit en stuurt, als er een `callbackUrl` is meegegeven, die
-   overgang als **CloudEvents NL GOV** naar die URL. Het slagen van die callback
-   heeft geen invloed op wat de NMC vastlegt. Een retentiejob verwijdert de
-   notificatie pas nadat `notificatie.retentie.bewaartermijn` (zie
+6. De NMC legt de uitkomst op de verzendpoging vast en voert de bijbehorende
+   statusovergang uit; elke overgang is een event in het eventlog. De Dienstverlener
+   leest die events als **CloudEvents NL GOV** uit de eventfeed, en heeft hij in het
+   register een webhook, dan levert een terugkoppeltaak dezelfde events daarheen. Het
+   slagen van die levering heeft geen invloed op wat de NMC vastlegt. Een retentiejob
+   verwijdert de notificatie pas nadat `notificatie.retentie.bewaartermijn` (zie
    `application.properties`) verstreken is sinds de laatste statusovergang.
-
-De `callbackUrl` is optioneel: Dienstverleners zonder eigen webhook-endpoint kunnen
-de status opvragen via `GET /centraal/notificaties/{id}` (nog niet geïmplementeerd).
 
 Dit is het **centraal profiel**-scenario (zie "De twee assen" hieronder),
 waarbij de NMC zelf de contactgegevens opzoekt.
@@ -38,11 +36,10 @@ waarbij de NMC zelf de contactgegevens opzoekt.
 Naast het centraal profiel ondersteunt de NMC het **decentraal profiel**: de
 aanroeper (doorgaans een OMC) heeft de contactgegevens zelf al bepaald en levert
 het e-mailadres rechtstreeks aan via `POST /api/nmc/v1/decentraal/notificaties`
-(e-mailadres, berichttype, optionele berichtgegevens en optioneel een `callbackUrl`).
-De NMC slaat de Profielservice-lookup (stap 2 hierboven) over en verstuurt direct
-via NotifyNL; stappen 3 t/m 6 (opslaan, `notificatieId` retourneren, asynchrone
-bezorgstatus via de NotifyNL-callback en de CloudEvents-statusupdate naar de
-`callbackUrl`) zijn identiek aan het centraal profiel.
+(e-mailadres, berichttype en optionele berichtgegevens). De NMC slaat de
+Profielservice-lookup over; de rest (opslaan, `notificatieId` retourneren, asynchrone
+bezorgstatus via de NotifyNL-callback, feed en webhook) is identiek aan het centraal
+profiel.
 
 Nog **niet** geïmplementeerd, maar wel onderdeel van de visie verderop in dit
 document:
@@ -52,9 +49,8 @@ document:
 - Een koppeling met de **Templating Service**: het `template_id` wordt voorlopig
   bepaald door een lokale `BerichtType`-enum in de NMC, niet via een externe Templating Service
 - Een observability-koppelvlak
-- `GET /centraal/notificaties/{id}`: statuspoll voor Dienstverleners zonder callbackUrl
-- Bearer-JWT-authenticatie voor de uitgaande consument-callback (momenteel geen
-  auth op de callback naar de Dienstverlener)
+- `GET /centraal/notificaties/{id}`: status van één notificatie opvragen
+- Registratie van een webhook via een API; nu zet beheer `webhook_url` in het register
 
 ## Wat is de NMC?
 
@@ -94,9 +90,9 @@ los van elkaar, een keuze op de ene as zegt niets over de andere.
 ### As 1. Zit er een OMC voor de NMC?
 
 - **Ja**: de OMC is de aanroeper van de NMC en ontvangt statusupdates terug,
-  die het weer doorgeeft aan de Procesapplicatie. De OMC kan bij de aanvraag
-  een optionele `callbackUrl` meegeven waarop de NMC asynchroon statusupdates
-  terugstuurt (CloudEvents NL GOV).
+  die het weer doorgeeft aan de Procesapplicatie. De OMC leest ze uit de eventfeed
+  of ontvangt ze op de webhook die bij de onboarding in het register is gezet
+  (CloudEvents NL GOV).
 - **Nee**: een dienst/voorziening zonder eigen OMC roept de NMC rechtstreeks
   aan.
 
@@ -131,11 +127,11 @@ contactherstel-deel van beide profielen is nog niet gebouwd.
    centraal profiel volstaat een identificatie; bij een decentraal profiel
    worden ook het verzendkanaal en de ontvangergegevens meegegeven.
 2. **Versturen**: de NMC haalt (in een latere stap) de juiste template op en
-   stuurt het bericht via NotifyNL. De notificatie wordt opgeslagen met status
-   `verzonden`.
+   stuurt het bericht via NotifyNL. De notificatie gaat van `aangenomen` via
+   `in-verzending` naar `verzonden`.
 3. **Bezorgstatus verwerken**: NotifyNL meldt asynchroon terug of de
-   bezorging is gelukt of mislukt. De NMC werkt de status bij en stuurt een
-   statusupdate naar de `callbackUrl` van de aanroeper (indien opgegeven).
+   bezorging is gelukt of mislukt. De NMC werkt de status bij; de overgang staat in de
+   eventfeed en gaat naar de webhook van de Dienstverlener, als die er een heeft.
 4. **Contactherstel (indien nodig)**: bij een mislukte bezorging in het centraal
    profiel start de NMC zelf een nieuwe verzendpoging via een ander kanaal. Bij
    het decentraal profiel handelt de aanroeper een mislukte bezorging zelf af.
@@ -154,10 +150,11 @@ Geïmplementeerde componenten zijn vetgedrukt; de rest is toekomstig ontwerp.
 | **Afleverstatus-callback** | REST (controller) | Webhook waarop NotifyNL delivery receipts meldt. |
 | **Aanname** | Service (`AannameService`) | Legt notificatie, eerste event en verzendtaak vast in één transactie en dwingt het quotum per Dienstverlener af. |
 | **Verzendtaak** | Taakhandler (`VerzendTaakHandler`) | Haalt bij centrale regie het adres op, verstuurt via NotifyNL met het poging-id als `reference` en voert de overgangen uit. |
-| **Profielservice-adapter** | Client | Haalt contactvoorkeur op bij de Profielservice en kan een e-mailadres invalideren. |
+| **Profielservice-adapter** | Client | Haalt contactvoorkeur op bij de Profielservice. |
 | **Verzendadapter** | Client (bearer-JWT) | Verstuurt berichten via NotifyNL (`template_id` + `personalisation`). |
-| **Consument-callback-adapter** | Webhook-client (CloudEvents NL GOV) | Stuurt de afleverstatus asynchroon terug naar de aanroeper via de opgegeven `callbackUrl`. |
-| **Verzendverwerker** | Worker (`TaakWorker`, `TaakClaimer`) | Claimt taken uit de takentabel met `SKIP LOCKED`, verdeeld over dienstverleners en binnen het verzendbudget, en geeft ze aan de handler per soort. Er zijn nog geen handlers. |
+| **Terugkoppeltaak** | Taakhandler (`TerugkoppelTaakHandler`, `WebhookDispatcher`) | Levert per dienstverlener de events vanaf de leverpositie als CloudEvents-batch aan de webhook uit het register, met een ondertekende bearer-JWT. |
+| **Webhook-adapter** | Webhook-client (CloudEvents NL GOV) | Doet de POST naar de webhook: één poging, zonder herhaling. |
+| **Verzendverwerker** | Worker (`TaakWorker`, `TaakClaimer`) | Claimt taken uit de takentabel met `SKIP LOCKED`, verdeeld over dienstverleners en binnen het verzendbudget, en geeft ze aan de handler per soort. |
 | **notificatiedatabase** | PostgreSQL | Slaat notificaties met hun status, de verzendpogingen, het eventlog, de takentabel, het verzendbudget en het dienstverlenerregister op; een retentiejob verwijdert notificaties `notificatie.retentie.bewaartermijn` na de laatste overgang. |
 | **Decentrale-regie-API** | REST (controller) | Inbound endpoint voor het decentraal profiel: intake op het meegegeven e-mailadres, zonder Profielservice-lookup. |
 | Adres-adapter | Client | Haalt een postadres op bij KvK Handelsregister of BRP als fallback bij contactherstel. |
@@ -177,10 +174,10 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
 
 - **`notificatie`** draagt de status in de levenscyclus (`aangenomen`,
   `in-verzending`, `verzonden`, `bezorgd` en de eindstatussen), een eventuele
-  `reden`, de optionele `callbackUrl` en een `versie` die per overgang met één
-  oploopt. De ontvanger (bij decentrale regie het e-mailadres, bij centrale regie
-  het identificerend nummer) en de personalisation staan er versleuteld op, met een
-  eigen sleutel per notificatie die met de KEK is gewrapt.
+  `reden` en een `versie` die per overgang met één oploopt. De ontvanger (bij
+  decentrale regie het e-mailadres, bij centrale regie het identificerend nummer) en
+  de personalisation staan er versleuteld op, met een eigen sleutel per notificatie
+  die met de KEK is gewrapt.
 - **`poging`** is één verzending bij NotifyNL: nummer, status (de uitkomst uit de
   receipts), het NotifyNL-id en het tijdstip uit de laatst verwerkte receipt. Een
   receipt komt via `reference` (het poging-id) bij de poging terecht, en anders via
@@ -191,7 +188,9 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
   feed het log op commitvolgorde kan lezen; het log is daarop gepartitioneerd,
   zodat het per partitie kan worden opgeruimd.
 - **`dienstverlener`** is het register uit de onboarding; nu één rij uit de
-  migratie, waarvan `dv_id` op elke notificatie en elk event staat.
+  migratie, waarvan `dv_id` op elke notificatie en elk event staat. De optionele
+  `webhook_url`, `webhook_max_mislukkingen` en `webhook_bundel` zet beheer; een
+  registratie-API is er nog niet.
 - **`taak`** draagt de bijwerkingen (verzenden, receipts verwerken, navraag,
   vaststellen, terugkoppelen, ongeldig melden, wissen, controle, onderhoud) met
   `due` als timer, een lease, een claim-epoch en een pogingenteller; per soort
@@ -204,6 +203,10 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
   gereserveerd voor de navraag.
 - **`bevestiging`** is per dienstverlener de feedcursor die hij zelf terugschrijft;
   hij gaat alleen vooruit.
+- **`webhookpositie`** is per dienstverlener het laatst aan de webhook geleverde
+  event (epoch, transactie-id, event-id), bij registratie de kop van het log, met het aantal
+  mislukte leveringen op rij en
+  een eventuele pauze. Het is een leverpositie, geen bevestiging.
 
 `Overgangsfunctie` is de enige schrijver van de status. Hij vergrendelt de
 notificatierij (`SELECT ... FOR UPDATE`), toetst de overgang aan
@@ -246,14 +249,12 @@ onderhoudstaak uit ADR 0024 vervangen hem.
 De huidige endpoints zitten onder `/api/nmc/v1`:
 
 - **`POST /centraal/notificaties`**: neemt de notificatie aan op een identificerend
-  nummer; de verzendtaak haalt later het adres op bij de Profielservice. Optioneel
-  kan een `callbackUrl` worden meegegeven voor asynchrone statusupdates.
+  nummer; de verzendtaak haalt later het adres op bij de Profielservice.
   Retourneert `202` met `notificatieId`, `400` bij een onbekend
-  berichttype of een ongeldige `callbackUrl`, en `429` als het quotum van de
-  Dienstverlener voor vandaag bereikt is.
+  berichttype, en `429` als het quotum van de Dienstverlener voor vandaag bereikt is.
 - **`POST /decentraal/notificaties`**: idem voor een meegegeven e-mailadres (geen
-  Profielservice-lookup). Retourneert `202`, `400` bij een onbekend berichttype,
-  een ongeldig e-mailadres of een ongeldige `callbackUrl`, en `429` bij het quotum.
+  Profielservice-lookup). Retourneert `202`, `400` bij een onbekend berichttype of
+  een ongeldig e-mailadres, en `429` bij het quotum.
 - **`GET /notificaties/wijzigingen?cursor=&limiet=`**: de events van de eigen
   notificaties als CloudEvents, in commitvolgorde, met de cursor voor de volgende
   pagina. Zonder cursor vanaf het oudste beschikbare event. `400` bij een ongeldige
@@ -262,6 +263,35 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   volgorde binnen één notificatie.
 - **`PUT /notificaties/wijzigingen/bevestiging`**: legt de cursor vast tot waar de
   Dienstverlener heeft verwerkt; een oudere cursor verandert niets. `204`, `400` of `410`.
+- **Webhook** (in het contract als callback bij de feed): heeft de Dienstverlener een
+  `webhook_url` in het register, dan levert één terugkoppeltaak per Dienstverlener
+  de events van na de registratie, in dezelfde vorm als de feed, gebundeld per aanroep (`webhook_bundel` in het register,
+  anders `nmc.webhook.bundel`; ten hoogste `nmc.feed.max-pagina`), als
+  `application/cloudevents-batch+json`. Elke aanroep draagt de header `Nmc-Cursor`
+  met de cursor van het laatste event in de bundel en een bearer-JWT (RS256, `iss` het
+  NMC, `aud` de webhook-URL, `body_sha256` de SHA-256 van de body als base64url, 5 minuten
+  geldig). Een `2xx` zet de leverpositie vooruit
+  maar is geen bevestiging. Een mislukte levering komt later opnieuw vanaf dezelfde
+  positie, met een oplopende wachttijd; na `webhook_max_mislukkingen` (default
+  `nmc.webhook.max-mislukkingen`) mislukkingen op rij pauzeert de webhook met een
+  wachttijd die verdubbelt tot ten hoogste een dag. Een geslaagde levering zet de
+  teller terug. De URL gaat vóór elke levering door `WebhookUrlValidator`; een
+  ongeldige URL pauzeert de webhook zonder aanroep en geeft een ERROR in het log.
+  Een gewijzigde URL heft de pauze niet op; dat doet beheer met
+  `update webhookpositie set gepauzeerd_tot = null, mislukkingen = 0 where dv_id = '…';`.
+
+  Registreren gaat nu rechtstreeks in de database:
+  1. Zet `webhook_url` op de rij in `dienstverlener`; optioneel `webhook_max_mislukkingen` en
+     `webhook_bundel`, leeg is de default uit de configuratie.
+  2. Binnen `nmc.controle.interval` plant de controletaak de terugkoppeltaak. De eerste ronde
+     legt de kop van het log vast als leverpositie: alleen events van ná dat moment gaan naar de
+     webhook.
+  3. De URL wordt pas bij de eerste levering gecontroleerd. Een typfout zie je als ERROR in het
+     log en als pauze in `webhookpositie`, niet bij het invoeren.
+  4. Uitzetten: `webhook_url` op NULL. De taak vervalt en de leverpositie wordt gewist, zodat
+     opnieuw aanzetten weer vanaf dat moment begint.
+- **`GET /.well-known/jwks.json`**: de publieke sleutel waarmee de Dienstverlener de
+  JWT op de webhook controleert, gekozen op `kid`.
 - **`POST /notifynl-callback`**: webhook waarop NotifyNL de bezorgstatus
   (delivery receipt) van een verzending terugmeldt. Beveiligd met een bearer
   token dat geconfigureerd wordt in NotifyNL's dashboard en via
@@ -276,9 +306,8 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   notificatie als die vanuit de huidige status is toegestaan (een eindstatus is
   absorberend, behalve `bezorgstatus-onbekend`; `bezorgd` is geen eindstatus). Tussenstatussen van NotifyNL worden genegeerd en
   een onbekende status wordt op ERROR gelogd zonder iets te wijzigen. Een
-  uitgevoerde overgang gaat, als er een `callbackUrl` is, pas ná de commit als
-  CloudEvent naar de Dienstverlener (`StatusUpdateVerzender` bij `AFTER_SUCCESS`),
-  met `sequence` het volgnummer waarop de Dienstverlener ordent. Retourneert `204`
+  uitgevoerde overgang staat als event in het log, en komt zo in de feed en op de
+  webhook, met `sequence` het volgnummer waarop de Dienstverlener ordent. Retourneert `204`
   op succes, ook bij een herhaling of een receipt die bij geen poging hoort (die wordt
   niet opgeslagen en geteld in `nmc.receipts.afgewezen`), en `401` bij een
   ontbrekend of ongeldig bearer token. Dit endpoint heeft een eigen, losse OpenAPI-specificatie (zie
@@ -288,11 +317,11 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
 Gepland/toekomstig (nog niet aanwezig):
 
 - **`GET /centraal/notificaties/{id}`**: status van een eerder verstuurde notificatie
-  opvragen (alternatief voor de callbackUrl).
+  opvragen.
 - **`POST /centraal/notificaties/{id}/contactherstel`**: een nieuwe verzendpoging
   (contactherstel) starten voor een bestaande notificatie.
 
-De `openapi.yaml`-specificatie (`/centraal/notificaties` en `/decentraal/notificaties`)
+De `openapi.yaml`-specificatie (intake, eventfeed, bevestiging, webhook en JWKS)
 is beschikbaar via `/q/swagger-ui` wanneer de applicatie draait (`./mvnw quarkus:dev`);
 zie de toelichting bij
 "OpenAPI-specificatie & codegen" hieronder voor waarom `/notifynl-callback`
@@ -303,8 +332,9 @@ daar niet in staat.
 Het contract van `/api/nmc/v1` is **spec-first** en bestaat uit twee losse
 specificaties:
 
-- `src/main/resources/META-INF/openapi.yaml` — `POST /centraal/notificaties` en
-  `POST /decentraal/notificaties` (de centrale- en decentrale-regie-flow).
+- `src/main/resources/META-INF/openapi.yaml` — `POST /centraal/notificaties`,
+  `POST /decentraal/notificaties`, de eventfeed met de bevestiging en de webhook als
+  callback, en `GET /.well-known/jwks.json`.
 - `src/main/resources/META-INF/notifynl-callback-openapi.yaml` — `POST
   /notifynl-callback`, in een eigen bestand zodat het zelfstandig te verwijderen
   is zodra dit endpoint niet meer nodig is (zie de API-sectie hierboven).
@@ -318,13 +348,14 @@ specificaties:
   voor runtime-documentatie.
 - Bij elke build genereert de `openapi-generator-maven-plugin` (twee losse
   `<execution>`s, één per spec) hieruit de JAX-RS-interfaces
-  (`nl.rijksoverheid.moz.nmc.api.CentraleNotificatiesApi` en `DecentraleNotificatiesApi`,
+  (`nl.rijksoverheid.moz.nmc.api.CentraleNotificatiesApi`, `DecentraleNotificatiesApi`,
+  `WijzigingenApi` en `SleutelsApi`,
   `nl.rijksoverheid.moz.nmc.notifynlcallback.api.NotifyNlCallbackApi`) en de
   request/response-modellen (`nl.rijksoverheid.moz.nmc.api.model.*`,
   `nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.*`) in
   `target/generated-sources/openapi` (niet ingecheckt).
-  `CentraleNotificatieController` en `DecentraleNotificatieController` (package
-  `controller`) en `NotifyNLCallbackController` (package
+  `CentraleNotificatieController`, `DecentraleNotificatieController`,
+  `EventfeedController` en `SleutelsController` (package `controller`) en `NotifyNLCallbackController` (package
   `notifynlcallback.controller`) implementeren de gegenereerde interfaces.
 
 Om een contract aan te passen: wijzig `META-INF/openapi.yaml` of
@@ -378,6 +409,11 @@ clients (zie "OpenAPI-specificatie & codegen" hierboven), geconfigureerd in
   ook leeg in de repository; zonder waarde (en zonder `%dev`/`%test`-override)
   start de applicatie niet op. Lokaal in te vullen via
   `application-dev.properties`.
+- `nmc.webhook.jwt.private-key` en `nmc.webhook.jwt.key-id`: de RSA-sleutel
+  (PKCS#8-PEM, minstens 2048 bits) waarmee de NMC de JWT op de webhook ondertekent,
+  en de sleutel-id in de JWKS. Leeg in de repository; zonder waarde start de
+  applicatie niet op. Lokaal een sleutel maken met
+  `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`.
 
 Start de applicatie in dev mode:
 
@@ -385,9 +421,9 @@ Start de applicatie in dev mode:
 ./mvnw quarkus:dev
 ```
 
-Voor `./mvnw test` worden de Profielservice- en NotifyNL-clients en de
-consument-callback-adapter gemockt; hiervoor is geen draaiende externe service
-nodig.
+Voor `./mvnw test` worden de Profielservice- en NotifyNL-clients gemockt en levert
+de webhook aan een testendpoint in de applicatie zelf; hiervoor is geen draaiende
+externe service nodig.
 
 Bovenstaande draait de app in **dev-mode** (`%dev`-profiel: Postgres uit
 `podman compose`, Flyway migreert automatisch). Wil je in plaats daarvan de
@@ -397,7 +433,7 @@ Bovenstaande draait de app in **dev-mode** (`%dev`-profiel: Postgres uit
 ## Status & vervolgstappen
 
 De NMC implementeert de centraal- en decentraal-profiel happy-flows inclusief de
-asynchrone bezorgstatus en consument-callback, zoals beschreven onder
+asynchrone bezorgstatus, de eventfeed en de webhook, zoals beschreven onder
 "Geïmplementeerde functionaliteit". De aanname is asynchroon (202) met een
 verzendtaak; de navraagtaak wordt gepland maar nog niet uitgevoerd. Nog **niet**
 aanwezig:
@@ -406,7 +442,7 @@ aanwezig:
 - **Contactherstel** en **herverzending** (voor beide profielen)
 - Een koppeling met de **Templating Service** (het `template_id` wordt voorlopig
   bepaald door een lokale `BerichtType`-enum, niet via een externe Templating Service)
-- **`GET /centraal/notificaties/{id}`** voor statuspoll zonder callbackUrl
-- **Bearer-JWT-authenticatie** voor de uitgaande consument-callback
+- **`GET /centraal/notificaties/{id}`** voor de status van één notificatie
+- Een **registratie-API** voor de webhook
 - Een uitgewerkt **observability-koppelvlak**
 

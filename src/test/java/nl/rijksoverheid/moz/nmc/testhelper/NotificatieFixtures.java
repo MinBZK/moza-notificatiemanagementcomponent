@@ -38,15 +38,14 @@ public final class NotificatieFixtures {
     }
 
     /** Een notificatie in de gegeven status, zonder poging. */
-    public static void voegNotificatieToe(EntityManager entityManager, UUID id, String callbackUrl,
-                                          NotificatieStatus status, OffsetDateTime laatsteStatusUpdate) {
+    public static void voegNotificatieToe(EntityManager entityManager, UUID id, NotificatieStatus status,
+                                          OffsetDateTime laatsteStatusUpdate) {
         zetTriggerUit(entityManager);
         entityManager.createQuery("insert into Notificatie (" + Notificatie_.ID + ", " + Notificatie_.DV_ID + ", "
-                        + Notificatie_.VERSIE + ", " + Notificatie_.CALLBACK_URL + ", " + Notificatie_.STATUS + ", "
-                        + Notificatie_.LAATSTE_STATUS_UPDATE + ") values (:id, :dvId, 0, :callbackUrl, :status, :tijdstip)")
+                        + Notificatie_.VERSIE + ", " + Notificatie_.STATUS + ", " + Notificatie_.LAATSTE_STATUS_UPDATE
+                        + ") values (:id, :dvId, 0, :status, :tijdstip)")
                 .setParameter("id", id)
                 .setParameter("dvId", DV_ID)
-                .setParameter("callbackUrl", callbackUrl)
                 .setParameter("status", status)
                 .setParameter("tijdstip", laatsteStatusUpdate)
                 .executeUpdate();

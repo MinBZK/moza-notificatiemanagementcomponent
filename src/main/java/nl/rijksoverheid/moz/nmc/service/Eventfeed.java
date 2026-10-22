@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import nl.rijksoverheid.moz.nmc.domain.Bevestiging;
@@ -61,7 +62,47 @@ public class Eventfeed {
 
         valideer(cursor);
 
-        int grootte = limiet == null ? maxPagina : Math.min(limiet, maxPagina);
+        return leesVanaf(dvId, cursor, limiet == null ? maxPagina : Math.min(limiet, maxPagina));
+    }
+
+    /**
+     * De volgende pagina na de leverpositie van de webhook, onder hetzelfde watermerk als de feed.
+     * Een positie uit een ander epoch begint opnieuw bij het oudste beschikbare event; een positie
+     * onder het oudste event leest gewoon verder met een waarschuwing, want wat daartussen lag is
+     * opgeruimd en bereikt de webhook niet.
+     *
+     * @param positie het laatst geleverde event, of null om bij het oudste beschikbare event te beginnen
+     */
+    @Transactional
+    public EventPagina leesVoorWebhook(UUID dvId, Cursor positie, int limiet) {
+        if (positie != null && positie.epoch() != epoch) {
+            Log.warnf("Webhookpositie van dienstverlener %s komt uit cluster-epoch %d; het huidige is %d. "
+                    + "De levering begint opnieuw bij het oudste beschikbare event", dvId, positie.epoch(), epoch);
+
+            return leesVanaf(dvId, null, Math.min(limiet, maxPagina));
+        }
+
+        if (positie != null && eventRepository.oudsteTransactieId().filter(oudste -> positie.transactieId() < oudste).isPresent()) {
+            Log.warnf("Webhookpositie van dienstverlener %s ligt onder het oudste beschikbare event; wat daartussen is "
+                    + "opgeruimd bereikt de webhook niet", dvId);
+        }
+
+        return leesVanaf(dvId, positie, Math.min(limiet, maxPagina));
+    }
+
+    /**
+     * De positie van het jongste event onder het watermerk, over alle dienstverleners; het begin van
+     * het log als er nog geen event is. Een webhook die zich registreert begint hier, zodat hij geen
+     * oudere events krijgt.
+     */
+    @Transactional
+    public Cursor kopVanHetLog() {
+        return eventRepository.jongsteOnderWatermerk()
+                .map(event -> new Cursor(epoch, event.getTransactieId(), event.getId()))
+                .orElseGet(() -> new Cursor(epoch, 0, 0));
+    }
+
+    private EventPagina leesVanaf(UUID dvId, Cursor cursor, int grootte) {
         long transactieId = cursor == null ? 0 : cursor.transactieId();
         long eventId = cursor == null ? 0 : cursor.eventId();
         List<Event> events = eventRepository.leesVanafPositie(dvId, transactieId, eventId, grootte);

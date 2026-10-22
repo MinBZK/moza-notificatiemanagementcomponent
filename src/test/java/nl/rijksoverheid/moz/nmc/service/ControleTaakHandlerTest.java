@@ -19,6 +19,7 @@ import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -113,6 +114,36 @@ class ControleTaakHandlerTest {
                 "controletaak plus de twee bestaande taken, geen nieuwe");
     }
 
+    @AfterEach
+    void zonderWebhook() {
+        zetWebhook(null);
+    }
+
+    // Een webhook komt er via het register bij; de controletaak geeft die dienstverlener zijn
+    // terugkoppeltaak, en een tweede ronde plant er geen tweede.
+    @Test
+    void controle_plantEenTerugkoppeltaakVoorEenDienstverlenerMetWebhook_eenmaal() {
+        zetWebhook("https://dv.example.nl/webhook");
+
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
+        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetDue(taakRepository.getEntityManager(),
+                TaakSoort.CONTROLE, taakRepository.find(Taak_.TAAK_SOORT, TaakSoort.CONTROLE).singleResult().getId(),
+                OffsetDateTime.now(ZoneOffset.UTC)));
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
+
+        List<Taak> terugkoppeltaken = QuarkusTransaction.requiringNew().call(() -> taakRepository
+                .find(Taak_.TAAK_SOORT, TaakSoort.TERUGKOPPELEN).list());
+        assertEquals(1, terugkoppeltaken.size());
+        assertEquals(NotificatieFixtures.DV_ID, terugkoppeltaken.getFirst().getDvId());
+    }
+
+    @Test
+    void controle_zonderWebhook_plantGeenTerugkoppeltaak() {
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
+
+        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.TERUGKOPPELEN)));
+    }
+
     @Test
     void geplandeRondeControle_voertDeHandlerUit() {
         UUID id = notificatie(NotificatieStatus.AANGENOMEN, null);
@@ -122,10 +153,15 @@ class ControleTaakHandlerTest {
         assertEquals(TaakSoort.VERZENDEN, perNotificatie().get(id).getTaakSoort());
     }
 
+    private void zetWebhook(String url) {
+        QuarkusTransaction.requiringNew().run(() ->
+                TaakFixtures.zetWebhook(taakRepository.getEntityManager(), NotificatieFixtures.DV_ID, url, null, null));
+    }
+
     // Een notificatie in de gegeven status, zonder taak; bij een NotifyNL-id met een verzonden poging.
     private UUID notificatie(NotificatieStatus status, UUID notifyId) {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, null);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
             overgangsfunctie.neemAan(notificatie);
             UUID id = notificatie.getId();
 
