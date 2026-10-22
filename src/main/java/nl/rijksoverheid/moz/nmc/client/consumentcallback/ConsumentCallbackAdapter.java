@@ -11,7 +11,6 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.RestClientDefinitionException;
 
 import java.io.IOException;
-import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -25,8 +24,6 @@ import java.util.concurrent.TimeoutException;
 public class ConsumentCallbackAdapter {
 
     private static final int MAX_POGINGEN = 3;
-
-    private static final String TYPE_PREFIX = "nl.mijnoverheidzakelijk.nmc.notificatie.status.";
 
     // Begrenst het aflopen van een eventueel kringvormige oorzakenketen.
     private static final int MAX_OORZAAKDIEPTE = 20;
@@ -63,18 +60,9 @@ public class ConsumentCallbackAdapter {
             return;
         }
 
-        NotificatieStatusEvent event = new NotificatieStatusEvent(
-                "1.0",
-                UUID.randomUUID(),
-                TYPE_PREFIX + statusUpdateOpdracht.nieuweStatus().toApiValue(),
-                "/api/nmc/v1/notificaties/" + statusUpdateOpdracht.notificatieId(),
-                statusUpdateOpdracht.notificatieId().toString(),
-                statusUpdateOpdracht.tijdstip(),
-                "application/json",
-                // De sequence-extensie van CloudEvents vergelijkt als tekst; voorloopnullen houden "10" na "9".
-                String.format("%019d", statusUpdateOpdracht.versie()),
-                new NotificatieData(statusUpdateOpdracht.vorigeStatus(), statusUpdateOpdracht.nieuweStatus(),
-                        statusUpdateOpdracht.reden(), statusUpdateOpdracht.versie()));
+        NotificatieStatusEvent event = NotificatieStatusEvent.van(statusUpdateOpdracht.eventUuid(),
+                statusUpdateOpdracht.notificatieId(), statusUpdateOpdracht.versie(), statusUpdateOpdracht.vorigeStatus(),
+                statusUpdateOpdracht.nieuweStatus(), statusUpdateOpdracht.reden(), statusUpdateOpdracht.tijdstip());
 
         try {
             verstuurMetHerpogingen(client, event, statusUpdateOpdracht);
