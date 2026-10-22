@@ -23,6 +23,16 @@ public sealed interface TaakUitkomst {
         }
     }
 
+    /**
+     * Een taak die zichzelf steeds opnieuw plant, had een geslaagde ronde: hij komt op {@code due} terug
+     * en zijn pogingen gaan terug naar nul, zodat alleen fouten op rij hem op mislukt zetten.
+     */
+    record Herpland(OffsetDateTime due) implements TaakUitkomst {
+        public Herpland {
+            Objects.requireNonNull(due, "due is verplicht");
+        }
+    }
+
     /** De handler heeft de rij zelf al afgerond of uitgesteld in zijn eigen transactie; de worker doet niets meer. */
     record AlAfgerond() implements TaakUitkomst {
     }
@@ -33,6 +43,10 @@ public sealed interface TaakUitkomst {
 
     static TaakUitkomst uitgesteld(OffsetDateTime due, boolean teltAlsPoging) {
         return new Uitgesteld(due, teltAlsPoging);
+    }
+
+    static TaakUitkomst herpland(OffsetDateTime due) {
+        return new Herpland(due);
     }
 
     static TaakUitkomst alAfgerond() {
