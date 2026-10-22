@@ -6,6 +6,7 @@ import io.quarkus.panache.common.Parameters;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.LockModeType;
+import nl.rijksoverheid.moz.nmc.domain.Dienstverlener_;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
@@ -32,6 +33,26 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
 
     private static final String ZELFDE_CLAIM = Taak_.TAAK_SOORT + " = :taakSoort and " + Taak_.ID + " = :id and "
             + Taak_.CLAIM_EPOCH + " = :claimEpoch";
+
+    /**
+     * Plant een terugkoppeltaak voor elke dienstverlener met een webhook die er nog geen heeft.
+     *
+     * @return het aantal geplande taken
+     */
+    public int planTerugkoppeltaken(OffsetDateTime due) {
+        // De unieke index op (dv_id, soort) voor terugkoppeltaken maakt dit veilig bij gelijktijdige pods.
+        // Hibernate leidt de parametertypen in een insert niet af uit de kolommen; vandaar de types van
+        // de attributen.
+        return getSession().createMutationQuery("insert into Taak (" + Taak_.TAAK_SOORT + ", " + Taak_.DV_ID + ", "
+                        + Taak_.DUE + ", " + Taak_.STATUS + ") select :taakSoort, d." + Dienstverlener_.ID + ", :due, :open"
+                        + " from Dienstverlener d where d." + Dienstverlener_.WEBHOOK_URL + " is not null"
+                        + " and not exists (select 1 from Taak t where t." + Taak_.TAAK_SOORT + " = :taakSoort and t."
+                        + Taak_.DV_ID + " = d." + Dienstverlener_.ID + ") on conflict do nothing")
+                .setParameter("taakSoort", TaakSoort.TERUGKOPPELEN, Taak_.taakSoort.getType())
+                .setParameter("due", due, Taak_.due.getType())
+                .setParameter("open", TaakStatus.OPEN, Taak_.status.getType())
+                .executeUpdate();
+    }
 
     /**
      * De dienstverleners met een taak van deze soort die aan de beurt is, wie het langst wacht eerst,
@@ -112,6 +133,15 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
         return update(Taak_.LEASE_TOT + " = null, " + Taak_.DUE + " = :due, " + Taak_.POGINGEN + " = "
                         + Taak_.POGINGEN + " + :extra where " + ZELFDE_CLAIM,
                 claimVan(taak).and("due", due).and("extra", teltAlsPoging ? 1 : 0)) == 1;
+    }
+
+    /**
+     * Plant de taak opnieuw op {@code due} na een geslaagde ronde en zet de pogingen terug; false als
+     * de taak inmiddels door een andere worker is geclaimd.
+     */
+    public boolean herplanNaSucces(Taak taak, OffsetDateTime due) {
+        return update(Taak_.LEASE_TOT + " = null, " + Taak_.DUE + " = :due, " + Taak_.POGINGEN + " = 0 where "
+                + ZELFDE_CLAIM, claimVan(taak).and("due", due)) == 1;
     }
 
     /** Zet de taak op mislukt en geeft de lease vrij; false als een andere worker hem inmiddels claimde. */

@@ -10,7 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class CallbackUrlValidatorTest {
+class WebhookUrlValidatorTest {
+
+    private static final WebhookUrlValidator VALIDATOR = new WebhookUrlValidator();
 
     private static final String SCHEME = "alleen een absolute https-URL is toegestaan";
     private static final String IP_ADRES = "een IP-adres als host is niet toegestaan";
@@ -32,24 +34,24 @@ class CallbackUrlValidatorTest {
         // De uitgaande REST-client vergelijkt het scheme hoofdlettergevoelig, dus "HTTPS"
         // mag niet ongewijzigd worden opgeslagen (anders gaat de callback over plain HTTP).
         assertEquals("https://consument.example.nl/status",
-                CallbackUrlValidator.normaliseer(URI.create("HTTPS://consument.example.nl/status")));
+                VALIDATOR.normaliseer(URI.create("HTTPS://consument.example.nl/status")));
     }
 
     @Test
     void kleineletterSchemeWordtOngewijzigdTeruggegeven() {
         assertEquals("https://consument.example.nl:8443/pad?notificatie=1",
-                CallbackUrlValidator.normaliseer(URI.create("https://consument.example.nl:8443/pad?notificatie=1")));
+                VALIDATOR.normaliseer(URI.create("https://consument.example.nl:8443/pad?notificatie=1")));
     }
 
     @Test
     void uriZonderScheme_wordtOngewijzigdTeruggegeven() {
-        assertEquals("/alleen-een-pad", CallbackUrlValidator.normaliseer(URI.create("/alleen-een-pad")));
+        assertEquals("/alleen-een-pad", VALIDATOR.normaliseer(URI.create("/alleen-een-pad")));
     }
 
     @Test
-    void zonderCallbackUrl_wordtGeaccepteerdEnGeeftNull() {
-        assertDoesNotThrow(() -> CallbackUrlValidator.valideer(null));
-        assertNull(CallbackUrlValidator.normaliseer(null));
+    void zonderUrl_wordtGeaccepteerdEnGeeftNull() {
+        assertDoesNotThrow(() -> VALIDATOR.valideer(null));
+        assertNull(VALIDATOR.normaliseer(null));
     }
 
     @Test
@@ -134,21 +136,37 @@ class CallbackUrlValidatorTest {
     }
 
     @Test
-    void foutmeldingBenoemtDeCallbackUrl() {
-        OngeldigeCallbackUrlException e = assertThrows(OngeldigeCallbackUrlException.class,
-                () -> CallbackUrlValidator.valideer(URI.create("http://consument.example.nl/status")));
-        assertTrue(e.getMessage().contains("callbackUrl"));
+    void foutmeldingBenoemtDeWebhookUrl() {
+        OngeldigeWebhookUrlException e = assertThrows(OngeldigeWebhookUrlException.class,
+                () -> VALIDATOR.valideer(URI.create("http://consument.example.nl/status")));
+        assertTrue(e.getMessage().contains("webhook-URL"));
+    }
+
+    @Test
+    void controleer_geldigeUrl_geeftHemGenormaliseerdTerug() {
+        assertEquals("https://dv.example.nl/webhook", VALIDATOR.controleer("HTTPS://dv.example.nl/webhook"));
+    }
+
+    @Test
+    void controleer_interneOfOnveiligeUrl_weigert() {
+        assertThrows(OngeldigeWebhookUrlException.class, () -> VALIDATOR.controleer("http://dv.example.nl/webhook"));
+        assertThrows(OngeldigeWebhookUrlException.class, () -> VALIDATOR.controleer("https://10.0.0.1/webhook"));
+    }
+
+    @Test
+    void controleer_nietTeOntleden_weigert() {
+        assertThrows(OngeldigeWebhookUrlException.class, () -> VALIDATOR.controleer("https://dv example.nl/webhook"));
     }
 
     private static void assertGeaccepteerd(String url) {
-        assertDoesNotThrow(() -> CallbackUrlValidator.valideer(URI.create(url)),
+        assertDoesNotThrow(() -> VALIDATOR.valideer(URI.create(url)),
                 url + " zou geaccepteerd moeten worden");
     }
 
     /** Asserts both the rejection and the reden, so a case cannot pass via another regel. */
     private static void assertGeweigerd(String url, String reden) {
-        OngeldigeCallbackUrlException e = assertThrows(OngeldigeCallbackUrlException.class,
-                () -> CallbackUrlValidator.valideer(URI.create(url)),
+        OngeldigeWebhookUrlException e = assertThrows(OngeldigeWebhookUrlException.class,
+                () -> VALIDATOR.valideer(URI.create(url)),
                 url + " zou geweigerd moeten worden");
         assertTrue(e.getMessage().contains(reden),
                 url + " werd geweigerd om een andere reden: " + e.getMessage());

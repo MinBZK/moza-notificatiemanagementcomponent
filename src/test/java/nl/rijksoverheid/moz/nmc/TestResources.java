@@ -7,6 +7,7 @@ import io.quarkus.test.common.QuarkusTestResource;
  * in de testmodule; de resource geldt daarmee voor elke {@code @QuarkusTest}.
  */
 @QuarkusTestResource(EmbeddedPostgresTestResource.class)
+@QuarkusTestResource(WebhookSleutelTestResource.class)
 public final class TestResources {
 
     private TestResources() {

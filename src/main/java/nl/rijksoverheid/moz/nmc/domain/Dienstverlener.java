@@ -27,6 +27,18 @@ public class Dienstverlener {
     @Column(name = "quotum_per_dag")
     private Integer quotumPerDag;
 
+    // Leeg is geen webhook.
+    @Column(name = "webhook_url", length = 2048)
+    private String webhookUrl;
+
+    // Leeg is de default uit de configuratie.
+    @Column(name = "webhook_max_mislukkingen")
+    private Integer webhookMaxMislukkingen;
+
+    // Leeg is de default uit de configuratie.
+    @Column(name = "webhook_bundel")
+    private Integer webhookBundel;
+
     protected Dienstverlener() {
         // Voor JPA
     }
@@ -46,5 +58,20 @@ public class Dienstverlener {
     /** Het maximum aantal aannames per dag, als dat begrensd is. */
     public Optional<Integer> getQuotumPerDag() {
         return Optional.ofNullable(quotumPerDag);
+    }
+
+    /** De webhook uit de onboarding, als de dienstverlener er een heeft; nog niet gevalideerd. */
+    public Optional<String> getWebhookUrl() {
+        return Optional.ofNullable(webhookUrl);
+    }
+
+    /** Het aantal mislukte leveringen waarna de webhook pauzeert, als daar een afspraak over is. */
+    public Optional<Integer> getWebhookMaxMislukkingen() {
+        return Optional.ofNullable(webhookMaxMislukkingen);
+    }
+
+    /** Hoeveel events per aanroep naar de webhook gaan, als de dienstverlener dat afwijkend wil. */
+    public Optional<Integer> getWebhookBundel() {
+        return Optional.ofNullable(webhookBundel);
     }
 }

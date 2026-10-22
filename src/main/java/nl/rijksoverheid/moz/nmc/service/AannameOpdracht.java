@@ -17,8 +17,7 @@ public record AannameOpdracht(Regie regie,
                               String dienstverlener,
                               String dienst,
                               String templateId,
-                              Map<String, String> berichtgegevens,
-                              String callbackUrl) {
+                              Map<String, String> berichtgegevens) {
 
     public AannameOpdracht {
         Objects.requireNonNull(regie, "regie is verplicht");
