@@ -14,7 +14,7 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.Contactgeg
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.StatusRegistratie;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
@@ -178,8 +178,8 @@ class NotifyNLCallbackControllerTest {
 
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie notificatie = notificatieRepository.findByExternalReference(notifyNlId).orElseThrow();
-            List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
-            NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
+            List<StatusRegistratie> geschiedenis = notificatie.getStatusGeschiedenis();
+            StatusRegistratie laatste = geschiedenis.get(geschiedenis.size() - 1);
 
             assertEquals(StatusWaarde.DELIVERED, laatste.status());
             assertEquals(OffsetDateTime.parse(COMPLETED_AT), laatste.tijdstip());
@@ -196,7 +196,7 @@ class NotifyNLCallbackControllerTest {
     void verwerkAfleverstatus_receiptZonderTijdstippen_wordtVerwerkt() {
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
-        // Afgekapt op microseconden, net als NotificatieStatus; zie NotificatieTest.
+        // Afgekapt op microseconden, net als StatusRegistratie; zie NotificatieTest.
         OffsetDateTime voorCallback = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
         given()
@@ -215,8 +215,8 @@ class NotifyNLCallbackControllerTest {
 
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie notificatie = notificatieRepository.findByExternalReference(notifyNlId).orElseThrow();
-            List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
-            NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
+            List<StatusRegistratie> geschiedenis = notificatie.getStatusGeschiedenis();
+            StatusRegistratie laatste = geschiedenis.get(geschiedenis.size() - 1);
 
             assertEquals(StatusWaarde.DELIVERED, laatste.status());
             assertFalse(laatste.tijdstip().isBefore(voorCallback));

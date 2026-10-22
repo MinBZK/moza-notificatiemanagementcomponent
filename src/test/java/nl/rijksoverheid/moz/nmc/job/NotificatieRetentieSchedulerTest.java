@@ -6,7 +6,7 @@ import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.StatusRegistratie;
 import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
 import nl.rijksoverheid.moz.nmc.repository.Kandidaat;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
@@ -352,12 +352,12 @@ class NotificatieRetentieSchedulerTest {
         OffsetDateTime verlopen = OffsetDateTime.now(ZoneOffset.UTC).minusDays(31);
         List<UUID> ids = List.of(
                 maakNotificatieMetGeschiedenis(null, null, List.of(
-                        NotificatieStatus.opEigenKlok(StatusWaarde.CREATED, verlopen),
-                        NotificatieStatus.opEigenKlok(StatusWaarde.SENDING, verlopen),
-                        NotificatieStatus.opEigenKlok(StatusWaarde.DELIVERED, verlopen))),
+                        StatusRegistratie.opEigenKlok(StatusWaarde.CREATED, verlopen),
+                        StatusRegistratie.opEigenKlok(StatusWaarde.SENDING, verlopen),
+                        StatusRegistratie.opEigenKlok(StatusWaarde.DELIVERED, verlopen))),
                 maakNotificatieMetGeschiedenis(null, null, List.of(
-                        NotificatieStatus.opEigenKlok(StatusWaarde.CREATED, verlopen),
-                        NotificatieStatus.opEigenKlok(StatusWaarde.DELIVERED, verlopen))));
+                        StatusRegistratie.opEigenKlok(StatusWaarde.CREATED, verlopen),
+                        StatusRegistratie.opEigenKlok(StatusWaarde.DELIVERED, verlopen))));
 
         int verwijderd = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.verwijderOpId(ids));
 
@@ -556,8 +556,8 @@ class NotificatieRetentieSchedulerTest {
     @Test
     void verwijderVerlopenNotificaties_notificatieMetOudeCreatedMaarRecenteStatus_wordtNietVerwijderd() {
         UUID id = maakNotificatieMetGeschiedenis(null, null, List.of(
-                NotificatieStatus.opEigenKlok(StatusWaarde.CREATED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(40)),
-                NotificatieStatus.opEigenKlok(StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1))));
+                StatusRegistratie.opEigenKlok(StatusWaarde.CREATED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(40)),
+                StatusRegistratie.opEigenKlok(StatusWaarde.DELIVERED, OffsetDateTime.now(ZoneOffset.UTC).minusDays(1))));
 
         scheduler.verwijderVerlopenNotificaties();
 
@@ -632,7 +632,7 @@ class NotificatieRetentieSchedulerTest {
     void verwerkAfleverstatus_voorEenVerlopenNotificatie_verzetDeBewaartermijnZodatDeRetentiejobHemLaatStaan() {
         UUID notifyNlReferentie = UUID.randomUUID();
         UUID id = maakNotificatieMetGeschiedenis(null, notifyNlReferentie, List.of(
-                NotificatieStatus.opEigenKlok(StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31))));
+                StatusRegistratie.opEigenKlok(StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC).minusDays(31))));
 
         // Met een completed_at die zelf al buiten de bewaartermijn valt: de gebeurtenistijd komt van
         // de klok van NotifyNL en mag de bewaartermijn niet bepalen. Vaart de retentiejob er toch op,
@@ -683,14 +683,14 @@ class NotificatieRetentieSchedulerTest {
     private UUID maakNotificatie(String callbackUrl, StatusWaarde status, OffsetDateTime laatsteStatusUpdate,
             UUID externalReference) {
         return maakNotificatieMetGeschiedenis(callbackUrl, externalReference,
-                List.of(NotificatieStatus.opEigenKlok(status, laatsteStatusUpdate)));
+                List.of(StatusRegistratie.opEigenKlok(status, laatsteStatusUpdate)));
     }
 
     // De constructor registreert altijd zelf CREATED op de eigen klok; deze fixtures willen een
     // bewust terug- of vooruitgedateerde geschiedenis. Die schrijft NotificatieFixtures met SQL,
     // inclusief de kopie op notificatie die registreerStatus normaal bijwerkt.
     private UUID maakNotificatieMetGeschiedenis(String callbackUrl, UUID externalReference,
-            List<NotificatieStatus> geschiedenis) {
+            List<StatusRegistratie> geschiedenis) {
         UUID id = UUID.randomUUID();
         QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.voegNotificatieToe(
                 notificatieRepository.getEntityManager(), id, externalReference, callbackUrl, geschiedenis));
