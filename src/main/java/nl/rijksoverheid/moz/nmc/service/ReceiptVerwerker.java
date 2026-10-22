@@ -10,13 +10,17 @@ import nl.rijksoverheid.moz.nmc.domain.OvergangUitkomst;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
+import nl.rijksoverheid.moz.nmc.domain.Taak;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,9 +37,12 @@ public class ReceiptVerwerker {
 
     private final PogingRepository pogingRepository;
     private final Overgangsfunctie overgangsfunctie;
+    private final TaakRepository taakRepository;
+    private final Vaststellingstermijn vaststellingstermijn;
     private final Duration klokmarge;
 
     public ReceiptVerwerker(PogingRepository pogingRepository, Overgangsfunctie overgangsfunctie,
+                            TaakRepository taakRepository, Vaststellingstermijn vaststellingstermijn,
                             @ConfigProperty(name = "nmc.receipt.klokmarge") Duration klokmarge) {
         if (klokmarge.isNegative()) {
             throw new IllegalStateException("nmc.receipt.klokmarge mag niet negatief zijn, is " + klokmarge);
@@ -43,6 +50,8 @@ public class ReceiptVerwerker {
 
         this.pogingRepository = pogingRepository;
         this.overgangsfunctie = overgangsfunctie;
+        this.taakRepository = taakRepository;
+        this.vaststellingstermijn = vaststellingstermijn;
         this.klokmarge = klokmarge;
     }
 
@@ -60,8 +69,9 @@ public class ReceiptVerwerker {
         Poging poging = zoekPoging(notifyId, reference);
         Optional<PogingStatus> uitkomst = NotifyNLAfleverstatus.naarUitkomst(status, notifyId);
 
-        // Een tussenstatus voor een poging die haar id al heeft, verandert niets.
-        if (uitkomst.isEmpty() && poging.getNotifyId() != null) {
+        // Een tussenstatus voor een poging die haar id al heeft, verandert niets. Een onbekende status
+        // komt wel op de poging, zodat te zien blijft wat NotifyNL meldde.
+        if (uitkomst.isEmpty() && poging.getNotifyId() != null && NotifyNLAfleverstatus.isTussenstatus(status)) {
             return;
         }
 
@@ -69,6 +79,7 @@ public class ReceiptVerwerker {
         // elkaars uitkomst zien.
         Notificatie notificatie = overgangsfunctie.vergrendel(poging.getNotificatieId());
         pogingRepository.herlaad(poging);
+        poging.registreerNotifyStatus(status);
         OffsetDateTime ontvangen = normaliseer(OffsetDateTime.now(ZoneOffset.UTC));
         OffsetDateTime tijdstip = opgetreden == null ? ontvangen : begrens(normaliseer(opgetreden), ontvangen, status, notifyId);
 
@@ -89,6 +100,7 @@ public class ReceiptVerwerker {
             return;
         }
 
+        PogingStatus vorige = poging.getStatus();
         boolean verwerkt = opgetreden == null
                 ? poging.verwerkReceiptZonderTijdstip(uitkomst.get(), tijdstip)
                 : poging.verwerkReceipt(uitkomst.get(), tijdstip);
@@ -105,12 +117,38 @@ public class ReceiptVerwerker {
             return;
         }
 
+        // Met een uitkomst voor de lopende poging is de navraag klaar.
+        if (vorige == PogingStatus.VERZONDEN || vorige == PogingStatus.GEPLAND) {
+            taakRepository.verwijderOpen(TaakSoort.RECONCILIEREN, notificatie.getId());
+        }
+
+        // Op een bezorgde notificatie geeft een faalreceipt alleen een overgang als hij gaat over de
+        // poging waarop bezorgd rust en binnen de vaststellingstermijn valt.
+        if (notificatie.getStatus() == NotificatieStatus.BEZORGD && uitkomst.get() != PogingStatus.BEZORGD
+                && (poging.getBezorgdOp() == null || !vaststellingstermijn.binnen(poging.getBezorgdOp(), tijdstip))) {
+            Log.infof("Receipt %s voor notificatie %s valt buiten de vaststellingstermijn van de bezorging; alleen op "
+                    + "de poging vastgelegd", status, notificatie.getId());
+
+            return;
+        }
+
         Overgang overgang = Overgang.bepaal(uitkomst.get());
         OvergangUitkomst resultaat = overgangsfunctie.voerUit(notificatie.getId(), overgang.status(), overgang.reden());
 
         if (!resultaat.isUitgevoerd()) {
             Log.debugf("Notificatie %s blijft op %s; receipt %s (NotifyNL-referentie %s) is op de poging vastgelegd",
                     notificatie.getId(), resultaat.van(), status, notifyId);
+
+            return;
+        }
+
+        // Een overgang weg van bezorgd rondt de open vaststeltaak af; een nieuwe bezorging plant een nieuwe.
+        taakRepository.verwijderOpen(TaakSoort.BEZORGING_VASTSTELLEN, notificatie.getId());
+
+        if (overgang.status() == NotificatieStatus.BEZORGD) {
+            taakRepository.persist(new Taak(TaakSoort.BEZORGING_VASTSTELLEN, notificatie.getDvId(), notificatie.getId(),
+                    vaststellingstermijn.vaststellenOp(tijdstip), null,
+                    Map.of(VerzendTaakHandler.PAYLOAD_POGING_ID, poging.getId().toString())));
         }
     }
 
