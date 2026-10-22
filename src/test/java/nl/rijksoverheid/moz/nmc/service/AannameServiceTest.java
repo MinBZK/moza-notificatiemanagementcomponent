@@ -82,14 +82,13 @@ class AannameServiceTest {
 
     @Test
     void neemAan_centraal_slaatNotificatieEventEnVerzendtaakOpZonderExterneAanroep() {
-        UUID id = aannameService.neemAan(centraal("https://omc.example.nl/callback"));
+        UUID id = aannameService.neemAan(centraal());
 
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie notificatie = notificatieRepository.findById(id);
             assertEquals(NotificatieStatus.AANGENOMEN, notificatie.getStatus());
             assertEquals(0, notificatie.getVersie());
             assertEquals(NotificatieFixtures.DV_ID, notificatie.getDvId());
-            assertEquals("https://omc.example.nl/callback", notificatie.getCallbackUrl());
             assertFalse(notificatie.getAangenomenOp().isAfter(OffsetDateTime.now(ZoneOffset.UTC)));
             assertEquals(new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
                     sleutelbeheer.ontsleutelOntvanger(id, notificatie.getVersleuteldeGegevens()));
@@ -118,7 +117,7 @@ class AannameServiceTest {
     @Test
     void neemAan_decentraal_bewaartHetAdresVersleuteldEnLaatDienstverlenerUitDePayload() {
         UUID id = aannameService.neemAan(new AannameOpdracht(Regie.DECENTRAAL, Ontvanger.email("burger@example.nl"),
-                null, null, TEMPLATE_ID, null, null));
+                null, null, TEMPLATE_ID, null));
 
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie notificatie = notificatieRepository.findById(id);
@@ -136,9 +135,9 @@ class AannameServiceTest {
     @Test
     void neemAan_quotumBereikt_weigertEnLegtNietsVast() {
         zetQuotum(1);
-        aannameService.neemAan(centraal(null));
+        aannameService.neemAan(centraal());
 
-        assertThrows(QuotumOverschredenException.class, () -> aannameService.neemAan(centraal(null)));
+        assertThrows(QuotumOverschredenException.class, () -> aannameService.neemAan(centraal()));
 
         assertEquals(1, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
         assertEquals(1, QuarkusTransaction.requiringNew().call(() -> taakRepository.count()));
@@ -147,7 +146,7 @@ class AannameServiceTest {
     @Test
     void neemAan_zonderQuotum_kentGeenGrens() {
         for (int i = 0; i < 3; i++) {
-            aannameService.neemAan(centraal(null));
+            aannameService.neemAan(centraal());
         }
 
         assertEquals(3, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
@@ -156,12 +155,12 @@ class AannameServiceTest {
     @Test
     void aannameOpdracht_zonderOntvanger_weigert() {
         assertThrows(NullPointerException.class,
-                () -> new AannameOpdracht(Regie.DECENTRAAL, null, null, null, TEMPLATE_ID, null, null));
+                () -> new AannameOpdracht(Regie.DECENTRAAL, null, null, null, TEMPLATE_ID, null));
     }
 
-    private static AannameOpdracht centraal(String callbackUrl) {
+    private static AannameOpdracht centraal() {
         return new AannameOpdracht(Regie.CENTRAAL, new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
-                "Gemeente Voorbeeld", "Parkeervergunning", TEMPLATE_ID, Map.of("naam", "Voorbeeld BV"), callbackUrl);
+                "Gemeente Voorbeeld", "Parkeervergunning", TEMPLATE_ID, Map.of("naam", "Voorbeeld BV"));
     }
 
     private void zetQuotum(Integer quotum) {

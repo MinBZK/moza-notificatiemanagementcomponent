@@ -65,6 +65,6 @@ class AannameQuotumTest {
 
     private static AannameOpdracht opdracht() {
         return new AannameOpdracht(Regie.DECENTRAAL, Ontvanger.email("burger@example.nl"), null, null,
-                "test-template-id", null, null);
+                "test-template-id", null);
     }
 }

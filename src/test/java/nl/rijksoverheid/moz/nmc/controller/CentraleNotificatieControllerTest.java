@@ -64,7 +64,7 @@ class CentraleNotificatieControllerTest {
     }
 
     @Test
-    void notificatieVersturen_happyFlow_retourneert202EnPlantDeVerzendtaak() {
+    void notificatieAannemen_happyFlow_retourneert202EnPlantDeVerzendtaak() {
         String id = given()
                 .contentType(ContentType.JSON)
                 .body(aanvraag("Stuurgroep Agenda", "\"dienst\": \"Parkeervergunning\","))
@@ -82,7 +82,7 @@ class CentraleNotificatieControllerTest {
     }
 
     @Test
-    void notificatieVersturen_zonderDienst_retourneert202() {
+    void notificatieAannemen_zonderDienst_retourneert202() {
         given()
                 .contentType(ContentType.JSON)
                 .body(aanvraag("Stuurgroep Agenda", ""))
@@ -92,18 +92,7 @@ class CentraleNotificatieControllerTest {
     }
 
     @Test
-    void notificatieVersturen_ongeldigeCallbackUrl_retourneert400() {
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag("Stuurgroep Agenda", "\"callbackUrl\": \"http://127.0.0.1/cb\","))
-                .when().post(PAD)
-                .then()
-                .statusCode(400)
-                .body("violations", notNullValue());
-    }
-
-    @Test
-    void notificatieVersturen_ontbrekendIdentificatieNummer_retourneert400() {
+    void notificatieAannemen_ontbrekendIdentificatieNummer_retourneert400() {
         given()
                 .contentType(ContentType.JSON)
                 .body("""
@@ -119,7 +108,7 @@ class CentraleNotificatieControllerTest {
     }
 
     @Test
-    void notificatieVersturen_leegIdentificatieNummer_retourneert400() {
+    void notificatieAannemen_leegIdentificatieNummer_retourneert400() {
         given()
                 .contentType(ContentType.JSON)
                 .body("""
@@ -136,7 +125,7 @@ class CentraleNotificatieControllerTest {
     }
 
     @Test
-    void notificatieVersturen_onbekendBerichtType_retourneert400() {
+    void notificatieAannemen_onbekendBerichtType_retourneert400() {
         given()
                 .contentType(ContentType.JSON)
                 .body(aanvraag("Bestaat Niet", ""))
@@ -147,7 +136,7 @@ class CentraleNotificatieControllerTest {
     }
 
     @Test
-    void notificatieVersturen_quotumBereikt_retourneert429MetEigenType() {
+    void notificatieAannemen_quotumBereikt_retourneert429MetEigenType() {
         zetQuotum(1);
         given().contentType(ContentType.JSON).body(aanvraag("Stuurgroep Agenda", "")).when().post(PAD).then().statusCode(202);
 
@@ -162,7 +151,7 @@ class CentraleNotificatieControllerTest {
     }
 
     @Test
-    void notificatieVersturen_meerDan50Berichtgegevens_retourneert400() {
+    void notificatieAannemen_meerDan50Berichtgegevens_retourneert400() {
         StringBuilder gegevens = new StringBuilder("{");
         for (int i = 1; i <= 51; i++) {
             gegevens.append(i > 1 ? ", " : "").append("\"v").append(i).append("\": \"x\"");
@@ -179,7 +168,7 @@ class CentraleNotificatieControllerTest {
     }
 
     @Test
-    void notificatieVersturen_berichtgegevenLangerDan2000Tekens_retourneert400() {
+    void notificatieAannemen_berichtgegevenLangerDan2000Tekens_retourneert400() {
         given()
                 .contentType(ContentType.JSON)
                 .body(aanvraagMetBerichtgegevens("{ \"naam\": \"" + "x".repeat(2001) + "\" }"))

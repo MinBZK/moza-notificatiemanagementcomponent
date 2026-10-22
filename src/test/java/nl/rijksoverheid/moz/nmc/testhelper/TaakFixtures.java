@@ -8,13 +8,15 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.domain.VerzendbudgetTijdvak_;
+import nl.rijksoverheid.moz.nmc.domain.Webhookpositie_;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * Schrijft en leest de takentabel, het verzendbudget en de dienstverleners buiten de claim om, voor
- * tests die een toestand willen die de claim zelf niet maakt. Elke query op {@code Taak} noemt de soort.
+ * Schrijft en leest de takentabel, het verzendbudget, de dienstverleners en de webhookpositie buiten de
+ * claim om, voor tests die een toestand willen die de claim zelf niet maakt. Elke query op
+ * {@code Taak} noemt de soort.
  */
 public final class TaakFixtures {
 
@@ -43,6 +45,14 @@ public final class TaakFixtures {
     public static void zetLeaseTot(EntityManager entityManager, TaakSoort taakSoort, long id, OffsetDateTime tot) {
         entityManager.createQuery("update Taak set " + Taak_.LEASE_TOT + " = :tot" + ZELFDE_TAAK)
                 .setParameter("tot", tot)
+                .setParameter("taakSoort", taakSoort)
+                .setParameter("id", id)
+                .executeUpdate();
+    }
+
+    public static void zetPogingen(EntityManager entityManager, TaakSoort taakSoort, long id, int pogingen) {
+        entityManager.createQuery("update Taak set " + Taak_.POGINGEN + " = :pogingen" + ZELFDE_TAAK)
+                .setParameter("pogingen", pogingen)
                 .setParameter("taakSoort", taakSoort)
                 .setParameter("id", id)
                 .executeUpdate();
@@ -106,6 +116,28 @@ public final class TaakFixtures {
                         + Dienstverlener_.ID + " = :id")
                 .setParameter("quotum", quotum)
                 .setParameter("id", dvId)
+                .executeUpdate();
+    }
+
+    /** Zet de webhook in het register; {@code null} betekent geen webhook of de default. */
+    public static void zetWebhook(EntityManager entityManager, UUID dvId, String url, Integer maxMislukkingen,
+                                  Integer bundel) {
+        entityManager.createQuery("update Dienstverlener set " + Dienstverlener_.WEBHOOK_URL + " = :url, "
+                        + Dienstverlener_.WEBHOOK_MAX_MISLUKKINGEN + " = :max, " + Dienstverlener_.WEBHOOK_BUNDEL
+                        + " = :bundel where " + Dienstverlener_.ID + " = :id")
+                .setParameter("url", url)
+                .setParameter("max", maxMislukkingen)
+                .setParameter("bundel", bundel)
+                .setParameter("id", dvId)
+                .executeUpdate();
+    }
+
+    /** Laat een lopende pauze van de webhook op {@code tot} eindigen. */
+    public static void beeindigPauze(EntityManager entityManager, UUID dvId, OffsetDateTime tot) {
+        entityManager.createQuery("update Webhookpositie set " + Webhookpositie_.GEPAUZEERD_TOT + " = :tot where "
+                        + Webhookpositie_.DV_ID + " = :dvId and " + Webhookpositie_.GEPAUZEERD_TOT + " is not null")
+                .setParameter("tot", tot)
+                .setParameter("dvId", dvId)
                 .executeUpdate();
     }
 
