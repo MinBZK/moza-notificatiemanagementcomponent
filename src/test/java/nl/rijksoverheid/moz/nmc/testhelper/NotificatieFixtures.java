@@ -5,7 +5,16 @@ import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 
+import javax.sql.DataSource;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -89,6 +98,35 @@ public final class NotificatieFixtures {
         return (String) entityManager.createNativeQuery("SELECT n.status FROM notificatie n "
                         + "JOIN poging p ON p.notificatie_id = n.id WHERE p.status = 'GEPLAND'")
                 .getSingleResult();
+    }
+
+    /**
+     * De notificatierij zoals een {@code SELECT} van een beheerder hem ziet: elke kolom als bytes, bytea zoals
+     * opgeslagen en andere typen in hun tekstvorm.
+     */
+    public static Map<String, byte[]> leesRuweRij(DataSource dataSource, UUID id) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("SELECT * FROM notificatie WHERE id = ?")) {
+            statement.setObject(1, id);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    throw new IllegalStateException("notificatie " + id + " niet gevonden");
+                }
+
+                ResultSetMetaData metaData = resultSet.getMetaData();
+                Map<String, byte[]> rij = new LinkedHashMap<>();
+
+                for (int i = 1; i <= metaData.getColumnCount(); i++) {
+                    Object waarde = resultSet.getObject(i);
+                    byte[] bytes = waarde instanceof byte[] b ? b
+                            : waarde == null ? null : String.valueOf(waarde).getBytes(StandardCharsets.UTF_8);
+                    rij.put(metaData.getColumnName(i), bytes);
+                }
+
+                return rij;
+            }
+        }
     }
 
     /** Zet de registratietijd terug, zodat een notificatie buiten de bewaartermijn valt. */

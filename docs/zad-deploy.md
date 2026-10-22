@@ -56,6 +56,8 @@ Benodigde env-vars op die deployment:
 | `QUARKUS_REST_CLIENT_NOTIFY_URL` | NotifyNL-endpoint; `application.properties` heeft geen default (leeg buiten `%test`), dus verplicht per deployomgeving |
 | `QUARKUS_REST_CLIENT_PROFIELSERVICE_URL` | Profielservice-endpoint; idem, geen default, verplicht per deployomgeving |
 | `HASH_PEPPER` | Keyed HMAC pepper (mag niet leeg in prod) |
+| `NMC_KEK_HUIDIGE_VERSIE` | Versie van de KEK waarmee `Sleutelbeheer` nieuwe sleutels per notificatie wrapt (geheel getal, 1 of hoger). Ontbreekt hij, dan start de app niet |
+| `NMC_KEK_VERSIE_<n>` | KEK van versie `<n>`: base64 van precies 32 random bytes (bijvoorbeeld `openssl rand -base64 32`). Die van de huidige versie is verplicht; ontbreekt hij of is hij geen 32 bytes, dan start de app niet. Een rotatie gaat in twee deploys: eerst `NMC_KEK_VERSIE_<n+1>` toevoegen met `NMC_KEK_HUIDIGE_VERSIE` ongewijzigd, en pas als die volledig is uitgerold `NMC_KEK_HUIDIGE_VERSIE` verhogen. Anders wrapt een nieuwe pod onder een versie die een oude pod niet kent. Een KEK-versie haal je nooit weg zolang er rijen met die `kek_versie` zijn, ook niet bij een rollback; anders zijn die rijen niet meer te ontsleutelen |
 | `LOGBOEKDATAVERWERKING_ENABLED` | Verwerkingenlogging (LDV). `%prod` laat 'm leeg, dus verplicht per deployomgeving. **Voorlopig `false`**; op `true` zetten zodra de ClickHouse-config hieronder werkt |
 | `LOGBOEKDATAVERWERKING_CLICKHOUSE_ENDPOINT`, `_USERNAME`, `_PASSWORD`, `_DATABASE`, `_TABLE` | ClickHouse-sink voor LDV. Alleen nodig zodra `LOGBOEKDATAVERWERKING_ENABLED=true`; nu leeg te laten |
 
