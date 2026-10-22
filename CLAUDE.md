@@ -121,7 +121,10 @@ Geïmplementeerd:
 - `POST /api/nmc/v1/decentraal/notificaties`: idem met een e-mailadres van de
   aanroeper; geen Profielservice-lookup.
 - `POST /api/nmc/v1/notifynl-callback`: ontvangt de afleverstatus van NotifyNL,
-  beveiligd met een bearer token (`NotifyNLCallbackAuthFilter`).
+  beveiligd met een bearer token (`NotifyNLCallbackAuthFilter`). `ReceiptOpslag`
+  slaat de receipt op als `RECEIPT_VERWERKEN`-taak (uniek op poging, status en
+  tijdstip) en de controller antwoordt 204, ook bij een receipt die bij geen poging
+  hoort (geteld in `nmc.receipts.afgewezen`). `ReceiptTaakHandler` verwerkt hem.
 - **Statusmodel uit ADR 0024.** `notificatie` draagt de status en een versie,
   `poging` de uitkomst per verzending, `event` het eventlog met één rij per
   overgang. `Overgangsfunctie` is de enige schrijver van de status; een deferred
@@ -142,9 +145,9 @@ Geïmplementeerd:
   verdeeld over de dienstverleners met werk en voor het
   verzenden en de navraag binnen het `verzendbudget` per Notify-service per minuut.
   `TaakWorker` draait per soort een `@Scheduled`-ronde en geeft elke taak aan de
-  `TaakHandler` van die soort. Handlers: `VerzendTaakHandler` en
-  `ControleTaakHandler`; de navraag- en vaststellingstaak worden al gepland maar nog
-  niet uitgevoerd, de overige soorten hebben nog geen handler.
+  `TaakHandler` van die soort. Handlers: `VerzendTaakHandler`, `ReceiptTaakHandler` en
+  `ControleTaakHandler`; de navraag- en vaststellingstaak worden al gepland maar nog niet
+  uitgevoerd, de overige soorten hebben nog geen handler.
 - **Eén geconfigureerde dienstverlener.** `dienstverlener` heeft één rij uit de
   migratie; `DvProvider` levert die `dv_id`, die op elke notificatie en elk event
   staat. Tokenvalidatie per dienstverlener vervangt later alleen de provider.
@@ -230,11 +233,12 @@ de logica die kiest tussen herverzending en contactherstel.
   statements staan gebundeld in `NotificatieFixtures` (die de trigger voor de eigen
   transactie uitzet) en `TaakFixtures`.
 - **Afleverstatussen komen at-least-once en ongeordend binnen.** NotifyNL biedt een
-  callback opnieuw aan bij elke niet-2xx. `ReceiptVerwerker` zoekt de poging op de
-  `reference` uit de receipt (het poging-id) en anders op het NotifyNL-id. Heeft de poging
-  nog geen NotifyNL-id, dan is de receipt er eerder dan de verzend-commit: de poging neemt
-  het id over en de verwerker doet de overgang naar `verzonden` namens de worker, ook bij een
-  tussenstatus. Een ander NotifyNL-id dan dat op de poging komt van een tweede verzending na
+  callback opnieuw aan bij elke niet-2xx; de NMC antwoordt 2xx zodra de receipt is
+  opgeslagen, en een fout in de verwerking laat de taak staan. `ReceiptVerwerker` zoekt de
+  poging op de `reference` uit de receipt (het poging-id) en anders op het NotifyNL-id. Heeft
+  de poging nog geen NotifyNL-id, dan is de receipt er eerder dan de verzend-commit: de poging
+  neemt het id over en de verwerker doet de overgang naar `verzonden` namens de worker, ook bij
+  een tussenstatus. Een ander NotifyNL-id dan dat op de poging komt van een tweede verzending na
   een herclaim en wordt als duplicaat op dezelfde poging vastgelegd. De verwerker ordent per poging op het
   tijdstip in de receipt (`completed_at`, met `sent_at` en `created_at` als terugval,
   zonder tijdstip geldt het moment van ontvangst en gaat de receipt nooit vóór een al
