@@ -37,6 +37,10 @@ public class Notificatie {
     @Version
     private long versie;
 
+    // De dienstverlener namens wie de notificatie is aangenomen; elke lezing blijft binnen die grens.
+    @Column(name = "dv_id", nullable = false, updatable = false)
+    private UUID dvId;
+
     @Column(name = "callback_url", length = 2048)
     private String callbackUrl;
 
@@ -69,13 +73,18 @@ public class Notificatie {
     }
 
     /** Een nieuwe notificatie, nog zonder status; {@code Overgangsfunctie#neemAan} slaat hem op. */
-    public Notificatie(String callbackUrl) {
+    public Notificatie(UUID dvId, String callbackUrl) {
         this.id = UUID.randomUUID();
+        this.dvId = Objects.requireNonNull(dvId, "dvId is verplicht");
         this.callbackUrl = callbackUrl;
     }
 
     public UUID getId() {
         return id;
+    }
+
+    public UUID getDvId() {
+        return dvId;
     }
 
     public long getVersie() {
