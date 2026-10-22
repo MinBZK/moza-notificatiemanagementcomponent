@@ -8,12 +8,12 @@ import java.time.ZoneOffset;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Bewaakt dat NotificatieStatus zijn tijdstippen normaliseert naar wat de database kan bewaren:
+ * Bewaakt dat StatusRegistratie zijn tijdstippen normaliseert naar wat de database kan bewaren:
  * PostgreSQL bewaart in een timestamptz alleen het moment en levert UTC terug, en de kolommen zijn
  * timestamp(6). Zonder normalisatie verschilt een net aangemaakt record van datzelfde record na
  * herladen.
  */
-class NotificatieStatusTest {
+class StatusRegistratieTest {
 
     // NotifyNL mag in completed_at een andere offset dan Z meesturen. Die moet hier meteen UTC
     // worden, want PostgreSQL geeft hem toch als UTC terug en OffsetDateTime#equals eist dezelfde
@@ -22,7 +22,7 @@ class NotificatieStatusTest {
     void constructor_metEenAndereOffsetDanUtc_normaliseertNaarUtc() {
         OffsetDateTime metOffset = OffsetDateTime.parse("2026-03-01T14:00:00+02:00");
 
-        NotificatieStatus status = new NotificatieStatus(StatusWaarde.DELIVERED, metOffset, metOffset);
+        StatusRegistratie status = new StatusRegistratie(StatusWaarde.DELIVERED, metOffset, metOffset);
 
         assertEquals(ZoneOffset.UTC, status.tijdstip().getOffset());
         assertEquals(ZoneOffset.UTC, status.geregistreerd().getOffset());
@@ -35,7 +35,7 @@ class NotificatieStatusTest {
     void constructor_metNanosecondeprecisie_kaptAfOpMicroseconden() {
         OffsetDateTime metNanos = OffsetDateTime.parse("2026-03-01T12:00:00.123456789Z");
 
-        NotificatieStatus status = new NotificatieStatus(StatusWaarde.DELIVERED, metNanos, metNanos);
+        StatusRegistratie status = new StatusRegistratie(StatusWaarde.DELIVERED, metNanos, metNanos);
 
         assertEquals(OffsetDateTime.parse("2026-03-01T12:00:00.123456Z"), status.tijdstip());
         assertEquals(OffsetDateTime.parse("2026-03-01T12:00:00.123456Z"), status.geregistreerd());
