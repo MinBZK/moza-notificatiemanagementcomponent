@@ -18,6 +18,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -172,10 +173,24 @@ class V5MigratieTest {
         assertEquals(3, events(id).size());
     }
 
+    // Productie heeft rijen uit het oude model; elke latere migratie moet daarover heen kunnen.
+    @Test
+    void alleMigraties_overOudeRijen_slagen() throws SQLException {
+        migreerTot("4");
+        UUID bezorgd = oudeNotificatie(UUID.randomUUID(), "DELIVERED", 2, "CREATED", "SENDING", "DELIVERED");
+        UUID onderweg = oudeNotificatie(UUID.randomUUID(), "SENDING", 1, "CREATED", "SENDING");
+
+        migreerTot("latest");
+
+        assertEquals("BEZORGD", notificatie(bezorgd).getFirst());
+        assertEquals("VERZONDEN", notificatie(onderweg).getFirst());
+    }
+
     private void migreerTot(String versie) {
         Flyway.configure()
                 .dataSource(jdbcUrl, DB_USER, DB_PASSWORD)
                 .locations("classpath:db/migration")
+                .placeholders(Map.of("event_marge", "0"))
                 .target(versie)
                 .load()
                 .migrate();
