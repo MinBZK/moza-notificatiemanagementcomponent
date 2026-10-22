@@ -21,15 +21,15 @@ public class StatusUpdateVerzender {
         this.consumentCallbackAdapter = consumentCallbackAdapter;
     }
 
-    void verstuurNaCommit(@Observes(during = TransactionPhase.AFTER_SUCCESS) StatusUpdateOpdracht opdracht) {
+    void verstuurNaCommit(@Observes(during = TransactionPhase.AFTER_SUCCESS) StatusUpdateOpdracht statusUpdateOpdracht) {
         try {
-            consumentCallbackAdapter.stuurStatusUpdate(opdracht);
+            consumentCallbackAdapter.stuurStatusUpdate(statusUpdateOpdracht);
         } catch (RuntimeException e) {
             // De transactiemanager slikt fouten uit afterCompletion en logt ze hooguit onder
             // com.arjuna.*, dus hier zelf op ERROR. Gooien heeft geen zin: de transactie is al gecommit.
             Log.errorf(e, "Statusupdate voor notificatie %s (status %s) kon niet verstuurd worden door "
                     + "een fout in de NMC zelf — dit treft waarschijnlijk alle consument-callbacks",
-                    opdracht.notificatieId(), opdracht.status());
+                    statusUpdateOpdracht.notificatieId(), statusUpdateOpdracht.nieuweStatus());
         }
     }
 }

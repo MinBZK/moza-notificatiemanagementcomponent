@@ -5,8 +5,9 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
-import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +28,9 @@ class BewaartermijnConfiguratieTest {
     @Inject
     NotificatieRepository notificatieRepository;
 
+    @Inject
+    Overgangsfunctie overgangsfunctie;
+
     @Test
     void deTermijnUitDeConfiguratieBepaaltDeGrens() {
         Duration termijn = Duration.ofDays(BewaartermijnTestProfile.DAGEN);
@@ -46,8 +50,9 @@ class BewaartermijnConfiguratieTest {
     private UUID maakNotificatie(Duration ouderdom) {
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(null);
-            notificatie.verwerkTerugmelding(StatusWaarde.DELIVERED, null);
-            notificatieRepository.persist(notificatie);
+            overgangsfunctie.neemAan(notificatie);
+            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
+            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
 
             return notificatie.getId();
         });
