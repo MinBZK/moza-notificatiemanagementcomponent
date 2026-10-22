@@ -220,6 +220,22 @@ class EventfeedTest {
         assertTrue(eventfeed.bevestiging(TWEEDE_DV).isEmpty());
     }
 
+    // Zonder nieuwe events bevestigt een dienstverlener dezelfde cursor; die mag niet verlopen.
+    @Test
+    void bevestig_dezelfdeCursorOpnieuw_ververstHetTijdstip() {
+        schrijfEvent(NotificatieFixtures.DV_ID);
+        Cursor cursor = eventfeed.lees(NotificatieFixtures.DV_ID, null, null).cursor();
+        java.time.OffsetDateTime eerste = java.time.OffsetDateTime.parse("2030-01-01T10:00:00Z");
+        java.time.OffsetDateTime later = eerste.plusMinutes(1);
+
+        QuarkusTransaction.requiringNew().run(() -> bevestigingRepository.updateCursorPositie(NotificatieFixtures.DV_ID, cursor, eerste));
+        boolean ververst = QuarkusTransaction.requiringNew()
+                .call(() -> bevestigingRepository.updateCursorPositie(NotificatieFixtures.DV_ID, cursor, later));
+
+        assertTrue(ververst);
+        assertEquals(later.toInstant(), eventfeed.bevestiging(NotificatieFixtures.DV_ID).orElseThrow().getBevestigdOp().toInstant());
+    }
+
     // Een cursor van vóór een herstel uit back-up zonder verhoogd epoch wijst boven elke nieuwe
     // transactie-id; zonder deze controle zou hij lege pagina's geven tot de id's hem inhalen.
     @Test

@@ -97,7 +97,17 @@ public class ControleTaakHandler implements TaakHandler {
         int gepland = 0;
 
         for (Notificatie notificatie : zonderTaak) {
-            Optional<TaakSoort> soort = ontbrekendeSoort(notificatie);
+            Optional<Poging> laatste = pogingRepository.findLaatsteVan(notificatie.getId());
+
+            // De navraag gaf geen uitkomst, maar de overgang bleef uit omdat de notificatie op dat moment
+            // niet op verzonden stond; een nieuwe navraag rondt zich af zonder iets te doen.
+            if (notificatie.getStatus() == NotificatieStatus.VERZONDEN
+                    && laatste.filter(p -> p.getStatus() == PogingStatus.ONBEKEND).isPresent()) {
+                overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.BEZORGSTATUS_ONBEKEND, null);
+                continue;
+            }
+
+            Optional<TaakSoort> soort = ontbrekendeSoort(notificatie, laatste);
 
             if (soort.isEmpty()) {
                 // Zonder eindstatus komen wissen en opruimen nooit aan de beurt en blijft de sleutel staan.
@@ -107,7 +117,6 @@ public class ControleTaakHandler implements TaakHandler {
                 continue;
             }
 
-            Optional<Poging> laatste = pogingRepository.findLaatsteVan(notificatie.getId());
             taakRepository.persist(new Taak(soort.get(), notificatie.getDvId(), notificatie.getId(),
                     due(soort.get(), notificatie, laatste, nu), null, soort.get() == TaakSoort.VERZENDEN ? null : pogingPayload(laatste)));
             gepland++;
@@ -119,11 +128,10 @@ public class ControleTaakHandler implements TaakHandler {
     // Aangenomen of in-verzending: verzenden (een herclaim hergebruikt de poging). Verzonden met een
     // lopende poging: navraag; met een geplande of herverzendbare poging: verzenden. Bezorgd: vaststellen.
     // Verzonden zonder een van die pogingen kan niets meer doen en krijgt een eindstatus.
-    private Optional<TaakSoort> ontbrekendeSoort(Notificatie notificatie) {
+    private Optional<TaakSoort> ontbrekendeSoort(Notificatie notificatie, Optional<Poging> laatste) {
         return switch (notificatie.getStatus()) {
             case AANGENOMEN, IN_VERZENDING -> Optional.of(TaakSoort.VERZENDEN);
-            case VERZONDEN -> pogingRepository.findLaatsteVan(notificatie.getId())
-                    .flatMap(poging -> soortBijPoging(poging, notificatie.getBerichtType()));
+            case VERZONDEN -> laatste.flatMap(poging -> soortBijPoging(poging, notificatie.getBerichtType()));
             case BEZORGD -> Optional.of(TaakSoort.BEZORGING_VASTSTELLEN);
             default -> throw new IllegalStateException("Eindstatus " + notificatie.getStatus() + " hoort hier niet");
         };
@@ -140,8 +148,7 @@ public class ControleTaakHandler implements TaakHandler {
     }
 
     private static boolean isLopend(Poging poging) {
-        return poging.getNotifyId() != null
-                && (poging.getStatus() == PogingStatus.VERZONDEN || poging.getStatus() == PogingStatus.ONBEKEND);
+        return poging.getNotifyId() != null && poging.getStatus() == PogingStatus.VERZONDEN;
     }
 
     // De vaststeltaak houdt de termijn vanaf de bezorging aan, ook als hij hier opnieuw wordt gepland;

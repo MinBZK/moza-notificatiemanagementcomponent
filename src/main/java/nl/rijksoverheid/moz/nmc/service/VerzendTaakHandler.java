@@ -182,9 +182,10 @@ public class VerzendTaakHandler implements TaakHandler {
             }
 
             // Een andere 4xx ligt aan het verzoek of de key van het NMC en kost een poging, zodat de
-            // notificatie na het maximum op technisch-mislukt eindigt. 429, 5xx en een verbindingsfout
-            // liggen aan NotifyNL en kosten geen poging.
-            if (e.status().filter(VerzendTaakHandler::isFoutVanHetNmc).isPresent()) {
+            // notificatie na het maximum op technisch-mislukt eindigt; zo ook een antwoord zonder bruikbaar
+            // notificatie-ID, dat zich bij elke herhaling herhaalt. 429, 5xx en een verbindingsfout liggen
+            // aan NotifyNL en kosten geen poging.
+            if (e.onbruikbaarAntwoord() || e.status().filter(VerzendTaakHandler::isFoutVanHetNmc).isPresent()) {
                 Log.errorf(e, "NotifyNL weigert het verzoek voor notificatie %s; verzendtaak uitgesteld", verzending.notificatieId());
 
                 return uitgesteldAlsPoging();

@@ -178,10 +178,32 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
         return count(Taak_.TAAK_SOORT + " = ?1 and " + Taak_.STATUS + " = ?2", taakSoort, status);
     }
 
-    /** Het aantal open taken van deze soort dat aan de beurt is: de achterstand. */
-    public long telAchterstand(TaakSoort taakSoort, OffsetDateTime nu) {
-        return count(Taak_.TAAK_SOORT + " = ?1 and " + Taak_.STATUS + " = ?2 and " + Taak_.DUE + " <= ?3",
-                taakSoort, TaakStatus.OPEN, nu);
+    /**
+     * Per taaksoort het aantal mislukte taken en de achterstand (open taken die aan de beurt zijn), in één
+     * query over alle partities. Een soort zonder taken ontbreekt in de map.
+     */
+    public Map<TaakSoort, TaakTelling> telPerSoort(OffsetDateTime nu) {
+        List<Object[]> rijen = getEntityManager().createQuery("select " + Taak_.TAAK_SOORT
+                        + ", sum(case when " + Taak_.STATUS + " = :mislukt then 1 else 0 end)"
+                        + ", sum(case when " + Taak_.STATUS + " = :open and " + Taak_.DUE + " <= :nu then 1 else 0 end)"
+                        + " from Taak group by " + Taak_.TAAK_SOORT, Object[].class)
+                .setParameter("mislukt", TaakStatus.MISLUKT)
+                .setParameter("open", TaakStatus.OPEN)
+                .setParameter("nu", nu)
+                .getResultList();
+        Map<TaakSoort, TaakTelling> tellingen = new java.util.EnumMap<>(TaakSoort.class);
+
+        for (Object[] rij : rijen) {
+            tellingen.put((TaakSoort) rij[0], new TaakTelling(((Number) rij[1]).longValue(), ((Number) rij[2]).longValue()));
+        }
+
+        return tellingen;
+    }
+
+    /** Het aantal mislukte taken en de achterstand van één taaksoort. */
+    public record TaakTelling(long mislukt, long achterstand) {
+
+        public static final TaakTelling GEEN = new TaakTelling(0, 0);
     }
 
     public Optional<Taak> zoek(TaakSoort taakSoort, long id) {

@@ -41,8 +41,8 @@ public class EventfeedController implements WijzigingenApi {
     }
 
     @Override
-    // TODO #754 (LDV Logboek annotaties hebben placeholder URL)
-    // processingActivityId is een placeholder, vervang door de echte URL uit het privacy-register.
+    // TODO processingActivityId is een placeholder; vervang door de URL van de verwerkingsactiviteit uit
+    // het register van verwerkingsactiviteiten zodra die er is.
     @Logboek(name = "wijzigingenLezen", processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
     public Response wijzigingenLezen(String cursor, Integer limiet) {
         UUID dvId = dvProvider.huidigeDvId();

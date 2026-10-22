@@ -114,6 +114,21 @@ class ControleTaakHandlerTest {
                 Taak_.TAAK_SOORT + " = ?1 and " + Taak_.NOTIFICATIE_ID + " = ?2", TaakSoort.WISSEN, id)));
     }
 
+    // Een navraag op een onbekende poging rondt zich af zonder iets te doen; zonder deze overgang plant de
+    // controletaak er elke ronde opnieuw een.
+    @Test
+    void controle_verzondenMetOnbekendePoging_gaatNaarBezorgstatusOnbekend() {
+        UUID id = notificatie(NotificatieStatus.VERZONDEN, UUID.randomUUID());
+        QuarkusTransaction.requiringNew().run(() -> pogingRepository.findLaatsteVan(id).orElseThrow().markeerOnbekend());
+
+        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
+
+        Notificatie notificatie = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findById(id));
+        assertEquals(NotificatieStatus.BEZORGSTATUS_ONBEKEND, notificatie.getStatus());
+        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(
+                Taak_.TAAK_SOORT + " = ?1 and " + Taak_.NOTIFICATIE_ID + " = ?2", TaakSoort.RECONCILIEREN, id)));
+    }
+
     // Opnieuw gepland houdt de vaststeltaak de termijn vanaf de bezorging aan.
     @Test
     void controle_bezorgdMetReceipt_plantDeVaststeltaakNaDeTermijn() {

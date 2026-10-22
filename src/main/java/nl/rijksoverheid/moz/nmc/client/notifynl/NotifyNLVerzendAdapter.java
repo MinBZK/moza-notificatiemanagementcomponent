@@ -90,7 +90,7 @@ public class NotifyNLVerzendAdapter {
         } catch (ProcessingException e) {
             throw new NotifyNLVerzendException("NotifyNL was niet bereikbaar bij het zoeken op referentie", e);
         } catch (IllegalArgumentException e) {
-            throw new NotifyNLVerzendException("NotifyNL gaf een ongeldig notificatie-ID terug bij het zoeken op referentie", e);
+            throw NotifyNLVerzendException.onbruikbaarAntwoord("NotifyNL gaf een ongeldig notificatie-ID terug bij het zoeken op referentie", e);
         }
     }
 
@@ -204,13 +204,13 @@ public class NotifyNLVerzendAdapter {
 
     private UUID extraheerNotificatieId(SendEmailResponse notifyResponse) throws NotifyNLVerzendException {
         if (notifyResponse == null || notifyResponse.getId() == null) {
-            throw new NotifyNLVerzendException("NotifyNL gaf geen notificatie-ID terug in de respons");
+            throw NotifyNLVerzendException.onbruikbaarAntwoord("NotifyNL gaf geen notificatie-ID terug in de respons", null);
         }
 
         try {
             return UUID.fromString(notifyResponse.getId());
         } catch (IllegalArgumentException e) {
-            throw new NotifyNLVerzendException("NotifyNL gaf een ongeldig notificatie-ID terug in de respons", e);
+            throw NotifyNLVerzendException.onbruikbaarAntwoord("NotifyNL gaf een ongeldig notificatie-ID terug in de respons", e);
         }
     }
 }
