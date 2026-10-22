@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.repository;
 
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.persistence.LockModeType;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
 import org.hibernate.query.NativeQuery;
@@ -28,6 +29,16 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
 
     // Slaat rijen over die in een eerdere batch mislukten; zie de batchlus in de scheduler.
     private static final String UITSLUITING_SQL = "\n   AND id NOT IN (?3)";
+
+    /** Leest de notificatie met een rijlock die tot het einde van de transactie blijft staan. */
+    public Optional<Notificatie> vergrendel(UUID id) {
+        return findByIdOptional(id, LockModeType.PESSIMISTIC_WRITE);
+    }
+
+    /** Verhoogt de versie van een vergrendelde notificatie waarvan geen veld verandert. */
+    public void verhoogVersie(Notificatie notificatie) {
+        getEntityManager().lock(notificatie, LockModeType.PESSIMISTIC_FORCE_INCREMENT);
+    }
 
     public Optional<Notificatie> findByExternalReference(UUID externalReference) {
         return find(Notificatie_.EXTERNAL_REFERENCE, externalReference).singleResultOptional();
