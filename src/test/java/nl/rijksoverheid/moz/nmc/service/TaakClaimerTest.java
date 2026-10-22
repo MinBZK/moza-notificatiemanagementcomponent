@@ -263,6 +263,23 @@ class TaakClaimerTest {
         assertEquals(2, geclaimd.stream().filter(t -> TWEEDE_DV.equals(t.getDvId())).count());
     }
 
+    // Een dienstverlener met weinig werk laat zijn aandeel niet ongebruikt: de rest gaat naar wie meer heeft.
+    @Test
+    void claim_dienstverlenerMetWeinigWerk_geeftZijnAandeelDoor() {
+        plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusHours(2));
+
+        for (int i = 0; i < 10; i++) {
+            plan(TaakSoort.ONDERHOUD, TWEEDE_DV, nu().minusMinutes(1));
+        }
+
+        List<Taak> geclaimd = taakClaimer.claim(TaakSoort.ONDERHOUD, 6);
+
+        assertEquals(6, geclaimd.size());
+        assertEquals(1, geclaimd.stream().filter(t -> NotificatieFixtures.DV_ID.equals(t.getDvId())).count());
+        assertEquals(5, geclaimd.stream().filter(t -> TWEEDE_DV.equals(t.getDvId())).count());
+        assertEquals(6, geclaimd.stream().map(Taak::getId).distinct().count(), "geen taak twee keer geclaimd");
+    }
+
     // Meer dienstverleners dan plek in de batch: de dienstverlener die het langst wacht gaat voor.
     @Test
     void claim_minderPlekDanDienstverleners_geeftVoorrangAanWieHetLangstWacht() {

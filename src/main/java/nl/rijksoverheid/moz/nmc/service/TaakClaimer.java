@@ -78,6 +78,8 @@ public class TaakClaimer {
         OffsetDateTime leaseTot = nu.plus(lease);
         List<Taak> geclaimd = new ArrayList<>();
 
+        List<UUID> metMeerWerk = new ArrayList<>();
+
         for (UUID dvId : dienstverleners) {
             int ruimte = budget - geclaimd.size();
 
@@ -85,7 +87,25 @@ public class TaakClaimer {
                 break;
             }
 
-            geclaimd.addAll(taakRepository.claim(taakSoort, dvId, Math.min(perDienstverlener, ruimte), nu, leaseTot));
+            int gevraagd = Math.min(perDienstverlener, ruimte);
+            List<Taak> taken = taakRepository.claim(taakSoort, dvId, gevraagd, nu, leaseTot);
+            geclaimd.addAll(taken);
+
+            if (taken.size() == gevraagd) {
+                metMeerWerk.add(dvId);
+            }
+        }
+
+        // Wat een dienstverlener met weinig werk liet liggen, gaat naar wie zijn aandeel vol had. De
+        // taken uit de eerste ronde hebben al een lease, dus de claim slaat ze over.
+        for (UUID dvId : metMeerWerk) {
+            int ruimte = budget - geclaimd.size();
+
+            if (ruimte <= 0) {
+                break;
+            }
+
+            geclaimd.addAll(taakRepository.claim(taakSoort, dvId, ruimte, nu, leaseTot));
         }
 
         genomen.ifPresent(g -> verzendbudget.geefTerug(g, budget - geclaimd.size()));
