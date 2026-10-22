@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.fuzzing;
 
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -200,7 +201,8 @@ public class NotificatieVerwerkingFuzzer {
                         new NotifyNLAuthorizationHolder(), Optional.of(API_KEY)),
                 pogingen,
                 overgangsfunctie,
-                new Sleutelbeheer(new VasteKekProvider(), new ObjectMapper()));
+                new Sleutelbeheer(new VasteKekProvider(), new ObjectMapper()),
+                () -> NotificatieFixtures.DV_ID);
         ReceiptVerwerker receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
                 // No wait between callback retries.
                 new DirecteStatusUpdateEvent(new ConsumentCallbackAdapter(url -> callbackClientStandIn(), 0)),
@@ -427,7 +429,7 @@ public class NotificatieVerwerkingFuzzer {
 
     /** Een notificatie op VERZONDEN met één poging onder het gegeven NotifyNL-id. */
     private static UUID bewaarVerzonden(UUID notifyId) {
-        Notificatie notificatie = new Notificatie("https://consument.example.invalid/callback");
+        Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, "https://consument.example.invalid/callback");
         overgangsfunctie.neemAan(notificatie);
         Poging poging = new Poging(notificatie.getId(), 1);
         pogingen.persist(poging);
@@ -481,7 +483,7 @@ public class NotificatieVerwerkingFuzzer {
             repository.persist(notificatie);
             versies.put(notificatie.getId(), 0L);
 
-            return new nl.rijksoverheid.moz.nmc.domain.Event(notificatie.getId(), 0, null, NotificatieStatus.AANGENOMEN, null);
+            return new nl.rijksoverheid.moz.nmc.domain.Event(NotificatieFixtures.DV_ID, notificatie.getId(), 0, null, NotificatieStatus.AANGENOMEN, null);
         }
 
         @Override
@@ -508,7 +510,7 @@ public class NotificatieVerwerkingFuzzer {
             long versie = versies.merge(notificatieId, 1L, Long::sum);
 
             return OvergangUitkomst.uitgevoerd(van,
-                    new nl.rijksoverheid.moz.nmc.domain.Event(notificatieId, versie, van, naar, reden));
+                    new nl.rijksoverheid.moz.nmc.domain.Event(NotificatieFixtures.DV_ID, notificatieId, versie, van, naar, reden));
         }
     }
 

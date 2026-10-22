@@ -49,7 +49,7 @@ class BewaartermijnConfiguratieTest {
 
     private UUID maakNotificatie(Duration ouderdom) {
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(null);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, null);
             overgangsfunctie.neemAan(notificatie);
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
