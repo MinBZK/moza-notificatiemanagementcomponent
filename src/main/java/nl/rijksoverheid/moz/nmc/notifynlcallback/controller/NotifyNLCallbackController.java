@@ -24,8 +24,8 @@ public class NotifyNLCallbackController implements NotifyNlCallbackApi {
     @Override
     public void verwerkAfleverstatus(AfleverstatusRequest afleverstatusRequest) {
         try {
-            receiptVerwerker.verwerk(afleverstatusRequest.getId(), afleverstatusRequest.getStatus(),
-                    gebeurtenisTijdstip(afleverstatusRequest));
+            receiptVerwerker.verwerk(afleverstatusRequest.getId(), afleverstatusRequest.getReference(),
+                    afleverstatusRequest.getStatus(), gebeurtenisTijdstip(afleverstatusRequest));
         } catch (NotificatieNietGevondenException e) {
             Log.warnf("NotifyNL-callback voor onbekende notificatie (notifyNlNotificatieId=%s)",
                     afleverstatusRequest.getId());

@@ -20,6 +20,10 @@ import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.job.TaakRonde;
+import nl.rijksoverheid.moz.nmc.job.TaakWorker;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -62,6 +66,9 @@ class NotifyNLCallbackControllerTest {
     ConsumentCallbackAdapter consumentCallbackAdapter;
 
     @Inject
+    TaakWorker taakWorker;
+
+    @Inject
     NotificatieRepository notificatieRepository;
 
     @Inject
@@ -75,6 +82,7 @@ class NotifyNLCallbackControllerTest {
         QuarkusTransaction.requiringNew().run(() -> {
             eventRepository.deleteAll();
             notificatieRepository.deleteAll();
+            TaakFixtures.leegVerzendbudget(notificatieRepository.getEntityManager());
         });
 
         Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
@@ -199,7 +207,9 @@ class NotifyNLCallbackControllerTest {
                 .contentType(ContentType.JSON)
                 .body(aanvraag(callbackUrl))
                 .when().post("/api/nmc/v1/centraal/notificaties")
-                .then().statusCode(200);
+                .then().statusCode(202);
+        // De verzending is asynchroon: de verzendtaak zet de poging op het NotifyNL-id uit de mock.
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         return notifyNlId;
     }

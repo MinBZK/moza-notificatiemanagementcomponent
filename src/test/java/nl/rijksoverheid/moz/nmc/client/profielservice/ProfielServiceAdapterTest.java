@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -94,6 +95,26 @@ class ProfielServiceAdapterTest {
                 .thenThrow(new WebApplicationException(Response.status(Response.Status.INTERNAL_SERVER_ERROR).build()));
 
         assertThrows(ProfielServiceException.class, () -> adapter.zoekEmailAdres(standaardIdentificatie()));
+    }
+
+    // Een ongeldig nummer gaat over de partij, net als een onbekend nummer.
+    @Test
+    void zoekEmailAdres_400_gooitPartijNietGevondenException() {
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenThrow(new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build()));
+
+        assertThrows(PartijNietGevondenException.class, () -> adapter.zoekEmailAdres(standaardIdentificatie()));
+    }
+
+    @Test
+    void zoekEmailAdres_403_gooitProfielServiceExceptionMetStatus() {
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenThrow(new WebApplicationException(Response.status(Response.Status.FORBIDDEN).build()));
+
+        ProfielServiceException e = assertThrows(ProfielServiceException.class,
+                () -> adapter.zoekEmailAdres(standaardIdentificatie()));
+
+        assertEquals(Optional.of(403), e.status());
     }
 
     private PartijIdentificatie standaardIdentificatie() {
