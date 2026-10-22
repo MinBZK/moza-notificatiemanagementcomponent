@@ -9,6 +9,7 @@ import nl.rijksoverheid.moz.nmc.service.TaakHandler;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -47,7 +48,7 @@ class TaakWorkerUnitTest {
         Instance<TaakHandler> beans = mock(Instance.class);
         when(beans.iterator()).thenReturn(List.of(handlers).iterator());
 
-        return new TaakWorker(taakClaimer, mock(TaakRepository.class), beans, new SimpleMeterRegistry(), Clock.systemUTC(), 10, 2);
+        return new TaakWorker(taakClaimer, mock(TaakRepository.class), beans, new SimpleMeterRegistry(), Clock.systemUTC(), 10, 2, Duration.ZERO);
     }
 
     private static TaakHandler handler(TaakSoort soort) {

@@ -297,6 +297,19 @@ class VerzendTaakHandlerTest {
         assertEquals(1, taken().getFirst().getPogingen());
     }
 
+    // Een antwoord zonder bruikbaar notificatie-ID herhaalt zich; zonder poging zou de taak eeuwig
+    // opnieuw lopen en nooit technisch-mislukt worden.
+    @Test
+    void notifyGeeftEenOngeldigNotificatieId_kostEenPoging() {
+        when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id("geen-uuid"));
+        UUID id = aannameService.neemAan(decentraal());
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        assertEquals(NotificatieStatus.IN_VERZENDING, notificatie(id).getStatus());
+        assertEquals(1, taken().getFirst().getPogingen());
+    }
+
     // Een 400 op de zoekvraag bij een herclaim zegt niets over het adres.
     @Test
     void herclaimZoekvraagGeeft400_isGeenAdresafwijzing() {

@@ -55,7 +55,8 @@ public class Poging {
     @Column(name = "bezorgd_op")
     private OffsetDateTime bezorgdOp;
 
-    // Letterlijk wat NotifyNL het laatst meldde, ook een status die het NMC niet kent.
+    // Letterlijk de status die NotifyNL het laatst stuurde, in volgorde van binnenkomst: ook een status die
+    // het NMC niet kent, en ook een oudere receipt die de uitkomst niet verandert.
     @Column(name = "laatste_notify_status", length = 64)
     private String laatsteNotifyStatus;
 
@@ -101,7 +102,7 @@ public class Poging {
         return receiptTijdstip;
     }
 
-    /** Het tijdstip van de bezorging waarop de vaststellingstermijn loopt; null als er geen delivered was. */
+    /** De status die NotifyNL het laatst stuurde, in volgorde van binnenkomst; null zolang er geen was. */
     public String getLaatsteNotifyStatus() {
         return laatsteNotifyStatus;
     }
@@ -110,6 +111,7 @@ public class Poging {
         this.laatsteNotifyStatus = Objects.requireNonNull(status, "status is verplicht");
     }
 
+    /** Het tijdstip van de bezorging waarop de vaststellingstermijn loopt; null als er geen delivered was. */
     public OffsetDateTime getBezorgdOp() {
         return bezorgdOp;
     }

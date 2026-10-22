@@ -48,11 +48,16 @@ public class TaakWorker {
     private final Clock clock;
     private final int batch;
     private final int maxPogingen;
+    private final Duration metriekVerversing;
+    private Map<TaakSoort, TaakRepository.TaakTelling> tellingen = Map.of();
+    private long geteldOpNanos;
+    private boolean geteld;
 
     public TaakWorker(TaakClaimer taakClaimer, TaakRepository taakRepository, Instance<TaakHandler> handlerBeans,
                       MeterRegistry meterRegistry, Clock clock,
                       @ConfigProperty(name = "nmc.taak.batch") int batch,
-                      @ConfigProperty(name = "nmc.taak.max-pogingen") int maxPogingen) {
+                      @ConfigProperty(name = "nmc.taak.max-pogingen") int maxPogingen,
+                      @ConfigProperty(name = "nmc.taak.metriek-verversing") Duration metriekVerversing) {
         if (batch < 1 || maxPogingen < 1) {
             throw new IllegalStateException("nmc.taak.batch en nmc.taak.max-pogingen moeten 1 of hoger zijn");
         }
@@ -62,6 +67,7 @@ public class TaakWorker {
         this.clock = clock;
         this.batch = batch;
         this.maxPogingen = maxPogingen;
+        this.metriekVerversing = metriekVerversing;
 
         for (TaakHandler handler : handlerBeans) {
             TaakHandler eerder = handlers.putIfAbsent(handler.taakSoort(), handler);
@@ -72,19 +78,30 @@ public class TaakWorker {
             }
         }
 
-        // Eigen transactie per meting: een scrape heeft geen transactie of requestcontext.
+        // Een scrape leest alle gauges na elkaar; één telling per verversing bedient ze allemaal.
         for (TaakSoort taakSoort : TaakSoort.values()) {
-            Gauge.builder("nmc.taken.mislukt", () -> QuarkusTransaction.requiringNew()
-                            .call(() -> taakRepository.telMetStatus(taakSoort, TaakStatus.MISLUKT)))
+            Gauge.builder("nmc.taken.mislukt", () -> telling(taakSoort).mislukt())
                     .description("Taken die na het maximum aantal pogingen op beheer wachten")
                     .tag("soort", taakSoort.name())
                     .register(meterRegistry);
-            Gauge.builder("nmc.taken.achterstand", () -> QuarkusTransaction.requiringNew()
-                            .call(() -> taakRepository.telAchterstand(taakSoort, OffsetDateTime.now(clock))))
+            Gauge.builder("nmc.taken.achterstand", () -> telling(taakSoort).achterstand())
                     .description("Open taken die aan de beurt zijn")
                     .tag("soort", taakSoort.name())
                     .register(meterRegistry);
         }
+    }
+
+    // Eigen transactie: een scrape heeft geen transactie of requestcontext.
+    private synchronized TaakRepository.TaakTelling telling(TaakSoort taakSoort) {
+        long nu = System.nanoTime();
+
+        if (!geteld || nu - geteldOpNanos >= metriekVerversing.toNanos()) {
+            tellingen = QuarkusTransaction.requiringNew().call(() -> taakRepository.telPerSoort(OffsetDateTime.now(clock)));
+            geteldOpNanos = nu;
+            geteld = true;
+        }
+
+        return tellingen.getOrDefault(taakSoort, TaakRepository.TaakTelling.GEEN);
     }
 
     @Scheduled(identity = "taak-verzenden", every = "{nmc.taak.interval}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
