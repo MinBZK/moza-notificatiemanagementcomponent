@@ -421,11 +421,13 @@ public class NotificatieVerwerkingFuzzer {
 
     /**
      * De overgangsfunctie in het geheugen: past Overgangsregels toe zonder database, lock of trigger,
-     * en nummert de events per notificatie.
+     * en nummert de events per notificatie. Event-ids komen uit een teller, zoals de identity van de
+     * database ze uitdeelt; de statusupdate gebruikt het id als CloudEvent-id.
      */
     private static final class GeheugenOvergangsfunctie extends Overgangsfunctie {
 
         private final Map<UUID, Long> versies = new HashMap<>();
+        private long volgendEventId = 1;
 
         GeheugenOvergangsfunctie() {
             super(null, null);
@@ -437,7 +439,7 @@ public class NotificatieVerwerkingFuzzer {
             repository.persist(notificatie);
             versies.put(notificatie.getId(), 0L);
 
-            return new nl.rijksoverheid.moz.nmc.domain.Event(NotificatieFixtures.DV_ID, notificatie.getId(), 0, null, NotificatieStatus.AANGENOMEN, null);
+            return event(notificatie.getId(), 0, null, NotificatieStatus.AANGENOMEN, null);
         }
 
         @Override
@@ -463,8 +465,19 @@ public class NotificatieVerwerkingFuzzer {
             notificatie.pasOvergangToe(naar, reden);
             long versie = versies.merge(notificatieId, 1L, Long::sum);
 
-            return OvergangUitkomst.uitgevoerd(van,
-                    new nl.rijksoverheid.moz.nmc.domain.Event(NotificatieFixtures.DV_ID, notificatieId, versie, van, naar, reden));
+            return OvergangUitkomst.uitgevoerd(van, event(notificatieId, versie, van, naar, reden));
+        }
+
+        private nl.rijksoverheid.moz.nmc.domain.Event event(UUID notificatieId, long volgnummer, NotificatieStatus van,
+                                                            NotificatieStatus naar, Reden reden) {
+            long id = volgendEventId++;
+
+            return new nl.rijksoverheid.moz.nmc.domain.Event(NotificatieFixtures.DV_ID, notificatieId, volgnummer, van, naar, reden) {
+                @Override
+                public Long getId() {
+                    return id;
+                }
+            };
         }
     }
 

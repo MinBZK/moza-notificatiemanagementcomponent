@@ -26,6 +26,7 @@ public class Notificatie {
 
     public static final String ZOEK_KANDIDATEN = "Notificatie.zoekKandidaten";
     public static final String VERWIJDER_OP_ID = "Notificatie.verwijderOpId";
+    public static final String PAD = "/api/nmc/v1/notificaties/";
 
     // Toegekend bij het aanmaken en niet bij de persist: de versleutelde velden zijn aan deze id
     // gebonden en worden vóór de eerste opslag gezet.

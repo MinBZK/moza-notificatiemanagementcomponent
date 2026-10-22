@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import org.hibernate.annotations.Immutable;
+import org.hibernate.annotations.Type;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -19,9 +20,6 @@ import java.util.UUID;
  * Eén statusovergang van een notificatie in het eventlog. Het volgnummer is de versie van de
  * notificatie na de overgang. Bevat geen contactgegevens, identificerende nummers of referentie van
  * de Dienstverlener.
- * <p>
- * De kolom {@code transactie_id} (gevuld door de database) is hier niet gemapt; hij is bedoeld
- * om het log op volgorde van commit te lezen.
  */
 // Append-only: een event verandert nooit meer.
 @Entity
@@ -38,6 +36,10 @@ public class Event {
 
     @Column(name = "notificatie_id", nullable = false)
     private UUID notificatieId;
+
+    // Het id van het CloudEvent in feed en callback; de identity-id loopt na een herstel uit back-up terug.
+    @Column(nullable = false)
+    private UUID uuid;
 
     @Column(nullable = false)
     private long volgnummer;
@@ -59,6 +61,12 @@ public class Event {
     @Column(nullable = false)
     private OffsetDateTime geregistreerd;
 
+    // Transactie-id van de schrijvende transactie, gevuld door de database; de feed leest het log
+    // op (transactie-id, id). Leeg op een event dat in deze sessie is aangemaakt.
+    @Type(TransactieIdType.class)
+    @Column(name = "transactie_id", insertable = false, updatable = false)
+    private Long transactieId;
+
     protected Event() {
         // Voor JPA
     }
@@ -66,11 +74,16 @@ public class Event {
     public Event(UUID dvId, UUID notificatieId, long volgnummer, NotificatieStatus van, NotificatieStatus naar, Reden reden) {
         this.dvId = Objects.requireNonNull(dvId, "dvId is verplicht");
         this.notificatieId = Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
+        this.uuid = UUID.randomUUID();
         this.volgnummer = volgnummer;
         this.van = van;
         this.naar = Objects.requireNonNull(naar, "naar is verplicht");
         this.reden = reden;
         this.geregistreerd = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+    }
+
+    public UUID getUuid() {
+        return uuid;
     }
 
     public Long getId() {
@@ -103,5 +116,9 @@ public class Event {
 
     public OffsetDateTime getGeregistreerd() {
         return geregistreerd;
+    }
+
+    public Long getTransactieId() {
+        return transactieId;
     }
 }
