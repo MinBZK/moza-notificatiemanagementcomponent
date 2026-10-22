@@ -7,6 +7,7 @@ import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
+import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
@@ -24,8 +25,10 @@ import java.util.Optional;
 
 /**
  * Vangnet voor notificaties die zijn blijven steken: elke notificatie zonder eindstatus en
- * zonder open of mislukte taak krijgt de taak die bij haar status hoort, en elke dienstverlener met een
- * webhook zonder terugkoppeltaak krijgt er een. De controletaak is een taak per systeem die zichzelf
+ * zonder open taak krijgt de taak die bij haar status hoort, of een eindstatus als geen taak haar
+ * verder kan brengen. Een mislukte taak houdt dat tegen tot {@code geldig_tot}, daarna niet meer:
+ * de notificatie loopt dan via de gewone taken naar een eindstatus en kan gewist worden; elke dienstverlener met een webhook zonder terugkoppeltaak krijgt er
+ * een. De controletaak is een taak per systeem die zichzelf
  * na elke ronde opnieuw plant.
  */
 @ApplicationScoped
@@ -38,19 +41,21 @@ public class ControleTaakHandler implements TaakHandler {
     private final NotificatieRepository notificatieRepository;
     private final PogingRepository pogingRepository;
     private final TaakRepository taakRepository;
+    private final Overgangsfunctie overgangsfunctie;
     private final Vaststellingstermijn vaststellingstermijn;
     private final Verzendbeleid verzendbeleid;
     private final Duration interval;
     private final int maxPerRonde;
 
     public ControleTaakHandler(NotificatieRepository notificatieRepository, PogingRepository pogingRepository,
-                               TaakRepository taakRepository, Vaststellingstermijn vaststellingstermijn,
-                               Verzendbeleid verzendbeleid,
+                               TaakRepository taakRepository, Overgangsfunctie overgangsfunctie,
+                               Vaststellingstermijn vaststellingstermijn, Verzendbeleid verzendbeleid,
                                @ConfigProperty(name = "nmc.controle.interval") Duration interval,
                                @ConfigProperty(name = "nmc.controle.max-per-ronde") int maxPerRonde) {
         this.notificatieRepository = notificatieRepository;
         this.pogingRepository = pogingRepository;
         this.taakRepository = taakRepository;
+        this.overgangsfunctie = overgangsfunctie;
         this.vaststellingstermijn = vaststellingstermijn;
         this.verzendbeleid = verzendbeleid;
         this.interval = interval;
@@ -82,12 +87,12 @@ public class ControleTaakHandler implements TaakHandler {
             Log.infof("Controletaak: terugkoppeltaak gepland voor %d dienstverlener(s) met een webhook", terugkoppeltaken);
         }
 
-        return TaakUitkomst.uitgesteld(OffsetDateTime.now(ZoneOffset.UTC).plus(interval), false);
+        return TaakUitkomst.herpland(OffsetDateTime.now(ZoneOffset.UTC).plus(interval));
     }
 
     private int herstelOntbrekendeTaken() {
-        List<Notificatie> zonderTaak = notificatieRepository.zonderTaak(OPEN_STATUSSEN, maxPerRonde);
         OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
+        List<Notificatie> zonderTaak = notificatieRepository.zonderTaak(OPEN_STATUSSEN, nu, maxPerRonde);
 
         int gepland = 0;
 
@@ -95,9 +100,10 @@ public class ControleTaakHandler implements TaakHandler {
             Optional<TaakSoort> soort = ontbrekendeSoort(notificatie);
 
             if (soort.isEmpty()) {
+                // Zonder eindstatus komen wissen en opruimen nooit aan de beurt en blijft de sleutel staan.
                 Log.errorf("Controletaak: notificatie %s staat op %s zonder lopende of herverzendbare poging; "
-                        + "geen taak gepland",
-                        notificatie.getId(), notificatie.getStatus());
+                        + "afgesloten als technisch-mislukt", notificatie.getId(), notificatie.getStatus());
+                overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.TECHNISCH_MISLUKT, Reden.TECHNISCH);
                 continue;
             }
 
@@ -112,8 +118,7 @@ public class ControleTaakHandler implements TaakHandler {
 
     // Aangenomen of in-verzending: verzenden (een herclaim hergebruikt de poging). Verzonden met een
     // lopende poging: navraag; met een geplande of herverzendbare poging: verzenden. Bezorgd: vaststellen.
-    // Verzonden zonder een van die pogingen kan niets meer doen; daarvoor wordt niets gepland, zodat de
-    // controletaak niet elke ronde een taak aanmaakt die direct afrondt.
+    // Verzonden zonder een van die pogingen kan niets meer doen en krijgt een eindstatus.
     private Optional<TaakSoort> ontbrekendeSoort(Notificatie notificatie) {
         return switch (notificatie.getStatus()) {
             case AANGENOMEN, IN_VERZENDING -> Optional.of(TaakSoort.VERZENDEN);

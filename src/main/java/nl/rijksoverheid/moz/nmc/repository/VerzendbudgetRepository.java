@@ -33,4 +33,9 @@ public class VerzendbudgetRepository implements PanacheRepositoryBase<Verzendbud
 
         return findById(new VerzendbudgetTijdvak.Sleutel(notifyService, tijdvak), LockModeType.PESSIMISTIC_WRITE);
     }
+
+    /** Verwijdert de rijen van tijdvakken vóór {@code grens} en geeft het aantal terug. */
+    public int verwijderTijdvakkenOuderDan(OffsetDateTime grens) {
+        return (int) delete(VerzendbudgetTijdvak_.TIJDVAK + " < ?1", grens);
+    }
 }

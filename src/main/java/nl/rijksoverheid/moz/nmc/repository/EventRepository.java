@@ -26,8 +26,12 @@ public class EventRepository implements PanacheRepositoryBase<Event, Long> {
     public List<Event> leesVanafPositie(UUID dvId, long transactieId, long eventId, int maximum) {
         // In een rijvergelijking leidt Hibernate het parametertype niet af; zonder het type van de
         // kolom gaat de transactie-id als bigint en kent PostgreSQL geen vergelijking met xid8.
+        // De losse ondergrens op transactie_id is overbodig voor het resultaat, maar PostgreSQL
+        // snoeit partities niet op een rijvergelijking; zonder die grens doorzoekt elke aanroep ook
+        // de partities onder de cursor.
         return getSession().createSelectionQuery("from Event where " + Event_.DV_ID + " = :dvId and ("
-                        + Event_.TRANSACTIE_ID + ", " + Event_.ID + ") > (:transactieId, :eventId) and " + Event_.TRANSACTIE_ID
+                        + Event_.TRANSACTIE_ID + ", " + Event_.ID + ") > (:transactieId, :eventId) and "
+                        + Event_.TRANSACTIE_ID + " >= :transactieId and " + Event_.TRANSACTIE_ID
                         + " < function('pg_snapshot_xmin', function('pg_current_snapshot')) order by "
                         + Event_.TRANSACTIE_ID + ", " + Event_.ID, Event.class)
                 .setParameter("dvId", dvId)
