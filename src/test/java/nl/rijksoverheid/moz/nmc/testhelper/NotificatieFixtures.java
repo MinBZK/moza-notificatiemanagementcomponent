@@ -2,8 +2,11 @@ package nl.rijksoverheid.moz.nmc.testhelper;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.persistence.EntityManager;
+import nl.rijksoverheid.moz.nmc.domain.Event_;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
+import nl.rijksoverheid.moz.nmc.domain.Poging_;
 
 import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
@@ -18,8 +21,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Schrijft rijen buiten Hibernate en buiten de overgangsfunctie om, voor tests die een toestand
- * willen die de applicatie zelf niet maakt: een willekeurige status met een terug- of
+ * Schrijft rijen buiten de overgangsfunctie om, voor tests die een toestand willen die de applicatie
+ * zelf niet maakt: een willekeurige status met een terug- of
  * vooruitgedateerde registratietijd. Staat op één plek zodat een kolomwijziging niet door meerdere
  * testklassen hoeft.
  * <p>
@@ -38,47 +41,50 @@ public final class NotificatieFixtures {
     public static void voegNotificatieToe(EntityManager entityManager, UUID id, String callbackUrl,
                                           NotificatieStatus status, OffsetDateTime laatsteStatusUpdate) {
         zetTriggerUit(entityManager);
-        entityManager.createNativeQuery("INSERT INTO notificatie (id, dv_id, versie, callback_url, status, laatste_status_update) "
-                        + "VALUES (?1, ?5, 0, ?2, ?3, ?4)")
-                .setParameter(1, id)
-                .setParameter(5, DV_ID)
-                .setParameter(2, callbackUrl)
-                .setParameter(3, status.name())
-                .setParameter(4, laatsteStatusUpdate)
+        entityManager.createQuery("insert into Notificatie (" + Notificatie_.ID + ", " + Notificatie_.DV_ID + ", "
+                        + Notificatie_.VERSIE + ", " + Notificatie_.CALLBACK_URL + ", " + Notificatie_.STATUS + ", "
+                        + Notificatie_.LAATSTE_STATUS_UPDATE + ") values (:id, :dvId, 0, :callbackUrl, :status, :tijdstip)")
+                .setParameter("id", id)
+                .setParameter("dvId", DV_ID)
+                .setParameter("callbackUrl", callbackUrl)
+                .setParameter("status", status)
+                .setParameter("tijdstip", laatsteStatusUpdate)
                 .executeUpdate();
     }
 
     /** Een poging bij een bestaande notificatie, met het NotifyNL-id waarop een receipt binnenkomt. */
     public static void voegPogingToe(EntityManager entityManager, UUID notificatieId, int nummer, UUID notifyId,
                                      PogingStatus status, OffsetDateTime verzondenOp) {
-        entityManager.createNativeQuery("INSERT INTO poging (id, notificatie_id, nummer, status, notify_id, verzonden_op) "
-                        + "VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
-                .setParameter(1, UUID.randomUUID())
-                .setParameter(2, notificatieId)
-                .setParameter(3, nummer)
-                .setParameter(4, status.name())
-                .setParameter(5, notifyId)
-                .setParameter(6, verzondenOp)
+        entityManager.createQuery("insert into Poging (" + Poging_.ID + ", " + Poging_.NOTIFICATIE_ID + ", "
+                        + Poging_.NUMMER + ", " + Poging_.STATUS + ", " + Poging_.NOTIFY_ID + ", " + Poging_.VERZONDEN_OP
+                        + ") values (:id, :notificatieId, :nummer, :status, :notifyId, :verzondenOp)")
+                .setParameter("id", UUID.randomUUID())
+                .setParameter("notificatieId", notificatieId)
+                .setParameter("nummer", nummer)
+                .setParameter("status", status)
+                .setParameter("notifyId", notifyId)
+                .setParameter("verzondenOp", verzondenOp)
                 .executeUpdate();
     }
 
     /** Een event met een eigen registratietijd, los van {@code laatste_status_update} op de notificatie. */
     public static void voegEventToe(EntityManager entityManager, UUID notificatieId, long volgnummer,
                                     NotificatieStatus van, NotificatieStatus naar, OffsetDateTime geregistreerd) {
-        entityManager.createNativeQuery("INSERT INTO event (geregistreerd, dv_id, notificatie_id, volgnummer, van, naar) "
-                        + "VALUES (?1, ?6, ?2, ?3, ?4, ?5)")
-                .setParameter(1, geregistreerd)
-                .setParameter(6, DV_ID)
-                .setParameter(2, notificatieId)
-                .setParameter(3, volgnummer)
-                .setParameter(4, van != null ? van.name() : null)
-                .setParameter(5, naar.name())
+        entityManager.createQuery("insert into Event (" + Event_.GEREGISTREERD + ", " + Event_.DV_ID + ", "
+                        + Event_.NOTIFICATIE_ID + ", " + Event_.VOLGNUMMER + ", " + Event_.VAN + ", " + Event_.NAAR
+                        + ") values (:geregistreerd, :dvId, :notificatieId, :volgnummer, :van, :naar)")
+                .setParameter("geregistreerd", geregistreerd)
+                .setParameter("dvId", DV_ID)
+                .setParameter("notificatieId", notificatieId)
+                .setParameter("volgnummer", volgnummer)
+                .setParameter("van", van)
+                .setParameter("naar", naar)
                 .executeUpdate();
     }
 
     public static void verwijderNotificatie(EntityManager entityManager, UUID id) {
-        entityManager.createNativeQuery("DELETE FROM notificatie WHERE id = ?1")
-                .setParameter(1, id)
+        entityManager.createQuery("delete from Notificatie where " + Notificatie_.ID + " = :id")
+                .setParameter("id", id)
                 .executeUpdate();
     }
 
@@ -92,17 +98,10 @@ public final class NotificatieFixtures {
     /** Zet de status rechtstreeks, zonder overgang en zonder versieverhoging; de trigger staat daarvoor uit. */
     public static void zetStatus(EntityManager entityManager, UUID id, NotificatieStatus status) {
         zetTriggerUit(entityManager);
-        entityManager.createNativeQuery("UPDATE notificatie SET status = ?1 WHERE id = ?2")
-                .setParameter(1, status.name())
-                .setParameter(2, id)
+        entityManager.createQuery("update Notificatie set " + Notificatie_.STATUS + " = :status where " + Notificatie_.ID + " = :id")
+                .setParameter("status", status)
+                .setParameter("id", id)
                 .executeUpdate();
-    }
-
-    /** De status van de notificatie met een poging op {@code GEPLAND}, rechtstreeks uit de database. */
-    public static String statusBijGeplandePoging(EntityManager entityManager) {
-        return (String) entityManager.createNativeQuery("SELECT n.status FROM notificatie n "
-                        + "JOIN poging p ON p.notificatie_id = n.id WHERE p.status = 'GEPLAND'")
-                .getSingleResult();
     }
 
     /**
@@ -136,16 +135,33 @@ public final class NotificatieFixtures {
 
     /** Zet de registratietijd terug, zodat een notificatie buiten de bewaartermijn valt. */
     public static void verzetLaatsteStatusUpdate(EntityManager entityManager, UUID id, OffsetDateTime tijdstip) {
-        entityManager.createNativeQuery("UPDATE notificatie SET laatste_status_update = ?1 WHERE id = ?2")
-                .setParameter(1, tijdstip)
-                .setParameter(2, id)
+        entityManager.createQuery("update Notificatie set " + Notificatie_.LAATSTE_STATUS_UPDATE + " = :tijdstip where "
+                        + Notificatie_.ID + " = :id")
+                .setParameter("tijdstip", tijdstip)
+                .setParameter("id", id)
+                .executeUpdate();
+    }
+
+    /** Wist het template-id, zoals bij een notificatie van vóór de takentabel. */
+    public static void wisTemplateId(EntityManager entityManager, UUID id) {
+        entityManager.createQuery("update Notificatie set " + Notificatie_.TEMPLATE_ID + " = null where " + Notificatie_.ID + " = :id")
+                .setParameter("id", id)
+                .executeUpdate();
+    }
+
+    public static void zetKekVersie(EntityManager entityManager, UUID id, int kekVersie) {
+        entityManager.createQuery("update Notificatie set " + Notificatie_.KEK_VERSIE + " = :kekVersie where "
+                        + Notificatie_.ID + " = :id")
+                .setParameter("kekVersie", kekVersie)
+                .setParameter("id", id)
                 .executeUpdate();
     }
 
     public static long telPogingen(EntityManager entityManager, UUID notificatieId) {
-        return ((Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM poging WHERE notificatie_id = ?1")
-                .setParameter(1, notificatieId)
-                .getSingleResult()).longValue();
+        return entityManager.createQuery("select count(*) from Poging where " + Poging_.NOTIFICATIE_ID + " = :notificatieId",
+                        Long.class)
+                .setParameter("notificatieId", notificatieId)
+                .getSingleResult();
     }
 
     /**

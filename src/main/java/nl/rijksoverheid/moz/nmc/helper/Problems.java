@@ -3,6 +3,8 @@ package nl.rijksoverheid.moz.nmc.helper;
 import io.quarkiverse.httpproblem.HttpProblem;
 import jakarta.ws.rs.core.Response;
 
+import java.net.URI;
+
 public final class Problems {
 
     private Problems() {
@@ -36,6 +38,16 @@ public final class Problems {
         return HttpProblem.builder()
                 .withStatus(Response.Status.BAD_GATEWAY)
                 .withTitle(title)
+                .withDetail(detail)
+                .build();
+    }
+
+    /** 429 met een eigen probleemtype, zodat een Dienstverlener het quotum van andere fouten onderscheidt. */
+    public static HttpProblem quotumOverschreden(String detail) {
+        return HttpProblem.builder()
+                .withType(URI.create("https://mijnoverheidzakelijk.nl/problemen/quotum-overschreden"))
+                .withStatus(Response.Status.TOO_MANY_REQUESTS)
+                .withTitle("Quotum overschreden")
                 .withDetail(detail)
                 .build();
     }

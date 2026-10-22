@@ -52,20 +52,21 @@ public class ReceiptVerwerker {
     }
 
     /**
+     * @param reference  de eigen referentie uit de receipt: het poging-id dat bij het versturen is
+     *                   meegegeven; null of onbruikbaar voor verzendingen van vóór die afspraak, dan
+     *                   geldt het NotifyNL-id
      * @param opgetreden het tijdstip van de status volgens NotifyNL, dat de volgorde van de receipts
      *        bepaalt, begrensd op de eigen klok plus de klokmarge; null als de receipt er geen heeft,
      *        dan geldt het moment van ontvangst en gaat de receipt nooit vóór een al vastgelegde uitkomst
-     * @throws NotificatieNietGevondenException als geen poging dit NotifyNL-id heeft
+     * @throws NotificatieNietGevondenException als geen poging bij deze receipt hoort
      */
     @Transactional
-    public void verwerk(UUID notifyId, String status, OffsetDateTime opgetreden) {
-        Poging poging = pogingRepository.findByNotifyId(notifyId)
-                .orElseThrow(() -> new NotificatieNietGevondenException(
-                        "Geen poging gevonden voor NotifyNL-referentie " + notifyId));
-
+    public void verwerk(UUID notifyId, String reference, String status, OffsetDateTime opgetreden) {
+        Poging poging = zoekPoging(notifyId, reference);
         Optional<PogingStatus> uitkomst = NotifyNLAfleverstatus.naarUitkomst(status, notifyId);
 
-        if (uitkomst.isEmpty()) {
+        // Een tussenstatus voor een poging die haar id al heeft, verandert niets.
+        if (uitkomst.isEmpty() && poging.getNotifyId() != null) {
             return;
         }
 
@@ -73,11 +74,29 @@ public class ReceiptVerwerker {
         // elkaars uitkomst zien.
         Notificatie notificatie = overgangsfunctie.vergrendel(poging.getNotificatieId());
         pogingRepository.herlaad(poging);
-
         OffsetDateTime ontvangen = normaliseer(OffsetDateTime.now(ZoneOffset.UTC));
+        OffsetDateTime tijdstip = opgetreden == null ? ontvangen : begrens(normaliseer(opgetreden), ontvangen, status, notifyId);
+
+        if (poging.getNotifyId() == null) {
+            // De receipt is er eerder dan de verzend-commit van de worker: de poging neemt het id over
+            // en de overgang naar verzonden gebeurt hier, namens de worker.
+            poging.markeerVerzonden(notifyId, tijdstip);
+
+            if (notificatie.getStatus() == NotificatieStatus.IN_VERZENDING) {
+                overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
+            }
+        } else if (!poging.hoortBij(notifyId)) {
+            // Een tweede verzending na een herclaim: zelfde ontvanger en inhoud, dus dezelfde poging.
+            poging.registreerDuplicaat(notifyId);
+        }
+
+        if (uitkomst.isEmpty()) {
+            return;
+        }
+
         boolean verwerkt = opgetreden == null
-                ? poging.verwerkReceiptZonderTijdstip(uitkomst.get(), ontvangen)
-                : poging.verwerkReceipt(uitkomst.get(), begrens(normaliseer(opgetreden), ontvangen, status, notifyId));
+                ? poging.verwerkReceiptZonderTijdstip(uitkomst.get(), tijdstip)
+                : poging.verwerkReceipt(uitkomst.get(), tijdstip);
 
         if (!verwerkt) {
             // Een genegeerde receipt met een andere uitkomst is het enige spoor van een scheef tijdstip.
@@ -104,6 +123,28 @@ public class ReceiptVerwerker {
         // StatusUpdateVerzender pakt dit pas ná de commit op, zodat de Dienstverlener geen status
         // krijgt die daarna terugrolt.
         statusUpdateEvent.fire(StatusUpdateOpdracht.van(resultaat.event(), notificatie.getCallbackUrl()));
+    }
+
+    // Eerst op reference (het poging-id), dan op het NotifyNL-id voor verzendingen zonder reference.
+    private Poging zoekPoging(UUID notifyId, String reference) {
+        Optional<Poging> opReference = parseUuid(reference).map(pogingRepository::findById);
+
+        return opReference
+                .or(() -> pogingRepository.findByNotifyId(notifyId))
+                .orElseThrow(() -> new NotificatieNietGevondenException(
+                        "Geen poging gevonden voor NotifyNL-referentie " + notifyId + " (reference " + reference + ")"));
+    }
+
+    private static Optional<UUID> parseUuid(String waarde) {
+        if (waarde == null || waarde.isBlank()) {
+            return Optional.empty();
+        }
+
+        try {
+            return Optional.of(UUID.fromString(waarde.strip()));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
     }
 
     private OffsetDateTime begrens(OffsetDateTime opgetreden, OffsetDateTime ontvangen, String status, UUID notifyId) {

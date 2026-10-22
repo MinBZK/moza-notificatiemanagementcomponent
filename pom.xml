@@ -253,7 +253,7 @@
                             <configOptions>
                                 <sourceFolder>src/gen/java</sourceFolder>
                                 <interfaceOnly>true</interfaceOnly>
-                                <returnResponse>false</returnResponse>
+                                <returnResponse>true</returnResponse>
                                 <useJakartaEe>true</useJakartaEe>
                                 <useSwaggerAnnotations>false</useSwaggerAnnotations>
                                 <useTags>true</useTags>

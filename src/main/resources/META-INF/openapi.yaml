@@ -3,7 +3,7 @@ info:
   title: NotificatieManagementComponent API
   description: |
     API voor het versturen van notificaties namens een Dienstverlener.
-  version: 0.1.0
+  version: 0.2.0
   contact:
     name: MijnOverheid Zakelijk Team
     email: moza@minbzk.nl
@@ -30,9 +30,13 @@ paths:
       operationId: notificatieVersturen
       summary: Notificatie versturen
       description: |
-        Haalt de contactgegevens op bij de Profielservice, verstuurt de notificatie
-        en slaat de notificatie op. Als een callbackUrl is meegegeven, stuurt de
-        NMC asynchroon een statusupdate (CloudEvents) zodra de bezorgstatus bekend is.
+        Neemt de notificatie aan op een identificerend nummer en antwoordt 202 zodra ze
+        duurzaam is opgeslagen. De verzending volgt asynchroon: het NMC haalt dan het
+        e-mailadres op bij de Profielservice en biedt het bericht aan bij NotifyNL. Is
+        er geen partij of geen e-mailadres, dan eindigt de notificatie in
+        `niet-bezorgbaar` met reden `geen-contactgegevens`. Als een callbackUrl is
+        meegegeven, stuurt de NMC een statusupdate (CloudEvents) bij elke overgang die
+        op een delivery receipt volgt.
       tags:
         - CentraleNotificaties
       requestBody:
@@ -71,8 +75,10 @@ paths:
                 '2XX':
                   description: Statusupdate ontvangen
       responses:
-        '200':
-          description: Notificatie succesvol verstuurd
+        '202':
+          description: >-
+            Notificatie aangenomen en duurzaam opgeslagen; de verzending volgt asynchroon. De
+            uitkomst komt via de callback, als er een `callbackUrl` is.
           headers:
             API-Version:
               schema:
@@ -84,16 +90,23 @@ paths:
                 $ref: '#/components/schemas/NotificatieResponse'
         '400':
           description: >-
-            Ongeldige aanvraag, of er kon geen notificatie worden gedaan voor de
-            opgegeven partij (geen partij of geen e-mailadres gevonden voor de
-            opgegeven identificatie). Bij bean-validatie, zoals een ongeldige
-            callbackUrl, is `violations` gevuld.
+            Ongeldige aanvraag, zoals een ontbrekend identificatienummer, een ongeldige
+            callbackUrl of een onbekend berichttype. Bij een ongeldig veld noemt `violations`
+            het veld.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          description: >-
+            Het quotum van de Dienstverlener voor vandaag is bereikt
+            (`type` `https://mijnoverheidzakelijk.nl/problemen/quotum-overschreden`).
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '500':
-          description: De notificatie kon niet (succesvol) verzonden worden
+          description: De notificatie kon niet worden aangenomen
           content:
             application/problem+json:
               schema:
@@ -104,11 +117,10 @@ paths:
       operationId: decentraleNotificatieVersturen
       summary: Notificatie versturen op basis van een e-mailadres
       description: |
-        Verstuurt een notificatie rechtstreeks naar het opgegeven e-mailadres, zonder
-        de Profielservice te raadplegen (decentraal profiel / doorgeefluik). De aanroeper
-        heeft de contactgegevens zelf al bepaald en geeft het e-mailadres mee. Als een
-        callbackUrl is meegegeven, stuurt de NMC asynchroon een statusupdate (CloudEvents)
-        zodra de bezorgstatus bekend is.
+        Neemt een notificatie aan voor het opgegeven e-mailadres en antwoordt 202 zodra
+        ze duurzaam is opgeslagen. De verzending bij NotifyNL volgt asynchroon. Als een
+        callbackUrl is meegegeven, stuurt de NMC een statusupdate (CloudEvents) bij elke
+        overgang die op een delivery receipt volgt.
       tags:
         - DecentraleNotificaties
       requestBody:
@@ -147,8 +159,10 @@ paths:
                 '2XX':
                   description: Statusupdate ontvangen
       responses:
-        '200':
-          description: Notificatie succesvol verstuurd
+        '202':
+          description: >-
+            Notificatie aangenomen en duurzaam opgeslagen; de verzending volgt asynchroon. De
+            uitkomst komt via de callback, als er een `callbackUrl` is.
           headers:
             API-Version:
               schema:
@@ -160,15 +174,23 @@ paths:
                 $ref: '#/components/schemas/NotificatieResponse'
         '400':
           description: >-
-            Ongeldige aanvraag (bijv. ontbrekend/ongeldig e-mailadres of onbekend
-            berichttype). Bij bean-validatie, zoals een ongeldig e-mailadres of een
-            ongeldige callbackUrl, is `violations` gevuld.
+            Ongeldige aanvraag, zoals een ontbrekend of ongeldig e-mailadres, een ongeldige
+            callbackUrl of een onbekend berichttype. Bij een ongeldig veld noemt `violations`
+            het veld.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          description: >-
+            Het quotum van de Dienstverlener voor vandaag is bereikt
+            (`type` `https://mijnoverheidzakelijk.nl/problemen/quotum-overschreden`).
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '500':
-          description: De notificatie kon niet (succesvol) verzonden worden
+          description: De notificatie kon niet worden aangenomen
           content:
             application/problem+json:
               schema:
@@ -198,6 +220,7 @@ components:
         identificatieNummer:
           type: string
           minLength: 1
+          pattern: '^.*\S.*$'
           description: BSN-, KVK- of RSIN-nummer van de ontvanger
         dienstverlener:
           type: string
@@ -213,9 +236,13 @@ components:
           description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template"
         berichtgegevens:
           type: object
-          description: Templatevariabelen voor het bericht
+          description: Templatevariabelen voor het bericht, ten hoogste 50 met waarden tot 2000 tekens
+          maxProperties: 50
           additionalProperties:
             type: string
+            maxLength: 2000
+          # De generator maakt hier een Map zonder validatie van; de grenzen zitten in de annotatie.
+          x-field-extra-annotation: "@nl.rijksoverheid.moz.nmc.validation.ValidBerichtgegevens"
         callbackUrl:
           type: string
           format: uri
@@ -265,9 +292,13 @@ components:
           description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template"
         berichtgegevens:
           type: object
-          description: Templatevariabelen voor het bericht
+          description: Templatevariabelen voor het bericht, ten hoogste 50 met waarden tot 2000 tekens
+          maxProperties: 50
           additionalProperties:
             type: string
+            maxLength: 2000
+          # De generator maakt hier een Map zonder validatie van; de grenzen zitten in de annotatie.
+          x-field-extra-annotation: "@nl.rijksoverheid.moz.nmc.validation.ValidBerichtgegevens"
         callbackUrl:
           type: string
           format: uri

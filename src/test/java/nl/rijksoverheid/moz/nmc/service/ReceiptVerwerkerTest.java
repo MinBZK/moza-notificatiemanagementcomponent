@@ -84,7 +84,7 @@ class ReceiptVerwerkerTest {
                                                              NotificatieStatus naar, Reden reden) {
         UUID notifyId = verzondenNotificatie("https://omc.example.nl/callback");
 
-        receiptVerwerker.verwerk(notifyId, receipt, T1);
+        receiptVerwerker.verwerk(notifyId, null, receipt, T1);
 
         Poging poging = poging(notifyId);
         assertEquals(pogingStatus, poging.getStatus());
@@ -104,8 +104,8 @@ class ReceiptVerwerkerTest {
     void verwerk_zelfdeReceiptTweeKeer_voertEenOvergangUit() {
         UUID notifyId = verzondenNotificatie(null);
 
-        receiptVerwerker.verwerk(notifyId, "delivered", T1);
-        receiptVerwerker.verwerk(notifyId, "delivered", T1);
+        receiptVerwerker.verwerk(notifyId, null, "delivered", T1);
+        receiptVerwerker.verwerk(notifyId, null, "delivered", T1);
 
         assertEquals(3, notificatie(notifyId).getVersie());
         verstuurdeOpdrachten(1);
@@ -116,8 +116,8 @@ class ReceiptVerwerkerTest {
     void verwerk_zelfdeUitkomstMetLaterTijdstip_laatDeVastgelegdeReceiptStaan() {
         UUID notifyId = verzondenNotificatie(null);
 
-        receiptVerwerker.verwerk(notifyId, "delivered", T1);
-        receiptVerwerker.verwerk(notifyId, "delivered", T2);
+        receiptVerwerker.verwerk(notifyId, null, "delivered", T1);
+        receiptVerwerker.verwerk(notifyId, null, "delivered", T2);
 
         assertEquals(T1, poging(notifyId).getReceiptTijdstip());
         assertEquals(3, notificatie(notifyId).getVersie());
@@ -130,8 +130,8 @@ class ReceiptVerwerkerTest {
     void verwerk_receiptZonderTijdstipNaEenVastgelegdeUitkomst_wordtGenegeerd() {
         UUID notifyId = verzondenNotificatie(null);
 
-        receiptVerwerker.verwerk(notifyId, "delivered", T1);
-        receiptVerwerker.verwerk(notifyId, "permanent-failure", null);
+        receiptVerwerker.verwerk(notifyId, null, "delivered", T1);
+        receiptVerwerker.verwerk(notifyId, null, "permanent-failure", null);
 
         assertEquals(PogingStatus.BEZORGD, poging(notifyId).getStatus());
         assertEquals(T1, poging(notifyId).getReceiptTijdstip());
@@ -145,7 +145,7 @@ class ReceiptVerwerkerTest {
         UUID notifyId = verzondenNotificatie(null);
         OffsetDateTime ietsVooruit = OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(1).truncatedTo(ChronoUnit.MICROS);
 
-        receiptVerwerker.verwerk(notifyId, "delivered", ietsVooruit);
+        receiptVerwerker.verwerk(notifyId, null, "delivered", ietsVooruit);
 
         assertEquals(ietsVooruit, poging(notifyId).getReceiptTijdstip());
     }
@@ -157,12 +157,12 @@ class ReceiptVerwerkerTest {
         UUID notifyId = verzondenNotificatie(null);
         OffsetDateTime voorOntvangst = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
-        receiptVerwerker.verwerk(notifyId, "delivered", voorOntvangst.plusHours(1));
+        receiptVerwerker.verwerk(notifyId, null, "delivered", voorOntvangst.plusHours(1));
         OffsetDateTime vastgelegd = poging(notifyId).getReceiptTijdstip();
         assertFalse(vastgelegd.isBefore(voorOntvangst));
         assertTrue(vastgelegd.isBefore(voorOntvangst.plusMinutes(5)));
 
-        receiptVerwerker.verwerk(notifyId, "permanent-failure", vastgelegd.plusMinutes(1));
+        receiptVerwerker.verwerk(notifyId, null, "permanent-failure", vastgelegd.plusMinutes(1));
 
         assertEquals(PogingStatus.PERMANENT_MISLUKT, poging(notifyId).getStatus());
         assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(notifyId).getStatus());
@@ -174,8 +174,8 @@ class ReceiptVerwerkerTest {
     void verwerk_oudereReceiptNaEenNieuwere_wordtGenegeerd() {
         UUID notifyId = verzondenNotificatie(null);
 
-        receiptVerwerker.verwerk(notifyId, "delivered", T2);
-        receiptVerwerker.verwerk(notifyId, "permanent-failure", T1);
+        receiptVerwerker.verwerk(notifyId, null, "delivered", T2);
+        receiptVerwerker.verwerk(notifyId, null, "permanent-failure", T1);
 
         assertEquals(PogingStatus.BEZORGD, poging(notifyId).getStatus());
         assertEquals(T2, poging(notifyId).getReceiptTijdstip());
@@ -188,8 +188,8 @@ class ReceiptVerwerkerTest {
     void verwerk_faalreceiptNaDelivered_brengtDeNotificatieNaarNietBezorgbaar() {
         UUID notifyId = verzondenNotificatie(null);
 
-        receiptVerwerker.verwerk(notifyId, "delivered", T1);
-        receiptVerwerker.verwerk(notifyId, "permanent-failure", T2);
+        receiptVerwerker.verwerk(notifyId, null, "delivered", T1);
+        receiptVerwerker.verwerk(notifyId, null, "permanent-failure", T2);
 
         assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(notifyId).getStatus());
         List<StatusUpdateOpdracht> opdrachten = verstuurdeOpdrachten(2);
@@ -201,8 +201,8 @@ class ReceiptVerwerkerTest {
     void verwerk_receiptNaEenEindstatus_legtVastOpDePogingZonderOvergang() {
         UUID notifyId = verzondenNotificatie(null);
 
-        receiptVerwerker.verwerk(notifyId, "permanent-failure", T1);
-        receiptVerwerker.verwerk(notifyId, "delivered", T2);
+        receiptVerwerker.verwerk(notifyId, null, "permanent-failure", T1);
+        receiptVerwerker.verwerk(notifyId, null, "delivered", T2);
 
         assertEquals(PogingStatus.BEZORGD, poging(notifyId).getStatus());
         assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(notifyId).getStatus());
@@ -218,7 +218,7 @@ class ReceiptVerwerkerTest {
 
         List<String> fouten;
         try (LogVanger vanger = LogVanger.van(NotifyNLAfleverstatus.class)) {
-            receiptVerwerker.verwerk(notifyId, "een-rare-status", T1);
+            receiptVerwerker.verwerk(notifyId, null, "een-rare-status", T1);
             fouten = vanger.regelsOpNiveau(Level.SEVERE);
         }
 
@@ -235,7 +235,7 @@ class ReceiptVerwerkerTest {
     void verwerk_tussenstatus_wijzigtNiets() {
         UUID notifyId = verzondenNotificatie(null);
 
-        receiptVerwerker.verwerk(notifyId, "sending", T1);
+        receiptVerwerker.verwerk(notifyId, null, "sending", T1);
 
         assertEquals(PogingStatus.VERZONDEN, poging(notifyId).getStatus());
         verify(consumentCallbackAdapter, never()).stuurStatusUpdate(any());
@@ -244,7 +244,7 @@ class ReceiptVerwerkerTest {
     @Test
     void verwerk_onbekendNotifyId_gooitNietGevonden() {
         assertThrows(NotificatieNietGevondenException.class,
-                () -> receiptVerwerker.verwerk(UUID.randomUUID(), "delivered", T1));
+                () -> receiptVerwerker.verwerk(UUID.randomUUID(), null, "delivered", T1));
     }
 
     @Test
@@ -252,7 +252,7 @@ class ReceiptVerwerkerTest {
         UUID notifyId = verzondenNotificatie(null);
         OffsetDateTime ervoor = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
-        receiptVerwerker.verwerk(notifyId, "delivered", null);
+        receiptVerwerker.verwerk(notifyId, null, "delivered", null);
 
         assertFalse(poging(notifyId).getReceiptTijdstip().isBefore(ervoor));
     }
