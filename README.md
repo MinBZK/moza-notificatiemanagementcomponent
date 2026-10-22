@@ -173,7 +173,9 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
 - **`notificatie`** draagt de status in de levenscyclus (`aangenomen`,
   `in-verzending`, `verzonden`, `bezorgd` en de eindstatussen), een eventuele
   `reden`, de optionele `callbackUrl` en een `versie` die per overgang met één
-  oploopt.
+  oploopt. De ontvanger (bij decentrale regie het e-mailadres, bij centrale regie
+  het identificerend nummer) en de personalisation staan er versleuteld op, met een
+  eigen sleutel per notificatie die met de KEK is gewrapt.
 - **`poging`** is één verzending bij NotifyNL: nummer, status (de uitkomst uit de
   receipts), het NotifyNL-id en het tijdstip uit de laatst verwerkte receipt. Een
   receipt komt via het NotifyNL-id bij de poging terecht.
