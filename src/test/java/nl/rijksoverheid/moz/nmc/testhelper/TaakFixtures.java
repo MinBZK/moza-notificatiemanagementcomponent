@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.testhelper;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+import nl.rijksoverheid.moz.nmc.domain.Bevestiging_;
 import nl.rijksoverheid.moz.nmc.domain.Dienstverlener_;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
@@ -9,13 +10,15 @@ import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.domain.VerzendbudgetTijdvak_;
 import nl.rijksoverheid.moz.nmc.domain.Webhookpositie_;
+import org.hibernate.Session;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * Schrijft en leest de takentabel, het verzendbudget, de dienstverleners en de webhookpositie buiten de
- * claim om, voor tests die een toestand willen die de claim zelf niet maakt. Elke query op
+ * Schrijft en leest de takentabel, het verzendbudget, de dienstverleners, de bevestigingen en de
+ * webhookposities buiten de claim om, voor tests die een toestand willen die de claim zelf niet maakt. Elke query op
  * {@code Taak} noemt de soort.
  */
 public final class TaakFixtures {
@@ -147,6 +150,59 @@ public final class TaakFixtures {
                 .setParameter("tot", tot)
                 .setParameter("dvId", dvId)
                 .executeUpdate();
+    }
+
+    /** Zet de maximale cursorleeftijd in het register; {@code null} is de default uit de configuratie. */
+    public static void zetMaxCursorleeftijd(EntityManager entityManager, UUID dvId, Duration leeftijd) {
+        // Native: max_cursorleeftijd is niet gemapt op Dienstverlener.
+        entityManager.createNativeQuery("UPDATE dienstverlener SET max_cursorleeftijd = CAST(?1 AS bigint) * interval '1 second' "
+                        + "WHERE id = ?2")
+                .setParameter(1, leeftijd == null ? null : leeftijd.toSeconds())
+                .setParameter(2, dvId)
+                .executeUpdate();
+    }
+
+    public static void verwijderBevestigingen(EntityManager entityManager) {
+        entityManager.createQuery("delete from Bevestiging").executeUpdate();
+    }
+
+    public static void voegBevestigingToe(EntityManager entityManager, UUID dvId, int epoch, long transactieId,
+                                          OffsetDateTime bevestigdOp) {
+        // Via de Session: Hibernate leidt het type van de transactie-id in een insert niet af, en alleen
+        // een Hibernate-query neemt het type als parameter.
+        entityManager.unwrap(Session.class).createMutationQuery("insert into Bevestiging (" + Bevestiging_.DV_ID + ", " + Bevestiging_.EPOCH + ", "
+                        + Bevestiging_.TRANSACTIE_ID + ", " + Bevestiging_.EVENT_ID + ", " + Bevestiging_.BEVESTIGD_OP
+                        + ") values (:dvId, :epoch, :transactieId, 1, :bevestigdOp)")
+                .setParameter("dvId", dvId)
+                .setParameter("epoch", epoch)
+                .setParameter("transactieId", transactieId, Bevestiging_.transactieId.getType())
+                .setParameter("bevestigdOp", bevestigdOp)
+                .executeUpdate();
+    }
+
+    public static void verwijderWebhookposities(EntityManager entityManager) {
+        entityManager.createQuery("delete from Webhookpositie").executeUpdate();
+    }
+
+    /** Een leverpositie met drie mislukkingen, die voor het laatst op {@code geleverdOp} verschoof. */
+    public static void voegWebhookpositieToe(EntityManager entityManager, UUID dvId, long transactieId,
+                                             OffsetDateTime geleverdOp, OffsetDateTime bijgewerktOp) {
+        entityManager.unwrap(Session.class).createMutationQuery("insert into Webhookpositie (" + Webhookpositie_.DV_ID + ", " + Webhookpositie_.EPOCH
+                        + ", " + Webhookpositie_.TRANSACTIE_ID + ", " + Webhookpositie_.EVENT_ID + ", "
+                        + Webhookpositie_.MISLUKKINGEN + ", " + Webhookpositie_.BIJGEWERKT_OP + ", "
+                        + Webhookpositie_.GELEVERD_OP + ") values (:dvId, 1, :transactieId, 1, 3, :bijgewerktOp, :geleverdOp)")
+                .setParameter("dvId", dvId)
+                .setParameter("transactieId", transactieId, Webhookpositie_.transactieId.getType())
+                .setParameter("bijgewerktOp", bijgewerktOp)
+                .setParameter("geleverdOp", geleverdOp)
+                .executeUpdate();
+    }
+
+    public static OffsetDateTime geleverdOp(EntityManager entityManager, UUID dvId) {
+        return entityManager.createQuery("select " + Webhookpositie_.GELEVERD_OP + " from Webhookpositie where "
+                        + Webhookpositie_.DV_ID + " = :dvId", OffsetDateTime.class)
+                .setParameter("dvId", dvId)
+                .getSingleResult();
     }
 
     public static int telDienstverleners(EntityManager entityManager, UUID id) {

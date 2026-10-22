@@ -22,18 +22,25 @@ public class WebhookpositieRepository implements PanacheRepositoryBase<Webhookpo
     public void bewaar(Webhookpositie positie, OffsetDateTime nu) {
         Optional<Cursor> cursor = positie.laatstGeleverd();
         // Hibernate leidt de parametertypen in een insert niet af uit de kolommen; met de types van de
-        // attributen komen een lege positie of pauze als null van het juiste type aan.
-        getSession().createMutationQuery("insert into Webhookpositie (" + Webhookpositie_.DV_ID + ", "
+        // attributen komen een lege positie of pauze als null van het juiste type aan. geleverdOp verschuift
+        // alleen met de positie; het opruimen van het eventlog rekent daarmee de cursorleeftijd.
+        getSession().createMutationQuery("insert into Webhookpositie w (" + Webhookpositie_.DV_ID + ", "
                         + Webhookpositie_.EPOCH + ", " + Webhookpositie_.TRANSACTIE_ID + ", " + Webhookpositie_.EVENT_ID + ", "
                         + Webhookpositie_.MISLUKKINGEN + ", " + Webhookpositie_.GEPAUZEERD_TOT + ", "
-                        + Webhookpositie_.BIJGEWERKT_OP + ") values (:dvId, :epoch, :transactieId, :eventId, :mislukkingen,"
-                        + " :gepauzeerdTot, :bijgewerktOp) on conflict(" + Webhookpositie_.DV_ID + ") do update set "
+                        + Webhookpositie_.BIJGEWERKT_OP + ", " + Webhookpositie_.GELEVERD_OP + ") values (:dvId, :epoch,"
+                        + " :transactieId, :eventId, :mislukkingen, :gepauzeerdTot, :bijgewerktOp, :geleverdOp) on conflict("
+                        + Webhookpositie_.DV_ID + ") do update set "
                         + Webhookpositie_.EPOCH + " = excluded." + Webhookpositie_.EPOCH + ", "
                         + Webhookpositie_.TRANSACTIE_ID + " = excluded." + Webhookpositie_.TRANSACTIE_ID + ", "
                         + Webhookpositie_.EVENT_ID + " = excluded." + Webhookpositie_.EVENT_ID + ", "
                         + Webhookpositie_.MISLUKKINGEN + " = excluded." + Webhookpositie_.MISLUKKINGEN + ", "
                         + Webhookpositie_.GEPAUZEERD_TOT + " = excluded." + Webhookpositie_.GEPAUZEERD_TOT + ", "
-                        + Webhookpositie_.BIJGEWERKT_OP + " = excluded." + Webhookpositie_.BIJGEWERKT_OP)
+                        + Webhookpositie_.BIJGEWERKT_OP + " = excluded." + Webhookpositie_.BIJGEWERKT_OP + ", "
+                        + Webhookpositie_.GELEVERD_OP + " = case when w." + Webhookpositie_.EPOCH + " = excluded."
+                        + Webhookpositie_.EPOCH + " and w." + Webhookpositie_.TRANSACTIE_ID + " = excluded."
+                        + Webhookpositie_.TRANSACTIE_ID + " and w." + Webhookpositie_.EVENT_ID + " = excluded."
+                        + Webhookpositie_.EVENT_ID + " then w." + Webhookpositie_.GELEVERD_OP + " else excluded."
+                        + Webhookpositie_.GELEVERD_OP + " end")
                 .setParameter("dvId", positie.getDvId())
                 .setParameter("epoch", cursor.map(Cursor::epoch).orElse(null), Webhookpositie_.epoch.getType())
                 .setParameter("transactieId", cursor.map(Cursor::transactieId).orElse(null),
@@ -42,6 +49,7 @@ public class WebhookpositieRepository implements PanacheRepositoryBase<Webhookpo
                 .setParameter("mislukkingen", positie.getMislukkingen())
                 .setParameter("gepauzeerdTot", positie.getGepauzeerdTot(), Webhookpositie_.gepauzeerdTot.getType())
                 .setParameter("bijgewerktOp", nu)
+                .setParameter("geleverdOp", cursor.isPresent() ? nu : null, Webhookpositie_.geleverdOp.getType())
                 .executeUpdate();
     }
 }

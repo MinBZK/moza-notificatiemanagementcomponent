@@ -35,6 +35,21 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
             + Taak_.CLAIM_EPOCH + " = :claimEpoch";
 
     /**
+     * Plant de wistaak van de notificatie op {@code due}, of verzet de open wistaak daarheen. De aanroeper
+     * houdt de rijvergrendeling van de notificatie, dus twee overgangen plannen nooit tegelijk; een latere
+     * overgang naar een eindstatus verzet zo ook een wistaak die een worker net geclaimd heeft, die de
+     * termijn opnieuw leest onder diezelfde vergrendeling.
+     */
+    public void planWistaak(UUID dvId, UUID notificatieId, OffsetDateTime due) {
+        long verzet = update(Taak_.DUE + " = ?1 where " + Taak_.TAAK_SOORT + " = ?2 and " + Taak_.NOTIFICATIE_ID + " = ?3 and "
+                + Taak_.STATUS + " = ?4", due, TaakSoort.WISSEN, notificatieId, TaakStatus.OPEN);
+
+        if (verzet == 0) {
+            persist(new Taak(TaakSoort.WISSEN, dvId, notificatieId, due, null, null));
+        }
+    }
+
+    /**
      * Plant een terugkoppeltaak voor elke dienstverlener met een webhook die er nog geen heeft.
      *
      * @return het aantal geplande taken

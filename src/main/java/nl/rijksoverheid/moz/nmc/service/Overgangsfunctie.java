@@ -8,8 +8,10 @@ import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.OvergangUitkomst;
 import nl.rijksoverheid.moz.nmc.domain.Overgangsregels;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -18,6 +20,11 @@ import java.util.UUID;
  * De enige schrijver van de notificatiestatus. Elke overgang vergrendelt de notificatierij, toetst
  * het paar aan {@link Overgangsregels}, verhoogt de versie met precies één en schrijft een event met
  * die versie als volgnummer, in de transactie van de aanroeper.
+ * <p>
+ * Elke overgang naar een eindstatus plant de wistaak op de wistermijn vanaf die overgang, of verzet een
+ * open wistaak daarheen. Zo gaat geen schrijver van een eindstatus aan het wissen voorbij, en wist een
+ * correctie van {@code BEZORGSTATUS_ONBEKEND} niet op de termijn van de eerdere status. Een overgang
+ * uit een eindstatus terug naar een status zonder eindstatus verwijdert de open wistaak.
  */
 @ApplicationScoped
 @Transactional(Transactional.TxType.MANDATORY)
@@ -25,10 +32,15 @@ public class Overgangsfunctie {
 
     private final NotificatieRepository notificatieRepository;
     private final EventRepository eventRepository;
+    private final TaakRepository taakRepository;
+    private final Opruimtermijnen opruimtermijnen;
 
-    public Overgangsfunctie(NotificatieRepository notificatieRepository, EventRepository eventRepository) {
+    public Overgangsfunctie(NotificatieRepository notificatieRepository, EventRepository eventRepository,
+                            TaakRepository taakRepository, Opruimtermijnen opruimtermijnen) {
         this.notificatieRepository = notificatieRepository;
         this.eventRepository = eventRepository;
+        this.taakRepository = taakRepository;
+        this.opruimtermijnen = opruimtermijnen;
     }
 
     /** Slaat een nieuwe notificatie op als {@code AANGENOMEN}, met het event met volgnummer 0. */
@@ -76,6 +88,13 @@ public class Overgangsfunctie {
         }
 
         notificatieRepository.flush();
+
+        if (naar.isEindstatus()) {
+            taakRepository.planWistaak(notificatie.getDvId(), notificatie.getId(),
+                    opruimtermijnen.wissenOp(notificatie.getEindstatusOp()));
+        } else if (van.isEindstatus()) {
+            taakRepository.verwijderOpen(TaakSoort.WISSEN, notificatie.getId());
+        }
 
         return OvergangUitkomst.uitgevoerd(van, schrijfEvent(notificatie, van));
     }

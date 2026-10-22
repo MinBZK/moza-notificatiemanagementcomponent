@@ -40,6 +40,10 @@ public class Webhookpositie {
     @Column(name = "bijgewerkt_op", nullable = false)
     private OffsetDateTime bijgewerktOp;
 
+    // Wanneer de positie voor het laatst verschoof; bijgewerktOp verschuift ook bij een mislukking.
+    @Column(name = "geleverd_op")
+    private OffsetDateTime geleverdOp;
+
     protected Webhookpositie() {
         // Voor JPA
     }
