@@ -55,7 +55,7 @@ jobs:
       digest: ${{ steps.build.outputs.digest }} # immutable digest voor verse pull
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '25'
@@ -108,7 +108,7 @@ jobs:
     steps:
       - name: Deploy to ZAD
         id: deploy
-        uses: RijksICTGilde/zad-actions/deploy@4ac541a57542a22bde95b28f3ace4ee3123acd7a # v4.2.0
+        uses: RijksICTGilde/zad-actions/deploy@b612e5968bb88c2c9c05da30f0be2e96b98f78c6 # v4.3.2
         with:
           api-key: ${{ secrets.ZAD_API_KEY }}
           project-id: ${{ env.ZAD_PROJECT_ID }}
@@ -135,7 +135,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Cleanup ZAD environment
-        uses: RijksICTGilde/zad-actions/cleanup@4ac541a57542a22bde95b28f3ace4ee3123acd7a # v4.2.0
+        uses: RijksICTGilde/zad-actions/cleanup@b612e5968bb88c2c9c05da30f0be2e96b98f78c6 # v4.3.2
         with:
           api-key: ${{ secrets.ZAD_API_KEY }}
           project-id: ${{ env.ZAD_PROJECT_ID }}
@@ -167,7 +167,7 @@ jobs:
     steps:
       - name: Deploy to ZAD (stable)
         id: deploy
-        uses: RijksICTGilde/zad-actions/deploy@4ac541a57542a22bde95b28f3ace4ee3123acd7a # v4.2.0
+        uses: RijksICTGilde/zad-actions/deploy@b612e5968bb88c2c9c05da30f0be2e96b98f78c6 # v4.3.2
         with:
           api-key: ${{ secrets.ZAD_API_KEY }}
           project-id: ${{ env.ZAD_PROJECT_ID }}
