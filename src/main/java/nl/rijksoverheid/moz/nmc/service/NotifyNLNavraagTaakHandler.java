@@ -86,8 +86,11 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
 
         // Een tussenstatus of een status die het NMC niet kent is geen uitkomst; de navraag loopt dan door.
         if (afleverstatus.isPresent() && afleverstatus.get().uitkomst(navraag.notifyId()).isPresent()) {
-            // Eerst afronden: de verwerking ruimt open navraagtaken op en zou deze anders ook raken.
+            // Eerst de notificatierij, dan de taakrij: dezelfde volgorde als een receipt die de navraagtaak
+            // verwijdert, anders wachten beide op elkaar. Daarna afronden, want de verwerking ruimt open
+            // navraagtaken op en zou deze anders ook raken.
             QuarkusTransaction.requiringNew().run(() -> {
+                overgangsfunctie.vergrendel(navraag.notificatieId());
                 taakClaimer.rondAf(taak);
                 receiptVerwerker.verwerk(navraag.notifyId(), navraag.pogingId().toString(), afleverstatus.get().status(),
                         afleverstatus.get().tijdstip());
@@ -112,6 +115,8 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
 
     private TaakUitkomst sluitAf(Taak taak, Navraag navraag) {
         QuarkusTransaction.requiringNew().run(() -> {
+            // Eerst de notificatierij, dan de taakrij, zoals een receipt die de navraagtaak verwijdert.
+            overgangsfunctie.vergrendel(navraag.notificatieId());
             taakClaimer.rondAf(taak);
             sluitAfZonderUitkomst(navraag);
         });
