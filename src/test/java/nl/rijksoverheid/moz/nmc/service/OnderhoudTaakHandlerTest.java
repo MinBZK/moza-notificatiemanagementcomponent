@@ -184,6 +184,20 @@ class OnderhoudTaakHandlerTest {
                 "een nieuw event landt in een bereikpartitie, niet in de default");
     }
 
+    // De partitie wordt los aangemaakt en aangehangen; elke index van event moet daarbij een deel op
+    // de nieuwe partitie krijgen, anders mist de feed of het opruimen er een.
+    @Test
+    void maakVolgendeAan_nieuwePartitie_heeftElkeIndexVanHetEventlog() {
+        EventPartitie lopend = zorgVoorLopendePartitie();
+        verbruikTransactieIdsTot(lopend.van() + 40);
+
+        EventPartitie volgende = eventlogPartitiebeheer.maakVolgendeAan().orElseThrow();
+
+        long opEvent = aantalIndexen("event", false);
+        assertTrue(opEvent >= 3, "primary key, notificatie/volgnummer en feed");
+        assertEquals(opEvent, aantalIndexen(volgende.naam(), true));
+    }
+
     @Test
     void ruimOp_oudePartitieZonderCursor_verwijdertHaar() {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
@@ -390,6 +404,15 @@ class OnderhoudTaakHandlerTest {
                 null, NotificatieStatus.AANGENOMEN, tijdstip));
 
         return notificatieId;
+    }
+
+    /** Het aantal indexen op de tabel; voor een partitie alleen de indexen die aan een index van event hangen. */
+    private long aantalIndexen(String tabel, boolean aangehangen) {
+        String sql = "SELECT count(*) FROM pg_index x WHERE x.indrelid = CAST(?1 AS regclass)"
+                + (aangehangen ? " AND EXISTS (SELECT 1 FROM pg_inherits i WHERE i.inhrelid = x.indexrelid)" : "");
+
+        return QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager.createNativeQuery(sql)
+                .setParameter(1, tabel).getSingleResult()).longValue());
     }
 
     private void verbruikTransactieIdsTot(long transactieId) {

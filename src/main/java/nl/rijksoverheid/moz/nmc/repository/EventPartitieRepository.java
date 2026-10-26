@@ -97,13 +97,27 @@ public class EventPartitieRepository {
         entityManager.createNativeQuery("SET LOCAL lock_timeout = '" + timeout.toMillis() + "ms'").executeUpdate();
     }
 
+    /** Geeft de lopende transactie meer tijd dan de timeouts van de databaserol (V16) toestaan. */
+    public void zetTransactieTimeouts(Duration timeout) {
+        entityManager.createNativeQuery("SET LOCAL statement_timeout = '" + timeout.toMillis() + "ms'").executeUpdate();
+        entityManager.createNativeQuery("SET LOCAL transaction_timeout = '" + timeout.toMillis() + "ms'").executeUpdate();
+    }
+
     /** Houdt tot het einde van de transactie elke lezer en schrijver van het eventlog tegen. */
     public void vergrendelEventlog() {
         entityManager.createNativeQuery("LOCK TABLE event IN ACCESS EXCLUSIVE MODE").executeUpdate();
     }
 
+    /**
+     * Eerst een losse tabel, dan aangehangen: ATTACH PARTITION houdt het eventlog niet tegen terwijl
+     * PostgreSQL de default-partitie op rijen in het nieuwe bereik controleert; CREATE TABLE ... PARTITION OF
+     * zou daarvoor elke lezer en schrijver van {@code event} laten wachten. Alleen de default-partitie zelf
+     * is tijdens die controle vergrendeld. De indexen van {@code event} komen mee en worden aangehangen.
+     */
     public void maak(EventPartitie partitie) {
-        entityManager.createNativeQuery("CREATE TABLE " + partitie.naam() + " PARTITION OF event FOR VALUES FROM ('"
+        entityManager.createNativeQuery("CREATE TABLE " + partitie.naam() + " (LIKE event INCLUDING ALL EXCLUDING IDENTITY)")
+                .executeUpdate();
+        entityManager.createNativeQuery("ALTER TABLE event ATTACH PARTITION " + partitie.naam() + " FOR VALUES FROM ('"
                 + partitie.van() + "') TO ('" + partitie.tot() + "')").executeUpdate();
     }
 

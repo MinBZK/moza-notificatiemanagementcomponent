@@ -332,12 +332,15 @@ de logica die kiest tussen herverzending en contactherstel.
 - **Het eventlog heeft bereikpartities op `transactie_id`.** V16 maakte van de oude
   default-partitie `event_0` (tot de eerstvolgende transactie-id plus de Flyway-placeholder
   `event_marge`) en een nieuwe, lege `event_standaard`. `EventlogPartitiebeheer` maakt `event_<van>` aan
-  zodra de lopende partitie voor 80% gevuld is, en begint een nieuw bereik altijd boven de al
+  zodra de lopende partitie voor 80% gevuld is, als losse tabel die met `ATTACH PARTITION` wordt
+  aangehangen: dat houdt het eventlog niet tegen terwijl PostgreSQL de default-partitie
+  doorleest, en krijgt daarvoor in zijn eigen transactie vijf minuten in plaats van de
+  timeouts van de rol. Een nieuw bereik begint altijd boven de al
   uitgedeelde transactie-ids: PostgreSQL weigert een bereik waarvoor al rijen in de
   default-partitie staan. Liep het onderhoud achter, dan begint het nieuwe bereik
   `nmc.onderhoud.partitie-marge` boven de volgende transactie-id en komen de events ertussen
-  in de default-partitie; die worden per rij opgeruimd, maar pas als er geen oudere
-  bereikpartitie meer staat. Een partitie gaat weg als ze onder het watermerk ligt, haar jongste
+  in de default-partitie; dat wordt als ERROR gelogd, en die events worden per rij opgeruimd,
+  maar pas als er geen oudere bereikpartitie meer staat. Een partitie gaat weg als ze onder het watermerk ligt, haar jongste
   event (op transactie-id) ouder is dan de bewaartermijn en geen bevestiging of
   leverpositie uit het huidige epoch, jonger dan de maximale cursorleeftijd, erin of eronder
   wijst. De leeftijd van een leverpositie is `webhookpositie.geleverd_op`, niet

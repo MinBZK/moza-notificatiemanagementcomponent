@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -26,6 +27,11 @@ import java.util.Optional;
 @Startup
 @ApplicationScoped
 public class EventlogPartitiebeheer {
+
+    // Het aanhangen leest de default-partitie door; met de timeouts van de databaserol (V16) zou dat bij een
+    // volle default-partitie elke ronde mislukken en er nooit meer een partitie bij komen. Zolang het duurt,
+    // staat de feed stil op het watermerk van deze transactie.
+    private static final Duration AANHANG_TIMEOUT = Duration.ofMinutes(5);
 
     private final EventPartitieRepository repository;
     private final Opruimtermijnen opruimtermijnen;
@@ -69,11 +75,20 @@ public class EventlogPartitiebeheer {
     public Optional<EventPartitie> maakVolgendeAan() {
         return QuarkusTransaction.requiringNew().call(() -> {
             List<EventPartitie> partities = repository.bereikpartities();
-            Optional<EventPartitie> volgende = EventPartitie.volgende(partities.isEmpty() ? Optional.empty()
-                    : Optional.of(partities.getLast()), repository.volgendeTransactieId(), omvang, marge);
+            long volgendeTransactieId = repository.volgendeTransactieId();
+            Optional<EventPartitie> laatste = partities.isEmpty() ? Optional.empty() : Optional.of(partities.getLast());
+            Optional<EventPartitie> volgende = EventPartitie.volgende(laatste, volgendeTransactieId, omvang, marge);
+
+            if (laatste.map(EventPartitie::tot).orElse(0L) <= volgendeTransactieId) {
+                // Het onderhoud liep achter: tot de nieuwe partitie er is, landen events in de default-partitie.
+                Log.errorf("Onderhoud: geen eventpartitie voor transactie-id %d (laatste bereik tot %d); "
+                        + "events landen in de default-partitie", volgendeTransactieId,
+                        laatste.map(EventPartitie::tot).orElse(0L));
+            }
 
             if (volgende.isPresent()) {
                 repository.zetLockTimeout(lockTimeout);
+                repository.zetTransactieTimeouts(AANHANG_TIMEOUT);
                 repository.maak(volgende.get());
             }
 
