@@ -207,8 +207,9 @@ daarbuiten de Profielservice (bij centrale regie) en NotifyNL aan met het poging
 als `reference`, en doet in een tweede transactie `in-verzending` naar `verzonden`
 met een navraagtaak. Een `ValidationError` van NotifyNL op `email_address` en een
 partij zonder adres leiden tot een eindstatus (`niet-bezorgbaar`). Een andere 4xx, behalve
-429, ligt aan het NMC en kost een poging; 429, 5xx, een verbindingsfout en een
-ontbrekende KEK-versie stellen de taak uit zonder poging. Een herclaim zoekt eerst
+401, 403 en 429, ligt aan het verzoek van het NMC en kost een poging; 401, 403, 429, 5xx, een
+verbindingsfout, een ongeldige NotifyNL-configuratie en een ontbrekende KEK-versie stellen de
+taak uit zonder poging, begrensd door `geldig_tot`. Een herclaim zoekt eerst
 op `reference`. `ControleTaakHandler` plant zichzelf opnieuw, geeft een notificatie
 zonder taak de taak die bij haar status hoort en plant een terugkoppeltaak voor
 elke dienstverlener met een webhook die er nog geen heeft. De

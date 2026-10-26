@@ -159,21 +159,24 @@ public class VerzendTaakHandler implements TaakHandler {
                         verzending.pogingId().toString());
             }
         } catch (ProfielServiceException e) {
-            // 401 en 403 liggen aan de aanroep van het NMC en kosten een poging; de rest is een storing.
+            // Een 401 of 403 ligt aan de aanroep van het NMC, niet aan de poging: elke notificatie zou
+            // anders in de tijd dat de toegang hapert op technisch-mislukt eindigen. Het wachten wordt
+            // alleen door geldig_tot begrensd.
             if (e.status().filter(s -> s == 401 || s == 403).isPresent()) {
                 Log.errorf(e, "Profielservice weigert de aanroep voor notificatie %s; verzendtaak uitgesteld",
                         verzending.notificatieId());
 
-                return uitgesteldAlsPoging();
+                return uitgesteld();
             }
 
             Log.warnf(e, "Profielservice niet beschikbaar voor notificatie %s; verzendtaak uitgesteld", verzending.notificatieId());
 
             return uitgesteld();
         } catch (NotifyNLConfiguratieException e) {
+            // Een configuratiefout raakt elke notificatie tegelijk en kost daarom geen poging.
             Log.errorf(e, "NotifyNL-configuratie ongeldig; verzendtaak voor notificatie %s uitgesteld", verzending.notificatieId());
 
-            return uitgesteldAlsPoging();
+            return uitgesteld();
         } catch (NotifyNLVerzendException e) {
             if (e.adresAfgewezen()) {
                 Log.warnf("NotifyNL weigert het adres van notificatie %s (%s)", verzending.notificatieId(), e.getMessage());
@@ -181,10 +184,11 @@ public class VerzendTaakHandler implements TaakHandler {
                 return rondAfAls(taak, verzending, NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR);
             }
 
-            // Een andere 4xx ligt aan het verzoek of de key van het NMC en kost een poging, zodat de
-            // notificatie na het maximum op technisch-mislukt eindigt; zo ook een antwoord zonder bruikbaar
-            // notificatie-ID, dat zich bij elke herhaling herhaalt. 429, 5xx en een verbindingsfout liggen
-            // aan NotifyNL en kosten geen poging.
+            // Een andere 4xx ligt aan het verzoek van het NMC en kost een poging, zodat de notificatie na
+            // het maximum op technisch-mislukt eindigt; zo ook een antwoord zonder bruikbaar notificatie-ID,
+            // dat zich bij elke herhaling herhaalt. 401, 403, 429, 5xx en een verbindingsfout betreffen de
+            // aanroep, niet de poging, en kosten geen poging: een haperende key of toegang zou anders elke
+            // notificatie van dat moment op technisch-mislukt zetten.
             if (e.onbruikbaarAntwoord() || e.status().filter(VerzendTaakHandler::isFoutVanHetNmc).isPresent()) {
                 Log.errorf(e, "NotifyNL weigert het verzoek voor notificatie %s; verzendtaak uitgesteld", verzending.notificatieId());
 
@@ -391,7 +395,7 @@ public class VerzendTaakHandler implements TaakHandler {
     }
 
     private static boolean isFoutVanHetNmc(int status) {
-        return status >= 400 && status < 500 && status != 429;
+        return status >= 400 && status < 500 && status != 401 && status != 403 && status != 429;
     }
 
     private record Verzending(UUID notificatieId, UUID dvId, UUID pogingId, boolean herclaim, boolean verlopen,

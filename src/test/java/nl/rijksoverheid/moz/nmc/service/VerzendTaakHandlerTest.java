@@ -66,6 +66,8 @@ import static org.mockito.Mockito.when;
 class VerzendTaakHandlerTest {
 
     private static final String TEMPLATE_ID = BerichtType.DEMO_TEMPLATE.getTemplateId();
+    // Een 400 van NotifyNL die niet over het adres gaat: ligt aan het verzoek van het NMC.
+    private static final String TEAM_KEY_FOUT = "{\"errors\":[{\"error\":\"BadRequestError\",\"message\":\"Can't send to this recipient using a team-only API key\"}],\"status_code\":400}";
     private static final String EMAIL = "burger@example.nl";
 
     @InjectMock
@@ -245,13 +247,14 @@ class VerzendTaakHandlerTest {
     }
 
     // Een uitgeputte verzendtaak (%test: max-pogingen=2) zet de notificatie op technisch-mislukt, zodat
-    // de Dienstverlener een eindstatus krijgt, en de taak verdwijnt.
+    // de Dienstverlener een eindstatus krijgt, en de taak verdwijnt. Een 400 die niet over het adres gaat
+    // kost een poging; de herclaim zoekt eerst op reference en krijgt daar dezelfde fout.
     @Test
     void uitgeputteVerzendtaak_eindigtInTechnischMislukt() {
         when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.FORBIDDEN).build()));
+                .thenThrow(new WebApplicationException(Response.status(400).entity(TEAM_KEY_FOUT).build()));
         when(getMessageDataApi.getMultipleMessagesStatus(any(), any(), any(), any(), any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.FORBIDDEN).build()));
+                .thenThrow(new WebApplicationException(Response.status(400).entity(TEAM_KEY_FOUT).build()));
         UUID id = aannameService.neemAan(decentraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -288,13 +291,29 @@ class VerzendTaakHandlerTest {
     @Test
     void notifyWeigertHetVerzoekOmEenAndereReden_kostEenPoging() {
         when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(400).entity("{\"errors\":[{\"error\":\"BadRequestError\",\"message\":\"Can't send to this recipient using a team-only API key\"}],\"status_code\":400}").build()));
+                .thenThrow(new WebApplicationException(Response.status(400).entity(TEAM_KEY_FOUT).build()));
         UUID id = aannameService.neemAan(decentraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         assertEquals(NotificatieStatus.IN_VERZENDING, notificatie(id).getStatus());
         assertEquals(1, taken().getFirst().getPogingen());
+    }
+
+    // Een 401 of 403 betreft de key of de toegang van het NMC, niet de poging: anders eindigt elke
+    // notificatie die tijdens zo'n storing aan de beurt is na het maximum op technisch-mislukt.
+    @Test
+    void notifyWeigertDeKey_steltUitZonderPoging() {
+        when(sendAMessageApi.sendEmail(any()))
+                .thenThrow(new WebApplicationException(Response.status(Response.Status.UNAUTHORIZED).build()));
+        UUID id = aannameService.neemAan(decentraal());
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        Taak uitgesteld = taken().getFirst();
+        assertEquals(NotificatieStatus.IN_VERZENDING, notificatie(id).getStatus());
+        assertEquals(0, uitgesteld.getPogingen());
+        assertEquals(TaakStatus.OPEN, uitgesteld.getStatus());
     }
 
     // Een antwoord zonder bruikbaar notificatie-ID herhaalt zich; zonder poging zou de taak eeuwig
@@ -506,9 +525,10 @@ class VerzendTaakHandlerTest {
         assertEquals(Reden.GEEN_CONTACTGEGEVENS, notificatie.getReden());
     }
 
-    // 403 ligt aan de aanroep van het NMC: dat kost een poging, zodat de notificatie niet eindeloos wacht.
+    // 403 ligt aan de toegang van het NMC, niet aan de poging: de taak wacht zonder poging, begrensd door
+    // geldig_tot.
     @Test
-    void centraal_profielserviceWeigertDeAanroep_kostEenPoging() {
+    void centraal_profielserviceWeigertDeAanroep_steltUitZonderPoging() {
         when(profielApi.apiProfielserviceV1PartijPost(any()))
                 .thenThrow(new WebApplicationException(Response.status(Response.Status.FORBIDDEN).build()));
         UUID id = aannameService.neemAan(centraal());
@@ -516,7 +536,7 @@ class VerzendTaakHandlerTest {
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         assertEquals(NotificatieStatus.IN_VERZENDING, notificatie(id).getStatus());
-        assertEquals(1, taken().getFirst().getPogingen());
+        assertEquals(0, taken().getFirst().getPogingen());
     }
 
     @Test
