@@ -35,6 +35,9 @@ import java.util.UUID;
 @ApplicationScoped
 public class ControleTaakHandler implements TaakHandler {
 
+    // Een ronde bestaat uit losse korte transacties; de lease van de controletaak loopt intussen door.
+    private static final int LEASE_VERLENGEN_NA = 100;
+
     private static final List<NotificatieStatus> OPEN_STATUSSEN = Arrays.stream(NotificatieStatus.values())
             .filter(status -> !status.isEindstatus())
             .toList();
@@ -75,7 +78,7 @@ public class ControleTaakHandler implements TaakHandler {
 
     @Override
     public TaakUitkomst voerUit(Taak taak, Lease lease) {
-        int gepland = QuarkusTransaction.requiringNew().call(this::herstelOntbrekendeTaken);
+        int gepland = herstelOntbrekendeTaken(lease);
 
         if (gepland > 0) {
             Log.warnf("Controletaak: %d notificatie(s) zonder taak, ontbrekende taak gepland", gepland);
@@ -91,47 +94,70 @@ public class ControleTaakHandler implements TaakHandler {
         return TaakUitkomst.herpland(OffsetDateTime.now(ZoneOffset.UTC).plus(interval));
     }
 
-    private int herstelOntbrekendeTaken() {
+    // De selectie vergrendelt niets en elke notificatie krijgt daarna haar eigen transactie: een ronde
+    // houdt zo nooit meer dan één notificatierij vast, en een fout of time-out bij de ene notificatie
+    // rolt alleen die ene terug.
+    private int herstelOntbrekendeTaken(Lease lease) {
         OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
-        List<UUID> zonderTaak = notificatieRepository.zonderTaak(OPEN_STATUSSEN, nu, maxPerRonde);
+        List<UUID> zonderTaak = QuarkusTransaction.requiringNew()
+                .call(() -> notificatieRepository.zonderTaak(OPEN_STATUSSEN, nu, maxPerRonde));
 
         int gepland = 0;
+        int verwerkt = 0;
 
         for (UUID id : zonderTaak) {
-            // De selectie is niet vergrendeld: een receipt of navraag kan intussen een taak hebben gepland of
-            // de status hebben verzet. Onder de rijvergrendeling is dat afgerond en zichtbaar.
-            Notificatie notificatie = overgangsfunctie.vergrendel(id);
-
-            if (!notificatieRepository.isZonderTaak(id, OPEN_STATUSSEN, nu)) {
-                continue;
+            try {
+                if (QuarkusTransaction.requiringNew().call(() -> herstel(id, nu))) {
+                    gepland++;
+                }
+            } catch (RuntimeException e) {
+                Log.errorf(e, "Controletaak: notificatie %s kon niet worden hersteld; volgende ronde opnieuw", id);
             }
 
-            Optional<Poging> laatste = pogingRepository.findLaatsteVan(notificatie.getId());
-
-            // De navraag gaf geen uitkomst, maar de overgang bleef uit omdat de notificatie op dat moment
-            // niet op verzonden stond; een nieuwe navraag rondt zich af zonder iets te doen.
-            if (notificatie.getStatus() == NotificatieStatus.VERZONDEN
-                    && laatste.filter(p -> p.getStatus() == PogingStatus.ONBEKEND).isPresent()) {
-                overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.BEZORGSTATUS_ONBEKEND, null);
-                continue;
+            if (++verwerkt % LEASE_VERLENGEN_NA == 0) {
+                lease.verleng();
             }
-
-            Optional<TaakSoort> soort = ontbrekendeSoort(notificatie, laatste);
-
-            if (soort.isEmpty()) {
-                // Zonder eindstatus komen wissen en opruimen nooit aan de beurt en blijft de sleutel staan.
-                Log.errorf("Controletaak: notificatie %s staat op %s zonder lopende of herverzendbare poging; "
-                        + "afgesloten als technisch-mislukt", notificatie.getId(), notificatie.getStatus());
-                overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.TECHNISCH_MISLUKT, Reden.TECHNISCH);
-                continue;
-            }
-
-            taakRepository.persist(new Taak(soort.get(), notificatie.getDvId(), notificatie.getId(),
-                    due(soort.get(), notificatie, laatste, nu), null, soort.get() == TaakSoort.VERZENDEN ? null : pogingPayload(laatste)));
-            gepland++;
         }
 
         return gepland;
+    }
+
+    /** @return of er een taak is gepland */
+    private boolean herstel(UUID id, OffsetDateTime nu) {
+        // Een receipt of navraag kan sinds de selectie een taak hebben gepland of de status hebben
+        // verzet. Onder de rijvergrendeling is dat afgerond en zichtbaar.
+        Notificatie notificatie = overgangsfunctie.vergrendel(id);
+
+        if (!notificatieRepository.isZonderTaak(id, OPEN_STATUSSEN, nu)) {
+            return false;
+        }
+
+        Optional<Poging> laatste = pogingRepository.findLaatsteVan(notificatie.getId());
+
+        // De navraag gaf geen uitkomst, maar de overgang bleef uit omdat de notificatie op dat moment
+        // niet op verzonden stond; een nieuwe navraag rondt zich af zonder iets te doen.
+        if (notificatie.getStatus() == NotificatieStatus.VERZONDEN
+                && laatste.filter(p -> p.getStatus() == PogingStatus.ONBEKEND).isPresent()) {
+            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.BEZORGSTATUS_ONBEKEND, null);
+
+            return false;
+        }
+
+        Optional<TaakSoort> soort = ontbrekendeSoort(notificatie, laatste);
+
+        if (soort.isEmpty()) {
+            // Zonder eindstatus komen wissen en opruimen nooit aan de beurt en blijft de sleutel staan.
+            Log.errorf("Controletaak: notificatie %s staat op %s zonder lopende of herverzendbare poging; "
+                    + "afgesloten als technisch-mislukt", notificatie.getId(), notificatie.getStatus());
+            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.TECHNISCH_MISLUKT, Reden.TECHNISCH);
+
+            return false;
+        }
+
+        taakRepository.persist(new Taak(soort.get(), notificatie.getDvId(), notificatie.getId(),
+                due(soort.get(), notificatie, laatste, nu), null, soort.get() == TaakSoort.VERZENDEN ? null : pogingPayload(laatste)));
+
+        return true;
     }
 
     // Aangenomen of in-verzending: verzenden (een herclaim hergebruikt de poging). Verzonden met een
