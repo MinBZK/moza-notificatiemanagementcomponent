@@ -4,6 +4,7 @@ import io.quarkus.rest.client.reactive.QuarkusRestClientBuilder;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.GetMessageDataApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import org.junit.jupiter.api.Test;
 
@@ -51,7 +52,11 @@ class NotifyNLFoutmeldingIntegratieTest {
                 .baseUri(URI.create(basis + "/" + fout))
                 .build(SendAMessageApi.class);
 
-        return new NotifyNLVerzendAdapter(client, notifyNLJwtFactory, notifyNLAuthorizationHolder,
+        GetMessageDataApi navraag = QuarkusRestClientBuilder.newBuilder()
+                .baseUri(URI.create(basis + "/" + fout))
+                .build(GetMessageDataApi.class);
+
+        return new NotifyNLVerzendAdapter(client, navraag, notifyNLJwtFactory, notifyNLAuthorizationHolder,
                 Optional.of("niet-voor-productie-00000000-0000-0000-0000-000000000000-11111111-1111-1111-1111-111111111111"));
     }
 }

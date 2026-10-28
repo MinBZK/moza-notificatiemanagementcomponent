@@ -52,10 +52,18 @@ Benodigde env-vars op die deployment:
 | `QUARKUS_DATASOURCE_USERNAME`, `QUARKUS_DATASOURCE_PASSWORD` | Datasource-credentials (managed Postgres) |
 | `QUARKUS_DATASOURCE_JDBC_URL` | JDBC-url naar de managed Postgres |
 | `QUARKUS_FLYWAY_MIGRATE_AT_START` = `true` | Container draait prod-profiel waar dit `false` is; zonder migraties faalt boot op `schema-management=validate` |
-| `NOTIFY_API_KEY`, `NOTIFY_TEMPLATE_ID` | NotifyNL-integratie |
+| `NOTIFY_API_KEY` | NotifyNL-integratie. De templates staan per berichttype in `BerichtType` |
+| `NOTIFY_CALLBACK_BEARER_TOKEN` | Token dat NotifyNL meestuurt op de receipt-callback; gelijk aan het token in het dashboard van NotifyNL ("API integration" → "Callbacks"). Ontbreekt hij, dan start de app niet |
 | `QUARKUS_REST_CLIENT_NOTIFY_URL` | NotifyNL-endpoint; `application.properties` heeft geen default (leeg buiten `%test`), dus verplicht per deployomgeving |
 | `QUARKUS_REST_CLIENT_PROFIELSERVICE_URL` | Profielservice-endpoint; idem, geen default, verplicht per deployomgeving |
 | `HASH_PEPPER` | Keyed HMAC pepper (mag niet leeg in prod) |
+| `NMC_KEK_HUIDIGE_VERSIE` | Versie van de KEK waarmee `Sleutelbeheer` nieuwe sleutels per notificatie wrapt (geheel getal, 1 of hoger). Ontbreekt hij, dan start de app niet |
+| `NMC_KEK_VERSIE_<n>` | KEK van versie `<n>`: base64 van precies 32 random bytes (bijvoorbeeld `openssl rand -base64 32`). Die van de huidige versie is verplicht; ontbreekt hij of is hij geen 32 bytes, dan start de app niet. Een rotatie gaat in twee deploys: eerst `NMC_KEK_VERSIE_<n+1>` toevoegen met `NMC_KEK_HUIDIGE_VERSIE` ongewijzigd, en pas als die volledig is uitgerold `NMC_KEK_HUIDIGE_VERSIE` verhogen. Anders wrapt een nieuwe pod onder een versie die een oude pod niet kent. De onderhoudstaak herwrapt daarna de sleutels onder de oude versie. Een KEK-versie haal je pas weg als `SELECT count(*) FROM notificatie WHERE kek_versie = <n>` nul geeft, en nooit bij een rollback; anders zijn die rijen niet meer te ontsleutelen |
+| `NMC_AFLEVERBEWIJS_BEWAARTERMIJN` | Optioneel, default `365d`. Bewaartermijn van het afleverbewijs: daarna verwijdert de onderhoudstaak notificaties, pogingen en eventpartities. De wettelijke termijn is nog niet vastgesteld, dus per omgeving te kiezen; niet korter dan `NMC_WISSEN_TERMIJN`, anders start de app niet |
+| `NMC_WISSEN_TERMIJN`, `NMC_FEED_MAX_CURSORLEEFTIJD` | Optioneel, default `7d` en `30d`. Wistermijn van de sleutel na de eindstatus, en de leeftijd waarna een bevestiging of leverpositie het opruimen van het eventlog niet meer tegenhoudt (per dienstverlener te overschrijven met `dienstverlener.max_cursorleeftijd`) |
+| `NMC_WEBHOOK_JWT_PRIVATE_KEY` | RSA-sleutel waarmee de NMC de JWT op elke webhook-aanroep ondertekent: PKCS#8-PEM van minstens 2048 bits (`openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`) |
+| `NMC_WEBHOOK_JWT_KEY_ID` | Sleutel-id (`kid`) in de JWT-header en in `GET /api/nmc/v1/.well-known/jwks.json`. Kies bij een nieuwe sleutel een nieuwe id |
+| `NMC_FEED_CLUSTER_EPOCH` | Optioneel, default `1`. Epoch in de cursor van de eventfeed. Beheer verhoogt hem na een herstel uit back-up of een promotie waarbij de transactie-id-reeks niet doorloopt, op alle pods tegelijk; een cursor met een ander epoch krijgt 410 |
 | `LOGBOEKDATAVERWERKING_ENABLED` | Verwerkingenlogging (LDV). `%prod` laat 'm leeg, dus verplicht per deployomgeving. **Voorlopig `false`**; op `true` zetten zodra de ClickHouse-config hieronder werkt |
 | `LOGBOEKDATAVERWERKING_CLICKHOUSE_ENDPOINT`, `_USERNAME`, `_PASSWORD`, `_DATABASE`, `_TABLE` | ClickHouse-sink voor LDV. Alleen nodig zodra `LOGBOEKDATAVERWERKING_ENABLED=true`; nu leeg te laten |
 
@@ -64,6 +72,21 @@ Benodigde env-vars op die deployment:
 > `QUARKUS_FLYWAY_MIGRATE_AT_START` overschrijft `%prod.quarkus.flyway.migrate-at-start`.
 > `application.properties` bevat hiervoor geen placeholders meer — alle prod-config loopt
 > uniform via deze `QUARKUS_*`-env-vars.
+
+> Migratie V16 zet `statement_timeout` (30s), `transaction_timeout` (1min) en
+> `idle_in_transaction_session_timeout` (30s) op de databaserol van de datasource, voor
+> deze database. Dat vraagt geen extra rechten: een rol mag zijn eigen defaults zetten.
+> `transaction_timeout` bestaat vanaf PostgreSQL 17. De onderhoudstaak maakt en verwijdert
+> partities van `event` tijdens het draaien; de rol moet dus eigenaar van `event` blijven,
+> zoals hij dat is als Flyway de tabellen onder dezelfde rol aanmaakt.
+
+> De NMC hoort een eigen PostgreSQL-instantie te hebben. De eventfeed, de webhook en het
+> opruimen van het eventlog lezen onder het watermerk van de oudste lopende transactie, en
+> dat watermerk geldt per instantie, niet per database: een lange of vergeten
+> schrijftransactie van een andere applicatie op dezelfde instantie zet de feed voor alle
+> dienstverleners stil, en de timeouts uit V16 gelden alleen voor de rol van de NMC. Is een
+> gedeelde instantie onvermijdelijk, bewaak dan de leeftijd van de oudste open transactie
+> van de hele instantie (de watermerkmetriek uit MinBZK/MijnOverheidZakelijk#1253).
 
 > Deze env-vars worden nu handmatig gezet. Automatiseren via de ZAD Operations
 > Manager API staat open als [#10](https://github.com/MinBZK/moza-notificatiemanagementcomponent/issues/10).

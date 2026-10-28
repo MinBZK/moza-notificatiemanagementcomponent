@@ -1,187 +1,197 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
-import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.NamedQuery;
-import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Version;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.List;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
 
-// De queries staan als @NamedQuery en niet in de repository, omdat Hibernate ze dan bij het opstarten
-// controleert in plaats van bij de eerste aanroep — die valt voor de retentiejob midden in de nacht.
-// JPA kent geen andere plek dan de entiteit; uitvoeren gebeurt uitsluitend in NotificatieRepository.
-@NamedQuery(name = Notificatie.ZOEK_KANDIDATEN,
-        query = "SELECT new nl.rijksoverheid.moz.nmc.repository.Kandidaat(n.id, n.externalReference, "
-                + "n.laatsteStatus, n.laatsteStatusUpdate) FROM Notificatie n "
-                + "WHERE n.id IN :ids ORDER BY n.laatsteStatusUpdate")
-@NamedQuery(name = Notificatie.VERWIJDER_OP_ID, query = "DELETE FROM Notificatie n WHERE n.id IN :ids")
 @Entity
 public class Notificatie {
 
-    public static final String ZOEK_KANDIDATEN = "Notificatie.zoekKandidaten";
-    public static final String VERWIJDER_OP_ID = "Notificatie.verwijderOpId";
+    public static final String PAD = "/api/nmc/v1/notificaties/";
 
+    // Toegekend bij het aanmaken en niet bij de persist: de versleutelde velden zijn aan deze id
+    // gebonden en worden vóór de eerste opslag gezet.
     @Id
-    @GeneratedValue
     private UUID id;
 
+    // Loopt per overgang op en is het volgnummer van het bijbehorende event; een
+    // databasetrigger weigert een nieuwe versie zonder event.
     @Version
     private long versie;
 
-    @Column(name = "external_reference", unique = true)
-    private UUID externalReference;
+    // De dienstverlener namens wie de notificatie is aangenomen; elke lezing blijft binnen die grens.
+    @Column(name = "dv_id", nullable = false, updatable = false)
+    private UUID dvId;
 
-    @Column(name = "callback_url", length = 2048)
-    private String callbackUrl;
-
-    // Kopie van status en registratietijd van het laatste geschiedenisrecord, zodat een retentiejob en
-    // lijstvragen op notificatie filteren zonder over notificatie_status te aggregeren. Binnen Java
-    // schrijft alleen registreerStatus(NotificatieStatus) ze; geen constraint koppelt laatste_status aan
-    // het hoogste volgnummer, dus een tweede schrijver moet de notificatie-rij locken (SELECT ... FOR
-    // UPDATE).
     @Enumerated(EnumType.STRING)
-    @Column(name = "laatste_status", nullable = false, length = 32)
-    private StatusWaarde laatsteStatus;
+    @Column(nullable = false, length = 32)
+    private NotificatieStatus status;
 
-    @Column(name = "laatste_status_update", nullable = false)
-    private OffsetDateTime laatsteStatusUpdate;
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private Reden reden;
 
-    // @OrderColumn en geen @OrderBy: zonder ordeningskolom is dit voor Hibernate een bag, en wordt
-    // elke toevoeging een delete-all plus reinsert. De volgorde is daarmee registratievolgorde, niet
-    // die van tijdstip — dat laatste zou een oude completed_at vóór de aanmaakstatus sorteren.
-    @ElementCollection
-    @CollectionTable(name = "notificatie_status", joinColumns = @JoinColumn(name = "notificatie_id"))
-    @OrderColumn(name = "volgnummer")
-    private List<NotificatieStatus> statusGeschiedenis = new ArrayList<>();
+    // Tijdstip van de laatste overgang naar een eindstatus, op de eigen klok; leeg zolang de
+    // notificatie geen eindstatus heeft. Wistermijn en bewaartermijn lopen vanaf hier.
+    @Column(name = "eindstatus_op")
+    private OffsetDateTime eindstatusOp;
+
+    // Het quotum per dienstverlener telt op dit tijdstip.
+    @Column(name = "aangenomen_op", nullable = false, updatable = false)
+    private OffsetDateTime aangenomenOp;
+
+    // Niet updatable: wissen en herwrappen wijzigen deze kolommen met native SQL zonder de versie op
+    // te hogen, en een overgang mag ze daarna niet met een eerder gelezen waarde terugschrijven.
+    @Column(name = "ontvanger_versleuteld", updatable = false)
+    private byte[] ontvangerVersleuteld;
+
+    @Column(name = "personalisation_versleuteld", updatable = false)
+    private byte[] personalisationVersleuteld;
+
+    @Column(name = "sleutel_gewrapt", updatable = false)
+    private byte[] sleutelGewrapt;
+
+    @Column(name = "kek_versie", updatable = false)
+    private Integer kekVersie;
+
+    @Column(name = "template_id", length = 64)
+    private String templateId;
+
+    @Column(length = 16)
+    private String regie;
+
+    @Column(name = "dienstverlener_naam")
+    private String dienstverlenerNaam;
+
+    @Column
+    private String dienst;
+
+    // De enum-naam van het berichttype, voor het verzendbeleid.
+    @Column(name = "bericht_type", length = 64)
+    private String berichtType;
+
+    // Na dit tijdstip wordt geen verzending of herverzending meer gestart; leeg betekent geen grens.
+    @Column(name = "geldig_tot")
+    private OffsetDateTime geldigTot;
 
     protected Notificatie() {
         // Voor JPA
     }
 
-    public Notificatie(String callbackUrl) {
-        this.callbackUrl = callbackUrl;
-        registreerStatus(NotificatieStatus.opEigenKlok(StatusWaarde.CREATED, OffsetDateTime.now(ZoneOffset.UTC)));
+    /** Een nieuwe notificatie, nog zonder status; {@code Overgangsfunctie#neemAan} slaat hem op. */
+    public Notificatie(UUID dvId) {
+        this.id = UUID.randomUUID();
+        this.dvId = Objects.requireNonNull(dvId, "dvId is verplicht");
+        this.aangenomenOp = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+    }
+
+    public OffsetDateTime getAangenomenOp() {
+        return aangenomenOp;
     }
 
     public UUID getId() {
         return id;
     }
 
-    public String getCallbackUrl() {
-        return callbackUrl;
+    public UUID getDvId() {
+        return dvId;
     }
 
-    public StatusWaarde getStatus() {
-        return laatsteStatus;
+    public long getVersie() {
+        return versie;
     }
 
-    /** Registratietijd van de huidige status, op de eigen klok. */
-    public OffsetDateTime getLaatsteStatusUpdate() {
-        return laatsteStatusUpdate;
+    public NotificatieStatus getStatus() {
+        return status;
     }
 
-    public UUID getExternalReference() {
-        return externalReference;
+    public Reden getReden() {
+        return reden;
     }
 
-    /**
-     * Koppelt de notificatie aan de verzending bij NotifyNL en legt {@code SENDING} vast.
-     * <p>
-     * Die twee horen altijd samen: zonder referentie vindt {@code findByExternalReference} de
-     * notificatie nooit meer, en zonder {@code SENDING} blijft hij op {@code CREATED} staan terwijl
-     * de e-mail al weg is.
-     *
-     * @throws IllegalStateException als er al een referentie gekoppeld is, of als de notificatie
-     *         niet meer op {@code CREATED} staat
-     */
-    public void markeerVerzonden(UUID externalReference) {
-        Objects.requireNonNull(externalReference, "externalReference is verplicht");
-
-        if (this.externalReference != null) {
-            throw new IllegalStateException("Notificatie " + id + " is al gekoppeld aan NotifyNL-referentie "
-                    + this.externalReference);
-        }
-
-        if (!StatusWaarde.SENDING.volgtOp(laatsteStatus)) {
-            throw new IllegalStateException("Notificatie " + id + " kan niet verzonden worden vanuit status "
-                    + laatsteStatus);
-        }
-
-        this.externalReference = externalReference;
-        registreerStatus(NotificatieStatus.opEigenKlok(StatusWaarde.SENDING, OffsetDateTime.now(ZoneOffset.UTC)));
+    /** Wanneer de notificatie haar eindstatus kreeg; leeg zolang ze er geen heeft. */
+    public OffsetDateTime getEindstatusOp() {
+        return eindstatusOp;
     }
 
     /**
-     * Legt een terugmelding van NotifyNL vast als {@link StatusWaarde#volgtOp} hem als nieuw ziet.
-     *
-     * @param opgetreden gebeurtenistijd van de bron; bij null valt de NMC terug op de eigen klok
-     * @return false als de melding niets nieuws is en dus niet is vastgelegd
+     * Zet status en reden. Alleen voor Overgangsfunctie, die de rij vergrendelt, de overgang toetst en
+     * het event schrijft.
      */
-    public boolean verwerkTerugmelding(StatusWaarde status, OffsetDateTime opgetreden) {
-        Objects.requireNonNull(status, "status is verplicht");
-
-        if (!status.volgtOp(laatsteStatus)) {
-            return false;
-        }
-
-        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
-        registreerStatus(new NotificatieStatus(status, opgetreden != null ? opgetreden : nu, nu));
-
-        return true;
+    public void pasOvergangToe(NotificatieStatus status, Reden reden) {
+        this.status = Objects.requireNonNull(status, "status is verplicht");
+        this.reden = reden;
+        this.eindstatusOp = status.isEindstatus()
+                ? OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS)
+                : null;
     }
 
-    // Enige mutatiepunt voor status. Bewust geen controle op tijdstip: een scheve of oude
-    // gebeurtenistijd weigeren zou een geschiedenis opleveren die laatsteStatus tegenspreekt.
-    private void registreerStatus(NotificatieStatus record) {
-        this.statusGeschiedenis.add(record);
-        this.laatsteStatus = record.status();
-        this.laatsteStatusUpdate = record.geregistreerd();
+    public void bewaarVersleuteldeGegevens(VersleuteldeGegevens gegevens) {
+        Objects.requireNonNull(gegevens, "gegevens is verplicht");
+        this.ontvangerVersleuteld = gegevens.ontvangerVersleuteld();
+        this.personalisationVersleuteld = gegevens.personalisationVersleuteld();
+        this.sleutelGewrapt = gegevens.sleutelGewrapt();
+        this.kekVersie = gegevens.kekVersie();
     }
 
-    // Tijdstip van het eerste geschiedenisrecord: de CREATED uit de constructor, of voor een rij uit
-    // de V2-backfill zijn oude aanmaaktijdstip. Vereist een actieve persistence context.
-    public OffsetDateTime getAangemaakt() {
-        return eersteStatus().tijdstip();
+    /**
+     * Legt vast hoe de notificatie verstuurd wordt. Alleen bij de aanname, vóór de eerste opslag.
+     *
+     * @param regie          {@code CENTRAAL} of {@code DECENTRAAL}
+     * @param dienstverlener de naam voor de Profielservice-lookup; leeg bij decentrale regie
+     */
+    public void bewaarVerzendgegevens(String templateId, String regie, String dienstverlener, String dienst) {
+        this.templateId = Objects.requireNonNull(templateId, "templateId is verplicht");
+        this.regie = Objects.requireNonNull(regie, "regie is verplicht");
+        this.dienstverlenerNaam = dienstverlener;
+        this.dienst = dienst;
     }
 
-    // Vereist een actieve persistence context: statusGeschiedenis is een lazy @ElementCollection.
-    public List<NotificatieStatus> getStatusGeschiedenis() {
-        bevestigVolledigeGeschiedenis();
-
-        return List.copyOf(statusGeschiedenis);
+    public String getTemplateId() {
+        return templateId;
     }
 
-    // Vangnet voor rijen die buiten Java zijn ontstaan: de database eist geen statusregel, en een
-    // ontbrekend volgnummer levert via @OrderColumn een null in de lijst op. Zonder deze controle
-    // wordt dat een NoSuchElementException of NullPointerException die de oorzaak niet noemt.
-    private void bevestigVolledigeGeschiedenis() {
-        if (statusGeschiedenis.isEmpty()) {
-            throw new IllegalStateException(
-                    "Notificatie " + id + " heeft geen statusgeschiedenis, datamigratie onvolledig?");
-        }
-
-        if (statusGeschiedenis.contains(null)) {
-            throw new IllegalStateException("Notificatie " + id + " mist een volgnummer in notificatie_status; "
-                    + "de statusgeschiedenis is buiten Hibernate om gewijzigd");
-        }
+    public String getRegie() {
+        return regie;
     }
 
-    private NotificatieStatus eersteStatus() {
-        bevestigVolledigeGeschiedenis();
+    public String getDienstverlenerNaam() {
+        return dienstverlenerNaam;
+    }
 
-        return statusGeschiedenis.getFirst();
+    public String getDienst() {
+        return dienst;
+    }
+
+    /** Legt het verzendbeleid vast. Alleen bij de aanname, vóór de eerste opslag. */
+    public void bewaarVerzendbeleid(String berichtType, OffsetDateTime geldigTot) {
+        this.berichtType = Objects.requireNonNull(berichtType, "berichtType is verplicht");
+        this.geldigTot = Objects.requireNonNull(geldigTot, "geldigTot is verplicht");
+    }
+
+    public String getBerichtType() {
+        return berichtType;
+    }
+
+    public OffsetDateTime getGeldigTot() {
+        return geldigTot;
+    }
+
+    /** Of op {@code nu} geen poging meer gestart mag worden. */
+    public boolean isVerlopen(OffsetDateTime nu) {
+        return geldigTot != null && !nu.isBefore(geldigTot);
+    }
+
+    public VersleuteldeGegevens getVersleuteldeGegevens() {
+        return new VersleuteldeGegevens(ontvangerVersleuteld, personalisationVersleuteld, sleutelGewrapt, kekVersie);
     }
 }
