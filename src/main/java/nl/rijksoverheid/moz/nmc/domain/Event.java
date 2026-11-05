@@ -1,0 +1,124 @@
+package nl.rijksoverheid.moz.nmc.domain;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import org.hibernate.annotations.Immutable;
+import org.hibernate.annotations.Type;
+
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.Objects;
+import java.util.UUID;
+
+/**
+ * Eén statusovergang van een notificatie in het eventlog. Het volgnummer is de versie van de
+ * notificatie na de overgang. Bevat geen contactgegevens, identificerende nummers of referentie van
+ * de Dienstverlener.
+ */
+// Append-only: een event verandert nooit meer.
+@Entity
+@Immutable
+public class Event {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // De dienstverlener van de notificatie; de feed leest per dienstverlener.
+    @Column(name = "dv_id", nullable = false)
+    private UUID dvId;
+
+    @Column(name = "notificatie_id", nullable = false)
+    private UUID notificatieId;
+
+    // Het id van het CloudEvent in feed en callback; de identity-id loopt na een herstel uit back-up terug.
+    @Column(nullable = false)
+    private UUID uuid;
+
+    @Column(nullable = false)
+    private long volgnummer;
+
+    // Leeg bij het eerste event van een notificatie.
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private NotificatieStatus van;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
+    private NotificatieStatus naar;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private Reden reden;
+
+    // Op de klok van het NMC; het tijdstip uit een receipt staat op de poging.
+    @Column(nullable = false)
+    private OffsetDateTime geregistreerd;
+
+    // Transactie-id van de schrijvende transactie, gevuld door de database; de feed leest het log
+    // op (transactie-id, id). Leeg op een event dat in deze sessie is aangemaakt.
+    @Type(TransactieIdType.class)
+    @Column(name = "transactie_id", insertable = false, updatable = false)
+    private Long transactieId;
+
+    protected Event() {
+        // Voor JPA
+    }
+
+    public Event(UUID dvId, UUID notificatieId, long volgnummer, NotificatieStatus van, NotificatieStatus naar, Reden reden) {
+        this.dvId = Objects.requireNonNull(dvId, "dvId is verplicht");
+        this.notificatieId = Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
+        this.uuid = UUID.randomUUID();
+        this.volgnummer = volgnummer;
+        this.van = van;
+        this.naar = Objects.requireNonNull(naar, "naar is verplicht");
+        this.reden = reden;
+        this.geregistreerd = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+    }
+
+    public UUID getUuid() {
+        return uuid;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public UUID getDvId() {
+        return dvId;
+    }
+
+    public UUID getNotificatieId() {
+        return notificatieId;
+    }
+
+    public long getVolgnummer() {
+        return volgnummer;
+    }
+
+    public NotificatieStatus getVan() {
+        return van;
+    }
+
+    public NotificatieStatus getNaar() {
+        return naar;
+    }
+
+    public Reden getReden() {
+        return reden;
+    }
+
+    public OffsetDateTime getGeregistreerd() {
+        return geregistreerd;
+    }
+
+    public Long getTransactieId() {
+        return transactieId;
+    }
+}
