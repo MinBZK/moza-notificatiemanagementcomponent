@@ -5,7 +5,7 @@
 # gepinde base-builder-jvm.
 FROM --platform=linux/amd64 eclipse-temurin:25.0.5_8-jdk@sha256:83f4a7fc27df94dcc7b8de04d14cbbba8da14406f921e966969c3b09000aa507 AS jdk
 
-FROM gcr.io/oss-fuzz-base/base-builder-jvm:v1@sha256:73e9f2aaddb0a9ca97b137c1e7d8f2142203be6a5767be48a56888491edaf310
+FROM gcr.io/oss-fuzz-base/base-builder-jvm:v1@sha256:bd13a763de1a0fb22099442094e7e0049657a8c47f01e9d7af8bb849e0ad4699
 
 COPY --from=jdk /opt/java/openjdk /usr/lib/jvm/java-25-temurin
 
