@@ -71,7 +71,8 @@ public class Event {
         // Voor JPA
     }
 
-    public Event(UUID dvId, UUID notificatieId, long volgnummer, NotificatieStatus van, NotificatieStatus naar, Reden reden) {
+    public Event(UUID dvId, UUID notificatieId, long volgnummer, NotificatieStatus van, NotificatieStatus naar, Reden reden,
+                 OffsetDateTime geregistreerd) {
         this.dvId = Objects.requireNonNull(dvId, "dvId is verplicht");
         this.notificatieId = Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
         this.uuid = UUID.randomUUID();
@@ -79,7 +80,7 @@ public class Event {
         this.van = van;
         this.naar = Objects.requireNonNull(naar, "naar is verplicht");
         this.reden = reden;
-        this.geregistreerd = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        this.geregistreerd = geregistreerd.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
     }
 
     public UUID getUuid() {

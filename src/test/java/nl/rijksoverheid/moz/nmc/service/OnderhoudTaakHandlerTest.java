@@ -359,7 +359,7 @@ class OnderhoudTaakHandlerTest {
 
     private UUID opgeslagen(Sleutelbeheer beheer) {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
             notificatie.bewaarVersleuteldeGegevens(beheer.versleutel(notificatie.getId(), ONTVANGER,
                     Map.of("naam", "Voorbeeld BV")));
             overgangsfunctie.neemAan(notificatie);

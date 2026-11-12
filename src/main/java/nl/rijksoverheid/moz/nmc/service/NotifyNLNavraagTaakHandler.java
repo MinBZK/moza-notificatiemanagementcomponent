@@ -16,9 +16,9 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -38,9 +38,11 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
     private final NotifyNLVerzendAdapter verzendAdapter;
     private final NotifyNLNavraagmomenten notifyNLNavraagmomenten;
     private final Duration uitstel;
+    private final Clock clock;
 
     public NotifyNLNavraagTaakHandler(PogingRepository pogingRepository, Overgangsfunctie overgangsfunctie, ReceiptVerwerker receiptVerwerker,
                       TaakClaimer taakClaimer, NotifyNLVerzendAdapter verzendAdapter, NotifyNLNavraagmomenten notifyNLNavraagmomenten,
+                      Clock clock,
                       @ConfigProperty(name = "nmc.taak.uitstel") Duration uitstel) {
         this.pogingRepository = pogingRepository;
         this.overgangsfunctie = overgangsfunctie;
@@ -49,6 +51,7 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
         this.verzendAdapter = verzendAdapter;
         this.notifyNLNavraagmomenten = notifyNLNavraagmomenten;
         this.uitstel = uitstel;
+        this.clock = clock;
     }
 
     @Override
@@ -72,7 +75,7 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
             afleverstatus = verzendAdapter.vraagStatusOp(navraag.notifyId());
         } catch (NotifyNLConfiguratieException | NotifyNLVerzendException e) {
             // Ook een navraag die blijft mislukken houdt op bij het einde van de bewaartermijn van NotifyNL.
-            if (notifyNLNavraagmomenten.volgende(navraag.verzondenOp(), OffsetDateTime.now(ZoneOffset.UTC)).isEmpty()) {
+            if (notifyNLNavraagmomenten.volgende(navraag.verzondenOp(), OffsetDateTime.now(clock)).isEmpty()) {
                 Log.warnf(e, "Navraag voor poging %s (NotifyNL-id %s) blijft mislukken en de bewaartermijn is "
                         + "verstreken; bezorgstatus onbekend", navraag.pogingId(), navraag.notifyId());
 
@@ -81,7 +84,7 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
 
             Log.warnf(e, "Navraag bij NotifyNL voor poging %s mislukt; uitgesteld", navraag.pogingId());
 
-            return TaakUitkomst.uitgesteld(OffsetDateTime.now(ZoneOffset.UTC).plus(uitstel), false);
+            return TaakUitkomst.uitgesteld(OffsetDateTime.now(clock).plus(uitstel), false);
         }
 
         // Een tussenstatus of een status die het NMC niet kent is geen uitkomst; de navraag loopt dan door.
@@ -101,7 +104,7 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
 
         Optional<OffsetDateTime> volgende = afleverstatus.isEmpty()
                 ? Optional.empty()
-                : notifyNLNavraagmomenten.volgende(navraag.verzondenOp(), OffsetDateTime.now(ZoneOffset.UTC));
+                : notifyNLNavraagmomenten.volgende(navraag.verzondenOp(), OffsetDateTime.now(clock));
 
         if (volgende.isPresent()) {
             return TaakUitkomst.uitgesteld(volgende.get(), false);

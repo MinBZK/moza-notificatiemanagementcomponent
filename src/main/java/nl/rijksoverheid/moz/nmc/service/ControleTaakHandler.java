@@ -15,9 +15,9 @@ import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -50,10 +50,12 @@ public class ControleTaakHandler implements TaakHandler {
     private final Verzendbeleid verzendbeleid;
     private final Duration interval;
     private final int maxPerRonde;
+    private final Clock clock;
 
     public ControleTaakHandler(NotificatieRepository notificatieRepository, PogingRepository pogingRepository,
                                TaakRepository taakRepository, Overgangsfunctie overgangsfunctie,
                                Vaststellingstermijn vaststellingstermijn, Verzendbeleid verzendbeleid,
+                               Clock clock,
                                @ConfigProperty(name = "nmc.controle.interval") Duration interval,
                                @ConfigProperty(name = "nmc.controle.max-per-ronde") int maxPerRonde) {
         this.notificatieRepository = notificatieRepository;
@@ -64,6 +66,7 @@ public class ControleTaakHandler implements TaakHandler {
         this.verzendbeleid = verzendbeleid;
         this.interval = interval;
         this.maxPerRonde = maxPerRonde;
+        this.clock = clock;
     }
 
     @Override
@@ -85,20 +88,20 @@ public class ControleTaakHandler implements TaakHandler {
         }
 
         int terugkoppeltaken = QuarkusTransaction.requiringNew()
-                .call(() -> taakRepository.planTerugkoppeltaken(OffsetDateTime.now(ZoneOffset.UTC)));
+                .call(() -> taakRepository.planTerugkoppeltaken(OffsetDateTime.now(clock)));
 
         if (terugkoppeltaken > 0) {
             Log.infof("Controletaak: terugkoppeltaak gepland voor %d dienstverlener(s) met een webhook", terugkoppeltaken);
         }
 
-        return TaakUitkomst.herpland(OffsetDateTime.now(ZoneOffset.UTC).plus(interval));
+        return TaakUitkomst.herpland(OffsetDateTime.now(clock).plus(interval));
     }
 
     // De selectie vergrendelt niets en elke notificatie krijgt daarna haar eigen transactie: een ronde
     // houdt zo nooit meer dan één notificatierij vast, en een fout of time-out bij de ene notificatie
     // rolt alleen die ene terug.
     private int herstelOntbrekendeTaken(Lease lease) {
-        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime nu = OffsetDateTime.now(clock);
         List<UUID> zonderTaak = QuarkusTransaction.requiringNew()
                 .call(() -> notificatieRepository.zonderTaak(OPEN_STATUSSEN, nu, maxPerRonde));
 

@@ -14,9 +14,9 @@ import nl.rijksoverheid.moz.nmc.repository.DienstverlenerRepository;
 import nl.rijksoverheid.moz.nmc.repository.WebhookpositieRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
@@ -55,11 +55,13 @@ public class TerugkoppelTaakHandler implements TaakHandler {
     private final int maxMislukkingen;
     private final Duration herpogingWachttijd;
     private final Duration pauzeWachttijd;
+    private final Clock clock;
 
     public TerugkoppelTaakHandler(DienstverlenerRepository dienstverlenerRepository,
                                   WebhookpositieRepository webhookpositieRepository, Eventfeed eventfeed,
                                   WebhookUrlValidator webhookUrlValidator, WebhookDispatcher webhookDispatcher,
                                   TaakClaimer taakClaimer,
+                                  Clock clock,
                                   @ConfigProperty(name = "nmc.webhook.interval") Duration interval,
                                   @ConfigProperty(name = "nmc.webhook.bundel") int bundel,
                                   @ConfigProperty(name = "nmc.webhook.max-mislukkingen") int maxMislukkingen,
@@ -85,6 +87,7 @@ public class TerugkoppelTaakHandler implements TaakHandler {
         this.maxMislukkingen = maxMislukkingen;
         this.herpogingWachttijd = herpogingWachttijd;
         this.pauzeWachttijd = pauzeWachttijd;
+        this.clock = clock;
     }
 
     // Eén rij per dienstverlener; de controletaak maakt hem niet opnieuw aan zolang er een rij staat.
@@ -224,8 +227,8 @@ public class TerugkoppelTaakHandler implements TaakHandler {
         return !duur.isNegative() && !duur.isZero();
     }
 
-    private static OffsetDateTime nu() {
-        return OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+    private OffsetDateTime nu() {
+        return OffsetDateTime.now(clock).truncatedTo(ChronoUnit.MICROS);
     }
 
     private sealed interface Ronde {

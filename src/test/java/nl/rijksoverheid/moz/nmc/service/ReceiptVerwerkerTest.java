@@ -248,7 +248,7 @@ class ReceiptVerwerkerTest {
     private UUID verzondenNotificatie() {
         UUID notifyId = UUID.randomUUID();
         QuarkusTransaction.requiringNew().run(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
             overgangsfunctie.neemAan(notificatie);
             Poging poging = new Poging(notificatie.getId(), 1);
             pogingRepository.persist(poging);

@@ -16,6 +16,7 @@ import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -41,10 +42,12 @@ public class ReceiptVerwerker {
     private final Vaststellingstermijn vaststellingstermijn;
     private final Verzendbeleid verzendbeleid;
     private final Duration klokmarge;
+    private final Clock clock;
 
     public ReceiptVerwerker(PogingRepository pogingRepository, Overgangsfunctie overgangsfunctie,
                             TaakRepository taakRepository, Vaststellingstermijn vaststellingstermijn,
                             Verzendbeleid verzendbeleid,
+                            Clock clock,
                             @ConfigProperty(name = "nmc.receipt.klokmarge") Duration klokmarge) {
         if (klokmarge.isNegative()) {
             throw new IllegalStateException("nmc.receipt.klokmarge mag niet negatief zijn, is " + klokmarge);
@@ -56,6 +59,7 @@ public class ReceiptVerwerker {
         this.vaststellingstermijn = vaststellingstermijn;
         this.verzendbeleid = verzendbeleid;
         this.klokmarge = klokmarge;
+        this.clock = clock;
     }
 
     /**
@@ -83,7 +87,7 @@ public class ReceiptVerwerker {
         Notificatie notificatie = overgangsfunctie.vergrendel(poging.getNotificatieId());
         pogingRepository.herlaad(poging);
         poging.registreerNotifyStatus(status);
-        OffsetDateTime ontvangen = normaliseer(OffsetDateTime.now(ZoneOffset.UTC));
+        OffsetDateTime ontvangen = normaliseer(OffsetDateTime.now(clock));
         OffsetDateTime tijdstip = opgetreden == null ? ontvangen : begrens(normaliseer(opgetreden), ontvangen, status, notifyId);
 
         if (poging.getNotifyId() == null) {
@@ -152,7 +156,7 @@ public class ReceiptVerwerker {
             return;
         }
 
-        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        OffsetDateTime nu = OffsetDateTime.now(clock).truncatedTo(ChronoUnit.MICROS);
         Overgang overgang = Overgang.bij(uitkomst.get(),
                 verzendbeleid.magHerverzenden(poging, notificatie.getBerichtType()), notificatie.isVerlopen(nu));
 

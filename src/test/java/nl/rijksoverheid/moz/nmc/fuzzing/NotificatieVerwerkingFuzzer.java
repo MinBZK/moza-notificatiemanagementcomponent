@@ -28,6 +28,8 @@ import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
 import nl.rijksoverheid.moz.nmc.service.Vaststellingstermijn;
 import nl.rijksoverheid.moz.nmc.service.Verzendbeleid;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+
+import java.time.Clock;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.controller.NotifyNLCallbackController;
@@ -131,10 +133,11 @@ public class NotificatieVerwerkingFuzzer {
                 repository,
                 taken,
                 verzendbeleid,
+                Clock.systemUTC(),
                 Optional.empty());
         receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
                 taken, new Vaststellingstermijn(Duration.ofDays(7), Duration.ofDays(1)), verzendbeleid,
-                Duration.ofMinutes(5));
+                Clock.systemUTC(), Duration.ofMinutes(5));
 
         LogboekContext logboekContext = new LogboekContext();
         HashHelper hashHelper = new HashHelper(Optional.of("fuzz-pepper-niet-voor-productie"));
@@ -142,7 +145,7 @@ public class NotificatieVerwerkingFuzzer {
         centraleController = new CentraleNotificatieController(aannameService, logboekContext, hashHelper);
         decentraleController = new DecentraleNotificatieController(aannameService, logboekContext, hashHelper);
         callbackController = new NotifyNLCallbackController(new ReceiptOpslag(pogingen, repository, taken,
-                new SimpleMeterRegistry()));
+                new SimpleMeterRegistry(), Clock.systemUTC()));
     }
 
     public static void fuzzerTestOneInput(FuzzedDataProvider data) {
@@ -266,7 +269,7 @@ public class NotificatieVerwerkingFuzzer {
 
     /** Een notificatie op VERZONDEN met één poging onder het gegeven NotifyNL-id. */
     private static UUID bewaarVerzonden(UUID notifyId) {
-        Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
+        Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
         overgangsfunctie.neemAan(notificatie);
         Poging poging = new GeheugenPoging(notificatie.getId(), 1);
         pogingen.persist(poging);
@@ -388,12 +391,12 @@ public class NotificatieVerwerkingFuzzer {
         private long volgendEventId = 1;
 
         GeheugenOvergangsfunctie() {
-            super(null, null, null, null);
+            super(null, null, null, null, Clock.systemUTC());
         }
 
         @Override
         public nl.rijksoverheid.moz.nmc.domain.Event neemAan(Notificatie notificatie) {
-            notificatie.pasOvergangToe(NotificatieStatus.AANGENOMEN, null);
+            notificatie.pasOvergangToe(NotificatieStatus.AANGENOMEN, null, OffsetDateTime.now());
             repository.persist(notificatie);
             versies.put(notificatie.getId(), 0L);
 
@@ -420,7 +423,7 @@ public class NotificatieVerwerkingFuzzer {
                 return OvergangUitkomst.geweigerd(van, naar);
             }
 
-            notificatie.pasOvergangToe(naar, reden);
+            notificatie.pasOvergangToe(naar, reden, OffsetDateTime.now());
             long versie = versies.merge(notificatieId, 1L, Long::sum);
 
             return OvergangUitkomst.uitgevoerd(van, event(notificatieId, versie, van, naar, reden));
@@ -430,7 +433,8 @@ public class NotificatieVerwerkingFuzzer {
                                                             NotificatieStatus naar, Reden reden) {
             long id = volgendEventId++;
 
-            return new nl.rijksoverheid.moz.nmc.domain.Event(NotificatieFixtures.DV_ID, notificatieId, volgnummer, van, naar, reden) {
+            return new nl.rijksoverheid.moz.nmc.domain.Event(NotificatieFixtures.DV_ID, notificatieId, volgnummer, van, naar, reden,
+                    OffsetDateTime.now()) {
                 @Override
                 public Long getId() {
                     return id;

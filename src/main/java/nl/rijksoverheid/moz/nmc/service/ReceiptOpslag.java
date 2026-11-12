@@ -11,6 +11,7 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
@@ -35,15 +36,17 @@ public class ReceiptOpslag {
     private final NotificatieRepository notificatieRepository;
     private final TaakRepository taakRepository;
     private final Counter afgewezen;
+    private final Clock clock;
 
     public ReceiptOpslag(PogingRepository pogingRepository, NotificatieRepository notificatieRepository,
-                         TaakRepository taakRepository, MeterRegistry meterRegistry) {
+                         TaakRepository taakRepository, MeterRegistry meterRegistry, Clock clock) {
         this.pogingRepository = pogingRepository;
         this.notificatieRepository = notificatieRepository;
         this.taakRepository = taakRepository;
         this.afgewezen = Counter.builder("nmc.receipts.afgewezen")
                 .description("Receipts die bij geen poging horen en niet zijn opgeslagen")
                 .register(meterRegistry);
+        this.clock = clock;
     }
 
     /** Wat er met een receipt is gebeurd. */
@@ -83,7 +86,7 @@ public class ReceiptOpslag {
         payload.put(PAYLOAD_TIJDSTIP, tijdstip == null ? "" : tijdstip.withOffsetSameInstant(ZoneOffset.UTC).toString());
 
         boolean nieuw = taakRepository.planReceipt(notificatie.getDvId(), notificatie.getId(), payload,
-                OffsetDateTime.now(ZoneOffset.UTC));
+                OffsetDateTime.now(clock));
 
         if (!nieuw) {
             Log.debugf("Receipt %s voor poging %s staat al klaar; herhaling genegeerd", status, poging.get().getId());

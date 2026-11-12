@@ -88,7 +88,7 @@ public class EndpointFuzzTest {
             eventRepository.deleteAll();
             notificatieRepository.deleteAll();
             for (UUID referentie : BEKENDE_NOTIFY_REFERENTIES) {
-                Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
+                Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
                 overgangsfunctie.neemAan(notificatie);
                 Poging poging = new Poging(notificatie.getId(), 1);
                 pogingRepository.persist(poging);

@@ -4,6 +4,8 @@ import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+
+import java.time.OffsetDateTime;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
@@ -103,7 +105,7 @@ class PogingPersistentieTest {
 
     private UUID nieuweNotificatie() {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
             overgangsfunctie.neemAan(notificatie);
 
             return notificatie.getId();

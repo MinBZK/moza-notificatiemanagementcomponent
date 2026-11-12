@@ -184,7 +184,7 @@ class WisTaakHandlerTest {
 
     private UUID aangenomen() {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
             notificatie.bewaarVersleuteldeGegevens(sleutelbeheer.versleutel(notificatie.getId(), ONTVANGER,
                     Map.of("naam", "Voorbeeld BV")));
             overgangsfunctie.neemAan(notificatie);
