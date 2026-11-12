@@ -273,9 +273,9 @@ class TerugkoppelTaakHandlerTest {
         Duration minuut = Duration.ofMinutes(1);
 
         assertThrows(IllegalStateException.class, () -> new TerugkoppelTaakHandler(null, null, null, null, null, null,
-                Duration.ZERO, 1, 1, minuut, minuut));
+                null, Duration.ZERO, 1, 1, minuut, minuut));
         assertThrows(IllegalStateException.class, () -> new TerugkoppelTaakHandler(null, null, null, null, null, null,
-                minuut, 1, 1, minuut, Duration.ofSeconds(-1)));
+                null, minuut, 1, 1, minuut, Duration.ofSeconds(-1)));
     }
 
     @Test

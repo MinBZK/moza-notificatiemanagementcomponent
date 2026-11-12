@@ -10,9 +10,9 @@ import nl.rijksoverheid.moz.nmc.repository.GewrapteSleutel;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.IntSupplier;
@@ -42,9 +42,11 @@ public class OnderhoudTaakHandler implements TaakHandler {
     private final Duration interval;
     private final int batch;
     private final int maxBatches;
+    private final Clock clock;
 
     public OnderhoudTaakHandler(EventlogPartitiebeheer eventlogPartitiebeheer, NotificatieRepository notificatieRepository,
                                 Sleutelbeheer sleutelbeheer, Opruimtermijnen opruimtermijnen, Verzendbudget verzendbudget,
+                                Clock clock,
                                 @ConfigProperty(name = "nmc.onderhoud.interval") Duration interval,
                                 @ConfigProperty(name = "nmc.onderhoud.batch") int batch,
                                 @ConfigProperty(name = "nmc.onderhoud.max-batches") int maxBatches) {
@@ -60,6 +62,7 @@ public class OnderhoudTaakHandler implements TaakHandler {
         this.interval = interval;
         this.batch = batch;
         this.maxBatches = maxBatches;
+        this.clock = clock;
     }
 
     @Override
@@ -74,7 +77,7 @@ public class OnderhoudTaakHandler implements TaakHandler {
 
     @Override
     public TaakUitkomst voerUit(Taak taak, Lease lease) {
-        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime nu = OffsetDateTime.now(clock);
 
         voerStapUit("partitie aanmaken", () -> eventlogPartitiebeheer.maakVolgendeAan()
                 .ifPresent(p -> Log.infof("Onderhoud: eventpartitie %s aangemaakt (%d tot %d)", p.naam(), p.van(), p.tot())));
@@ -92,7 +95,7 @@ public class OnderhoudTaakHandler implements TaakHandler {
         voerStapUit("verzendbudget opruimen", () -> meld("tijdvak(ken) van het verzendbudget verwijderd",
                 QuarkusTransaction.requiringNew().call(() -> verzendbudget.verwijderTijdvakkenOuderDan(nu.minus(VERZENDBUDGET_BEWAARTERMIJN)))));
 
-        return TaakUitkomst.herpland(OffsetDateTime.now(ZoneOffset.UTC).plus(interval));
+        return TaakUitkomst.herpland(OffsetDateTime.now(clock).plus(interval));
     }
 
     /**

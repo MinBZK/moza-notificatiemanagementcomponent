@@ -1,12 +1,13 @@
 package nl.rijksoverheid.moz.nmc.client.notifynl;
 
+import java.time.Clock;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class NotifyNLJwtFactoryTest {
 
-    private final NotifyNLJwtFactory factory = new NotifyNLJwtFactory();
+    private final NotifyNLJwtFactory factory = new NotifyNLJwtFactory(Clock.systemUTC());
 
     // "some-service" (12) + "-" (1) + serviceId (36) + "-" (1) + secret (36) = 86 chars
     private static final String GELDIGE_API_KEY =

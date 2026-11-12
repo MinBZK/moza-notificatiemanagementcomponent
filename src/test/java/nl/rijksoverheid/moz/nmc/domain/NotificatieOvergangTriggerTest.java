@@ -130,7 +130,7 @@ class NotificatieOvergangTriggerTest {
 
     private UUID aangenomenNotificatie() {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
             overgangsfunctie.neemAan(notificatie);
 
             return notificatie.getId();

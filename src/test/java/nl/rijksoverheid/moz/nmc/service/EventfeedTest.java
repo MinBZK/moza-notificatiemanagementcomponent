@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -278,7 +279,7 @@ class EventfeedTest {
 
     // Het eventlog heeft geen foreign key naar notificatie, dus een los event volstaat.
     private long voegEventToe(UUID dvId) {
-        Event event = new Event(dvId, UUID.randomUUID(), 0, null, NotificatieStatus.AANGENOMEN, null);
+        Event event = new Event(dvId, UUID.randomUUID(), 0, null, NotificatieStatus.AANGENOMEN, null, OffsetDateTime.now());
         eventRepository.persist(event);
 
         return event.getId();

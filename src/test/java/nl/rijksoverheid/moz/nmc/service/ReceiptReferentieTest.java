@@ -153,7 +153,7 @@ class ReceiptReferentieTest {
 
     private UUID geplandePoging() {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
             overgangsfunctie.neemAan(notificatie);
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
             Poging poging = new Poging(notificatie.getId(), 1);

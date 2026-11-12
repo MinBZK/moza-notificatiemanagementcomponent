@@ -253,7 +253,7 @@ class ControleTaakHandlerTest {
     // Een notificatie in de gegeven status, zonder taak; bij een NotifyNL-id met een verzonden poging.
     private UUID notificatie(NotificatieStatus status, UUID notifyId) {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
             overgangsfunctie.neemAan(notificatie);
             UUID id = notificatie.getId();
 

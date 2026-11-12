@@ -11,6 +11,7 @@ import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
 import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.spec.PKCS8EncodedKeySpec;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
@@ -35,8 +36,10 @@ public class WebhookSleutel {
     private final String keyId;
     private final String issuer;
     private final Duration geldigheid;
+    private final Clock clock;
 
-    public WebhookSleutel(@ConfigProperty(name = "nmc.webhook.jwt.private-key") Optional<String> pem,
+    public WebhookSleutel(Clock clock,
+                          @ConfigProperty(name = "nmc.webhook.jwt.private-key") Optional<String> pem,
                           @ConfigProperty(name = "nmc.webhook.jwt.key-id") Optional<String> keyId,
                           @ConfigProperty(name = "nmc.webhook.jwt.issuer") String issuer,
                           @ConfigProperty(name = "nmc.webhook.jwt.geldigheid") Duration geldigheid) {
@@ -51,6 +54,7 @@ public class WebhookSleutel {
 
         this.issuer = issuer;
         this.geldigheid = geldigheid;
+        this.clock = clock;
     }
 
     /**
@@ -58,7 +62,7 @@ public class WebhookSleutel {
      * {@code body_sha256}, zodat een onderschepte token niet met een andere body te gebruiken is.
      */
     public String onderteken(String webhookUrl, String bodyHash) {
-        Instant nu = Instant.now();
+        Instant nu = clock.instant();
 
         return Jwt.issuer(issuer)
                 .audience(webhookUrl)
