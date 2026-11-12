@@ -125,6 +125,10 @@ Geïmplementeerd:
   slaat de receipt op als `RECEIPT_VERWERKEN`-taak (uniek op poging, status en
   tijdstip) en de controller antwoordt 204, ook bij een receipt die bij geen poging
   hoort (geteld in `nmc.receipts.afgewezen`). `ReceiptTaakHandler` verwerkt hem.
+- `POST /api/nmc/v1/contactherstellen` en `GET` en `PATCH .../contactherstellen/{contactherstelId}`:
+  alleen het contract en `ContactherstelController`; elke operatie antwoordt 501
+  (`Problems.notImplemented`), na de bodyvalidatie uit het contract. Alle drie hebben `@Logboek`:
+  het starten met de gehashte ontvanger als betrokkene, de andere twee voorlopig met de dienstverlener.
 - **Statusmodel uit ADR 0024.** `notificatie` draagt de status en een versie,
   `poging` de uitkomst per verzending, `event` het eventlog met één rij per
   overgang. `Overgangsfunctie` is de enige schrijver van de status; een deferred
@@ -216,7 +220,7 @@ elke dienstverlener met een webhook die er nog geen heeft. De
 verzendtaak schrijft nog geen LDV-registratie: de `@Logboek`-interceptor werkt alleen
 binnen een REST-aanroep.
 
-Nog niet gebouwd: een endpoint om de status op te vragen, contactherstel, de
+Nog niet gebouwd: een endpoint om de status op te vragen, contactherstel (alleen het contract), de
 Templating Service-koppeling (templates staan als vaste NotifyNL-template-IDs in
 `BerichtType`), de OMC-koppeling, de orkestratie die de fasen aan elkaar knoopt, en
 de logica die kiest tussen herverzending en contactherstel.
@@ -352,8 +356,9 @@ de logica die kiest tussen herverzending en contactherstel.
 
 - **Runtime:** Quarkus 3.40.1, Java 25
 - **Build:** één Maven-module, wrapper `./mvnw`
-- **API:** contract-first uit `META-INF/openapi.yaml` en
-  `META-INF/notifynl-callback-openapi.yaml`, Quarkus REST + Jackson
+- **API:** contract-first uit `META-INF/openapi.yaml`,
+  `META-INF/contactherstel-openapi.json` en
+  `openapi-callback/notifynl-callback-openapi.yaml`, Quarkus REST + Jackson
 - **Uitgaande clients:** quarkus-openapi-generator voor Profielservice en
   NotifyNL; één REST-client voor de webhooks van de dienstverleners, met de URL per aanroep (`@Url`)
 - **Persistentie:** PostgreSQL 18 + Hibernate ORM Panache + Flyway; in tests een embedded PostgreSQL (Zonky)
@@ -370,17 +375,23 @@ een eigen contract komt. Volg die indeling.
 
 ## Contract-first
 
-Er zijn twee servercontracten, elk met een eigen execution van de
+Er zijn drie servercontracten, elk met een eigen execution van de
 `openapi-generator-maven-plugin` (`jaxrs-spec`, `interfaceOnly=true`; `returnResponse=true`
-voor de notificaties, zodat de controllers 202 antwoorden, `false` voor de callback):
+voor de notificaties en het contactherstel, zodat de controllers 202 antwoorden, `false` voor
+de callback):
 
 | Contract | Interfaces en modellen in |
 |----------|---------------------------|
 | `src/main/resources/META-INF/openapi.yaml` | `nl.rijksoverheid.moz.nmc.api(.model)` |
-| `src/main/resources/META-INF/notifynl-callback-openapi.yaml` | `nl.rijksoverheid.moz.nmc.notifynlcallback.api(.model)` |
+| `src/main/resources/META-INF/contactherstel-openapi.json` | `nl.rijksoverheid.moz.nmc.api.contactherstel(.model)` |
+| `src/main/resources/openapi-callback/notifynl-callback-openapi.yaml` | `nl.rijksoverheid.moz.nmc.notifynlcallback.api(.model)` |
 
 Annotatie-scanning staat uit (`mp.openapi.scan.disable=true`); Quarkus publiceert
-het statische `META-INF/openapi.yaml` op `/q/openapi`.
+het statische `META-INF/openapi.yaml` op `/q/openapi`, samengevoegd met elk ander contract in
+`META-INF/` (`quarkus.smallrye-openapi.additional-docs-directory`), nu het
+contactherstelcontract. Bij een botsing wint `openapi.yaml`: `info`, `Problem` en `Violation`
+komen daaruit. Het callbackcontract hoort niet op `/q/openapi` en staat daarom buiten
+`META-INF/`, in `openapi-callback/`; `GepubliceerdeSpecTest` bewaakt dat.
 
 **Schrijf geen DTO met de hand en bewerk niets onder `target/generated-sources`.**
 Pas het contract aan en draai de build opnieuw.
@@ -400,7 +411,7 @@ Aandachtspunten in de contracten:
 - **De webhook staat als callback bij `GET .../wijzigingen`**, met als sleutel
   `{webhookUrl}`: OpenAPI 3.0 kent geen losse webhooks, en de URL komt uit het register.
 - **`IdentificatieType`** is via `importMappings` gekoppeld aan de bestaande enum
-  in `controller/`, zodat er geen tweede klasse ontstaat. Zo ook
+  in `controller/`, zodat er geen tweede klasse ontstaat, ook in het contactherstelcontract. Zo ook
   `NotificatieStatusEvent`: de feed levert hetzelfde record als de callback.
 - **De lijst geldige berichttypes staat op twee plekken**: in de `description` van
   `berichtType` in het contract en in de enum `BerichtType`. Houd ze gelijk.
@@ -731,7 +742,8 @@ twee kanten zichtbaar zijn:
 | Pad | Beschrijving |
 |-----|--------------|
 | `src/main/resources/META-INF/openapi.yaml` | Servercontract voor de notificatie-endpoints: bron voor `/q/openapi` én de codegen |
-| `src/main/resources/META-INF/notifynl-callback-openapi.yaml` | Servercontract voor de NotifyNL-callback |
+| `src/main/resources/openapi-callback/notifynl-callback-openapi.yaml` | Servercontract voor de NotifyNL-callback; bewust buiten `META-INF/` |
+| `src/main/resources/META-INF/contactherstel-openapi.json` | Servercontract voor contactherstel (concept), ook in `/q/openapi`; de controller antwoordt nog 501 |
 | `src/main/resources/openapi/` | Clientcontracten voor Profielservice en NotifyNL |
 | `src/main/resources/application.properties` | Alle configuratie, per profiel (`%dev`, `%test`, `%prod`), incl. JaCoCo-excludes |
 | `src/main/resources/db/migration/` | Flyway-migraties |

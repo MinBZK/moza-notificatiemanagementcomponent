@@ -275,7 +275,7 @@
                             <goal>generate</goal>
                         </goals>
                         <configuration>
-                            <inputSpec>${project.basedir}/src/main/resources/META-INF/notifynl-callback-openapi.yaml</inputSpec>
+                            <inputSpec>${project.basedir}/src/main/resources/openapi-callback/notifynl-callback-openapi.yaml</inputSpec>
                             <generatorName>jaxrs-spec</generatorName>
                             <output>${project.build.directory}/generated-sources/openapi</output>
                             <apiPackage>nl.rijksoverheid.moz.nmc.notifynlcallback.api</apiPackage>
@@ -290,6 +290,36 @@
                                 <dateLibrary>java8</dateLibrary>
                                 <openApiNullable>false</openApiNullable>
                             </configOptions>
+                            <generateSupportingFiles>false</generateSupportingFiles>
+                            <generateApiTests>false</generateApiTests>
+                            <generateModelTests>false</generateModelTests>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>contactherstel</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <inputSpec>${project.basedir}/src/main/resources/META-INF/contactherstel-openapi.json</inputSpec>
+                            <generatorName>jaxrs-spec</generatorName>
+                            <output>${project.build.directory}/generated-sources/openapi</output>
+                            <!-- Eigen packages: het contract heeft een eigen Problem en Violation. -->
+                            <apiPackage>nl.rijksoverheid.moz.nmc.api.contactherstel</apiPackage>
+                            <modelPackage>nl.rijksoverheid.moz.nmc.api.contactherstel.model</modelPackage>
+                            <configOptions>
+                                <sourceFolder>src/gen/java</sourceFolder>
+                                <interfaceOnly>true</interfaceOnly>
+                                <returnResponse>true</returnResponse>
+                                <useJakartaEe>true</useJakartaEe>
+                                <useSwaggerAnnotations>false</useSwaggerAnnotations>
+                                <useTags>true</useTags>
+                                <dateLibrary>java8</dateLibrary>
+                                <openApiNullable>false</openApiNullable>
+                            </configOptions>
+                            <importMappings>
+                                <importMapping>IdentificatieType=nl.rijksoverheid.moz.nmc.controller.IdentificatieType</importMapping>
+                            </importMappings>
                             <generateSupportingFiles>false</generateSupportingFiles>
                             <generateApiTests>false</generateApiTests>
                             <generateModelTests>false</generateModelTests>
