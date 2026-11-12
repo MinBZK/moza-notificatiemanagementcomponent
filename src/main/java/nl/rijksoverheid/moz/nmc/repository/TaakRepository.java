@@ -28,11 +28,14 @@ import java.util.UUID;
 @ApplicationScoped
 public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
 
-    private static final String AAN_DE_BEURT = Taak_.TAAK_SOORT + " = :taakSoort AND " + Taak_.STATUS + " = :open AND "
-            + Taak_.DUE + " <= :nu AND (" + Taak_.LEASE_TOT + " IS NULL OR " + Taak_.LEASE_TOT + " < :nu)";
+    private static final String AAN_DE_BEURT = Taak_.TAAK_SOORT + " = :taakSoort"
+            + " AND " + Taak_.STATUS + " = :open"
+            + " AND " + Taak_.DUE + " <= :nu"
+            + " AND (" + Taak_.LEASE_TOT + " IS NULL OR " + Taak_.LEASE_TOT + " < :nu)";
 
-    private static final String ZELFDE_CLAIM = Taak_.TAAK_SOORT + " = :taakSoort AND " + Taak_.ID + " = :id AND "
-            + Taak_.CLAIM_EPOCH + " = :claimEpoch";
+    private static final String ZELFDE_CLAIM = Taak_.TAAK_SOORT + " = :taakSoort"
+            + " AND " + Taak_.ID + " = :id"
+            + " AND " + Taak_.CLAIM_EPOCH + " = :claimEpoch";
 
     /**
      * Plant de wistaak van de notificatie op {@code due}, of verzet de open wistaak daarheen. De aanroeper
@@ -41,8 +44,12 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
      * termijn opnieuw leest onder diezelfde vergrendeling.
      */
     public void planWistaak(UUID dvId, UUID notificatieId, OffsetDateTime due) {
-        long verzet = update(Taak_.DUE + " = ?1 WHERE " + Taak_.TAAK_SOORT + " = ?2 AND " + Taak_.NOTIFICATIE_ID + " = ?3 AND "
-                + Taak_.STATUS + " = ?4", due, TaakSoort.WISSEN, notificatieId, TaakStatus.OPEN);
+        long verzet = update(
+                Taak_.DUE + " = ?1"
+                        + " WHERE " + Taak_.TAAK_SOORT + " = ?2"
+                        + " AND " + Taak_.NOTIFICATIE_ID + " = ?3"
+                        + " AND " + Taak_.STATUS + " = ?4",
+                due, TaakSoort.WISSEN, notificatieId, TaakStatus.OPEN);
 
         if (verzet == 0) {
             persist(new Taak(TaakSoort.WISSEN, dvId, notificatieId, due, null, null));
