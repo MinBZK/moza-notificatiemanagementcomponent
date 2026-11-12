@@ -337,10 +337,10 @@ specificaties:
 - `src/main/resources/META-INF/openapi.yaml`: `POST /centraal/notificaties`,
   `POST /decentraal/notificaties`, de eventfeed met de bevestiging en de webhook als
   callback, en `GET /.well-known/jwks.json`.
-- `src/main/resources/META-INF/notifynl-callback-openapi.yaml`: `POST
+- `src/main/resources/openapi-callback/notifynl-callback-openapi.yaml`: `POST
   /notifynl-callback`, in een eigen bestand omdat NotifyNL hier de aanroeper is in
   plaats van een Dienstverlener.
-- `src/main/resources/META-INF/openapi-aanvullend/contactherstel-openapi.json`: `POST /contactherstellen` en
+- `src/main/resources/META-INF/contactherstel-openapi.json`: `POST /contactherstellen` en
   `GET` en `PATCH /contactherstellen/{contactherstelId}`. Een conceptcontract; de endpoints
   antwoorden nog 501.
 
@@ -348,10 +348,10 @@ specificaties:
   `/q/swagger-ui` (SmallRye OpenAPI pikt automatisch een bestand met die naam
   op uit `META-INF`; `mp.openapi.scan.disable=true` staat aan, dus er wordt
   niet ook nog automatisch op annotaties gescand).
-  Elk contract in `META-INF/openapi-aanvullend/` voegt SmallRye daarmee samen
+  Elk ander contract in `META-INF/` voegt SmallRye daarmee samen
   (`quarkus.smallrye-openapi.additional-docs-directory`), zodat ook contactherstel in
   swagger-ui staat; bij een botsing wint `openapi.yaml`. JSON staat op `/q/openapi?format=json`.
-  `notifynl-callback-openapi.yaml` heet bewust anders en wordt dus **niet**
+  `notifynl-callback-openapi.yaml` staat bewust buiten `META-INF/` en wordt dus **niet**
   via swagger-ui getoond; die is alleen input voor de codegen hieronder.
 - Bij elke build genereert de `openapi-generator-maven-plugin` (drie losse
   `<execution>`s, één per spec) hieruit de JAX-RS-interfaces
@@ -368,8 +368,8 @@ specificaties:
   `notifynlcallback.controller`) implementeren de gegenereerde interfaces.
 
 Om een contract aan te passen: wijzig `META-INF/openapi.yaml`,
-`META-INF/notifynl-callback-openapi.yaml` of
-`META-INF/openapi-aanvullend/contactherstel-openapi.json` en draai een build (`./mvnw compile`,
+`META-INF/contactherstel-openapi.json` of
+`openapi-callback/notifynl-callback-openapi.yaml` en draai een build (`./mvnw compile`,
 `test` of `quarkus:dev`); de gegenereerde interfaces/modellen worden
 automatisch bijgewerkt (en, voor `openapi.yaml` en het contactherstelcontract, ook de swagger-ui).
 
