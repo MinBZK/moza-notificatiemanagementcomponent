@@ -12,6 +12,7 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -36,10 +37,12 @@ public class AannameService {
     private final TaakRepository taakRepository;
     private final Verzendbeleid verzendbeleid;
     private final Optional<Integer> standaardQuotumPerDag;
+    private final Clock clock;
 
     public AannameService(Overgangsfunctie overgangsfunctie, Sleutelbeheer sleutelbeheer, DvProvider dvProvider,
                           DienstverlenerRepository dienstverlenerRepository, NotificatieRepository notificatieRepository,
                           TaakRepository taakRepository, Verzendbeleid verzendbeleid,
+                          Clock clock,
                           @ConfigProperty(name = "nmc.aanname.quotum-per-dag") Optional<Integer> standaardQuotumPerDag) {
         if (standaardQuotumPerDag.isPresent() && standaardQuotumPerDag.get() < 1) {
             throw new IllegalStateException("nmc.aanname.quotum-per-dag moet leeg of 1 of hoger zijn");
@@ -53,6 +56,7 @@ public class AannameService {
         this.taakRepository = taakRepository;
         this.verzendbeleid = verzendbeleid;
         this.standaardQuotumPerDag = standaardQuotumPerDag;
+        this.clock = clock;
     }
 
     /**
@@ -65,7 +69,7 @@ public class AannameService {
         toetsQuotum(dvId);
 
         // De versleutelde gegevens gaan vóór de aanname op de entity, zodat de insert ze meeneemt.
-        Notificatie notificatie = new Notificatie(dvId);
+        Notificatie notificatie = new Notificatie(dvId, OffsetDateTime.now(clock));
         notificatie.bewaarVersleuteldeGegevens(
                 sleutelbeheer.versleutel(notificatie.getId(), opdracht.ontvanger(), opdracht.berichtgegevens()));
         // Op de notificatie en niet in de taak, zodat ook een later geplande verzendtaak kan versturen.
@@ -76,7 +80,7 @@ public class AannameService {
         overgangsfunctie.neemAan(notificatie);
 
         taakRepository.persist(new Taak(TaakSoort.VERZENDEN, dvId, notificatie.getId(),
-                OffsetDateTime.now(ZoneOffset.UTC), UUID.randomUUID().toString(), null));
+                OffsetDateTime.now(clock), UUID.randomUUID().toString(), null));
 
         return notificatie.getId();
     }
@@ -92,7 +96,7 @@ public class AannameService {
         }
 
         dienstverlener.getQuotumPerDag().or(() -> standaardQuotumPerDag).ifPresent(quotum -> {
-            OffsetDateTime beginVanDeDag = LocalDate.now(ZoneOffset.UTC).atStartOfDay().atOffset(ZoneOffset.UTC);
+            OffsetDateTime beginVanDeDag = LocalDate.now(clock).atStartOfDay().atOffset(ZoneOffset.UTC);
 
             if (notificatieRepository.telAangenomenSinds(dvId, beginVanDeDag) >= quotum) {
                 throw new QuotumOverschredenException(quotum);

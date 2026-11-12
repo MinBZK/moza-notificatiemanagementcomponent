@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import java.time.Clock;
 import nl.rijksoverheid.moz.nmc.domain.Dienstverlener;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.repository.DienstverlenerRepository;
@@ -61,7 +62,8 @@ class AannameQuotumTest {
 
     private AannameService aannameService(Optional<Integer> standaardQuotum) {
         return new AannameService(mock(Overgangsfunctie.class), mock(Sleutelbeheer.class), () -> DV_ID,
-                dienstverlenerRepository, notificatieRepository, mock(TaakRepository.class), verzendbeleid(), standaardQuotum);
+                dienstverlenerRepository, notificatieRepository, mock(TaakRepository.class), verzendbeleid(),
+                Clock.systemUTC(), standaardQuotum);
     }
 
     private static Verzendbeleid verzendbeleid() {

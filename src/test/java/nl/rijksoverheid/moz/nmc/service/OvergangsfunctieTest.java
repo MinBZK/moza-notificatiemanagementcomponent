@@ -5,6 +5,8 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.transaction.TransactionalException;
+
+import java.time.OffsetDateTime;
 import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
@@ -59,7 +61,7 @@ class OvergangsfunctieTest {
     @Test
     void neemAan_nieuweNotificatie_staatOpAangenomenMetEventNul() {
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
             overgangsfunctie.neemAan(notificatie);
 
             return notificatie.getId();
@@ -260,7 +262,7 @@ class OvergangsfunctieTest {
     // vertrekpunt te testen is zonder de hele keten te doorlopen. De versie blijft 0.
     private UUID aangenomenNotificatieMetStatus(NotificatieStatus status) {
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID);
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
             overgangsfunctie.neemAan(notificatie);
 
             return notificatie.getId();

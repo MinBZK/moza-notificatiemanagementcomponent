@@ -8,8 +8,8 @@ import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 
 /**
  * Wist de gewrapte sleutel van een notificatie de wistermijn na haar eindstatus. Daarna zijn
@@ -26,13 +26,15 @@ public class WisTaakHandler implements TaakHandler {
     private final NotificatieRepository notificatieRepository;
     private final TaakClaimer taakClaimer;
     private final Opruimtermijnen opruimtermijnen;
+    private final Clock clock;
 
     public WisTaakHandler(Overgangsfunctie overgangsfunctie, NotificatieRepository notificatieRepository,
-                          TaakClaimer taakClaimer, Opruimtermijnen opruimtermijnen) {
+                          TaakClaimer taakClaimer, Opruimtermijnen opruimtermijnen, Clock clock) {
         this.overgangsfunctie = overgangsfunctie;
         this.notificatieRepository = notificatieRepository;
         this.taakClaimer = taakClaimer;
         this.opruimtermijnen = opruimtermijnen;
+        this.clock = clock;
     }
 
     @Override
@@ -60,7 +62,7 @@ public class WisTaakHandler implements TaakHandler {
 
         OffsetDateTime wissenOp = opruimtermijnen.wissenOp(notificatie.getEindstatusOp());
 
-        if (wissenOp.isAfter(OffsetDateTime.now(ZoneOffset.UTC))) {
+        if (wissenOp.isAfter(OffsetDateTime.now(clock))) {
             taakClaimer.stelUit(taak, wissenOp, false);
 
             return;

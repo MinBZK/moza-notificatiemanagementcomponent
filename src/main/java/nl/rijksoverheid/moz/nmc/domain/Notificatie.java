@@ -88,10 +88,10 @@ public class Notificatie {
     }
 
     /** Een nieuwe notificatie, nog zonder status; {@code Overgangsfunctie#neemAan} slaat hem op. */
-    public Notificatie(UUID dvId) {
+    public Notificatie(UUID dvId, OffsetDateTime aangenomenOp) {
         this.id = UUID.randomUUID();
         this.dvId = Objects.requireNonNull(dvId, "dvId is verplicht");
-        this.aangenomenOp = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        this.aangenomenOp = aangenomenOp.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
     }
 
     public OffsetDateTime getAangenomenOp() {
@@ -127,11 +127,11 @@ public class Notificatie {
      * Zet status en reden. Alleen voor Overgangsfunctie, die de rij vergrendelt, de overgang toetst en
      * het event schrijft.
      */
-    public void pasOvergangToe(NotificatieStatus status, Reden reden) {
+    public void pasOvergangToe(NotificatieStatus status, Reden reden, OffsetDateTime nu) {
         this.status = Objects.requireNonNull(status, "status is verplicht");
         this.reden = reden;
         this.eindstatusOp = status.isEindstatus()
-                ? OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS)
+                ? nu.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS)
                 : null;
     }
 

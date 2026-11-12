@@ -13,6 +13,8 @@ import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 
+import java.time.Clock;
+import java.time.OffsetDateTime;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -34,13 +36,15 @@ public class Overgangsfunctie {
     private final EventRepository eventRepository;
     private final TaakRepository taakRepository;
     private final Opruimtermijnen opruimtermijnen;
+    private final Clock clock;
 
     public Overgangsfunctie(NotificatieRepository notificatieRepository, EventRepository eventRepository,
-                            TaakRepository taakRepository, Opruimtermijnen opruimtermijnen) {
+                            TaakRepository taakRepository, Opruimtermijnen opruimtermijnen, Clock clock) {
         this.notificatieRepository = notificatieRepository;
         this.eventRepository = eventRepository;
         this.taakRepository = taakRepository;
         this.opruimtermijnen = opruimtermijnen;
+        this.clock = clock;
     }
 
     /** Slaat een nieuwe notificatie op als {@code AANGENOMEN}, met het event met volgnummer 0. */
@@ -51,10 +55,11 @@ public class Overgangsfunctie {
             throw new IllegalStateException("Notificatie " + notificatie.getId() + " is al aangenomen");
         }
 
-        notificatie.pasOvergangToe(NotificatieStatus.AANGENOMEN, null);
+        OffsetDateTime nu = OffsetDateTime.now(clock);
+        notificatie.pasOvergangToe(NotificatieStatus.AANGENOMEN, null, nu);
         notificatieRepository.persistAndFlush(notificatie);
 
-        return schrijfEvent(notificatie, null);
+        return schrijfEvent(notificatie, null, nu);
     }
 
     /**
@@ -78,13 +83,15 @@ public class Overgangsfunctie {
             return OvergangUitkomst.geweigerd(van, naar);
         }
 
+        OffsetDateTime nu = OffsetDateTime.now(clock);
+
         // Bij een herverzending blijft de status gelijk en is de entity niet gewijzigd; dan verhoogt
         // alleen de force-increment de versie. Anders doet de flush dat, en een tweede ophoging zou
         // een gat in de volgnummers geven.
         if (van == naar) {
             notificatieRepository.verhoogVersie(notificatie);
         } else {
-            notificatie.pasOvergangToe(naar, reden);
+            notificatie.pasOvergangToe(naar, reden, nu);
         }
 
         notificatieRepository.flush();
@@ -96,7 +103,7 @@ public class Overgangsfunctie {
             taakRepository.verwijderOpen(TaakSoort.WISSEN, notificatie.getId());
         }
 
-        return OvergangUitkomst.uitgevoerd(van, schrijfEvent(notificatie, van));
+        return OvergangUitkomst.uitgevoerd(van, schrijfEvent(notificatie, van, nu));
     }
 
     /**
@@ -112,9 +119,9 @@ public class Overgangsfunctie {
 
     // Status en reden komen van de rij, zodat het event nooit afwijkt van wat er vastligt; bij een
     // herverzending wordt de reden van de aanroeper niet op de rij gezet.
-    private Event schrijfEvent(Notificatie notificatie, NotificatieStatus van) {
+    private Event schrijfEvent(Notificatie notificatie, NotificatieStatus van, OffsetDateTime nu) {
         Event event = new Event(notificatie.getDvId(), notificatie.getId(), notificatie.getVersie(), van,
-                notificatie.getStatus(), notificatie.getReden());
+                notificatie.getStatus(), notificatie.getReden(), nu);
         eventRepository.persist(event);
 
         return event;

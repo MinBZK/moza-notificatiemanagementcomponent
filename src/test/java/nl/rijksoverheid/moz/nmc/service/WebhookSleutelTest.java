@@ -11,6 +11,7 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.RSAPublicKeySpec;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Optional;
@@ -61,7 +62,7 @@ class WebhookSleutelTest {
         assertThrows(IllegalStateException.class, () -> sleutel(" ", "sleutel-1"));
         assertThrows(IllegalStateException.class, () -> sleutel(pem, null));
         assertThrows(IllegalStateException.class, () -> sleutel(pem, " "));
-        assertThrows(IllegalStateException.class, () -> new WebhookSleutel(Optional.of(pem), Optional.of("k"),
+        assertThrows(IllegalStateException.class, () -> new WebhookSleutel(Clock.systemUTC(), Optional.of(pem), Optional.of("k"),
                 "https://nmc.example.nl", Duration.ZERO));
     }
 
@@ -80,8 +81,8 @@ class WebhookSleutelTest {
     }
 
     private static WebhookSleutel sleutel(String pem, String keyId) {
-        return new WebhookSleutel(Optional.ofNullable(pem), Optional.ofNullable(keyId), "https://nmc.example.nl",
-                Duration.ofMinutes(2));
+        return new WebhookSleutel(Clock.systemUTC(), Optional.ofNullable(pem), Optional.ofNullable(keyId),
+                "https://nmc.example.nl", Duration.ofMinutes(2));
     }
 
     private static KeyPair rsa(int bits) throws Exception {

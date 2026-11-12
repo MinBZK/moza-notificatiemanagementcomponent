@@ -24,9 +24,9 @@ import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.Optional;
@@ -64,11 +64,13 @@ public class VerzendTaakHandler implements TaakHandler {
     private final Duration uitstel;
     private final NotifyNLNavraagmomenten notifyNLNavraagmomenten;
     private final Verzendbeleid verzendbeleid;
+    private final Clock clock;
 
     public VerzendTaakHandler(Overgangsfunctie overgangsfunctie, PogingRepository pogingRepository,
                               TaakRepository taakRepository, TaakClaimer taakClaimer, Sleutelbeheer sleutelbeheer,
                               ProfielServiceAdapter profielServiceAdapter, NotifyNLVerzendAdapter verzendAdapter,
                               NotifyNLNavraagmomenten notifyNLNavraagmomenten, Verzendbeleid verzendbeleid,
+                              Clock clock,
                               @ConfigProperty(name = "nmc.taak.uitstel") Duration uitstel) {
         this.overgangsfunctie = overgangsfunctie;
         this.pogingRepository = pogingRepository;
@@ -80,6 +82,7 @@ public class VerzendTaakHandler implements TaakHandler {
         this.uitstel = uitstel;
         this.notifyNLNavraagmomenten = notifyNLNavraagmomenten;
         this.verzendbeleid = verzendbeleid;
+        this.clock = clock;
     }
 
     @Override
@@ -220,7 +223,7 @@ public class VerzendTaakHandler implements TaakHandler {
         Notificatie notificatie = overgangsfunctie.vergrendel(taak.getNotificatieId());
         taakClaimer.eisClaim(taak);
         Optional<Poging> laatste = pogingRepository.findLaatsteVan(notificatie.getId());
-        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime nu = OffsetDateTime.now(clock);
         Poging poging;
         boolean herclaim;
 
@@ -333,7 +336,7 @@ public class VerzendTaakHandler implements TaakHandler {
         Notificatie notificatie = overgangsfunctie.vergrendel(verzending.notificatieId());
         Poging poging = pogingRepository.findById(verzending.pogingId());
         pogingRepository.herlaad(poging);
-        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        OffsetDateTime nu = OffsetDateTime.now(clock).truncatedTo(ChronoUnit.MICROS);
 
         if (poging.getNotifyId() == null) {
             poging.markeerVerzonden(notifyId, nu);
@@ -387,11 +390,11 @@ public class VerzendTaakHandler implements TaakHandler {
     }
 
     private TaakUitkomst uitgesteld() {
-        return TaakUitkomst.uitgesteld(OffsetDateTime.now(ZoneOffset.UTC).plus(uitstel), false);
+        return TaakUitkomst.uitgesteld(OffsetDateTime.now(clock).plus(uitstel), false);
     }
 
     private TaakUitkomst uitgesteldAlsPoging() {
-        return TaakUitkomst.uitgesteld(OffsetDateTime.now(ZoneOffset.UTC).plus(uitstel), true);
+        return TaakUitkomst.uitgesteld(OffsetDateTime.now(clock).plus(uitstel), true);
     }
 
     private static boolean isFoutVanHetNmc(int status) {
