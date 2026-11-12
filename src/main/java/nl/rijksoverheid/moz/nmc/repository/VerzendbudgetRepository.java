@@ -19,11 +19,11 @@ public class VerzendbudgetRepository implements PanacheRepositoryBase<Verzendbud
      */
     public VerzendbudgetTijdvak vergrendel(String notifyService, OffsetDateTime tijdvak, int tokens, int verzendTokens,
                                            int navraagTokens) {
-        getSession().createMutationQuery("insert into VerzendbudgetTijdvak ("
+        getSession().createMutationQuery("INSERT INTO VerzendbudgetTijdvak ("
                         + String.join(", ", VerzendbudgetTijdvak_.NOTIFY_SERVICE, VerzendbudgetTijdvak_.TIJDVAK,
                                 VerzendbudgetTijdvak_.TOKENS, VerzendbudgetTijdvak_.VERZEND_TOKENS,
                                 VerzendbudgetTijdvak_.NAVRAAG_TOKENS)
-                        + ") values (:notifyService, :tijdvak, :tokens, :verzendTokens, :navraagTokens) on conflict do nothing")
+                        + ") VALUES (:notifyService, :tijdvak, :tokens, :verzendTokens, :navraagTokens) ON CONFLICT DO NOTHING")
                 .setParameter("notifyService", notifyService)
                 .setParameter("tijdvak", tijdvak)
                 .setParameter("tokens", tokens)

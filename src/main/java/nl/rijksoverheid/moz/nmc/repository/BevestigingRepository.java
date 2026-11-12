@@ -20,15 +20,15 @@ public class BevestigingRepository implements PanacheRepositoryBase<Bevestiging,
     public boolean updateCursorPositie(UUID dvId, Cursor cursor, OffsetDateTime bevestigdOp) {
         String positie = "(" + Bevestiging_.EPOCH + ", " + Bevestiging_.TRANSACTIE_ID + ", " + Bevestiging_.EVENT_ID + ")";
 
-        return getSession().createMutationQuery("insert into Bevestiging (" + Bevestiging_.DV_ID + ", "
+        return getSession().createMutationQuery("INSERT INTO Bevestiging (" + Bevestiging_.DV_ID + ", "
                         + Bevestiging_.EPOCH + ", " + Bevestiging_.TRANSACTIE_ID + ", " + Bevestiging_.EVENT_ID + ", "
-                        + Bevestiging_.BEVESTIGD_OP + ") values (:dvId, :epoch, :transactieId, :eventId, :bevestigdOp)"
-                        + " on conflict(" + Bevestiging_.DV_ID + ") do update set "
+                        + Bevestiging_.BEVESTIGD_OP + ") VALUES (:dvId, :epoch, :transactieId, :eventId, :bevestigdOp)"
+                        + " ON CONFLICT(" + Bevestiging_.DV_ID + ") DO UPDATE SET "
                         + Bevestiging_.EPOCH + " = excluded." + Bevestiging_.EPOCH + ", "
                         + Bevestiging_.TRANSACTIE_ID + " = excluded." + Bevestiging_.TRANSACTIE_ID + ", "
                         + Bevestiging_.EVENT_ID + " = excluded." + Bevestiging_.EVENT_ID + ", "
                         + Bevestiging_.BEVESTIGD_OP + " = excluded." + Bevestiging_.BEVESTIGD_OP
-                        + " where " + positie + " <= (excluded." + Bevestiging_.EPOCH + ", excluded."
+                        + " WHERE " + positie + " <= (excluded." + Bevestiging_.EPOCH + ", excluded."
                         + Bevestiging_.TRANSACTIE_ID + ", excluded." + Bevestiging_.EVENT_ID + ")")
                 .setParameter("dvId", dvId)
                 .setParameter("epoch", cursor.epoch())

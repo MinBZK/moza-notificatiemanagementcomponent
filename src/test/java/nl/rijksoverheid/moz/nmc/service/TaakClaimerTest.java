@@ -316,7 +316,7 @@ class TaakClaimerTest {
 
         assertEquals(15, taakClaimer.claim(TaakSoort.VERZENDEN, 100).size());
         assertEquals(0, taakClaimer.claim(TaakSoort.VERZENDEN, 100).size(), "budget voor dit tijdvak is op");
-        assertEquals(15, taakRepository.count(Taak_.TAAK_SOORT + " = ?1 and " + Taak_.LEASE_TOT + " is null and "
+        assertEquals(15, taakRepository.count(Taak_.TAAK_SOORT + " = ?1 AND " + Taak_.LEASE_TOT + " IS NULL AND "
                         + Taak_.POGINGEN + " = 0", TaakSoort.VERZENDEN),
                 "de niet-geclaimde taken zijn onaangeraakt");
     }
