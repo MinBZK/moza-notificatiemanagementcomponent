@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "extraKnownMarketplaces": {
+    "overheid-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "developer-overheid-nl/skills-marketplace"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "standaarden@overheid-plugins": true,
+    "developer-overheid@overheid-plugins": true,
+    "nerds@overheid-plugins": true,
+    "zad-actions@overheid-plugins": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(./mvnw *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr diff *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh issue view *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/bewaak-bestanden.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/verify-voor-push.sh",
+            "timeout": 1800
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/controleer-java.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

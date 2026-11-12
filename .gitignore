@@ -41,3 +41,6 @@ src/main/resources/application-dev.properties
 # Created by jazzer during a local JAZZER_FUZZ=1 run. The checked-in seed corpus lives in
 # src/test/resources under EndpointFuzzTestInputs.
 .cifuzz-corpus/
+### Claude Code ###
+# Persoonlijke instellingen; de gedeelde staan in .claude/settings.json.
+.claude/settings.local.json
