@@ -81,6 +81,14 @@ public final class Problems {
                 .build();
     }
 
+    public static HttpProblem notImplemented(String title, String detail) {
+        return HttpProblem.builder()
+                .withStatus(Response.Status.NOT_IMPLEMENTED)
+                .withTitle(title)
+                .withDetail(detail)
+                .build();
+    }
+
     public static HttpProblem serverError(String title, String detail) {
         return HttpProblem.builder()
                 .withStatus(Response.Status.INTERNAL_SERVER_ERROR)
