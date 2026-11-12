@@ -115,7 +115,7 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
 
     /** Het aantal notificaties dat deze dienstverlener sinds {@code vanaf} heeft aangeboden. */
     public long telAangenomenSinds(UUID dvId, OffsetDateTime vanaf) {
-        return count(Notificatie_.DV_ID + " = ?1 and " + Notificatie_.AANGENOMEN_OP + " >= ?2", dvId, vanaf);
+        return count(Notificatie_.DV_ID + " = ?1 AND " + Notificatie_.AANGENOMEN_OP + " >= ?2", dvId, vanaf);
     }
 
     /**
@@ -127,8 +127,8 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
      */
     public List<UUID> zonderTaak(Collection<NotificatieStatus> openStatussen, OffsetDateTime nu, int limiet) {
         return getEntityManager()
-                .createQuery("select n." + Notificatie_.ID + " from Notificatie n where " + ZONDER_TAAK
-                        + " order by n." + Notificatie_.AANGENOMEN_OP, UUID.class)
+                .createQuery("SELECT n." + Notificatie_.ID + " FROM Notificatie n WHERE " + ZONDER_TAAK
+                        + " ORDER BY n." + Notificatie_.AANGENOMEN_OP, UUID.class)
                 .setParameter("statussen", openStatussen)
                 .setParameter("open", TaakStatus.OPEN)
                 .setParameter("nu", nu)
@@ -139,7 +139,7 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
     /** Of deze notificatie nog altijd een open status heeft zonder taak, volgens dezelfde regel als {@link #zonderTaak}. */
     public boolean isZonderTaak(UUID id, Collection<NotificatieStatus> openStatussen, OffsetDateTime nu) {
         return getEntityManager()
-                .createQuery("select count(n) from Notificatie n where n." + Notificatie_.ID + " = :id and " + ZONDER_TAAK, Long.class)
+                .createQuery("SELECT COUNT(n) FROM Notificatie n WHERE n." + Notificatie_.ID + " = :id AND " + ZONDER_TAAK, Long.class)
                 .setParameter("id", id)
                 .setParameter("statussen", openStatussen)
                 .setParameter("open", TaakStatus.OPEN)
@@ -148,8 +148,8 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
     }
 
     // De subquery noemt geen soort: een taak van elke soort telt, dus hij leest elke partitie.
-    private static final String ZONDER_TAAK = "n." + Notificatie_.STATUS + " in :statussen "
-            + "and not exists (select t." + Taak_.ID + " from Taak t where t." + Taak_.NOTIFICATIE_ID
-            + " = n." + Notificatie_.ID + " and (t." + Taak_.STATUS + " = :open or n." + Notificatie_.GELDIG_TOT
-            + " is null or n." + Notificatie_.GELDIG_TOT + " > :nu))";
+    private static final String ZONDER_TAAK = "n." + Notificatie_.STATUS + " IN :statussen "
+            + "AND NOT EXISTS (SELECT t." + Taak_.ID + " FROM Taak t WHERE t." + Taak_.NOTIFICATIE_ID
+            + " = n." + Notificatie_.ID + " AND (t." + Taak_.STATUS + " = :open OR n." + Notificatie_.GELDIG_TOT
+            + " IS NULL OR n." + Notificatie_.GELDIG_TOT + " > :nu))";
 }

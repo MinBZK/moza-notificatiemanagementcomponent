@@ -111,7 +111,7 @@ class ControleTaakHandlerTest {
         assertEquals(Reden.TECHNISCH, notificatie.getReden());
         assertFalse(perNotificatie().containsKey(id), "geen andere taak dan de wistaak");
         assertEquals(1, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(
-                Taak_.TAAK_SOORT + " = ?1 and " + Taak_.NOTIFICATIE_ID + " = ?2", TaakSoort.WISSEN, id)));
+                Taak_.TAAK_SOORT + " = ?1 AND " + Taak_.NOTIFICATIE_ID + " = ?2", TaakSoort.WISSEN, id)));
     }
 
     // Een navraag op een onbekende poging rondt zich af zonder iets te doen; zonder deze overgang plant de
@@ -126,7 +126,7 @@ class ControleTaakHandlerTest {
         Notificatie notificatie = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findById(id));
         assertEquals(NotificatieStatus.BEZORGSTATUS_ONBEKEND, notificatie.getStatus());
         assertEquals(0, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(
-                Taak_.TAAK_SOORT + " = ?1 and " + Taak_.NOTIFICATIE_ID + " = ?2", TaakSoort.RECONCILIEREN, id)));
+                Taak_.TAAK_SOORT + " = ?1 AND " + Taak_.NOTIFICATIE_ID + " = ?2", TaakSoort.RECONCILIEREN, id)));
     }
 
     // Opnieuw gepland houdt de vaststeltaak de termijn vanaf de bezorging aan.
@@ -201,8 +201,8 @@ class ControleTaakHandlerTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
-        assertEquals(1L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT + " = ?1 and "
-                + Taak_.NOTIFICATIE_ID + " = ?2 and " + Taak_.STATUS + " = ?3", TaakSoort.VERZENDEN, id, TaakStatus.OPEN)),
+        assertEquals(1L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT + " = ?1 AND "
+                + Taak_.NOTIFICATIE_ID + " = ?2 AND " + Taak_.STATUS + " = ?3", TaakSoort.VERZENDEN, id, TaakStatus.OPEN)),
                 "een nieuwe verzendtaak naast de mislukte");
     }
 

@@ -592,6 +592,11 @@ als de Quarkus-BOM zelf een veilige versie levert.
   zijn. Gebruik niet `PanacheRepository<T>`: die legt het id-type vast op `Long`,
   en `Notificatie` heeft een `UUID`, waardoor methodes als `deleteById` stil
   verkeerd gaan.
+- **SQL-keywords in hoofdletters**, in native SQL, HQL, Panache-fragmenten en
+  migraties: `SELECT ... FROM Taak WHERE ... IS NULL`, ook functies als `COUNT`.
+  In HQL blijft `excluded` klein: Hibernate leest het als alias. Namen van tabellen,
+  kolommen, entiteiten, parameters en PostgreSQL-functies houden hun eigen
+  schrijfwijze. Dit geldt ook voor testcode.
 - **Foutafhandeling:** adapters vertalen een `WebApplicationException` van een
   externe dienst naar een eigen exception (`ProfielServiceException`,
   `NotifyNLVerzendException`, ...). Services gooien domeinexceptions. Alleen

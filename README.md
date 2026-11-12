@@ -286,7 +286,7 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   teller terug. De URL gaat vóór elke levering door `WebhookUrlValidator`; een
   ongeldige URL pauzeert de webhook zonder aanroep en geeft een ERROR in het log.
   Een gewijzigde URL heft de pauze niet op; dat doet beheer met
-  `update webhookpositie set gepauzeerd_tot = null, mislukkingen = 0 where dv_id = '…';`.
+  `UPDATE webhookpositie SET gepauzeerd_tot = NULL, mislukkingen = 0 WHERE dv_id = '…';`.
 
   Registreren gaat nu rechtstreeks in de database:
   1. Zet `webhook_url` op de rij in `dienstverlener`; optioneel `webhook_max_mislukkingen` en

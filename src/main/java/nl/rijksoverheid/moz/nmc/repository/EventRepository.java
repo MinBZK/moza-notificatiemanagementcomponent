@@ -29,10 +29,10 @@ public class EventRepository implements PanacheRepositoryBase<Event, Long> {
         // De losse ondergrens op transactie_id is overbodig voor het resultaat, maar PostgreSQL
         // snoeit partities niet op een rijvergelijking; zonder die grens doorzoekt elke aanroep ook
         // de partities onder de cursor.
-        return getSession().createSelectionQuery("from Event where " + Event_.DV_ID + " = :dvId and ("
-                        + Event_.TRANSACTIE_ID + ", " + Event_.ID + ") > (:transactieId, :eventId) and "
-                        + Event_.TRANSACTIE_ID + " >= :transactieId and " + Event_.TRANSACTIE_ID
-                        + " < function('pg_snapshot_xmin', function('pg_current_snapshot')) order by "
+        return getSession().createSelectionQuery("FROM Event WHERE " + Event_.DV_ID + " = :dvId AND ("
+                        + Event_.TRANSACTIE_ID + ", " + Event_.ID + ") > (:transactieId, :eventId) AND "
+                        + Event_.TRANSACTIE_ID + " >= :transactieId AND " + Event_.TRANSACTIE_ID
+                        + " < FUNCTION('pg_snapshot_xmin', FUNCTION('pg_current_snapshot')) ORDER BY "
                         + Event_.TRANSACTIE_ID + ", " + Event_.ID, Event.class)
                 .setParameter("dvId", dvId)
                 .setParameter("transactieId", transactieId, Event_.transactieId.getType())
@@ -43,9 +43,9 @@ public class EventRepository implements PanacheRepositoryBase<Event, Long> {
 
     /** Het jongste event onder de oudste lopende transactie, over alle dienstverleners; leeg zonder events. */
     public Optional<Event> jongsteOnderWatermerk() {
-        return getSession().createSelectionQuery("from Event where " + Event_.TRANSACTIE_ID
-                        + " < function('pg_snapshot_xmin', function('pg_current_snapshot')) order by "
-                        + Event_.TRANSACTIE_ID + " desc, " + Event_.ID + " desc", Event.class)
+        return getSession().createSelectionQuery("FROM Event WHERE " + Event_.TRANSACTIE_ID
+                        + " < FUNCTION('pg_snapshot_xmin', FUNCTION('pg_current_snapshot')) ORDER BY "
+                        + Event_.TRANSACTIE_ID + " DESC, " + Event_.ID + " DESC", Event.class)
                 .setMaxResults(1)
                 .getResultList()
                 .stream()
@@ -59,7 +59,7 @@ public class EventRepository implements PanacheRepositoryBase<Event, Long> {
      */
     public long bovengrensTransactieId() {
         Object waarde = getEntityManager()
-                .createNativeQuery("select pg_snapshot_xmax(pg_current_snapshot())::text::bigint")
+                .createNativeQuery("SELECT pg_snapshot_xmax(pg_current_snapshot())::text::bigint")
                 .getSingleResult();
 
         return ((Number) waarde).longValue();
@@ -67,7 +67,7 @@ public class EventRepository implements PanacheRepositoryBase<Event, Long> {
 
     /** De transactie-id van het oudste event in het log, over alle dienstverleners; leeg zonder events. */
     public Optional<Long> oudsteTransactieId() {
-        return getEntityManager().createQuery("select " + Event_.TRANSACTIE_ID + " from Event order by " + Event_.TRANSACTIE_ID, Long.class)
+        return getEntityManager().createQuery("SELECT " + Event_.TRANSACTIE_ID + " FROM Event ORDER BY " + Event_.TRANSACTIE_ID, Long.class)
                 .setMaxResults(1)
                 .getResultStream()
                 .findFirst();

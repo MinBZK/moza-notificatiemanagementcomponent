@@ -187,7 +187,7 @@ class BezorgingVaststellenTest {
     }
 
     private void maakVaststeltaakDue(UUID notificatieId) {
-        QuarkusTransaction.requiringNew().run(() -> taakRepository.update("due = ?1 where notificatieId = ?2",
+        QuarkusTransaction.requiringNew().run(() -> taakRepository.update("due = ?1 WHERE notificatieId = ?2",
                 OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1), notificatieId));
     }
 
