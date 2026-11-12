@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
+import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -18,13 +19,14 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -39,6 +41,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class AannameServiceTest {
 
     private static final String TEMPLATE_ID = BerichtType.DEMO_TEMPLATE.getTemplateId();
+
+    // De klok staat stil, zodat de test exacte tijdstippen kan verwachten.
+    private final VerstelbareClock clock = VerstelbareClock.opNu();
 
     @InjectMock
     @RestClient
@@ -68,6 +73,7 @@ class AannameServiceTest {
 
     @BeforeEach
     void setUp() {
+        QuarkusMock.installMockForType(clock, Clock.class);
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
             eventRepository.deleteAll();
@@ -89,7 +95,7 @@ class AannameServiceTest {
             assertEquals(NotificatieStatus.AANGENOMEN, notificatie.getStatus());
             assertEquals(0, notificatie.getVersie());
             assertEquals(NotificatieFixtures.DV_ID, notificatie.getDvId());
-            assertFalse(notificatie.getAangenomenOp().isAfter(OffsetDateTime.now(ZoneOffset.UTC)));
+            assertFalse(notificatie.getAangenomenOp().isAfter(clock.nu()));
             assertEquals(new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
                     sleutelbeheer.ontsleutelOntvanger(id, notificatie.getVersleuteldeGegevens()));
             assertEquals(Map.of("naam", "Voorbeeld BV"),
@@ -103,7 +109,7 @@ class AannameServiceTest {
             assertEquals(TaakSoort.VERZENDEN, taak.getTaakSoort());
             assertEquals(id, taak.getNotificatieId());
             assertEquals(NotificatieFixtures.DV_ID, taak.getDvId());
-            assertFalse(taak.getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC)));
+            assertFalse(taak.getDue().isAfter(clock.nu()));
             assertEquals(Map.of(), taak.getPayload(), "de verzendgegevens staan op de notificatie");
             assertEquals(TEMPLATE_ID, notificatie.getTemplateId());
             assertEquals("CENTRAAL", notificatie.getRegie());
@@ -141,6 +147,21 @@ class AannameServiceTest {
 
         assertEquals(1, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
         assertEquals(1, QuarkusTransaction.requiringNew().call(() -> taakRepository.count()));
+    }
+
+    // Het quotum telt per kalenderdag in UTC: wat voor middernacht is aangenomen telt de dag erna niet mee,
+    // wat op middernacht is aangenomen wel.
+    @Test
+    void neemAan_quotumBereikt_teltDeVorigeDagNietMee() {
+        zetQuotum(1);
+        clock.zet(Instant.parse("2030-01-01T23:59:59Z"));
+        aannameService.neemAan(centraal());
+
+        clock.zet(Instant.parse("2030-01-02T00:00:00Z"));
+        aannameService.neemAan(centraal());
+
+        assertThrows(QuotumOverschredenException.class, () -> aannameService.neemAan(centraal()));
+        assertEquals(2, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
     }
 
     @Test

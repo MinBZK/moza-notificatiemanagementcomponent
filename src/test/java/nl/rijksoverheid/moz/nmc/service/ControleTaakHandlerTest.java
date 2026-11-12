@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
@@ -20,12 +21,13 @@ import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,10 +35,12 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 class ControleTaakHandlerTest {
+
+    // De klok staat stil, zodat de test exacte tijdstippen kan verwachten.
+    private final VerstelbareClock clock = VerstelbareClock.opNu();
 
     @Inject
     TaakWorker taakWorker;
@@ -58,11 +62,12 @@ class ControleTaakHandlerTest {
 
     @BeforeEach
     void setUp() {
+        QuarkusMock.installMockForType(clock, Clock.class);
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
             eventRepository.deleteAll();
             notificatieRepository.deleteAll();
-            taakRepository.persist(new Taak(TaakSoort.CONTROLE, null, null, OffsetDateTime.now(ZoneOffset.UTC), null, null));
+            taakRepository.persist(new Taak(TaakSoort.CONTROLE, null, null, clock.nu(), null, null));
         });
     }
 
@@ -92,7 +97,7 @@ class ControleTaakHandlerTest {
         Taak controle = QuarkusTransaction.requiringNew().call(() -> taakRepository
                 .find(Taak_.TAAK_SOORT, TaakSoort.CONTROLE).singleResult());
         assertEquals(TaakStatus.OPEN, controle.getStatus());
-        assertTrue(controle.getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(1)), "opnieuw gepland");
+        assertEquals(clock.nu().plusMinutes(5).toInstant(), controle.getDue().toInstant(), "opnieuw gepland op het interval");
         assertEquals(0, controle.getPogingen());
     }
 
@@ -102,7 +107,7 @@ class ControleTaakHandlerTest {
     void controle_verzondenZonderLopendeOfHerverzendbarePoging_eindigtInTechnischMislukt() {
         UUID id = notificatie(NotificatieStatus.VERZONDEN, UUID.randomUUID());
         QuarkusTransaction.requiringNew().run(() -> pogingRepository.findLaatsteVan(id).orElseThrow()
-                .verwerkReceipt(PogingStatus.PERMANENT_MISLUKT, OffsetDateTime.now(ZoneOffset.UTC)));
+                .verwerkReceipt(PogingStatus.PERMANENT_MISLUKT, clock.nu()));
 
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
@@ -149,7 +154,7 @@ class ControleTaakHandlerTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
-        assertTrue(perNotificatie().get(id).getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusDays(7)));
+        assertEquals(clock.nu().plusDays(8).toInstant(), perNotificatie().get(id).getDue().toInstant());
     }
 
     // De controletaak plant zichzelf zijn hele levensduur opnieuw; fouten verspreid over die tijd mogen
@@ -172,9 +177,9 @@ class ControleTaakHandlerTest {
         UUID metMislukteTaak = notificatie(NotificatieStatus.AANGENOMEN, null);
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.persist(new Taak(TaakSoort.VERZENDEN, NotificatieFixtures.DV_ID, metOpenTaak,
-                    OffsetDateTime.now(ZoneOffset.UTC).plusHours(1), null, null));
+                    clock.nu().plusHours(1), null, null));
             Taak mislukt = new Taak(TaakSoort.VERZENDEN, NotificatieFixtures.DV_ID, metMislukteTaak,
-                    OffsetDateTime.now(ZoneOffset.UTC), null, null);
+                    clock.nu(), null, null);
             taakRepository.persist(mislukt);
             taakRepository.flush();
             TaakFixtures.markeerMislukt(taakRepository.getEntityManager(), TaakSoort.VERZENDEN, mislukt.getId());
@@ -192,11 +197,11 @@ class ControleTaakHandlerTest {
     void controle_mislukteTaakNaGeldigTot_plantDeOntbrekendeTaakAlsnog() {
         UUID id = notificatie(NotificatieStatus.AANGENOMEN, null);
         QuarkusTransaction.requiringNew().run(() -> {
-            Taak mislukt = new Taak(TaakSoort.VERZENDEN, NotificatieFixtures.DV_ID, id, OffsetDateTime.now(ZoneOffset.UTC), null, null);
+            Taak mislukt = new Taak(TaakSoort.VERZENDEN, NotificatieFixtures.DV_ID, id, clock.nu(), null, null);
             taakRepository.persist(mislukt);
             taakRepository.flush();
             TaakFixtures.markeerMislukt(taakRepository.getEntityManager(), TaakSoort.VERZENDEN, mislukt.getId());
-            NotificatieFixtures.verzetGeldigTot(taakRepository.getEntityManager(), id, OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1));
+            NotificatieFixtures.verzetGeldigTot(taakRepository.getEntityManager(), id, clock.nu().minusMinutes(1));
         });
 
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
@@ -220,7 +225,7 @@ class ControleTaakHandlerTest {
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
         QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetDue(taakRepository.getEntityManager(),
                 TaakSoort.CONTROLE, taakRepository.find(Taak_.TAAK_SOORT, TaakSoort.CONTROLE).singleResult().getId(),
-                OffsetDateTime.now(ZoneOffset.UTC)));
+                clock.nu()));
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
         List<Taak> terugkoppeltaken = QuarkusTransaction.requiringNew().call(() -> taakRepository
@@ -253,7 +258,7 @@ class ControleTaakHandlerTest {
     // Een notificatie in de gegeven status, zonder taak; bij een NotifyNL-id met een verzonden poging.
     private UUID notificatie(NotificatieStatus status, UUID notifyId) {
         return QuarkusTransaction.requiringNew().call(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
+            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, clock.nu());
             overgangsfunctie.neemAan(notificatie);
             UUID id = notificatie.getId();
 
@@ -264,7 +269,7 @@ class ControleTaakHandlerTest {
 
                 if (status != NotificatieStatus.IN_VERZENDING) {
                     if (notifyId != null) {
-                        poging.markeerVerzonden(notifyId, OffsetDateTime.now(ZoneOffset.UTC));
+                        poging.markeerVerzonden(notifyId, clock.nu());
                     }
 
                     overgangsfunctie.voerUit(id, NotificatieStatus.VERZONDEN, null);
