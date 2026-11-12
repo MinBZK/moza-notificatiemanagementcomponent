@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
+import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
@@ -30,6 +31,7 @@ import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,9 +39,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +61,9 @@ import static org.mockito.Mockito.when;
 /** Herverzending volgens het verzendbeleid (standaard één), en geen nieuwe poging na {@code geldig_tot}. */
 @QuarkusTest
 class HerverzendingTest {
+
+    // De klok staat stil, zodat de test exacte tijdstippen kan verwachten.
+    private final VerstelbareClock clock = VerstelbareClock.opNu();
 
     @InjectMock
     @RestClient
@@ -103,6 +108,7 @@ class HerverzendingTest {
 
     @BeforeEach
     void setUp() {
+        QuarkusMock.installMockForType(clock, Clock.class);
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
             TaakFixtures.leegVerzendbudget(taakRepository.getEntityManager());
@@ -120,14 +126,14 @@ class HerverzendingTest {
     void faalOpDeEerstePoging_plantEenHerverzendingDieDeTweedePogingMaakt(String receipt) {
         UUID id = verzonden();
         Poging eerste = laatstePoging(id);
-        OffsetDateTime voor = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime voor = clock.nu();
 
-        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), receipt, OffsetDateTime.now(ZoneOffset.UTC));
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), receipt, clock.nu());
 
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
         Taak herverzending = enigeTaak();
         assertEquals(TaakSoort.VERZENDEN, herverzending.getTaakSoort(), "de navraag van de eerste poging is afgerond");
-        assertTrue(!herverzending.getDue().isBefore(voor.plusMinutes(59)), "herverzend-wachttijd van een uur");
+        assertEquals(voor.plusHours(1).toInstant(), herverzending.getDue().toInstant(), "herverzend-wachttijd van een uur");
 
         maakDue();
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -151,7 +157,7 @@ class HerverzendingTest {
     void bezorgingVanDeEerstePogingTijdensDeHerverzending_gaatVoorDeWeigering() {
         UUID id = verzonden();
         Poging eerste = laatstePoging(id);
-        OffsetDateTime fout = OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(2);
+        OffsetDateTime fout = clock.nu().minusMinutes(2);
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure", fout);
         doAnswer(a -> {
             receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "delivered", fout.plusMinutes(1));
@@ -172,7 +178,7 @@ class HerverzendingTest {
     void tweedeFaalreceiptVoorDeEerstePoging_plantGeenTweedeHerverzending(String eerste, String tweede) {
         UUID id = verzonden();
         Poging poging = laatstePoging(id);
-        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime nu = clock.nu();
         receiptVerwerker.verwerk(poging.getNotifyId(), poging.getId().toString(), eerste, nu.minusMinutes(2));
 
         receiptVerwerker.verwerk(poging.getNotifyId(), poging.getId().toString(), tweede, nu.minusMinutes(1));
@@ -191,7 +197,7 @@ class HerverzendingTest {
         UUID id = naHerverzending();
         Poging tweede = laatstePoging(id);
 
-        receiptVerwerker.verwerk(tweede.getNotifyId(), tweede.getId().toString(), receipt, OffsetDateTime.now(ZoneOffset.UTC));
+        receiptVerwerker.verwerk(tweede.getNotifyId(), tweede.getId().toString(), receipt, clock.nu());
 
         assertEquals(naar, notificatie(id).getStatus());
         assertEquals(reden, notificatie(id).getReden());
@@ -210,7 +216,7 @@ class HerverzendingTest {
             Poging poging = laatstePoging(id);
             assertEquals(nummer, poging.getNummer());
             receiptVerwerker.verwerk(poging.getNotifyId(), poging.getId().toString(), "temporary-failure",
-                    OffsetDateTime.now(ZoneOffset.UTC));
+                    clock.nu());
             assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
             maakDue();
             TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -219,7 +225,7 @@ class HerverzendingTest {
         Poging derde = laatstePoging(id);
         assertEquals(3, derde.getNummer());
         receiptVerwerker.verwerk(derde.getNotifyId(), derde.getId().toString(), "temporary-failure",
-                OffsetDateTime.now(ZoneOffset.UTC));
+                clock.nu());
 
         assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(id).getStatus());
         verify(sendAMessageApi, times(3)).sendEmail(any());
@@ -232,7 +238,7 @@ class HerverzendingTest {
         Poging eerste = pogingen(id).getFirst();
 
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "permanent-failure",
-                OffsetDateTime.now(ZoneOffset.UTC));
+                clock.nu());
 
         assertEquals(PogingStatus.PERMANENT_MISLUKT, poging(eerste.getId()).getStatus());
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
@@ -245,7 +251,7 @@ class HerverzendingTest {
         verzetGeldigTot(id);
 
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure",
-                OffsetDateTime.now(ZoneOffset.UTC));
+                clock.nu());
 
         assertEquals(NotificatieStatus.VERLOPEN, notificatie(id).getStatus());
         assertEquals(Reden.VERLOPEN, notificatie(id).getReden());
@@ -257,7 +263,7 @@ class HerverzendingTest {
         UUID id = verzonden();
         Poging eerste = laatstePoging(id);
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure",
-                OffsetDateTime.now(ZoneOffset.UTC));
+                clock.nu());
         verzetGeldigTot(id);
         maakDue();
 
@@ -304,7 +310,7 @@ class HerverzendingTest {
     void tijdelijkeFoutBinnenDeVaststellingstermijn_brengtBezorgdTerugNaarVerzondenMetHerverzending() {
         UUID id = verzonden();
         Poging eerste = laatstePoging(id);
-        OffsetDateTime bezorgdOp = OffsetDateTime.now(ZoneOffset.UTC).minusDays(2);
+        OffsetDateTime bezorgdOp = clock.nu().minusDays(2);
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "delivered", bezorgdOp);
         assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, enigeTaak().getTaakSoort());
 
@@ -320,7 +326,7 @@ class HerverzendingTest {
     void tijdelijkeFoutNaBezorgingMetOpenHerverzending_vervangtDeOudeHerverzendtaak() {
         UUID id = verzonden();
         Poging eerste = laatstePoging(id);
-        OffsetDateTime fout = OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(3);
+        OffsetDateTime fout = clock.nu().minusMinutes(3);
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure", fout);
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "delivered", fout.plusMinutes(1));
         assertEquals(NotificatieStatus.BEZORGD, notificatie(id).getStatus());
@@ -341,7 +347,7 @@ class HerverzendingTest {
         });
 
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure",
-                OffsetDateTime.now(ZoneOffset.UTC));
+                clock.nu());
 
         assertEquals(NotificatieStatus.BEZORGSTATUS_ONBEKEND, notificatie(id).getStatus());
         assertEquals(PogingStatus.TIJDELIJK_MISLUKT, poging(eerste.getId()).getStatus());
@@ -352,7 +358,7 @@ class HerverzendingTest {
     void tijdelijkeFoutNaEenPermanenteFout_plantGeenHerverzending() {
         UUID id = verzonden();
         Poging eerste = laatstePoging(id);
-        OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime nu = clock.nu();
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "permanent-failure", nu.minusMinutes(1));
 
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure", nu);
@@ -368,7 +374,7 @@ class HerverzendingTest {
         UUID id = verzonden();
         Poging eerste = laatstePoging(id);
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure",
-                OffsetDateTime.now(ZoneOffset.UTC));
+                clock.nu());
         Taak herverzending = enigeTaak();
 
         QuarkusTransaction.requiringNew().run(() -> verzendTaakHandler.handelUitputtingAf(herverzending));
@@ -382,11 +388,13 @@ class HerverzendingTest {
     void controletaak_plantDeOntbrekendeHerverzendingNaDeWachttijd() {
         UUID id = verzonden();
         Poging eerste = laatstePoging(id);
-        OffsetDateTime fout = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime fout = clock.nu();
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure", fout);
+        // De controle draait later dan de fout: de wachttijd telt vanaf de fout.
+        clock.zet(fout.plusMinutes(10).toInstant());
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
-            taakRepository.persist(new Taak(TaakSoort.CONTROLE, null, null, OffsetDateTime.now(ZoneOffset.UTC), null, null));
+            taakRepository.persist(new Taak(TaakSoort.CONTROLE, null, null, clock.nu(), null, null));
         });
 
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
@@ -394,19 +402,19 @@ class HerverzendingTest {
         Taak herverzending = taken().stream()
                 .filter(t -> t.getTaakSoort() == TaakSoort.VERZENDEN && id.equals(t.getNotificatieId()))
                 .findFirst().orElseThrow();
-        assertTrue(!herverzending.getDue().isBefore(fout.plusMinutes(59)), "herverzend-wachttijd vanaf de fout");
+        assertEquals(fout.plusHours(1).toInstant(), herverzending.getDue().toInstant(), "herverzend-wachttijd vanaf de fout");
     }
 
     @Test
     void aanname_legtBerichttypeEnGeldigTotVast() {
-        OffsetDateTime voor = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        OffsetDateTime voor = clock.nu().truncatedTo(ChronoUnit.MICROS);
 
         UUID id = aannameService.neemAan(opdracht());
 
         Notificatie notificatie = notificatie(id);
         assertEquals(BerichtType.DEMO_TEMPLATE.name(), notificatie.getBerichtType());
         assertEquals(notificatie.getAangenomenOp().plusDays(7), notificatie.getGeldigTot(), "aanname plus zeven dagen");
-        assertTrue(!notificatie.getGeldigTot().isBefore(voor.plusDays(7)));
+        assertEquals(voor.plusDays(7).toInstant(), notificatie.getGeldigTot().toInstant());
     }
 
     // Een notificatie op verzonden, met een lopende eerste poging en haar navraagtaak.
@@ -423,7 +431,7 @@ class HerverzendingTest {
         UUID id = verzonden();
         Poging eerste = laatstePoging(id);
         receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure",
-                OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1));
+                clock.nu().minusMinutes(1));
         maakDue();
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
         assertEquals(2, laatstePoging(id).getNummer());
@@ -442,12 +450,12 @@ class HerverzendingTest {
 
     private void verzetGeldigTot(UUID id) {
         QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.verzetGeldigTot(taakRepository.getEntityManager(), id,
-                OffsetDateTime.now(ZoneOffset.UTC).minus(Duration.ofMinutes(1))));
+                clock.nu().minus(Duration.ofMinutes(1))));
     }
 
     private void maakDue() {
         QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetDue(taakRepository.getEntityManager(),
-                TaakSoort.VERZENDEN, OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1)));
+                TaakSoort.VERZENDEN, clock.nu().minusSeconds(1)));
     }
 
     private Notificatie notificatie(UUID id) {

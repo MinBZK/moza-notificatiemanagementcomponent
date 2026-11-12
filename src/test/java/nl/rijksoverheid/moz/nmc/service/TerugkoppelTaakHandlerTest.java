@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.common.http.TestHTTPResource;
+import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -25,6 +26,7 @@ import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.repository.WebhookpositieRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import nl.rijksoverheid.moz.nmc.testhelper.WebhookOntvanger;
 import org.jose4j.jwk.JsonWebKeySet;
 import org.jose4j.jwt.JwtClaims;
@@ -37,10 +39,10 @@ import org.junit.jupiter.api.Test;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Clock;
 import java.util.Base64;
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -69,6 +71,9 @@ class TerugkoppelTaakHandlerTest {
     @TestHTTPResource("/test/webhook")
     URL ontvanger;
 
+    // De klok staat stil, zodat de test exacte tijdstippen kan verwachten.
+    private final VerstelbareClock clock = VerstelbareClock.opNu();
+
     @InjectMock
     Aanroeplimiet aanroeplimiet;
 
@@ -95,6 +100,7 @@ class TerugkoppelTaakHandlerTest {
 
     @BeforeEach
     void setUp() {
+        QuarkusMock.installMockForType(clock, Clock.class);
         when(aanroeplimiet.registreer(any())).thenReturn(true);
         WebhookOntvanger.AANROEPEN.clear();
         WebhookOntvanger.TIJDENS_AANROEP = () -> { };
@@ -103,7 +109,7 @@ class TerugkoppelTaakHandlerTest {
             eventRepository.deleteAll();
             webhookpositieRepository.deleteAll();
             taakRepository.persist(new Taak(TaakSoort.TERUGKOPPELEN, NotificatieFixtures.DV_ID, null,
-                    OffsetDateTime.now(ZoneOffset.UTC), null, null));
+                    clock.nu(), null, null));
         });
     }
 
@@ -144,7 +150,7 @@ class TerugkoppelTaakHandlerTest {
         Taak taak = terugkoppeltaak();
         assertEquals(TaakStatus.OPEN, taak.getStatus());
         assertEquals(0, taak.getPogingen());
-        assertTrue(taak.getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC)), "na een lege ronde op het interval");
+        assertEquals(clock.nu().plusSeconds(10).toInstant(), taak.getDue().toInstant(), "na een lege ronde op het interval");
     }
 
     // De taak plant zichzelf zijn hele levensduur opnieuw; fouten die verspreid over die tijd vallen
@@ -209,7 +215,7 @@ class TerugkoppelTaakHandlerTest {
         assertEquals(1, positie().getMislukkingen());
         Taak taak = terugkoppeltaak();
         assertEquals(0, taak.getPogingen(), "een mislukte levering kost de taak geen poging");
-        assertBinnen(Duration.ofSeconds(30), taak.getDue());
+        assertUitgesteld(Duration.ofSeconds(30), taak.getDue());
 
         zetWebhook(ontvanger + "/204", null);
         maakAanDeBeurt();
@@ -231,21 +237,21 @@ class TerugkoppelTaakHandlerTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
         assertNull(positie().getGepauzeerdTot());
-        assertBinnen(Duration.ofSeconds(30), terugkoppeltaak().getDue());
+        assertUitgesteld(Duration.ofSeconds(30), terugkoppeltaak().getDue());
 
         maakAanDeBeurt();
         TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
         assertNull(positie().getGepauzeerdTot());
-        assertBinnen(Duration.ofMinutes(1), terugkoppeltaak().getDue());
+        assertUitgesteld(Duration.ofMinutes(1), terugkoppeltaak().getDue());
 
         maakAanDeBeurt();
         TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
         assertNotNull(positie().getGepauzeerdTot(), "na drie mislukkingen gepauzeerd");
-        assertBinnen(Duration.ofMinutes(15), terugkoppeltaak().getDue());
+        assertUitgesteld(Duration.ofMinutes(15), terugkoppeltaak().getDue());
 
         maakAanDeBeurt();
         TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
-        assertBinnen(Duration.ofMinutes(30), terugkoppeltaak().getDue());
+        assertUitgesteld(Duration.ofMinutes(30), terugkoppeltaak().getDue());
         assertEquals(terugkoppeltaak().getDue(), positie().getGepauzeerdTot());
 
         zetWebhook(ontvanger + "/204", 3);
@@ -293,7 +299,7 @@ class TerugkoppelTaakHandlerTest {
         assertEquals(1, fouten.size());
         assertTrue(fouten.getFirst().contains("interne hostnaam"));
         assertNotNull(positie().getGepauzeerdTot());
-        assertBinnen(Duration.ofMinutes(15), terugkoppeltaak().getDue());
+        assertUitgesteld(Duration.ofMinutes(15), terugkoppeltaak().getDue());
         assertEquals(0, terugkoppeltaak().getPogingen());
     }
 
@@ -301,9 +307,9 @@ class TerugkoppelTaakHandlerTest {
     void gepauzeerdeWebhook_dieToevalligAanDeBeurtIs_wachtTotHetEindVanDePauze() {
         schrijfEvents(1);
         zetWebhook(ontvanger + "/204", null);
-        OffsetDateTime tot = OffsetDateTime.now(ZoneOffset.UTC).plusHours(2).withNano(0);
+        OffsetDateTime tot = clock.nu().plusHours(2).withNano(0);
         QuarkusTransaction.requiringNew().run(() -> webhookpositieRepository.bewaar(
-                new Webhookpositie(NotificatieFixtures.DV_ID, null, 4, tot), OffsetDateTime.now(ZoneOffset.UTC)));
+                new Webhookpositie(NotificatieFixtures.DV_ID, null, 4, tot), clock.nu()));
 
         TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
@@ -315,7 +321,7 @@ class TerugkoppelTaakHandlerTest {
     @Test
     void geenWebhookMeer_rondtDeTaakAfEnWistDeLeverpositie() {
         QuarkusTransaction.requiringNew().run(() -> webhookpositieRepository.bewaar(
-                new Webhookpositie(NotificatieFixtures.DV_ID, new Cursor(1, 1, 1), 0, null), OffsetDateTime.now(ZoneOffset.UTC)));
+                new Webhookpositie(NotificatieFixtures.DV_ID, new Cursor(1, 1, 1), 0, null), clock.nu()));
 
         TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
@@ -334,7 +340,7 @@ class TerugkoppelTaakHandlerTest {
 
         assertEquals(0, WebhookOntvanger.AANROEPEN.size());
         assertNotNull(positie().getPositie(), "de registratieronde legt de kop van het log vast");
-        assertTrue(terugkoppeltaak().getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC)), "daarna op het interval");
+        assertEquals(clock.nu().plusSeconds(10).toInstant(), terugkoppeltaak().getDue().toInstant(), "daarna op het interval");
 
         schrijfEvents(1);
         maakAanDeBeurt();
@@ -361,7 +367,7 @@ class TerugkoppelTaakHandlerTest {
         assertEquals(voor, positie().getPositie(), "een verloren claim verzet de positie niet");
 
         WebhookOntvanger.TIJDENS_AANROEP = () -> { };
-        OffsetDateTime verstreken = OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1);
+        OffsetDateTime verstreken = clock.nu().minusSeconds(1);
         QuarkusTransaction.requiringNew().run(() -> {
             TaakFixtures.zetLeaseTot(entityManager, TaakSoort.TERUGKOPPELEN, id, verstreken);
             TaakFixtures.zetDue(entityManager, TaakSoort.TERUGKOPPELEN, id, verstreken);
@@ -376,7 +382,7 @@ class TerugkoppelTaakHandlerTest {
     @Test
     void terugkoppeltaakZonderDienstverlener_wordtGeweigerd() {
         assertThrows(PersistenceException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
-            taakRepository.persist(new Taak(TaakSoort.TERUGKOPPELEN, null, null, OffsetDateTime.now(ZoneOffset.UTC), null, null));
+            taakRepository.persist(new Taak(TaakSoort.TERUGKOPPELEN, null, null, clock.nu(), null, null));
             taakRepository.flush();
         }));
     }
@@ -416,7 +422,7 @@ class TerugkoppelTaakHandlerTest {
     void tweedeTerugkoppeltaakVoorDezelfdeDienstverlener_wordtGeweigerd() {
         assertThrows(PersistenceException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.persist(new Taak(TaakSoort.TERUGKOPPELEN, NotificatieFixtures.DV_ID, null,
-                    OffsetDateTime.now(ZoneOffset.UTC), null, null));
+                    clock.nu(), null, null));
             taakRepository.flush();
         }));
     }
@@ -435,7 +441,7 @@ class TerugkoppelTaakHandlerTest {
         QuarkusTransaction.requiringNew().run(() -> {
             for (int i = 0; i < aantal; i++) {
                 NotificatieFixtures.voegEventToe(entityManager, UUID.randomUUID(), 0, null, NotificatieStatus.AANGENOMEN,
-                        OffsetDateTime.now(ZoneOffset.UTC));
+                        clock.nu());
             }
         });
     }
@@ -466,7 +472,7 @@ class TerugkoppelTaakHandlerTest {
     // Laat de wachttijd en een eventuele pauze verstrijken.
     private void maakAanDeBeurt() {
         long id = terugkoppeltaak().getId();
-        OffsetDateTime verstreken = OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1);
+        OffsetDateTime verstreken = clock.nu().minusSeconds(1);
         QuarkusTransaction.requiringNew().run(() -> {
             TaakFixtures.zetDue(entityManager, TaakSoort.TERUGKOPPELEN, id, verstreken);
             TaakFixtures.beeindigPauze(entityManager, NotificatieFixtures.DV_ID, verstreken);
@@ -481,11 +487,8 @@ class TerugkoppelTaakHandlerTest {
         return QuarkusTransaction.requiringNew().call(() -> webhookpositieRepository.zoek(NotificatieFixtures.DV_ID));
     }
 
-    // Het uitstel ligt op nu plus de wachttijd, met ruimte voor de looptijd van de test.
-    private static void assertBinnen(Duration wachttijd, OffsetDateTime due) {
-        OffsetDateTime verwacht = OffsetDateTime.now(ZoneOffset.UTC).plus(wachttijd);
-
-        assertTrue(due.isAfter(verwacht.minusSeconds(20)) && due.isBefore(verwacht.plusSeconds(5)),
-                "due " + due + " hoort rond " + verwacht + " te liggen");
+    // Het uitstel ligt op nu plus de wachttijd.
+    private void assertUitgesteld(Duration wachttijd, OffsetDateTime due) {
+        assertEquals(clock.nu().plus(wachttijd).toInstant(), due.toInstant());
     }
 }

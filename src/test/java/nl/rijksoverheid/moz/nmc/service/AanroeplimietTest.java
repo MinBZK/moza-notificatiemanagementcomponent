@@ -1,11 +1,9 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -59,33 +57,5 @@ class AanroeplimietTest {
     @Test
     void constructor_nietPositieveLimiet_weigert() {
         assertThrows(IllegalStateException.class, () -> new Aanroeplimiet(clock, 0));
-    }
-
-    private static final class VerstelbareClock extends Clock {
-
-        private Instant nu;
-
-        VerstelbareClock(Instant nu) {
-            this.nu = nu;
-        }
-
-        void zet(Instant nu) {
-            this.nu = nu;
-        }
-
-        @Override
-        public ZoneId getZone() {
-            return ZoneOffset.UTC;
-        }
-
-        @Override
-        public Clock withZone(ZoneId zone) {
-            return this;
-        }
-
-        @Override
-        public Instant instant() {
-            return nu;
-        }
     }
 }
