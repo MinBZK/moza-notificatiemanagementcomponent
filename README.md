@@ -331,7 +331,7 @@ daar niet in staat.
 
 ## OpenAPI-specificatie & codegen
 
-Het contract van `/api/nmc/v1` is **spec-first** en bestaat uit twee losse
+Het contract van `/api/nmc/v1` is **spec-first** en bestaat uit drie losse
 specificaties:
 
 - `src/main/resources/META-INF/openapi.yaml`: `POST /centraal/notificaties`,
@@ -340,29 +340,38 @@ specificaties:
 - `src/main/resources/META-INF/notifynl-callback-openapi.yaml`: `POST
   /notifynl-callback`, in een eigen bestand omdat NotifyNL hier de aanroeper is in
   plaats van een Dienstverlener.
+- `src/main/resources/META-INF/openapi-aanvullend/contactherstel-openapi.json`: `POST /contactherstellen` en
+  `GET` en `PATCH /contactherstellen/{contactherstelId}`. Een conceptcontract; de endpoints
+  antwoorden nog 501.
 
-- Quarkus serveert alleen `openapi.yaml` ongewijzigd via `/q/openapi` en
+- Quarkus serveert `openapi.yaml` via `/q/openapi` en
   `/q/swagger-ui` (SmallRye OpenAPI pikt automatisch een bestand met die naam
   op uit `META-INF`; `mp.openapi.scan.disable=true` staat aan, dus er wordt
   niet ook nog automatisch op annotaties gescand).
+  Elk contract in `META-INF/openapi-aanvullend/` voegt SmallRye daarmee samen
+  (`quarkus.smallrye-openapi.additional-docs-directory`), zodat ook contactherstel in
+  swagger-ui staat; bij een botsing wint `openapi.yaml`. JSON staat op `/q/openapi?format=json`.
   `notifynl-callback-openapi.yaml` heet bewust anders en wordt dus **niet**
   via swagger-ui getoond; die is alleen input voor de codegen hieronder.
-- Bij elke build genereert de `openapi-generator-maven-plugin` (twee losse
+- Bij elke build genereert de `openapi-generator-maven-plugin` (drie losse
   `<execution>`s, één per spec) hieruit de JAX-RS-interfaces
   (`nl.rijksoverheid.moz.nmc.api.CentraleNotificatiesApi`, `DecentraleNotificatiesApi`,
   `WijzigingenApi` en `SleutelsApi`,
-  `nl.rijksoverheid.moz.nmc.notifynlcallback.api.NotifyNlCallbackApi`) en de
+  `nl.rijksoverheid.moz.nmc.notifynlcallback.api.NotifyNlCallbackApi`,
+  `nl.rijksoverheid.moz.nmc.api.contactherstel.ContactherstelApi`) en de
   request/response-modellen (`nl.rijksoverheid.moz.nmc.api.model.*`,
-  `nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.*`) in
+  `nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.*`,
+  `nl.rijksoverheid.moz.nmc.api.contactherstel.model.*`) in
   `target/generated-sources/openapi` (niet ingecheckt).
   `CentraleNotificatieController`, `DecentraleNotificatieController`,
-  `EventfeedController` en `SleutelsController` (package `controller`) en `NotifyNLCallbackController` (package
+  `EventfeedController`, `SleutelsController` en `ContactherstelController` (package `controller`) en `NotifyNLCallbackController` (package
   `notifynlcallback.controller`) implementeren de gegenereerde interfaces.
 
-Om een contract aan te passen: wijzig `META-INF/openapi.yaml` of
-`META-INF/notifynl-callback-openapi.yaml` en draai een build (`./mvnw compile`,
+Om een contract aan te passen: wijzig `META-INF/openapi.yaml`,
+`META-INF/notifynl-callback-openapi.yaml` of
+`META-INF/openapi-aanvullend/contactherstel-openapi.json` en draai een build (`./mvnw compile`,
 `test` of `quarkus:dev`); de gegenereerde interfaces/modellen worden
-automatisch bijgewerkt (en, voor `openapi.yaml`, ook de swagger-ui).
+automatisch bijgewerkt (en, voor `openapi.yaml` en het contactherstelcontract, ook de swagger-ui).
 
 ## Lokaal draaien
 
