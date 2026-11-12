@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
+import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.ProcessingException;
@@ -36,6 +37,7 @@ import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,8 +46,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -53,7 +55,6 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -69,6 +70,9 @@ class VerzendTaakHandlerTest {
     // Een 400 van NotifyNL die niet over het adres gaat: ligt aan het verzoek van het NMC.
     private static final String TEAM_KEY_FOUT = "{\"errors\":[{\"error\":\"BadRequestError\",\"message\":\"Can't send to this recipient using a team-only API key\"}],\"status_code\":400}";
     private static final String EMAIL = "burger@example.nl";
+
+    // De klok staat stil, zodat de test exacte tijdstippen kan verwachten.
+    private final VerstelbareClock clock = VerstelbareClock.opNu();
 
     @InjectMock
     @RestClient
@@ -111,6 +115,7 @@ class VerzendTaakHandlerTest {
 
     @BeforeEach
     void setUp() {
+        QuarkusMock.installMockForType(clock, Clock.class);
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
             TaakFixtures.leegVerzendbudget(taakRepository.getEntityManager());
@@ -148,7 +153,8 @@ class VerzendTaakHandlerTest {
         assertEquals(1, taken.size(), "de verzendtaak is afgerond, de navraagtaak staat");
         assertEquals(TaakSoort.RECONCILIEREN, taken.getFirst().getTaakSoort());
         assertEquals(id, taken.getFirst().getNotificatieId());
-        assertTrue(taken.getFirst().getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(30)));
+        assertEquals(clock.nu().plusHours(1).toInstant(), taken.getFirst().getDue().toInstant(),
+                "het eerste navraagmoment");
         assertEquals(poging.getId().toString(), taken.getFirst().getPayload().get(VerzendTaakHandler.PAYLOAD_POGING_ID));
     }
 
@@ -210,7 +216,7 @@ class VerzendTaakHandlerTest {
         assertEquals(TaakStatus.OPEN, taak.getStatus());
         assertEquals(0, taak.getPogingen(), "een storing bij een externe dienst kost geen poging");
         assertNull(taak.getLeaseTot());
-        assertTrue(taak.getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(1)));
+        assertEquals(clock.nu().plusMinutes(5).toInstant(), taak.getDue().toInstant());
         verify(sendAMessageApi, never()).sendEmail(any());
     }
 
@@ -235,7 +241,7 @@ class VerzendTaakHandlerTest {
         UUID dvId = notificatie(id).getDvId();
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
-            taakRepository.persist(new Taak(TaakSoort.VERZENDEN, dvId, id, OffsetDateTime.now(ZoneOffset.UTC), null, null));
+            taakRepository.persist(new Taak(TaakSoort.VERZENDEN, dvId, id, clock.nu(), null, null));
         });
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -258,7 +264,7 @@ class VerzendTaakHandlerTest {
         UUID id = aannameService.neemAan(decentraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
-        zetDue(taken().getFirst(), OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1));
+        zetDue(taken().getFirst(), clock.nu().minusSeconds(1));
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         Notificatie notificatie = notificatie(id);
@@ -338,7 +344,7 @@ class VerzendTaakHandlerTest {
                 .thenThrow(new WebApplicationException(Response.status(400).entity("{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}],\"status_code\":400}").build()));
         UUID id = aannameService.neemAan(decentraal());
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
-        zetDue(taken().getFirst(), OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1));
+        zetDue(taken().getFirst(), clock.nu().minusSeconds(1));
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
@@ -400,17 +406,17 @@ class VerzendTaakHandlerTest {
                 .thenThrow(new WebApplicationException(Response.status(Response.Status.FORBIDDEN).build()));
         UUID id = aannameService.neemAan(decentraal());
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
-        zetDue(taken().getFirst(), OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1));
+        zetDue(taken().getFirst(), clock.nu().minusSeconds(1));
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
         UUID notifyId = UUID.randomUUID();
 
-        receiptVerwerker.verwerk(notifyId, poging(id).getId().toString(), "delivered", OffsetDateTime.now(ZoneOffset.UTC));
+        receiptVerwerker.verwerk(notifyId, poging(id).getId().toString(), "delivered", clock.nu());
 
         assertEquals(NotificatieStatus.BEZORGD, notificatie(id).getStatus());
         assertEquals(PogingStatus.BEZORGD, poging(id).getStatus());
         assertEquals(notifyId, poging(id).getNotifyId());
 
-        zetDue(taken(TaakSoort.VERZENDEN).getFirst(), OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1));
+        zetDue(taken(TaakSoort.VERZENDEN).getFirst(), clock.nu().minusSeconds(1));
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         assertEquals(List.of(), taken(TaakSoort.VERZENDEN), "de verzendtaak is afgerond zonder tweede verzending");
@@ -437,7 +443,7 @@ class VerzendTaakHandlerTest {
         when(getMessageDataApi.getMultipleMessagesStatus(isNull(), isNull(), eq(poging.getId().toString()), isNull(), isNull()))
                 .thenReturn(new GetMultipleMessagesResponse().notifications(List.of(
                         new GetOneMessageResponse().id(notifyId.toString()).reference(poging.getId().toString()))));
-        zetDue(uitgesteld, OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1));
+        zetDue(uitgesteld, clock.nu().minusSeconds(1));
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
@@ -456,7 +462,7 @@ class VerzendTaakHandlerTest {
                 .thenReturn(new GetMultipleMessagesResponse().notifications(List.of()));
         UUID id = aannameService.neemAan(decentraal());
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
-        zetDue(taken().getFirst(), OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1));
+        zetDue(taken().getFirst(), clock.nu().minusSeconds(1));
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
@@ -473,7 +479,7 @@ class VerzendTaakHandlerTest {
         UUID notifyId = UUID.randomUUID();
         when(sendAMessageApi.sendEmail(any())).thenAnswer(aanroep -> {
             SendEmailRequest verzoek = aanroep.getArgument(0);
-            receiptVerwerker.verwerk(notifyId, verzoek.getReference(), "delivered", OffsetDateTime.now(ZoneOffset.UTC));
+            receiptVerwerker.verwerk(notifyId, verzoek.getReference(), "delivered", clock.nu());
 
             return new SendEmailResponse().id(notifyId.toString());
         });
@@ -500,7 +506,7 @@ class VerzendTaakHandlerTest {
         UUID notifyId = UUID.randomUUID();
         when(sendAMessageApi.sendEmail(any())).thenAnswer(aanroep -> {
             SendEmailRequest verzoek = aanroep.getArgument(0);
-            receiptVerwerker.verwerk(notifyId, verzoek.getReference(), "delivered", OffsetDateTime.now(ZoneOffset.UTC));
+            receiptVerwerker.verwerk(notifyId, verzoek.getReference(), "delivered", clock.nu());
 
             throw new WebApplicationException(Response.status(400).entity("{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}]}").build());
         });
