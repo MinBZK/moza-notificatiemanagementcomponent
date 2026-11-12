@@ -13,6 +13,7 @@ import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -67,6 +68,14 @@ class GepubliceerdeSpecTest {
         assertEquals(List.of("gestart", "afgeleverd", "afgerond", "ingetrokken", "gefaald"),
                 spec.getList("components.schemas.ContactherstelStatus.enum"));
         assertEquals("NotificatieManagementComponent API", spec.getString("info.title"));
+    }
+
+    // Elk contract in META-INF wordt samengevoegd; het callbackcontract staat daarom in een andere map.
+    @Test
+    void notifynlCallback_staatNietInGepubliceerdeSpec() {
+        Map<String, Object> paden = spec.getMap("paths");
+
+        assertFalse(paden.containsKey("/api/nmc/v1/notifynl-callback"), "de NotifyNL-callback is gepubliceerd");
     }
 
     // De statusupdate gaat naar de webhook uit het register; een callbackUrl per aanvraag bestaat niet meer.

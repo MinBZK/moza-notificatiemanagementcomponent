@@ -357,8 +357,8 @@ de logica die kiest tussen herverzending en contactherstel.
 - **Runtime:** Quarkus 3.40.1, Java 25
 - **Build:** één Maven-module, wrapper `./mvnw`
 - **API:** contract-first uit `META-INF/openapi.yaml`,
-  `META-INF/notifynl-callback-openapi.yaml` en
-  `META-INF/openapi-aanvullend/contactherstel-openapi.json`, Quarkus REST + Jackson
+  `META-INF/contactherstel-openapi.json` en
+  `openapi-callback/notifynl-callback-openapi.yaml`, Quarkus REST + Jackson
 - **Uitgaande clients:** quarkus-openapi-generator voor Profielservice en
   NotifyNL; één REST-client voor de webhooks van de dienstverleners, met de URL per aanroep (`@Url`)
 - **Persistentie:** PostgreSQL 18 + Hibernate ORM Panache + Flyway; in tests een embedded PostgreSQL (Zonky)
@@ -383,14 +383,15 @@ de callback):
 | Contract | Interfaces en modellen in |
 |----------|---------------------------|
 | `src/main/resources/META-INF/openapi.yaml` | `nl.rijksoverheid.moz.nmc.api(.model)` |
-| `src/main/resources/META-INF/notifynl-callback-openapi.yaml` | `nl.rijksoverheid.moz.nmc.notifynlcallback.api(.model)` |
-| `src/main/resources/META-INF/openapi-aanvullend/contactherstel-openapi.json` | `nl.rijksoverheid.moz.nmc.api.contactherstel(.model)` |
+| `src/main/resources/META-INF/contactherstel-openapi.json` | `nl.rijksoverheid.moz.nmc.api.contactherstel(.model)` |
+| `src/main/resources/openapi-callback/notifynl-callback-openapi.yaml` | `nl.rijksoverheid.moz.nmc.notifynlcallback.api(.model)` |
 
 Annotatie-scanning staat uit (`mp.openapi.scan.disable=true`); Quarkus publiceert
-het statische `META-INF/openapi.yaml` op `/q/openapi`, samengevoegd met elk contract in
-`META-INF/openapi-aanvullend/` (`quarkus.smallrye-openapi.additional-docs-directory`), nu het
+het statische `META-INF/openapi.yaml` op `/q/openapi`, samengevoegd met elk ander contract in
+`META-INF/` (`quarkus.smallrye-openapi.additional-docs-directory`), nu het
 contactherstelcontract. Bij een botsing wint `openapi.yaml`: `info`, `Problem` en `Violation`
-komen daaruit. Het callbackcontract staat er niet in.
+komen daaruit. Het callbackcontract hoort niet op `/q/openapi` en staat daarom buiten
+`META-INF/`, in `openapi-callback/`; `GepubliceerdeSpecTest` bewaakt dat.
 
 **Schrijf geen DTO met de hand en bewerk niets onder `target/generated-sources`.**
 Pas het contract aan en draai de build opnieuw.
@@ -741,8 +742,8 @@ twee kanten zichtbaar zijn:
 | Pad | Beschrijving |
 |-----|--------------|
 | `src/main/resources/META-INF/openapi.yaml` | Servercontract voor de notificatie-endpoints: bron voor `/q/openapi` én de codegen |
-| `src/main/resources/META-INF/notifynl-callback-openapi.yaml` | Servercontract voor de NotifyNL-callback |
-| `src/main/resources/META-INF/openapi-aanvullend/contactherstel-openapi.json` | Servercontract voor contactherstel (concept), ook in `/q/openapi`; de controller antwoordt nog 501 |
+| `src/main/resources/openapi-callback/notifynl-callback-openapi.yaml` | Servercontract voor de NotifyNL-callback; bewust buiten `META-INF/` |
+| `src/main/resources/META-INF/contactherstel-openapi.json` | Servercontract voor contactherstel (concept), ook in `/q/openapi`; de controller antwoordt nog 501 |
 | `src/main/resources/openapi/` | Clientcontracten voor Profielservice en NotifyNL |
 | `src/main/resources/application.properties` | Alle configuratie, per profiel (`%dev`, `%test`, `%prod`), incl. JaCoCo-excludes |
 | `src/main/resources/db/migration/` | Flyway-migraties |
