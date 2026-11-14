@@ -20,7 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Bewaakt waarden die op twee plekken staan zonder dat de build een verschil opmerkt.
+ * Bewaakt waarden die op twee plekken staan zonder dat de build een verschil opmerkt. Zonder deze
+ * test moest iedereen, mens of AI, onthouden dat ze gelijk moeten blijven.
  * <p>
  * Leest de bronbestanden en niet de gestarte applicatie: een afwijking moet hier falen, ook als
  * Quarkus de ene waarde over de andere heen legt.
