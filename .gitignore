@@ -38,9 +38,10 @@ bin/
 src/main/resources/application-dev.properties
 
 ### Fuzzing ###
-# Created by jazzer during a local JAZZER_FUZZ=1 run. The checked-in seed corpus lives in
-# src/test/resources under EndpointFuzzTestInputs.
+# Ontstaat bij een lokale run met JAZZER_FUZZ=1. De ingecheckte seed-corpus staat in
+# src/test/resources onder EndpointFuzzTestInputs.
 .cifuzz-corpus/
+
 ### Claude Code ###
 # Persoonlijke instellingen; de gedeelde staan in .claude/settings.json.
 .claude/settings.local.json

@@ -11,7 +11,9 @@ wijzigingen aan te brengen zonder iets stilzwijgend te breken.
 
 ## Taal
 
-Communicatie, commentaar en commitmessages in het Nederlands.
+Communicatie, commentaar en commitmessages in het Nederlands, ook in configuratiebestanden
+(`pom.xml`, `application.properties`, `.gitignore`). Kopjes uit een standaardsjabloon, zoals
+`### IntelliJ IDEA ###`, hoef je niet te vertalen.
 
 - **Domeinbegrippen blijven Nederlands**, ook als identifier: `Notificatie`,
   `Dienstverlener`, `BerichtType`, `verwerkAfleverstatus`, `WebhookUrlValidator`.
