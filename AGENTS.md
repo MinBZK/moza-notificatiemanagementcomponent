@@ -30,6 +30,11 @@ alleen een BSN/KVK/RSIN en zoekt de NMC het adres op bij de Profielservice; bij 
 regie levert de aanroeper het adres zelf. Of er een OMC vóór de NMC zit, staat daar los van.
 Haal die twee niet door elkaar; zie `docs/architectuur.md`.
 
+Voor de soorten berichten (notificatie, kennisgeving, gebeurtenisbericht, contactherstelmelding)
+gelden de begrippen van MOZa: <https://mijnoverheidzakelijk.nl/onderwerpen/berichten/begrippen/index.md>
+(markdown). Gebruik die namen in contractteksten en documentatie; hernoem bestaande code niet
+zonder afstemming.
+
 Het ontwerp (statusmodel, eventlog, takentabel) staat in
 [ADR 0024](https://github.com/MinBZK/MijnOverheidZakelijk/blob/main/Docs/structurizr/decisions/0024-georkestreerde-state-machine-met-eventlog.md)
 in de MijnOverheidZakelijk-repo.

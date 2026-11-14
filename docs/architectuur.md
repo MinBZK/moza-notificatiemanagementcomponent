@@ -27,6 +27,19 @@ die Dienstverleners anders ieder zelf zouden moeten bouwen.
 
 ### Begrippen
 
+Voor de soorten berichten volgt de NMC de
+[begrippen rond berichten van MOZa](https://mijnoverheidzakelijk.nl/onderwerpen/berichten/begrippen/)
+(als markdown: dezelfde URL met `index.md` erachter). Die hebben nog geen officiële status. In
+die termen:
+
+- de e-mail die de NMC verstuurt is een **kennisgeving (melding)** of een **attendering**;
+- de statusupdate aan de Dienstverlener via de eventfeed en de webhook is een
+  **gebeurtenisbericht**;
+- het bericht langs een andere weg na een mislukte bezorging is een **contactherstelmelding**
+  (Awb 2:11).
+
+Begrippen van de NMC zelf:
+
 - **Dienstverlener**: de overheidsorganisatie die de notificatie verstuurt.
 - **Procesapplicatie**: de backend van de Dienstverlener die besluit dat er een
   notificatie nodig is.
