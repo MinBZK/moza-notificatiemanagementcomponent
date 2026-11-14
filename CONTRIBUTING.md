@@ -32,7 +32,7 @@ De repo bevat een gedeelde Claude Code-setup in `.claude/`. Eenmalig per machine
 1. Gebruik Claude Code v2.1.277 of hoger. Oudere versies lezen `AGENTS.md` niet.
 2. Vertrouw de projectmap als Claude Code daarom vraagt. Pas daarna gelden de gedeelde
    permissies en de plugin-marketplace.
-3. Installeer de gedeelde plugins. `.claude/settings.json` zet ze aan, maar downloadt ze niet:
+3. Installeer de gedeelde plugins:
 
    ```bash
    claude plugin install standaarden@overheid-plugins --scope project
