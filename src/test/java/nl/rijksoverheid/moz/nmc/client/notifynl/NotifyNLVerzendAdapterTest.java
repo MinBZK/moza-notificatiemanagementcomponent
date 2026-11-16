@@ -98,7 +98,7 @@ class NotifyNLVerzendAdapterTest {
         NotifyNLVerzendException e = assertThrows(NotifyNLVerzendException.class,
                 () -> adapter.verstuurEmail("geen-adres", TEST_TEMPLATE_ID, Map.of()));
 
-        assertTrue(e.adresAfgewezen());
+        assertTrue(e.isAdresAfgewezen());
     }
 
     // Een team-key weigert elke ontvanger buiten de whitelist met een 400; dat ligt niet aan het adres.
@@ -109,7 +109,7 @@ class NotifyNLVerzendAdapterTest {
         NotifyNLVerzendException e = assertThrows(NotifyNLVerzendException.class,
                 () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
 
-        assertFalse(e.adresAfgewezen());
+        assertFalse(e.isAdresAfgewezen());
         assertEquals(Optional.of(400), e.status());
     }
 

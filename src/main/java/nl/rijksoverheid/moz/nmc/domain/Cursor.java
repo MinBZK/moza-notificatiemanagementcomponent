@@ -27,7 +27,7 @@ public record Cursor(int epoch, long transactieId, long eventId) {
     public String codeer() {
         String tekst = epoch + ":" + transactieId + ":" + eventId;
 
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(tekst.getBytes(StandardCharsets.US_ASCII));
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(tekst.getBytes(StandardCharsets.UTF_8));
     }
 
     /**
@@ -41,7 +41,7 @@ public record Cursor(int epoch, long transactieId, long eventId) {
             throw new OngeldigeCursorException("Cursor is geen geldige base64url-tekst");
         }
 
-        var match = CURSOR_PATROON.matcher(new String(bytes, StandardCharsets.US_ASCII));
+        var match = CURSOR_PATROON.matcher(new String(bytes, StandardCharsets.UTF_8));
 
         if (!match.matches()) {
             throw new OngeldigeCursorException("Cursor heeft niet de vorm epoch:transactieId:eventId");

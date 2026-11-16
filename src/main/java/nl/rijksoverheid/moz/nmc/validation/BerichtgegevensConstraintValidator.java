@@ -8,8 +8,8 @@ import java.util.Map;
 /** Dezelfde grenzen als in het contract: ten hoogste 50 variabelen met waarden tot 2000 tekens. */
 public class BerichtgegevensConstraintValidator implements ConstraintValidator<ValidBerichtgegevens, Map<String, String>> {
 
-    static final int MAX_AANTAL = 50;
-    static final int MAX_LENGTE = 2000;
+    private static final int MAX_AANTAL = 50;
+    private static final int MAX_LENGTE = 2000;
 
     @Override
     public boolean isValid(Map<String, String> berichtgegevens, ConstraintValidatorContext context) {
