@@ -153,6 +153,8 @@ public class EventPartitieRepository {
      * De laagste transactie-id waar een geldige bevestiging of leverpositie naar wijst; leeg als geen
      * enkele cursor het opruimen tegenhoudt.
      *
+     * @param epoch             het huidige cluster-epoch; cursors uit een ander epoch tellen niet
+     * @param nu                het moment waartegen de cursorleeftijd wordt gemeten
      * @param standaardLeeftijd de maximale cursorleeftijd voor een dienstverlener zonder eigen afspraak
      */
     @SuppressWarnings("unchecked")

@@ -8,15 +8,14 @@ import java.util.Objects;
 
 /**
  * Payload van het CloudEvent voor de Dienstverlener: één statusovergang. Statussen en reden gaan als
- * API-waarde over de lijn ({@code niet-bezorgbaar}).
+ * API-waarde over de lijn ({@code niet-bezorgbaar}). Een leeg veld gaat niet als null over de lijn:
+ * het contract kent {@code vorigeStatus} en {@code reden} alleen als enumwaarde.
  *
  * @param vorigeStatus de status vóór de overgang
  * @param nieuweStatus de status na de overgang
  * @param reden        de reden bij een eindstatus, anders null
  * @param versie       het volgnummer van de overgang, gelijk aan {@code sequence} in de envelop
  */
-// Een leeg veld gaat niet als null over de lijn: het contract kent vorigeStatus en reden alleen als
-// enumwaarde.
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record NotificatieData(NotificatieStatus vorigeStatus, NotificatieStatus nieuweStatus, Reden reden,
                               long versie) {

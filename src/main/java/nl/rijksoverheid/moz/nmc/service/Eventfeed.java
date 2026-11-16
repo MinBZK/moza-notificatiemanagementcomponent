@@ -49,6 +49,8 @@ public class Eventfeed {
     /**
      * De volgende pagina na {@code cursor}; zonder cursor vanaf het oudste beschikbare event.
      *
+     * @param dvId   de dienstverlener wiens events gelezen worden
+     * @param cursor het laatst gelezen event, of null om bij het oudste beschikbare event te beginnen
      * @param limiet het gewenste aantal events, of null voor het maximum; meer dan het maximum levert
      *               het maximum
      * @throws CursorVervallenException als de cursor uit een ander epoch komt, onder het oudste
@@ -71,7 +73,9 @@ public class Eventfeed {
      * onder het oudste event leest gewoon verder met een waarschuwing, want wat daartussen lag is
      * opgeruimd en bereikt de webhook niet.
      *
+     * @param dvId    de dienstverlener van de webhook
      * @param positie het laatst geleverde event, of null om bij het oudste beschikbare event te beginnen
+     * @param limiet  het grootste aantal events in de pagina
      */
     @Transactional
     public EventPagina leesVoorWebhook(UUID dvId, Cursor positie, int limiet) {

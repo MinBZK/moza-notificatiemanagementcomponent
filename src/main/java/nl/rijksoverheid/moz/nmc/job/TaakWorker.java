@@ -30,7 +30,7 @@ import java.util.Map;
  * {@link TaakHandler} van die soort geeft. Zonder handler voor een soort doet de ronde niets.
  * {@code concurrentExecution = SKIP} geldt per JVM; meerdere pods verdelen het werk via de claim.
  * <p>
- * Een handler die gooit kost de taak een poging en een uitstel met oplopende wachttijd; na
+ * Een handler die een exception gooit, kost de taak een poging en een uitstel met oplopende wachttijd; na
  * {@code nmc.taak.max-pogingen} staat de taak op mislukt en telt hij in de metriek
  * {@code nmc_taken_mislukt}. Heropenen is een handmatige ingreep in de database: status op
  * {@code OPEN}, {@code pogingen} op 0 en {@code due} op nu.
@@ -151,11 +151,12 @@ public class TaakWorker {
 
     /**
      * Eén ronde voor deze soort: claimt een batch en voert elke taak uit.
+     * <p>
+     * Package-private zodat een test een ronde direct kan draaien en het aantal geclaimde taken ziet;
+     * tests buiten dit package gaan via {@code TaakRonde}.
      *
      * @return het aantal geclaimde taken
      */
-    // Package-private zodat een test een ronde direct kan draaien en het aantal geclaimde taken ziet; tests buiten
-    // dit package gaan via TaakRonde.
     int verwerk(TaakSoort taakSoort) {
         TaakHandler handler = handlers.get(taakSoort);
 

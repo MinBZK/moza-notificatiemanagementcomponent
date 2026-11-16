@@ -14,7 +14,10 @@ import java.util.concurrent.TimeUnit;
 
 public class WebhookClientProducer {
 
-    // Time-out voor de verbinding en tussen twee stukken antwoord; de totale duur bewaakt de adapter.
+    /**
+     * De time-out geldt voor het opbouwen van de verbinding en voor de stilte tussen twee stukken
+     * antwoord, niet voor de aanroep als geheel. De totale duur begrenst {@link WebhookAdapter}.
+     */
     @Produces
     @ApplicationScoped
     WebhookClient webhookClient(@ConfigProperty(name = "nmc.webhook.timeout") Duration timeout) {

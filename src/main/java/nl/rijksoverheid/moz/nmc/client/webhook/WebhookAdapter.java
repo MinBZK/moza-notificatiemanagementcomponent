@@ -34,7 +34,7 @@ public class WebhookAdapter {
     public WebhookAdapter(WebhookClient client,
                                     @ConfigProperty(name = "nmc.webhook.timeout") Duration timeout,
                                     @ConfigProperty(name = "nmc.taak.lease") Duration lease) {
-        // Een aanroep die langer duurt dan de lease, laat een tweede worker dezelfde webhook beleveren.
+        // Een aanroep die langer duurt dan de lease, laat een tweede worker dezelfde bundel nog eens afleveren.
         if (timeout.isNegative() || timeout.isZero() || timeout.compareTo(lease) >= 0) {
             throw new IllegalStateException("nmc.webhook.timeout moet positief en korter dan nmc.taak.lease ("
                     + lease + ") zijn, is " + timeout);
@@ -45,6 +45,7 @@ public class WebhookAdapter {
     }
 
     /**
+     * @param url         de webhook-URL van de Dienstverlener
      * @param autorisatie de waarde van de Authorization-header
      * @param cursor      de cursor van het laatste event in de bundel
      * @param body        de CloudEvents-bundel als JSON

@@ -1,6 +1,8 @@
 package nl.rijksoverheid.moz.nmc.client.webhook;
 
-/** De webhook van de Dienstverlener nam de levering niet aan: geen 2xx, geen verbinding of niet op tijd. */
+/**
+ * De webhook van de Dienstverlener nam de levering niet aan: geen 2xx, geen verbinding of niet op tijd.
+ */
 public class WebhookLeveringException extends RuntimeException {
 
     public WebhookLeveringException(String bericht) {

@@ -8,9 +8,12 @@ import java.util.Objects;
 /**
  * Een notificatieverzoek zoals de controller het aan de aanname geeft.
  *
- * @param ontvanger      bij decentrale regie het e-mailadres, bij centrale regie het identificerend nummer
- * @param dienstverlener naam van de dienstverlener voor de Profielservice-lookup; bij decentrale regie leeg
- * @param dienst         naam van de dienst voor de scope van de voorkeur; mag leeg zijn
+ * @param regie           centrale of decentrale regie
+ * @param ontvanger       bij decentrale regie het e-mailadres, bij centrale regie het identificerend nummer
+ * @param dienstverlener  naam van de dienstverlener voor de Profielservice-lookup; bij decentrale regie leeg
+ * @param dienst          naam van de dienst voor de scope van de voorkeur; mag leeg zijn
+ * @param berichtType     het soort bericht dat wordt verstuurd
+ * @param berichtgegevens de variabelen voor het bericht, op naam
  */
 public record AannameOpdracht(Regie regie,
                               Ontvanger ontvanger,

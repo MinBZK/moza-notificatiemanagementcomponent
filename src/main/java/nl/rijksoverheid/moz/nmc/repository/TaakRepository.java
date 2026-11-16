@@ -95,7 +95,11 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
      * Claimt tot {@code maximum} taken van deze soort en dienstverlener die aan de beurt zijn en niet
      * door een andere worker vastgehouden worden, en zet er een lease op tot {@code leaseTot}.
      *
-     * @param dvId de dienstverlener, of {@code null} voor taken per systeem
+     * @param taakSoort de soort taken om te claimen
+     * @param dvId      de dienstverlener, of {@code null} voor taken per systeem
+     * @param maximum   het grootste aantal taken dat de claim oplevert
+     * @param nu        het moment van de claim; een taak is aan de beurt als zijn {@code due} verstreken is
+     * @param leaseTot  tot wanneer de lease op de geclaimde taken loopt
      */
     public List<Taak> claim(TaakSoort taakSoort, UUID dvId, int maximum, OffsetDateTime nu, OffsetDateTime leaseTot) {
         Parameters parameters = Parameters.with("taakSoort", taakSoort).and("open", TaakStatus.OPEN).and("nu", nu);
@@ -158,6 +162,8 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
      * Geeft de lease vrij en plant de taak opnieuw op {@code due}; false als de taak inmiddels door
      * een andere worker is geclaimd.
      *
+     * @param taak          de geclaimde taak
+     * @param due           het moment waarop de taak opnieuw aan de beurt is
      * @param teltAlsPoging of dit uitstel een mislukking in het NMC zelf was
      */
     public boolean stelUit(Taak taak, OffsetDateTime due, boolean teltAlsPoging) {

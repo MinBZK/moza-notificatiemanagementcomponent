@@ -12,6 +12,16 @@ import java.util.UUID;
  * Eén statusovergang als CloudEvent (NL GOV profiel), gelijk in de webhook en in de feed. {@code id}
  * is de UUID van het event uit het eventlog, zodat een Dienstverlener die beide gebruikt hetzelfde
  * event herkent.
+ *
+ * @param specversion     de versie van de CloudEvents-specificatie
+ * @param id              de UUID van het event
+ * @param type            het soort event; eindigt op de nieuwe status als API-waarde
+ * @param source          het pad van de notificatie in de API van het NMC
+ * @param subject         het id van de notificatie
+ * @param time            het tijdstip waarop het NMC de overgang registreerde
+ * @param datacontenttype het mediatype van {@code data}
+ * @param sequence        het volgnummer van de overgang binnen de notificatie, met voorloopnullen
+ * @param data            de overgang zelf: vorige en nieuwe status, reden en versie
  */
 public record NotificatieStatusEvent(
         String specversion,

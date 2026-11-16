@@ -686,6 +686,21 @@ het als aanname.
 // oplevert. Een fout bij de commit daarna kan dat nog wel.
 ```
 
+Eén declaratie krijgt één soort commentaar. Staat er javadoc boven een klasse,
+record of methode, dan hoort alles wat erover te zeggen valt in die javadoc en
+niet in een `//`-regel eronder. Inline commentaar is voor regels binnen een
+methode en voor velden.
+
+Javadoc is volledig of laat de tags weg: gebruik je `@param`, beschrijf dan elke
+parameter (bij een record elke component). Zet `@throws` op de methode die de
+exception zelf gooit, niet op een interfacemethode waarvan de implementaties hem
+alleen doorlaten. De eerste zin van de javadoc op een klasse zegt wat de klasse
+ís en noemt haar bij naam of rol, zodat een lezer zonder kennis van de rest hem
+kan plaatsen.
+
+Schrijf gewoon Nederlands. Geen verzonnen of letterlijk vertaalde woorden zoals
+"beleveren", en niet "gooit" zonder te zeggen wat: "gooit een exception".
+
 Verwijs in commentaar niet naar CLAUDE.md-secties. Beschrijf de regel zelf, zodat
 het commentaar zonder dit bestand leesbaar blijft.
 
