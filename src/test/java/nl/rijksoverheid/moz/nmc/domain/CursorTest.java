@@ -37,9 +37,9 @@ class CursorTest {
     @Test
     void decodeer_getalBuitenBereik_gooitOngeldigeCursor() {
         String tekst = Base64.getUrlEncoder().withoutPadding()
-                .encodeToString("1:99999999999999999999:1".substring(0, 23).getBytes(StandardCharsets.US_ASCII));
+                .encodeToString("1:99999999999999999999:1".substring(0, 23).getBytes(StandardCharsets.UTF_8));
         String teGroot = Base64.getUrlEncoder().withoutPadding()
-                .encodeToString("1:9999999999999999999:1".getBytes(StandardCharsets.US_ASCII));
+                .encodeToString("1:9999999999999999999:1".getBytes(StandardCharsets.UTF_8));
 
         assertThrows(OngeldigeCursorException.class, () -> Cursor.decodeer(tekst));
         assertThrows(OngeldigeCursorException.class, () -> Cursor.decodeer(teGroot));

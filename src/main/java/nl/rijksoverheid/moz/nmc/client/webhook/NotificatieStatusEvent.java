@@ -36,6 +36,7 @@ public record NotificatieStatusEvent(
 
     private static final String SPECVERSION = "1.0";
     private static final String TYPE_PREFIX = "nl.mijnoverheidzakelijk.nmc.notificatie.status.";
+    private static final String DATACONTENTTYPE = "application/json";
 
     public static NotificatieStatusEvent van(Event event) {
         return van(event.getUuid(), event.getNotificatieId(), event.getVolgnummer(), event.getVan(), event.getNaar(),
@@ -52,7 +53,7 @@ public record NotificatieStatusEvent(
                 Notificatie.PAD + notificatieId,
                 notificatieId.toString(),
                 tijdstip,
-                "application/json",
+                DATACONTENTTYPE,
                 // De sequence-extensie van CloudEvents vergelijkt als tekst; voorloopnullen houden "10" na "9".
                 String.format("%019d", versie),
                 new NotificatieData(vorigeStatus, nieuweStatus, reden, versie));

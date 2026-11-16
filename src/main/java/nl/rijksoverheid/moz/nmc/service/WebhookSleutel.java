@@ -30,7 +30,7 @@ public class WebhookSleutel {
     private static final int MIN_BITS = 2048;
 
     /** De claim met de SHA-256 van de body (base64url), die token en inhoud aan elkaar bindt. */
-    public static final String BODY_HASH_CLAIM = "body_sha256";
+    static final String BODY_HASH_CLAIM = "body_sha256";
 
     private final RSAPrivateCrtKey privateSleutel;
     private final String keyId;
@@ -61,7 +61,7 @@ public class WebhookSleutel {
      * Een vers ondertekende JWT met de webhook-URL als {@code aud} en de hash van de body als
      * {@code body_sha256}, zodat een onderschepte token niet met een andere body te gebruiken is.
      */
-    public String onderteken(String webhookUrl, String bodyHash) {
+    String onderteken(String webhookUrl, String bodyHash) {
         Instant nu = clock.instant();
 
         return Jwt.issuer(issuer)
