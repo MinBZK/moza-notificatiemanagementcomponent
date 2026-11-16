@@ -38,14 +38,14 @@ public record NotificatieStatusEvent(
     private static final String TYPE_PREFIX = "nl.mijnoverheidzakelijk.nmc.notificatie.status.";
     private static final String DATACONTENTTYPE = "application/json";
 
-    public static NotificatieStatusEvent van(Event event) {
-        return van(event.getUuid(), event.getNotificatieId(), event.getVolgnummer(), event.getVan(), event.getNaar(),
+    public static NotificatieStatusEvent of(Event event) {
+        return of(event.getUuid(), event.getNotificatieId(), event.getVolgnummer(), event.getVan(), event.getNaar(),
                 event.getReden(), event.getGeregistreerd());
     }
 
-    public static NotificatieStatusEvent van(UUID eventUuid, UUID notificatieId, long versie,
-                                             NotificatieStatus vorigeStatus, NotificatieStatus nieuweStatus, Reden reden,
-                                             OffsetDateTime tijdstip) {
+    public static NotificatieStatusEvent of(UUID eventUuid, UUID notificatieId, long versie,
+                                            NotificatieStatus vorigeStatus, NotificatieStatus nieuweStatus, Reden reden,
+                                            OffsetDateTime tijdstip) {
         return new NotificatieStatusEvent(
                 SPECVERSION,
                 eventUuid.toString(),
