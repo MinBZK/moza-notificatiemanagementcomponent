@@ -9,8 +9,10 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * De cursor tot waar de Dienstverlener de feed heeft verwerkt, door hem zelf teruggeschreven. Eén
- * per dienstverlener; hij gaat alleen vooruit.
+ * De bevestigde leespositie van één Dienstverlener in de eventfeed. De Dienstverlener leest de feed
+ * en meldt daarna zelf tot en met welke cursor hij de events heeft verwerkt; die cursor staat hier,
+ * met het tijdstip van de melding. Er is één rij per dienstverlener en de positie gaat alleen
+ * vooruit. Het eventlog bewaart de events vanaf een bevestigde positie zolang die jong genoeg is.
  */
 @Entity
 public class Bevestiging {

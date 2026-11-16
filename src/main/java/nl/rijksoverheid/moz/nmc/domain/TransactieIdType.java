@@ -11,8 +11,12 @@ import java.sql.Types;
 import java.util.Objects;
 
 /**
- * Een PostgreSQL-{@code xid8} als {@code Long}. De waarde gaat als tekst zonder type naar de database,
- * zodat PostgreSQL er een {@code xid8} van maakt en een vergelijking de index op de kolom gebruikt.
+ * Hibernate-type voor een kolom met een PostgreSQL-transactie-id ({@code xid8}), in Java een
+ * {@code Long}. De eventfeed sorteert en vergelijkt op die kolom.
+ * <p>
+ * JDBC heeft geen eigen type voor {@code xid8}. De waarde gaat daarom als tekst zonder type naar de
+ * database. PostgreSQL maakt er dan zelf een {@code xid8} van, zodat een vergelijking de index op de
+ * kolom gebruikt.
  */
 public class TransactieIdType implements UserType<Long> {
 

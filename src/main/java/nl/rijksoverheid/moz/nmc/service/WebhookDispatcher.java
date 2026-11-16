@@ -36,6 +36,7 @@ public class WebhookDispatcher {
 
     /**
      * @param url    de gecontroleerde en genormaliseerde webhook-URL
+     * @param events de CloudEvents die samen in één bundel gaan
      * @param cursor de positie van het laatste event in {@code events}
      * @throws WebhookLeveringException als de webhook de bundel niet aannam
      */

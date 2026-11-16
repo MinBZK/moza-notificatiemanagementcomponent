@@ -56,8 +56,10 @@ public class Sleutelbeheer {
     }
 
     /**
+     * @param notificatieId   het id van de notificatie waar de gegevens bij horen
+     * @param ontvanger       het e-mailadres of identificerend nummer van de ontvanger
      * @param personalisation null wordt als een lege map versleuteld; NotifyNL krijgt in beide gevallen
-     *        een lege personalisation
+     *                        een lege personalisation
      */
     public VersleuteldeGegevens versleutel(UUID notificatieId, Ontvanger ontvanger, Map<String, String> personalisation) {
         Objects.requireNonNull(notificatieId, "notificatieId is verplicht");

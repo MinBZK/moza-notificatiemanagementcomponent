@@ -49,6 +49,7 @@ public class Webhookpositie {
     }
 
     /**
+     * @param dvId          de dienstverlener van de webhook
      * @param positie       het laatst geleverde event; null als er nog niets is geleverd
      * @param mislukkingen  het aantal mislukte leveringen op rij
      * @param gepauzeerdTot tot wanneer de webhook gepauzeerd is; null als hij niet gepauzeerd is
