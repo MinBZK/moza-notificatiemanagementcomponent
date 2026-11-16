@@ -100,7 +100,7 @@ class CloudEventContractTest {
     }
 
     private static NotificatieStatusEvent verstuurdEvent(NotificatieStatus naar, Reden reden) {
-        return NotificatieStatusEvent.van(UUID.randomUUID(), UUID.randomUUID(), 3L, NotificatieStatus.VERZONDEN, naar, reden,
+        return NotificatieStatusEvent.of(UUID.randomUUID(), UUID.randomUUID(), 3L, NotificatieStatus.VERZONDEN, naar, reden,
                 OffsetDateTime.parse("2026-01-15T10:00:00Z"));
     }
 }

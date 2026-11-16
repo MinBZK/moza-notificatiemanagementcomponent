@@ -184,7 +184,7 @@ public class TerugkoppelTaakHandler implements TaakHandler {
             return new GeenEvents();
         }
 
-        List<NotificatieStatusEvent> events = pagina.events().stream().map(NotificatieStatusEvent::van).toList();
+        List<NotificatieStatusEvent> events = pagina.events().stream().map(NotificatieStatusEvent::of).toList();
 
         return new Levering(url, events, pagina.cursor(), max);
     }
