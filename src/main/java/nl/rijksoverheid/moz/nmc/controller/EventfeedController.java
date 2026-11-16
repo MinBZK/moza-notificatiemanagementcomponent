@@ -64,7 +64,7 @@ public class EventfeedController implements WijzigingenApi {
         }
 
         List<NotificatieStatusEvent> events = pagina.events().stream()
-                .map(NotificatieStatusEvent::van)
+                .map(NotificatieStatusEvent::of)
                 .toList();
         WijzigingenPagina wijzigingen = new WijzigingenPagina(events)
                 .cursor(pagina.cursor() == null ? null : pagina.cursor().codeer());
