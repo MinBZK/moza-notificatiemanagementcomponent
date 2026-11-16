@@ -2,14 +2,14 @@
 -- poging en hun geschiedenis als events; daarna bewaakt een trigger dat elke versie een event heeft.
 -- notificatie_status en external_reference blijven staan tot een volgende migratie.
 
-CREATE TEMP TABLE oude_status_afbeelding (
+CREATE TEMP TABLE oude_status_mapping (
     oud varchar(32) PRIMARY KEY,
     notificatie_status varchar(32) NOT NULL,
     reden varchar(32),
     poging_status varchar(32)
 ) ON COMMIT DROP;
 
-INSERT INTO oude_status_afbeelding (oud, notificatie_status, reden, poging_status) VALUES
+INSERT INTO oude_status_mapping (oud, notificatie_status, reden, poging_status) VALUES
     ('CREATED', 'AANGENOMEN', NULL, NULL),
     ('SENDING', 'VERZONDEN', NULL, 'VERZONDEN'),
     ('DELIVERED', 'BEZORGD', NULL, 'BEZORGD'),
@@ -32,7 +32,7 @@ SET status = a.notificatie_status,
     reden = a.reden,
     versie = l.volgnummer
 FROM laatste_bekende_status l
-JOIN oude_status_afbeelding a ON a.oud = l.status
+JOIN oude_status_mapping a ON a.oud = l.status
 WHERE l.notificatie_id = n.id
   AND n.status IS NULL;
 
@@ -40,7 +40,7 @@ WHERE l.notificatie_id = n.id
 UPDATE notificatie n
 SET status = a.notificatie_status,
     reden = a.reden
-FROM oude_status_afbeelding a
+FROM oude_status_mapping a
 WHERE a.oud = n.laatste_status
   AND n.status IS NULL;
 
@@ -52,7 +52,7 @@ SELECT gen_random_uuid(), n.id, 1, COALESCE(a.poging_status, 'VERZONDEN'), n.ext
            AND s.status IN ('DELIVERED', 'PERMANENT_FAILURE', 'TEMPORARY_FAILURE', 'TECHNICAL_FAILURE'))
 FROM notificatie n
 LEFT JOIN laatste_bekende_status l ON l.notificatie_id = n.id
-LEFT JOIN oude_status_afbeelding a ON a.oud = l.status
+LEFT JOIN oude_status_mapping a ON a.oud = l.status
 WHERE n.external_reference IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM poging p WHERE p.notificatie_id = n.id);
 
@@ -61,7 +61,7 @@ SELECT s.geregistreerd, s.notificatie_id, s.volgnummer,
        lag(a.notificatie_status) OVER (PARTITION BY s.notificatie_id ORDER BY s.volgnummer),
        a.notificatie_status, a.reden
 FROM notificatie_status s
-JOIN oude_status_afbeelding a ON a.oud = s.status
+JOIN oude_status_mapping a ON a.oud = s.status
 WHERE s.status <> 'ONBEKEND'
   AND NOT EXISTS (SELECT 1 FROM event e WHERE e.notificatie_id = s.notificatie_id);
 
