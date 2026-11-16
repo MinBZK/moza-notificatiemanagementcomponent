@@ -32,11 +32,6 @@ public class Verzendbeleid {
                          @ConfigProperty(name = "nmc.beleid.herverzend-wachttijd") Duration herverzendWachttijd,
                          @ConfigProperty(name = "nmc.beleid.max-herverzendingen") int maxHerverzendingen,
                          Config config) {
-        this.geldigheid = geldigheid;
-        this.herverzendWachttijd = herverzendWachttijd;
-        this.maxHerverzendingen = maxHerverzendingen;
-        this.config = config;
-
         if (maxHerverzendingen < 0) {
             throw new IllegalStateException("nmc.beleid.max-herverzendingen mag niet negatief zijn");
         }
@@ -44,6 +39,12 @@ public class Verzendbeleid {
         eisPositief("nmc.beleid.geldigheid", geldigheid);
         eisPositief("nmc.beleid.herverzend-wachttijd", herverzendWachttijd);
 
+        this.geldigheid = geldigheid;
+        this.herverzendWachttijd = herverzendWachttijd;
+        this.maxHerverzendingen = maxHerverzendingen;
+        this.config = config;
+
+        // De controle per berichttype leest via de velden hierboven en staat daarom na de toekenning.
         for (BerichtType berichtType : BerichtType.values()) {
             String prefix = "nmc.beleid." + berichtType.name().toLowerCase(Locale.ROOT);
 

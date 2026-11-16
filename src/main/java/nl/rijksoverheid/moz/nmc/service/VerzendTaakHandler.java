@@ -181,7 +181,7 @@ public class VerzendTaakHandler implements TaakHandler {
 
             return uitgesteld();
         } catch (NotifyNLVerzendException e) {
-            if (e.adresAfgewezen()) {
+            if (e.isAdresAfgewezen()) {
                 Log.warnf("NotifyNL weigert het adres van notificatie %s (%s)", verzending.notificatieId(), e.getMessage());
 
                 return rondAfAls(taak, verzending, NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR);
@@ -192,7 +192,7 @@ public class VerzendTaakHandler implements TaakHandler {
             // dat zich bij elke herhaling herhaalt. 401, 403, 429, 5xx en een verbindingsfout betreffen de
             // aanroep, niet de poging, en kosten geen poging: een haperende key of toegang zou anders elke
             // notificatie van dat moment op technisch-mislukt zetten.
-            if (e.onbruikbaarAntwoord() || e.status().filter(VerzendTaakHandler::isFoutVanHetNmc).isPresent()) {
+            if (e.isOnbruikbaarAntwoord() || e.status().filter(VerzendTaakHandler::isFoutVanHetNmc).isPresent()) {
                 Log.errorf(e, "NotifyNL weigert het verzoek voor notificatie %s; verzendtaak uitgesteld", verzending.notificatieId());
 
                 return uitgesteldAlsPoging();

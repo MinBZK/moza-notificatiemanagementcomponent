@@ -37,12 +37,12 @@ public class NotifyNLVerzendException extends Exception {
     }
 
     /** NotifyNL keurde het e-mailadres af; een uitkomst van de poging, geen storing. */
-    public boolean adresAfgewezen() {
+    public boolean isAdresAfgewezen() {
         return adresAfgewezen;
     }
 
     /** NotifyNL gaf een antwoord zonder bruikbaar notificatie-ID. */
-    public boolean onbruikbaarAntwoord() {
+    public boolean isOnbruikbaarAntwoord() {
         return onbruikbaarAntwoord;
     }
 

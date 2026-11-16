@@ -16,6 +16,7 @@ import nl.rijksoverheid.moz.nmc.service.DvProvider;
 import nl.rijksoverheid.moz.nmc.service.EventPagina;
 import nl.rijksoverheid.moz.nmc.service.Eventfeed;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -62,8 +63,13 @@ public class EventfeedController implements WijzigingenApi {
             throw Problems.gone(Problems.TYPE_CURSOR_VERVALLEN, "Cursor vervallen", e.getMessage());
         }
 
-        return Response.ok(new WijzigingenPagina(pagina.events().stream().map(NotificatieStatusEvent::van).toList())
-                .cursor(pagina.cursor() == null ? null : pagina.cursor().codeer())).build();
+        List<NotificatieStatusEvent> events = pagina.events().stream()
+                .map(NotificatieStatusEvent::van)
+                .toList();
+        WijzigingenPagina wijzigingen = new WijzigingenPagina(events)
+                .cursor(pagina.cursor() == null ? null : pagina.cursor().codeer());
+
+        return Response.ok(wijzigingen).build();
     }
 
     @Override
