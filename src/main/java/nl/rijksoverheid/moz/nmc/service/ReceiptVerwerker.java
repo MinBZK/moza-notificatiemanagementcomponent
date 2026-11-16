@@ -63,12 +63,15 @@ public class ReceiptVerwerker {
     }
 
     /**
+     * @param notifyId   het id dat NotifyNL aan de verzending gaf
      * @param reference  de eigen referentie uit de receipt: het poging-id dat bij het versturen is
      *                   meegegeven; null of onbruikbaar voor verzendingen van vóór die afspraak, dan
      *                   geldt het NotifyNL-id
+     * @param status     de afleverstatus volgens NotifyNL
      * @param opgetreden het tijdstip van de status volgens NotifyNL, dat de volgorde van de receipts
-     *        bepaalt, begrensd op de eigen klok plus de klokmarge; null als de receipt er geen heeft,
-     *        dan geldt het moment van ontvangst en gaat de receipt nooit vóór een al vastgelegde uitkomst
+     *                   bepaalt, begrensd op de eigen klok plus de klokmarge; null als de receipt er
+     *                   geen heeft, dan geldt het moment van ontvangst en gaat de receipt nooit vóór een
+     *                   al vastgelegde uitkomst
      * @throws NotificatieNietGevondenException als geen poging bij deze receipt hoort
      */
     @Transactional

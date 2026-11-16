@@ -17,11 +17,13 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Eén statusovergang van een notificatie in het eventlog. Het volgnummer is de versie van de
- * notificatie na de overgang. Bevat geen contactgegevens, identificerende nummers of referentie van
- * de Dienstverlener.
+ * Eén event: een rij in het eventlog (tabel {@code event}) die één statusovergang van een
+ * notificatie vastlegt. Het volgnummer is de versie van de notificatie na de overgang. Het eventlog
+ * is append-only: een event verandert nooit meer.
+ * <p>
+ * Een event bevat geen contactgegevens en geen identificerende nummers van de ontvanger. Van de
+ * Dienstverlener staat er alleen het interne {@code dvId} in.
  */
-// Append-only: een event verandert nooit meer.
 @Entity
 @Immutable
 public class Event {

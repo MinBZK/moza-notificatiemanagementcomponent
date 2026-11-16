@@ -57,7 +57,10 @@ public class ReceiptOpslag {
     }
 
     /**
-     * @param tijdstip het tijdstip van de status volgens NotifyNL; mag null zijn
+     * @param notifyId  het id dat NotifyNL aan de verzending gaf
+     * @param reference de eigen referentie uit de receipt: het poging-id; mag null zijn
+     * @param status    de afleverstatus volgens NotifyNL
+     * @param tijdstip  het tijdstip van de status volgens NotifyNL; mag null zijn
      */
     @Transactional
     public Uitkomst slaOp(UUID notifyId, String reference, String status, OffsetDateTime tijdstip) {

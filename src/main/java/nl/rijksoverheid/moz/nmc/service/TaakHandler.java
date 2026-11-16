@@ -19,8 +19,11 @@ public interface TaakHandler {
     TaakSoort taakSoort();
 
     /**
-     * @param lease verlengt de lease op de taak; aan te roepen vóór elke externe aanroep
-     * @throws TaakVerlorenException als de lease inmiddels bij een andere worker ligt
+     * @param taak  de geclaimde taak
+     * @param lease verlengt de lease op de taak; aan te roepen vóór elke externe aanroep. Een
+     *              {@link TaakVerlorenException} daaruit vangt de handler niet af: de worker slaat
+     *              de taak dan over
+     * @return wat de worker daarna met de taak doet
      */
     TaakUitkomst voerUit(Taak taak, Lease lease);
 
@@ -48,6 +51,10 @@ public interface TaakHandler {
     /** De lease die een worker op een geclaimde taak houdt. */
     @FunctionalInterface
     interface Lease {
+
+        /**
+         * @throws TaakVerlorenException als de taak inmiddels bij een andere worker ligt
+         */
         void verleng();
     }
 }

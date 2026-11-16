@@ -66,7 +66,6 @@ public class CentraleNotificatieController implements CentraleNotificatiesApi {
                 request.getBerichtgegevens());
     }
 
-    // Een switch zonder default: een nieuw IdentificatieType zonder Soort breekt de build.
     private static Ontvanger.Soort soort(IdentificatieType type) {
         return switch (type) {
             case BSN -> Ontvanger.Soort.BSN;

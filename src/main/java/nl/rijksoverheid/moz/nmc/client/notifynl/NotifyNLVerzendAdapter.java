@@ -56,8 +56,12 @@ public class NotifyNLVerzendAdapter {
     }
 
     /**
-     * @param reference eigen referentie die NotifyNL in de receipts terugstuurt en waarop te zoeken is;
-     *                  het NMC geeft het poging-id mee
+     * @param emailAdres      het e-mailadres van de ontvanger
+     * @param templateId      het id van het NotifyNL-template
+     * @param berichtgegevens de variabelen voor het template, op naam
+     * @param reference       eigen referentie die NotifyNL in de receipts terugstuurt en waarop te zoeken
+     *                        is; het NMC geeft het poging-id mee
+     * @return het id dat NotifyNL aan de verzending geeft
      */
     public UUID verstuurEmail(@NotNull String emailAdres, @NotNull String templateId, Map<String, String> berichtgegevens,
                               String reference) throws NotifyNLConfiguratieException, NotifyNLVerzendException {

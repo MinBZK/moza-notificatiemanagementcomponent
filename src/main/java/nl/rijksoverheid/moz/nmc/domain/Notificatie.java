@@ -146,8 +146,10 @@ public class Notificatie {
     /**
      * Legt vast hoe de notificatie verstuurd wordt. Alleen bij de aanname, vóór de eerste opslag.
      *
+     * @param templateId     het id van het NotifyNL-template
      * @param regie          {@code CENTRAAL} of {@code DECENTRAAL}
      * @param dienstverlener de naam voor de Profielservice-lookup; leeg bij decentrale regie
+     * @param dienst         de naam van de dienst voor de scope van de voorkeur; mag leeg zijn
      */
     public void bewaarVerzendgegevens(String templateId, String regie, String dienstverlener, String dienst) {
         this.templateId = Objects.requireNonNull(templateId, "templateId is verplicht");
