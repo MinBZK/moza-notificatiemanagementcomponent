@@ -1,0 +1,2 @@
+# Geaccepteerde ZAP-meldingen voor de nachtelijke API-scan (.github/workflows/zap.yml).
+# Eén regel per scanregel, gescheiden door tabs: <regel-id>	<IGNORE|WARN|FAIL>	<reden>

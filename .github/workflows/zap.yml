@@ -1,0 +1,54 @@
+# DAST: actieve OWASP ZAP API-scan tegen de 'stable'-deployment op ZAD, aangestuurd door
+# de gepubliceerde OpenAPI-spec. Draait na elke geslaagde deploy vanuit main en 's nachts.
+#
+# De scan stuurt per endpoint honderden aanvalsachtige verzoeken, ook naar de endpoints die
+# een notificatie versturen. 'stable' verstuurt via een NotifyNL-mock; richt deze scan niet
+# op een omgeving die naar het echte NotifyNL wijst.
+
+name: ZAP API-scan
+
+on:
+  workflow_run:
+    workflows: ["ZAD Deploy"]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: '30 1 * * *' # elke nacht om 01:30 UTC
+  workflow_dispatch:
+
+permissions: read-all
+
+# Twee scans tegelijk tegen dezelfde omgeving verstoren elkaars resultaat.
+concurrency:
+  group: zap-api-scan
+  cancel-in-progress: false
+
+env:
+  DOEL_URL: https://nmcapi-stable-nd-j7s.rig.prd1.gn2.quattro.rijksapps.nl
+
+jobs:
+  scan:
+    # 'ZAD Deploy' draait ook voor PR's; alleen een geslaagde push-deploy naar main telt.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: ZAP API-scan
+        uses: zaproxy/action-api-scan@5158fe4d9d8fcc75ea204db81317cce7f9e5453d # v0.10.0
+        with:
+          target: ${{ env.DOEL_URL }}/q/openapi?format=json
+          format: openapi
+          rules_file_name: .zap/rules.tsv
+          # Het rapport (HTML/JSON/Markdown) komt als artifact bij de run; bevindingen
+          # worden opgevolgd in MinBZK/MijnOverheidZakelijk, niet als issue in deze repo.
+          artifact_name: zap-rapport
+          allow_issue_writing: false
+          fail_action: true
