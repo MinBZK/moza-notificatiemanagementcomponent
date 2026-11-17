@@ -92,6 +92,8 @@ Benodigde env-vars op die deployment:
 > De ZAP API-scan (`.github/workflows/zap.yml`) stuurt na elke deploy vanuit `main` en elke
 > nacht honderden aanvalsachtige verzoeken naar `stable`, ook naar de endpoints die een
 > notificatie versturen. Wijst die URL naar het echte NotifyNL, dan verstuurt elke scan mail.
+> Een PR die de scan wijzigt, draait hem tegen de eigen preview; die erft de URL van `feature`,
+> dus ook daar hoort de mock te staan.
 
 > Deze env-vars worden nu handmatig gezet. Automatiseren via de ZAD Operations
 > Manager API staat open als [#10](https://github.com/MinBZK/moza-notificatiemanagementcomponent/issues/10).

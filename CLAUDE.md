@@ -488,8 +488,8 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
 
 `.github/workflows/zap.yml` draait een actieve OWASP ZAP API-scan tegen de
 `stable`-deployment op ZAD, aangestuurd door `/q/openapi`: na elke geslaagde
-deploy vanuit `main`, elke nacht, handmatig via `workflow_dispatch` en op een PR die
-`zap.yml` of `.zap/` wijzigt. Het rapport
+deploy vanuit `main`, elke nacht en handmatig via `workflow_dispatch`. Een PR die
+`zap.yml` of `.zap/` wijzigt, draait de scan tegen de eigen preview. Het rapport
 staat als artifact `zap-rapport` bij de run, en de run wordt rood zodra ZAP een
 melding geeft.
 
@@ -784,8 +784,9 @@ Applicatieconfiguratie (datasource, NotifyNL-keys, pepper) staat in de deploymen
 zelf, in de ZAD Operations Manager, niet in de workflow en niet in deze repo.
 
 De ZAP API-scan stuurt bij elke run honderden aanvalsachtige verzoeken naar
-`stable`, ook naar de endpoints die een notificatie versturen. `stable` verstuurt
-via een NotifyNL-mock; laat `QUARKUS_REST_CLIENT_NOTIFY_URL` daar op de mock staan.
+`stable`, ook naar de endpoints die een notificatie versturen, en op een PR die de
+scan wijzigt naar de preview van die PR. Laat `QUARKUS_REST_CLIENT_NOTIFY_URL` daarom
+op `stable` en op `feature` op de NotifyNL-mock staan.
 
 Details en debugroutes: `docs/zad-deploy.md`.
 
