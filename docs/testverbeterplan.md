@@ -55,7 +55,7 @@ en `OvergangsfunctieTest` dekken de toegestane statusovergangen, `ReceiptVerwerk
 zonder receipt. De terugmelding zelf loopt via de eventfeed (`EventfeedTest`) en de webhook
 (`TerugkoppelTaakHandlerTest`, `WebhookClientIntegratieTest`). `CloudEventContractTest` toetst het
 CloudEvent per status aan het schema in het gepubliceerde `/q/openapi`. Wat voor R8 nog ontbreekt is
-de contractlaag met een echte tegenpartij (gap 5) en de e2e-laag (gap 15).
+de contractlaag met een echte tegenpartij (gap 5) en een e2e-journey op het nieuwe model (gap 15).
 
 Voor **R9** (onterecht uitgebleven uitkomst) zijn de uitsluitingsregels veranderd. Een notificatie
 verdwijnt niet meer zodra de terugmelding slaagt. De wistaak wist de sleutel zeven dagen na de
@@ -126,7 +126,7 @@ systeem-`mvn` aan in plaats van `./mvnw`, waarmee de buildversie van de runner a
 van de repo. Er worden geen Surefire- of JaCoCo-rapporten als artifact gepubliceerd, wat het testplan
 onder *Pipeline-integratie* wel vraagt. En er is geen diff-coverage per pull request.
 
-→ `./mvnw` gebruiken, rapporten uploaden, diff-coverage toevoegen. Story: nog niet aangemaakt.
+→ `./mvnw` gebruiken, rapporten uploaden, diff-coverage toevoegen. Story: #1575.
 
 #### 2. Componenttests mocken de gegenereerde REST-clients
 
@@ -143,7 +143,7 @@ De webhook (`WebhookClientIntegratieTest`) en het uitlezen van een NotifyNL-fout
 zelf. Dat is de transportgrens, maar geen nagebootste tegenpartij.
 
 → Omzetten naar WireMock-stubs op HTTP-niveau, inclusief de unhappy paden (timeout, 5xx, misvormde
-body). Story: nog niet aangemaakt.
+body). Story: #1567.
 
 #### 3. ~~Tests draaien op H2~~ — *vervallen*
 
@@ -167,7 +167,7 @@ controleert dat statussen en redenen als enum in het gepubliceerde document staa
 conformiteitsvalidatie van alle requests en responses.
 
 → `swagger-request-validator` plus de `OpenApiValidationTest`-basisklasse overnemen uit de
-Profielservice. Story: nog niet aangemaakt.
+Profielservice. Story: #1568.
 
 #### 5. Het "contract" is een gesloten lus — *(ook in het Profielservice-plan)*
 
@@ -180,8 +180,7 @@ Aan de R8-kant is de NMC zelf provider: Dienstverleners lezen de eventfeed en on
 een eigen assertie, geen afspraak met een tegenpartij; een Dienstverlener die de feed of de webhook
 consumeert heeft nog geen contract.
 
-→ Na gap 2: echte consumertests hier; daarna pas de broker. Story: #748 bestaat, maar is een
-verkenning; een uitvoerbare story ontbreekt nog.
+→ Na gap 2: echte consumertests hier; daarna pas de broker. Story: #748 (verkenning).
 
 #### 6. Callback-auth is niet volledig negatief getest
 
@@ -191,7 +190,7 @@ testplan vraagt onder *Security- en robuustheidstesten* expliciet vier gevallen:
 verkeerd en bijna-goed. Los daarvan ontbreekt de `WWW-Authenticate`-header op de 401 (#1543).
 
 → De twee ontbrekende gevallen toevoegen, en de misbruikcases bij het filter zelf plaatsen in plaats
-van bij de controller. Story: nog niet aangemaakt.
+van bij de controller. Story: #1569.
 
 #### 7. `Clock` wordt maar deels gebruikt — *(ook in het Profielservice-plan)*
 
@@ -205,7 +204,7 @@ er nét niet onder valt niet vast op het moment zelf, en is R9 formeel gedekt en
 
 → De resterende `now()`-aanroepen vervangen door de geïnjecteerde `Clock`, te beginnen bij de wis- en
 onderhoudstaak. Voeg daarna per uitsluitingsregel een geval toe op de grens, dat er níét onder valt en
-dus moet blijven staan. Story: nog niet aangemaakt.
+dus moet blijven staan. Story: #1566.
 
 ### Middel
 
@@ -226,17 +225,20 @@ ook die horen niet in de snelle laag.
 ingang geven met `<groups>${test.groups}</groups>` en een lege default; en een ArchUnit-test die de
 scheiding afdwingt in plaats van haar te benoemen, inclusief de omgekeerde regel dat een klasse met
 "Unit" in de naam geen container of database mag starten. Deze repo heeft nog geen ArchUnit, dus die
-dependency komt erbij. Story: nog niet aangemaakt.
+dependency komt erbij. Story: #1570.
 
 #### 10. Bevroren spec-kopie als bron voor de gegenereerde client
 
 `src/main/resources/openapi/profielservice_api.json` is sinds 2 juli 2026 niet ververst, terwijl de
-Profielservice haar contract sindsdien meermaals heeft gewijzigd, waaronder een **brekende** wijziging
-(een onbekende dienstverlener in het pad geeft nu 404). De kopie wijkt dus aantoonbaar af. Er is nog
-geen drift-check.
+Profielservice haar contract sindsdien meermaals heeft gewijzigd. De NMC gebruikt er één operatie uit,
+`POST /partij`. Daarvan is de vorm gelijk gebleven, maar de betekenis niet helemaal: het contract
+beschrijft nu dat de Profielservice zelf filtert op `dienstverlener` en `dienstNaam`, terwijl de NMC
+daarna ook zelf op scope selecteert. Verder zijn velden verplicht geworden en is `teVerwijderenOp`
+uit `ContactgegevenResponse` verdwenen. Er is nog geen drift-check, dus zo'n verschil valt nu alleen op
+als iemand de twee naast elkaar legt.
 
 → Korte termijn: verversen plus een CI-check die drift signaleert. Structureel: vervangen door de
-broker-flow uit gap 5. Story: nog niet aangemaakt.
+broker-flow uit gap 5. Story: #1571.
 
 #### 11. De coverage-afspraak is niet één
 
@@ -244,8 +246,7 @@ De Profielservice staat op LINE/BRANCH 85/80. De NMC meet op INSTRUCTION (90) pl
 testplan raadt INSTRUCTION af omdat het gevoelig is voor bytecode-details en niet vergelijkbaar is
 tussen services.
 
-→ De `check`-regel omzetten naar LINE + BRANCH en het huidige niveau vasthouden. Story: nog niet
-aangemaakt.
+→ De `check`-regel omzetten naar LINE + BRANCH en het huidige niveau vasthouden. Story: #1576.
 
 #### 12. Geen mutatietesten — *(ook in het Profielservice-plan)*
 
@@ -262,7 +263,7 @@ onderhouden en er is geen tegenhanger zoals `OpenApiContractDriftTest`. Met de e
 is de NMC bovendien zelf provider geworden; een brekende wijziging raakt elke Dienstverlener die de
 feed leest.
 
-→ Spectral- en oasdiff-jobs toevoegen aan de PR-pipeline. Story: nog niet aangemaakt.
+→ Spectral- en oasdiff-jobs toevoegen aan de PR-pipeline. Story: #1572.
 
 #### 14. Geen dekking op de LDV-verwerkingslogging — *(ook in het Profielservice-plan)*
 
@@ -275,22 +276,26 @@ REST-aanroep. Het `processingActivityId` is nog een placeholder (#754).
 verwerkingslogging) is voor deze service nu niet aanwijsbaar gedekt. Story: #1359 (toetsen in de
 testsuite), onder #1526.
 
-#### 15. Geen e2e-suite in de pipeline — *(ook in het Profielservice-plan)*
+#### 15. De e2e-suite dekt alleen de decentrale route, op het oude model — *(ook in het Profielservice-plan)*
 
 ADR 0023 kiest Bruno voor de nachtelijke run, met Playwright voor journeys met polling of tijdgebonden
-asserties en REST Assured als een journey liever in Java blijft. De NotifyNL-mock in `moza-mock` maakt
-het mogelijk de notificatiestappen mee te nemen zonder dat er echte mail uitgaat, en #1141 heeft de
-nachtelijke run tegen ZAD `stable` ingericht.
+asserties en REST Assured als een journey liever in Java blijft. Met #1141 (loopt nog) draait er 's nachts een
+NMC-journey tegen ZAD `stable` (`moza-mock/bruno/e2e-nmc`, achter `NMC_KETEN_ROND`): een decentrale
+notificatie versturen, de verzending in het journal van de NotifyNL-mock terugvinden, en wachten tot de
+bezorgstatus als CloudEvent op de `callbackUrl` binnenkomt. Dat is de asynchrone bezorgstatus over de
+hele keten, precies wat het toelatingscriterium vraagt.
 
-Voor deze service is de asynchrone bezorgstatus de eerste echte kandidaat: die loopt van de NMC via
-NotifyNL terug naar de NMC en vandaar via de eventfeed of de webhook naar de Dienstverlener, dus geen
-enkele test van één losse service kan hem afdekken. Dat is precies wat het toelatingscriterium vraagt.
-Met de event-driven core is de journey veranderd: de aanname antwoordt 202, en de uitkomst moet
-gepolld worden op de feed of ontvangen op een webhook. De FSC-route naar de NMC is de tweede
-kandidaat; die is in september met Bruno handmatig doorlopen tegen ZAD.
+Die journey gaat uit van het model op `main`: een 200 op de aanname, synchroon versturen en een
+`callbackUrl` op het verzoek. Met de event-driven core vervallen alle drie. De aanname antwoordt 202,
+de verzending gebeurt later door een worker, en de status komt via de eventfeed of de webhook. Zonder
+aanpassing wordt de nachtrun rood zodra PR #66 op `stable` staat. De journey pollt dan op twee
+plekken, en dat is volgens ADR 0023 het punt om naar Playwright over te stappen.
 
-→ De journey "notificatie aannemen tot bezorgstatus in de feed" toevoegen aan de nachtelijke run.
-Story: nog niet aangemaakt.
+#1141 levert daarnaast drie vervolgstories op: de centrale journey (via de Profielservice), de
+FSC-route naar de NMC (in september met Bruno handmatig doorlopen tegen ZAD) en Schemathesis.
+
+→ De bestaande journey omzetten naar de event-driven core, samen met of direct na de merge van PR #66.
+Story: #1578. De drie vervolgen: via #1141.
 
 #### 16. Geen performancetests — *(ook in het Profielservice-plan)*
 
@@ -312,7 +317,7 @@ een soak-scenario met een trage of niet-antwoordende Profielservice of NotifyNL.
 De hele `build`-job heeft schrijfrechten omdat de dependency-submission-stap die nodig heeft, ook op
 pull requests. De Profielservice heeft dit in een aparte job gezet die alleen op `main` draait.
 
-→ Dezelfde splitsing overnemen. Story: nog niet aangemaakt.
+→ Dezelfde splitsing overnemen. Story: #1575.
 
 ### Nieuw
 
@@ -331,4 +336,4 @@ De cursor komt van de Dienstverlener binnen en wordt door de NMC ontleed. Dat is
 extern koppelvlak, het geval waarvoor de teststrategie fuzzing vraagt. `CursorTest` dekt de bekende
 gevallen; de bestaande fuzztargets raken de cursor niet.
 
-→ Een fuzztarget voor het ontleden van de cursor toevoegen. Story: nog niet aangemaakt.
+→ Een fuzztarget voor het ontleden van de cursor toevoegen. Story: #1579.
