@@ -351,10 +351,12 @@ components:
           minLength: 1
           pattern: '^.*\S.*$'
           description: BSN-, KVK- of RSIN-nummer van de ontvanger
+          example: '999990019'
         dienstverlener:
           type: string
           minLength: 1
           description: Naam van de dienstverlener namens wie de notificatie wordt verstuurd
+          example: Gemeente Voorbeeld
         dienst:
           type: string
           minLength: 1
@@ -363,6 +365,7 @@ components:
           type: string
           minLength: 1
           description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template"
+          example: Demo template
         berichtgegevens:
           type: object
           description: Templatevariabelen voor het bericht, ten hoogste 50 met waarden tot 2000 tekens
@@ -389,10 +392,12 @@ components:
           # `pattern`.
           pattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
           description: E-mailadres van de ontvanger
+          example: ontvanger@example.com
         berichtType:
           type: string
           minLength: 1
           description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template"
+          example: Demo template
         berichtgegevens:
           type: object
           description: Templatevariabelen voor het bericht, ten hoogste 50 met waarden tot 2000 tekens
