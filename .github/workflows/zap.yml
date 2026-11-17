@@ -1,5 +1,6 @@
 # DAST: actieve OWASP ZAP API-scan tegen de 'stable'-deployment op ZAD, aangestuurd door
-# de gepubliceerde OpenAPI-spec. Draait na elke geslaagde deploy vanuit main en 's nachts.
+# de gepubliceerde OpenAPI-spec. Draait na elke geslaagde deploy vanuit main, 's nachts en op
+# PR's die de scan zelf wijzigen.
 #
 # De scan stuurt per endpoint honderden aanvalsachtige verzoeken, ook naar de endpoints die
 # een notificatie versturen. 'stable' verstuurt via een NotifyNL-mock; richt deze scan niet
@@ -15,6 +16,11 @@ on:
   schedule:
     - cron: '30 1 * * *' # elke nacht om 01:30 UTC
   workflow_dispatch:
+  # Een PR die de scan wijzigt, draait hem direct; het doel blijft 'stable'.
+  pull_request:
+    paths:
+      - .github/workflows/zap.yml
+      - .zap/**
 
 permissions: read-all
 

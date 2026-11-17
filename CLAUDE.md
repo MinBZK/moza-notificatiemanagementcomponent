@@ -488,7 +488,8 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
 
 `.github/workflows/zap.yml` draait een actieve OWASP ZAP API-scan tegen de
 `stable`-deployment op ZAD, aangestuurd door `/q/openapi`: na elke geslaagde
-deploy vanuit `main`, elke nacht en handmatig via `workflow_dispatch`. Het rapport
+deploy vanuit `main`, elke nacht, handmatig via `workflow_dispatch` en op een PR die
+`zap.yml` of `.zap/` wijzigt. Het rapport
 staat als artifact `zap-rapport` bij de run, en de run wordt rood zodra ZAP een
 melding geeft.
 
