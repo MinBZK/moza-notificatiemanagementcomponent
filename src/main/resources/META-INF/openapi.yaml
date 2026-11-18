@@ -192,9 +192,13 @@ paths:
 
                 Na een `2xx` volgen de volgende events; anders komen dezelfde events later
                 opnieuw. Na herhaalde mislukkingen pauzeert de webhook, tot ten hoogste een dag.
-                Een `2xx` is geen bevestiging: bevestig de cursor uit `Nmc-Cursor` via
-                `PUT /api/nmc/v1/notificaties/events/bevestiging`. Een event kan dubbel
-                aankomen; herken het aan `id`.
+                Een event kan dubbel aankomen; herken het aan `id`.
+
+                Het NMC houdt zelf bij welke events aan de webhook zijn geleverd; de levering hangt
+                niet af van een bevestiging. De header `Nmc-Cursor` is de positie van het laatste event in
+                de aanroep, in dezelfde vorm als de cursor van de feed. Daarmee kan de
+                Dienstverlener in de feed verder lezen vanaf dat punt, of de verwerking vastleggen
+                via `PUT /api/nmc/v1/notificaties/events/bevestiging`.
 
                 De bearer token is een JWT (RS256) met de webhook-URL als `aud`; controleer hem
                 met de sleutel uit `GET /api/nmc/v1/.well-known/jwks.json`.
