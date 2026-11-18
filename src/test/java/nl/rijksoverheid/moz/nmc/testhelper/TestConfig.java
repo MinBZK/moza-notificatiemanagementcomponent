@@ -1,10 +1,13 @@
 package nl.rijksoverheid.moz.nmc.testhelper;
 
+import nl.rijksoverheid.moz.nmc.config.AfleverbewijsConfig;
 import nl.rijksoverheid.moz.nmc.config.FeedConfig;
 import nl.rijksoverheid.moz.nmc.config.TaakConfig;
 import nl.rijksoverheid.moz.nmc.config.VaststellingConfig;
 import nl.rijksoverheid.moz.nmc.config.VerzendbudgetConfig;
 import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
+import nl.rijksoverheid.moz.nmc.config.WissenConfig;
+import nl.rijksoverheid.moz.nmc.service.Opruimtermijnen;
 
 import java.time.Duration;
 
@@ -87,11 +90,28 @@ public final class TestConfig {
 
     public static VerzendbudgetConfig verzendbudget(int tokensPerMinuut, int verzendReservering, int navraagReservering) {
         VerzendbudgetConfig config = mock(VerzendbudgetConfig.class);
-        when(config.notifyService()).thenReturn("standaard");
         when(config.tokensPerMinuut()).thenReturn(tokensPerMinuut);
         when(config.verzendReservering()).thenReturn(verzendReservering);
         when(config.navraagReservering()).thenReturn(navraagReservering);
 
         return config;
+    }
+
+    public static WissenConfig wissen(Duration termijn) {
+        WissenConfig config = mock(WissenConfig.class);
+        when(config.termijn()).thenReturn(termijn);
+
+        return config;
+    }
+
+    public static AfleverbewijsConfig afleverbewijs(Duration bewaartermijn) {
+        AfleverbewijsConfig config = mock(AfleverbewijsConfig.class);
+        when(config.bewaartermijn()).thenReturn(bewaartermijn);
+
+        return config;
+    }
+
+    public static Opruimtermijnen opruimtermijnen(Duration wistermijn, Duration bewaartermijn, Duration maxCursorleeftijd) {
+        return new Opruimtermijnen(wissen(wistermijn), afleverbewijs(bewaartermijn), feedMetCursorleeftijd(maxCursorleeftijd));
     }
 }

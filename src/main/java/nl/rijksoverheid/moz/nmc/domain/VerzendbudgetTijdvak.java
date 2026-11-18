@@ -3,25 +3,19 @@ package nl.rijksoverheid.moz.nmc.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 
 import java.time.OffsetDateTime;
 
 /**
- * Het verzendbudget van één Notify-service in één tijdvak van een minuut. Verzenden en navraag hebben
+ * Het verzendbudget in één tijdvak van een minuut. Verzenden en navraag hebben
  * elk een reservering ({@code verzendTokens}, {@code navraagTokens}) die de ander laat staan; wat daar
  * boven over is, is voor wie het eerst claimt. Wijzig alleen een rij die met een rijlock is gelezen,
  * zodat twee gelijktijdige claims elkaars tokens niet dubbel nemen.
  */
 @Entity
 @Table(name = "verzendbudget")
-@IdClass(VerzendbudgetTijdvak.Sleutel.class)
 public class VerzendbudgetTijdvak {
-
-    @Id
-    @Column(name = "notify_service", length = 64)
-    private String notifyService;
 
     @Id
     private OffsetDateTime tijdvak;
@@ -81,8 +75,5 @@ public class VerzendbudgetTijdvak {
         } else {
             verzendTokens = waarde;
         }
-    }
-
-    public record Sleutel(String notifyService, OffsetDateTime tijdvak) {
     }
 }
