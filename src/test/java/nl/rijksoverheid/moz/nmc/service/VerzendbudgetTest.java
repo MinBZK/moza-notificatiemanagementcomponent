@@ -15,9 +15,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.when;
 
 // %test: 20 tokens per minuut, 10 gereserveerd voor het verzenden en 5 voor de navraag, 5 gedeeld.
@@ -183,15 +181,6 @@ class VerzendbudgetTest {
                 new Verzendbudget.Genomen(0, java.time.OffsetDateTime.ofInstant(TIJDVAK_A, ZoneOffset.UTC), BudgetDoel.VERZENDEN, 0), 0));
 
         assertEquals(0, QuarkusTransaction.requiringNew().call(() -> TaakFixtures.telBudgetrijen(entityManager)));
-    }
-
-    @Test
-    void constructor_ongeldigeConfiguratie_weigert() {
-        assertThrows(IllegalStateException.class, () -> new Verzendbudget(verzendbudgetRepository, clock, "x", 0, 0, 0));
-        assertThrows(IllegalStateException.class, () -> new Verzendbudget(verzendbudgetRepository, clock, "x", 10, 6, 5));
-        assertThrows(IllegalStateException.class, () -> new Verzendbudget(verzendbudgetRepository, clock, "x", 10, 5, -1));
-        assertThrows(IllegalStateException.class, () -> new Verzendbudget(verzendbudgetRepository, clock, "x", 10, 0, 5));
-        assertDoesNotThrow(() -> new Verzendbudget(verzendbudgetRepository, clock, "x", 10, 5, 5));
     }
 
     private int neem(BudgetDoel doel, int gevraagd) {

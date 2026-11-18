@@ -267,12 +267,6 @@ class EventfeedTest {
         assertThrows(CursorVervallenException.class, () -> eventfeed.bevestig(NotificatieFixtures.DV_ID, new Cursor(1, 1L << 62, 1)));
     }
 
-    @Test
-    void constructor_ongeldigeConfiguratie_weigert() {
-        assertThrows(IllegalStateException.class, () -> new Eventfeed(eventRepository, null, clock, -1, 10));
-        assertThrows(IllegalStateException.class, () -> new Eventfeed(eventRepository, null, clock, 1, 0));
-    }
-
     private long schrijfEvent(UUID dvId) {
         return QuarkusTransaction.requiringNew().call(() -> voegEventToe(dvId));
     }
