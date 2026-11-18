@@ -1,7 +1,7 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
+import nl.rijksoverheid.moz.nmc.config.FeedConfig;
 
 import java.time.Clock;
 import java.util.UUID;
@@ -19,13 +19,9 @@ public class Aanroeplimiet {
     private final int maxPerMinuut;
     private final ConcurrentMap<UUID, Venster> vensters = new ConcurrentHashMap<>();
 
-    public Aanroeplimiet(Clock clock, @ConfigProperty(name = "nmc.feed.max-aanroepen-per-minuut") int maxPerMinuut) {
-        if (maxPerMinuut < 1) {
-            throw new IllegalStateException("nmc.feed.max-aanroepen-per-minuut moet 1 of hoger zijn, is " + maxPerMinuut);
-        }
-
+    public Aanroeplimiet(Clock clock, FeedConfig config) {
         this.clock = clock;
-        this.maxPerMinuut = maxPerMinuut;
+        this.maxPerMinuut = config.maxAanroepenPerMinuut();
     }
 
     /** Telt een aanroep en geeft terug of hij nog binnen de limiet van de lopende minuut valt. */

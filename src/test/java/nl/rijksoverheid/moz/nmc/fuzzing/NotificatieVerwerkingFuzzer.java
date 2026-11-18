@@ -41,6 +41,7 @@ import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.domain.Dienstverlener;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.service.Sleutelbeheer;
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
 
@@ -136,7 +137,7 @@ public class NotificatieVerwerkingFuzzer {
                 Clock.systemUTC(),
                 Optional.empty());
         receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
-                taken, new Vaststellingstermijn(Duration.ofDays(7), Duration.ofDays(1)), verzendbeleid,
+                taken, new Vaststellingstermijn(TestConfig.vaststelling(Duration.ofDays(7), Duration.ofDays(1))), verzendbeleid,
                 Clock.systemUTC(), Duration.ofMinutes(5));
 
         LogboekContext logboekContext = new LogboekContext();

@@ -3,6 +3,7 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
+import nl.rijksoverheid.moz.nmc.config.ControleConfig;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
@@ -13,7 +14,6 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -55,17 +55,15 @@ public class ControleTaakHandler implements TaakHandler {
     public ControleTaakHandler(NotificatieRepository notificatieRepository, PogingRepository pogingRepository,
                                TaakRepository taakRepository, Overgangsfunctie overgangsfunctie,
                                Vaststellingstermijn vaststellingstermijn, Verzendbeleid verzendbeleid,
-                               Clock clock,
-                               @ConfigProperty(name = "nmc.controle.interval") Duration interval,
-                               @ConfigProperty(name = "nmc.controle.max-per-ronde") int maxPerRonde) {
+                               Clock clock, ControleConfig config) {
         this.notificatieRepository = notificatieRepository;
         this.pogingRepository = pogingRepository;
         this.taakRepository = taakRepository;
         this.overgangsfunctie = overgangsfunctie;
         this.vaststellingstermijn = vaststellingstermijn;
         this.verzendbeleid = verzendbeleid;
-        this.interval = interval;
-        this.maxPerRonde = maxPerRonde;
+        this.interval = config.interval();
+        this.maxPerRonde = config.maxPerRonde();
         this.clock = clock;
     }
 

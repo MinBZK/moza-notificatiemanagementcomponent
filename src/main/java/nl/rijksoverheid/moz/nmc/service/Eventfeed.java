@@ -3,12 +3,12 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
+import nl.rijksoverheid.moz.nmc.config.FeedConfig;
 import nl.rijksoverheid.moz.nmc.domain.Bevestiging;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.repository.BevestigingRepository;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Clock;
 import java.time.OffsetDateTime;
@@ -33,17 +33,12 @@ public class Eventfeed {
     private final int maxPagina;
 
     public Eventfeed(EventRepository eventRepository, BevestigingRepository bevestigingRepository, Clock clock,
-                     @ConfigProperty(name = "nmc.feed.cluster-epoch") int epoch,
-                     @ConfigProperty(name = "nmc.feed.max-pagina") int maxPagina) {
-        if (epoch < 0 || maxPagina < 1) {
-            throw new IllegalStateException("nmc.feed.cluster-epoch mag niet negatief zijn en nmc.feed.max-pagina moet 1 of hoger zijn");
-        }
-
+                     FeedConfig config) {
         this.eventRepository = eventRepository;
         this.bevestigingRepository = bevestigingRepository;
         this.clock = clock;
-        this.epoch = epoch;
-        this.maxPagina = maxPagina;
+        this.epoch = config.clusterEpoch();
+        this.maxPagina = config.maxPagina();
     }
 
     /**

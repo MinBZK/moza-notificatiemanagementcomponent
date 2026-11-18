@@ -4,6 +4,7 @@ import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
+import nl.rijksoverheid.moz.nmc.config.FeedConfig;
 import nl.rijksoverheid.moz.nmc.repository.EventPartitie;
 import nl.rijksoverheid.moz.nmc.repository.EventPartitieRepository;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -44,7 +45,7 @@ public class EventlogPartitiebeheer {
                           @ConfigProperty(name = "nmc.onderhoud.partitie-omvang") long omvang,
                           @ConfigProperty(name = "nmc.onderhoud.partitie-marge") long marge,
                           @ConfigProperty(name = "nmc.onderhoud.lock-timeout") Duration lockTimeout,
-                          @ConfigProperty(name = "nmc.feed.cluster-epoch") int epoch) {
+                          FeedConfig feedConfig) {
         if (omvang < 1) {
             throw new IllegalStateException("nmc.onderhoud.partitie-omvang moet 1 of hoger zijn, is " + omvang);
         }
@@ -63,7 +64,7 @@ public class EventlogPartitiebeheer {
         this.omvang = omvang;
         this.marge = marge;
         this.lockTimeout = lockTimeout;
-        this.epoch = epoch;
+        this.epoch = feedConfig.clusterEpoch();
     }
 
     /**
