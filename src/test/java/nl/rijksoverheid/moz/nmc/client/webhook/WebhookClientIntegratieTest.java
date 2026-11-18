@@ -112,7 +112,7 @@ class WebhookClientIntegratieTest {
     // Een geweigerde verbinding is een transportfout: de levering is mislukt, niet het NMC.
     @Test
     void geweigerdeVerbinding_wordtEenLeveringException() {
-        WebhookAdapter adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(5)), TestConfig.taak());
+        WebhookAdapter adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(5)));
 
         assertThrows(WebhookLeveringException.class,
                 () -> adapter.lever("http://localhost:1/webhook", "Bearer jwt", "cursor", json(event(UUID.randomUUID()))));
@@ -121,7 +121,7 @@ class WebhookClientIntegratieTest {
     // Een webhook die blijft druppelen valt nooit onder de read-time-out; de totale termijn breekt hem af.
     @Test
     void druppelendeWebhook_wordtNaDeTermijnAfgebroken() {
-        WebhookAdapter adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(1)), TestConfig.taak());
+        WebhookAdapter adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(1)));
         long start = System.nanoTime();
 
         WebhookLeveringException fout = assertThrows(WebhookLeveringException.class,
