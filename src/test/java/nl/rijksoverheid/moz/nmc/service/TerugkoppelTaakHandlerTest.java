@@ -66,7 +66,7 @@ import static org.mockito.Mockito.when;
 @QuarkusTest
 class TerugkoppelTaakHandlerTest {
 
-    private static final String FEED = "/api/nmc/v1/notificaties/wijzigingen";
+    private static final String FEED = "/api/nmc/v1/notificaties/events";
 
     @TestHTTPResource("/test/webhook")
     URL ontvanger;

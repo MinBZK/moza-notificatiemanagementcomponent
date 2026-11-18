@@ -3,9 +3,9 @@ package nl.rijksoverheid.moz.nmc.controller;
 import jakarta.ws.rs.core.Response;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.Logboek;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
-import nl.rijksoverheid.moz.nmc.api.WijzigingenApi;
+import nl.rijksoverheid.moz.nmc.api.EventsApi;
 import nl.rijksoverheid.moz.nmc.api.model.BevestigingRequest;
-import nl.rijksoverheid.moz.nmc.api.model.WijzigingenPagina;
+import nl.rijksoverheid.moz.nmc.api.model.EventsResponse;
 import nl.rijksoverheid.moz.nmc.client.webhook.NotificatieStatusEvent;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.domain.OngeldigeCursorException;
@@ -24,7 +24,7 @@ import java.util.UUID;
  * pagina één LDV-registratie, met de dienstverlener als betrokkene: het log is pseudoniem, maar de
  * Dienstverlener kan het herleiden.
  */
-public class EventfeedController implements WijzigingenApi {
+public class EventfeedController implements EventsApi {
 
     private static final String BETROKKENE_TYPE_DIENSTVERLENER = "DIENSTVERLENER";
 
@@ -44,8 +44,8 @@ public class EventfeedController implements WijzigingenApi {
     @Override
     // TODO processingActivityId is een placeholder; vervang door de URL van de verwerkingsactiviteit uit
     // het register van verwerkingsactiviteiten zodra die er is.
-    @Logboek(name = "wijzigingenLezen", processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
-    public Response wijzigingenLezen(String cursor, Integer limiet) {
+    @Logboek(name = "eventsLezen", processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
+    public Response eventsLezen(String cursor, Integer limiet) {
         UUID dvId = dvProvider.huidigeDvId();
         logboekContext.setDataSubjectId(dvId.toString());
         logboekContext.setDataSubjectType(BETROKKENE_TYPE_DIENSTVERLENER);
@@ -66,14 +66,14 @@ public class EventfeedController implements WijzigingenApi {
         List<NotificatieStatusEvent> events = pagina.events().stream()
                 .map(NotificatieStatusEvent::of)
                 .toList();
-        WijzigingenPagina wijzigingen = new WijzigingenPagina(events)
+        EventsResponse antwoord = new EventsResponse(events)
                 .cursor(pagina.cursor() == null ? null : pagina.cursor().codeer());
 
-        return Response.ok(wijzigingen).build();
+        return Response.ok(antwoord).build();
     }
 
     @Override
-    public Response wijzigingenBevestigen(BevestigingRequest bevestigingRequest) {
+    public Response eventsBevestigen(BevestigingRequest bevestigingRequest) {
         Cursor cursor = ontleed(bevestigingRequest.getCursor());
 
         if (cursor == null) {

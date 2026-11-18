@@ -149,7 +149,7 @@ Geïmplementeerde componenten zijn vetgedrukt; de rest is toekomstig ontwerp.
 | **Wistaak en onderhoudstaak** | Taakhandlers (`WisTaakHandler`, `OnderhoudTaakHandler`, `EventlogPartitiebeheer`) | Wissen de sleutel per notificatie na de wistermijn; maken en verwijderen eventpartities, herwrappen sleutels na een KEK-rotatie en verwijderen notificaties na de bewaartermijn van het afleverbewijs. |
 | **notificatiedatabase** | PostgreSQL | Slaat notificaties met hun status, de verzendpogingen, het eventlog, de takentabel, het verzendbudget en het dienstverlenerregister op. |
 | **Decentrale-regie-API** | REST (controller) | Inbound endpoint voor het decentraal profiel: intake op het meegegeven e-mailadres, zonder Profielservice-lookup. |
-| **Eventfeed-API** | REST (controller) | `GET /notificaties/wijzigingen`, de bevestiging en de JWKS. |
+| **Eventfeed-API** | REST (controller) | `GET /notificaties/events`, de bevestiging en de JWKS. |
 | Adres-adapter | Client | Haalt een postadres op bij KvK Handelsregister of BRP als fallback bij contactherstel. |
 | Contactherstel-coordinator | Component | Coördineert de contactherstelstroom bij onbereikbaarheid; initieert een nieuwe verzendpoging via een ander kanaal en meldt dit aan de Contactherstel-dienst. |
 
@@ -261,7 +261,7 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
 - **`POST /decentraal/notificaties`**: idem voor een meegegeven e-mailadres (geen
   Profielservice-lookup). Retourneert `202`, `400` bij een onbekend berichttype of
   een ongeldig e-mailadres, en `429` bij het quotum.
-- **`GET /notificaties/wijzigingen?cursor=&limiet=`**: de events van de eigen
+- **`GET /notificaties/events?cursor=&limiet=`**: de events van de eigen
   notificaties als CloudEvents, in commitvolgorde, met de cursor voor de volgende
   pagina. Zonder cursor vanaf het oudste beschikbare event. `400` bij een ongeldige
   cursor, `410` bij een vervallen cursor (begin dan zonder cursor), `429` met `Retry-After`
@@ -269,7 +269,7 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   volgorde binnen één notificatie. Het onderhoud spaart alleen oude events waar een
   bevestiging naar wijst; een cursor die nog niet bevestigd is kan daardoor vervallen en
   geeft bij de volgende aanroep `410`.
-- **`PUT /notificaties/wijzigingen/bevestiging`**: legt de cursor vast tot waar de
+- **`PUT /notificaties/events/bevestiging`**: legt de cursor vast tot waar de
   Dienstverlener heeft verwerkt; een oudere cursor verandert niets. `204`, `400` of `410`.
 - **Webhook** (in het contract als callback bij de feed): heeft de Dienstverlener een
   `webhook_url` in het register, dan levert één terugkoppeltaak per Dienstverlener
@@ -350,7 +350,7 @@ specificaties:
 - Bij elke build genereert de `openapi-generator-maven-plugin` (twee losse
   `<execution>`s, één per spec) hieruit de JAX-RS-interfaces
   (`nl.rijksoverheid.moz.nmc.api.CentraleNotificatiesApi`, `DecentraleNotificatiesApi`,
-  `WijzigingenApi` en `SleutelsApi`,
+  `EventsApi` en `SleutelsApi`,
   `nl.rijksoverheid.moz.nmc.notifynlcallback.api.NotifyNlCallbackApi`) en de
   request/response-modellen (`nl.rijksoverheid.moz.nmc.api.model.*`,
   `nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.*`) in
