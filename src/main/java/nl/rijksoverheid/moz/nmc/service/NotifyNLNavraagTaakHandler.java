@@ -7,6 +7,7 @@ import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLAfleverstatus;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLConfiguratieException;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendException;
+import nl.rijksoverheid.moz.nmc.config.TaakConfig;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
@@ -14,7 +15,6 @@ import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -42,15 +42,14 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
 
     public NotifyNLNavraagTaakHandler(PogingRepository pogingRepository, Overgangsfunctie overgangsfunctie, ReceiptVerwerker receiptVerwerker,
                       TaakClaimer taakClaimer, NotifyNLVerzendAdapter verzendAdapter, NotifyNLNavraagmomenten notifyNLNavraagmomenten,
-                      Clock clock,
-                      @ConfigProperty(name = "nmc.taak.uitstel") Duration uitstel) {
+                      Clock clock, TaakConfig config) {
         this.pogingRepository = pogingRepository;
         this.overgangsfunctie = overgangsfunctie;
         this.receiptVerwerker = receiptVerwerker;
         this.taakClaimer = taakClaimer;
         this.verzendAdapter = verzendAdapter;
         this.notifyNLNavraagmomenten = notifyNLNavraagmomenten;
-        this.uitstel = uitstel;
+        this.uitstel = config.uitstel();
         this.clock = clock;
     }
 

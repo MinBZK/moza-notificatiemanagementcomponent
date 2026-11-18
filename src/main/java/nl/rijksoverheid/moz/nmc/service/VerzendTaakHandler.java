@@ -11,6 +11,7 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.PartijIdentificatie;
 import nl.rijksoverheid.moz.nmc.client.profielservice.PartijNietGevondenException;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceAdapter;
 import nl.rijksoverheid.moz.nmc.client.profielservice.ProfielServiceException;
+import nl.rijksoverheid.moz.nmc.config.TaakConfig;
 import nl.rijksoverheid.moz.nmc.controller.IdentificatieType;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
@@ -22,7 +23,6 @@ import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -70,8 +70,7 @@ public class VerzendTaakHandler implements TaakHandler {
                               TaakRepository taakRepository, TaakClaimer taakClaimer, Sleutelbeheer sleutelbeheer,
                               ProfielServiceAdapter profielServiceAdapter, NotifyNLVerzendAdapter verzendAdapter,
                               NotifyNLNavraagmomenten notifyNLNavraagmomenten, Verzendbeleid verzendbeleid,
-                              Clock clock,
-                              @ConfigProperty(name = "nmc.taak.uitstel") Duration uitstel) {
+                              Clock clock, TaakConfig config) {
         this.overgangsfunctie = overgangsfunctie;
         this.pogingRepository = pogingRepository;
         this.taakRepository = taakRepository;
@@ -79,7 +78,7 @@ public class VerzendTaakHandler implements TaakHandler {
         this.sleutelbeheer = sleutelbeheer;
         this.profielServiceAdapter = profielServiceAdapter;
         this.verzendAdapter = verzendAdapter;
-        this.uitstel = uitstel;
+        this.uitstel = config.uitstel();
         this.notifyNLNavraagmomenten = notifyNLNavraagmomenten;
         this.verzendbeleid = verzendbeleid;
         this.clock = clock;

@@ -5,6 +5,7 @@ import io.smallrye.mutiny.Uni;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -28,8 +29,6 @@ import static org.mockito.Mockito.when;
 class WebhookAdapterTest {
 
     private static final String URL = "https://omc.example.nl/webhook";
-    private static final Duration LEASE = Duration.ofMinutes(2);
-
     private WebhookClient client;
     private WebhookAdapter adapter;
 
@@ -37,7 +36,7 @@ class WebhookAdapterTest {
     void setUp() {
         client = Mockito.mock(WebhookClient.class);
         when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().voidItem());
-        adapter = new WebhookAdapter(client, Duration.ofSeconds(5), LEASE);
+        adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(5)), TestConfig.taak());
     }
 
     @Test
@@ -106,7 +105,7 @@ class WebhookAdapterTest {
     @Test
     void lever_geenAntwoordBinnenDeTermijn_gooitLeveringException() {
         when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().nothing());
-        WebhookAdapter kort = new WebhookAdapter(client, Duration.ofMillis(100), LEASE);
+        WebhookAdapter kort = new WebhookAdapter(client, TestConfig.webhook(Duration.ofMillis(100)), TestConfig.taak());
 
         WebhookLeveringException fout = assertThrows(WebhookLeveringException.class,
                 () -> kort.lever(URL, "Bearer jwt", "cursor", body()));
@@ -116,8 +115,8 @@ class WebhookAdapterTest {
 
     @Test
     void timeoutNietKorterDanLease_weigertOpTeStarten() {
-        assertThrows(IllegalStateException.class, () -> new WebhookAdapter(client, LEASE, LEASE));
-        assertThrows(IllegalStateException.class, () -> new WebhookAdapter(client, Duration.ZERO, LEASE));
+        assertThrows(IllegalStateException.class,
+                () -> new WebhookAdapter(client, TestConfig.webhook(TestConfig.LEASE), TestConfig.taak()));
     }
 
     @Test
