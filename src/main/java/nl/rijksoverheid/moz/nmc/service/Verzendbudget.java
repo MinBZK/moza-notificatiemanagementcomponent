@@ -1,6 +1,5 @@
 package nl.rijksoverheid.moz.nmc.service;
 
-import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import nl.rijksoverheid.moz.nmc.config.VerzendbudgetConfig;
@@ -22,7 +21,6 @@ import java.time.temporal.ChronoUnit;
  * Loopt in de transactie van de claim: de rij van het tijdvak blijft tot de commit vergrendeld, zodat
  * twee gelijktijdige claims elkaars tokens niet dubbel nemen.
  */
-@Startup
 @ApplicationScoped
 @Transactional(Transactional.TxType.MANDATORY)
 public class Verzendbudget {

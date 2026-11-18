@@ -1,7 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.logging.Log;
-import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import nl.rijksoverheid.moz.nmc.config.TaakConfig;
@@ -28,7 +27,6 @@ import java.util.UUID;
  * het claim-epoch en gooit {@link TaakVerlorenException} als een andere worker de taak inmiddels
  * heeft, zodat de transactie van de aanroeper terugrolt.
  */
-@Startup
 @ApplicationScoped
 public class TaakClaimer {
 
