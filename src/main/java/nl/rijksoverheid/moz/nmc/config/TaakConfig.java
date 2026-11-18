@@ -7,15 +7,16 @@ import org.hibernate.validator.constraints.time.DurationMin;
 import java.time.Duration;
 
 /**
- * De instellingen van de taakworker onder {@code nmc.taak}. Een ongeldige waarde laat de applicatie
- * niet starten.
+ * De instellingen van de taken onder {@code nmc.taak}: de worker, de claim en het uitstel. Een
+ * ongeldige waarde laat de applicatie niet starten.
  */
 @ConfigMapping(prefix = "nmc.taak")
 public interface TaakConfig {
 
     /**
      * Hoe vaak een ronde per taaksoort start; {@code off} zet de lus uit. Alleen de
-     * {@code @Scheduled}-expressies van de worker lezen deze waarde.
+     * {@code @Scheduled}-expressies van de worker lezen deze waarde. Hij staat hier omdat een mapping
+     * elke property onder zijn prefix moet kennen; zonder dit lid start de applicatie niet.
      */
     String interval();
 

@@ -6,7 +6,6 @@ import io.vertx.core.http.StreamResetException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
-import nl.rijksoverheid.moz.nmc.config.TaakConfig;
 import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
 
 import java.io.IOException;
@@ -32,18 +31,9 @@ public class WebhookAdapter {
     private final WebhookClient client;
     private final Duration timeout;
 
-    public WebhookAdapter(WebhookClient client, WebhookConfig webhookConfig, TaakConfig taakConfig) {
-        Duration timeout = webhookConfig.timeout();
-        Duration lease = taakConfig.lease();
-
-        // Een aanroep die langer duurt dan de lease, laat een tweede worker dezelfde bundel nog eens afleveren.
-        if (timeout.compareTo(lease) >= 0) {
-            throw new IllegalStateException("nmc.webhook.timeout moet korter dan nmc.taak.lease ("
-                    + lease + ") zijn, is " + timeout);
-        }
-
+    public WebhookAdapter(WebhookClient client, WebhookConfig config) {
         this.client = client;
-        this.timeout = timeout;
+        this.timeout = config.timeout();
     }
 
     /**
