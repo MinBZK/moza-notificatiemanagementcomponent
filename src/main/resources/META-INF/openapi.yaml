@@ -23,7 +23,7 @@ tags:
     description: >-
       Decentrale notificaties (decentraal profiel / doorgeefluik); de aanroeper heeft
       de contactgegevens zelf al bepaald en levert het e-mailadres rechtstreeks aan.
-  - name: Wijzigingen
+  - name: Events
     description: >-
       De eventfeed: de statusovergangen van de notificaties van de Dienstverlener als
       CloudEvents, gelezen met een cursor en bevestigd door die cursor terug te schrijven.
@@ -143,9 +143,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
-  /api/nmc/v1/notificaties/wijzigingen:
+  /api/nmc/v1/notificaties/events:
     get:
-      operationId: wijzigingenLezen
+      operationId: eventsLezen
       summary: Statusovergangen lezen vanaf een cursor
       description: |
         Geeft de statusovergangen van de notificaties van de Dienstverlener terug als
@@ -164,7 +164,7 @@ paths:
         zijn opgeruimd; lees dan opnieuw zonder cursor. Het aantal events per pagina en het
         aantal aanroepen per minuut zijn begrensd (429, met `Retry-After`).
       tags:
-        - Wijzigingen
+        - Events
       parameters:
         - name: cursor
           in: query
@@ -193,7 +193,7 @@ paths:
                 Na een `2xx` volgen de volgende events; anders komen dezelfde events later
                 opnieuw. Na herhaalde mislukkingen pauzeert de webhook, tot ten hoogste een dag.
                 Een `2xx` is geen bevestiging: bevestig de cursor uit `Nmc-Cursor` via
-                `PUT /api/nmc/v1/notificaties/wijzigingen/bevestiging`. Een event kan dubbel
+                `PUT /api/nmc/v1/notificaties/events/bevestiging`. Een event kan dubbel
                 aankomen; herken het aan `id`.
 
                 De bearer token is een JWT (RS256) met de webhook-URL als `aud`; controleer hem
@@ -231,7 +231,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WijzigingenPagina'
+                $ref: '#/components/schemas/EventsResponse'
         '400':
           description: De cursor is niet te ontleden of `limiet` is kleiner dan 1
           content:
@@ -258,9 +258,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/AanroeplimietProblem'
 
-  /api/nmc/v1/notificaties/wijzigingen/bevestiging:
+  /api/nmc/v1/notificaties/events/bevestiging:
     put:
-      operationId: wijzigingenBevestigen
+      operationId: eventsBevestigen
       summary: Verwerkte statusovergangen bevestigen
       description: |
         Legt vast tot welke cursor de Dienstverlener de events heeft verwerkt. De NMC bewaart
@@ -269,7 +269,7 @@ paths:
         (ander cluster-epoch, onder het oudste beschikbare event of boven de jongste transactie)
         krijgt `410`.
       tags:
-        - Wijzigingen
+        - Events
       requestBody:
         required: true
         content:
@@ -494,6 +494,10 @@ components:
           type: integer
           format: int64
           description: Het volgnummer van de overgang, gelijk aan `sequence` in de envelop
+      example:
+        vorigeStatus: verzonden
+        nieuweStatus: bezorgd
+        versie: 3
 
     NotificatieStatus:
       type: string
@@ -545,7 +549,7 @@ components:
         - geannuleerd
         - technisch
 
-    WijzigingenPagina:
+    EventsResponse:
       type: object
       description: >-
         Eén pagina uit de eventfeed. `events` zijn de CloudEvents op volgorde van transactie-id; `cursor`
