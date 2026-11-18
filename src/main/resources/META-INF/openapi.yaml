@@ -456,7 +456,10 @@ components:
         source:
           type: string
           format: uri-reference
-          example: /api/nmc/v1/notificaties/3f1a...
+          description: >-
+            De URN van het NMC dat het event uitgeeft, volgens het NL GOV profiel:
+            `urn:nld:oin:<OIN>:systeem:<naam>`. De notificatie zelf staat in `subject`.
+          example: urn:nld:oin:00000001823288444000:systeem:nmc
         subject:
           type: string
           description: De notificatie-id die bij de aanvraag is teruggegeven

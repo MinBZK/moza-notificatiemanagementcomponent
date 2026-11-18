@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.config;
 
 import io.smallrye.config.ConfigMapping;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 import org.hibernate.validator.constraints.time.DurationMin;
 
 import java.time.Duration;
@@ -37,4 +38,11 @@ public interface FeedConfig {
      */
     @DurationMin(nanos = 1)
     Duration maxCursorleeftijd();
+
+    /**
+     * De {@code source} van elk CloudEvent: de URN van dit systeem volgens het NL GOV profiel,
+     * {@code urn:nld:oin:<OIN>:systeem:<naam>}.
+     */
+    @Pattern(regexp = "urn:nld:oin:[0-9]{20}:systeem:[A-Za-z0-9._-]+")
+    String source();
 }

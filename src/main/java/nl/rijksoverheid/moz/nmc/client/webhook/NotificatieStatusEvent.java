@@ -1,7 +1,6 @@
 package nl.rijksoverheid.moz.nmc.client.webhook;
 
 import nl.rijksoverheid.moz.nmc.domain.Event;
-import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 
@@ -16,7 +15,7 @@ import java.util.UUID;
  * @param specversion     de versie van de CloudEvents-specificatie
  * @param id              de UUID van het event
  * @param type            het soort event; eindigt op de nieuwe status als API-waarde
- * @param source          het pad van de notificatie in de API van het NMC
+ * @param source          de URN van het NMC als bron van het event
  * @param subject         het id van de notificatie
  * @param time            het tijdstip waarop het NMC de overgang registreerde
  * @param datacontenttype het mediatype van {@code data}
@@ -38,19 +37,19 @@ public record NotificatieStatusEvent(
     private static final String TYPE_PREFIX = "nl.mijnoverheidzakelijk.nmc.notificatie.status.";
     private static final String DATACONTENTTYPE = "application/json";
 
-    public static NotificatieStatusEvent of(Event event) {
-        return of(event.getUuid(), event.getNotificatieId(), event.getVolgnummer(), event.getVan(), event.getNaar(),
+    public static NotificatieStatusEvent of(Event event, String source) {
+        return of(source, event.getUuid(), event.getNotificatieId(), event.getVolgnummer(), event.getVan(), event.getNaar(),
                 event.getReden(), event.getGeregistreerd());
     }
 
-    public static NotificatieStatusEvent of(UUID eventUuid, UUID notificatieId, long versie,
+    public static NotificatieStatusEvent of(String source, UUID eventUuid, UUID notificatieId, long versie,
                                             NotificatieStatus vorigeStatus, NotificatieStatus nieuweStatus, Reden reden,
                                             OffsetDateTime tijdstip) {
         return new NotificatieStatusEvent(
                 SPECVERSION,
                 eventUuid.toString(),
                 TYPE_PREFIX + nieuweStatus.toApiValue(),
-                Notificatie.PAD + notificatieId,
+                source,
                 notificatieId.toString(),
                 tijdstip,
                 DATACONTENTTYPE,

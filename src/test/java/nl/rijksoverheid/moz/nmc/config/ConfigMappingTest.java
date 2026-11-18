@@ -27,10 +27,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ConfigMappingTest {
 
-    // De sleutel komt in de applicatie uit de omgeving; application.properties laat hem leeg.
+    // Deze waarden komen in de applicatie uit de omgeving; application.properties laat ze leeg.
     private static final Map<String, String> SLEUTEL = Map.of(
             "nmc.webhook.jwt.private-key", "sleutel",
-            "nmc.webhook.jwt.key-id", "sleutel-1");
+            "nmc.webhook.jwt.key-id", "sleutel-1",
+            "nmc.feed.source", "urn:nld:oin:00000000000000000000:systeem:nmc");
 
     @Test
     void applicationProperties_wordtGelezen() {
@@ -74,6 +75,8 @@ class ConfigMappingTest {
             "nmc.feed.max-aanroepen-per-minuut, 0",
             "nmc.feed.cluster-epoch, -1",
             "nmc.feed.max-cursorleeftijd, 0s",
+            "nmc.feed.source, /api/nmc/v1/notificaties",
+            "nmc.feed.source, urn:nld:oin:123:systeem:nmc",
             "nmc.vaststelling.termijn, 0s",
             "nmc.vaststelling.callback-venster, -1s",
             "nmc.verzendbudget.tokens-per-minuut, 0",
@@ -93,13 +96,14 @@ class ConfigMappingTest {
         assertTrue(fout.getMessage().contains(sleutel), fout.getMessage());
     }
 
+    // Buiten het testprofiel, waar application.properties deze waarden leeg laat.
     @ParameterizedTest
-    @ValueSource(strings = {"nmc.webhook.jwt.private-key", "nmc.webhook.jwt.key-id"})
-    void sleutelNietGezet_weigertOpTeStarten(String sleutel) {
+    @ValueSource(strings = {"nmc.webhook.jwt.private-key", "nmc.webhook.jwt.key-id", "nmc.feed.source"})
+    void verplichteWaardeNietGezet_weigertOpTeStarten(String sleutel) {
         Map<String, String> waarden = new HashMap<>(SLEUTEL);
         waarden.remove(sleutel);
 
-        ConfigValidationException fout = assertThrows(ConfigValidationException.class, () -> bouw(waarden));
+        ConfigValidationException fout = assertThrows(ConfigValidationException.class, () -> bouw("prod", waarden));
 
         assertTrue(fout.getMessage().contains(sleutel), fout.getMessage());
     }

@@ -64,7 +64,7 @@ public class EventfeedController implements EventsApi {
         }
 
         List<NotificatieStatusEvent> events = pagina.events().stream()
-                .map(NotificatieStatusEvent::of)
+                .map(event -> NotificatieStatusEvent.of(event, eventfeed.source()))
                 .toList();
         EventsResponse antwoord = new EventsResponse(events)
                 .cursor(pagina.cursor() == null ? null : pagina.cursor().codeer());

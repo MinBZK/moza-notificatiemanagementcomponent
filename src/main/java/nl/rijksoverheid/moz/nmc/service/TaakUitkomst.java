@@ -13,9 +13,12 @@ public sealed interface TaakUitkomst {
     /**
      * De taak komt later opnieuw aan de beurt.
      *
-     * @param due           wanneer
-     * @param teltAlsPoging of dit uitstel een mislukking in het NMC zelf was; een fout bij een externe
-     *                      dienst telt niet mee, zodat een storing daar de taak geen pogingen kost
+     * @param due           wanneer de taak opnieuw aan de beurt is
+     * @param teltAlsPoging of dit uitstel meetelt voor het maximum aantal pogingen. {@code true} als
+     *                      herhalen waarschijnlijk niet helpt omdat de oorzaak bij het NMC ligt,
+     *                      bijvoorbeeld een verzoek dat NotifyNL als ongeldig afwijst. {@code false} als
+     *                      een externe dienst niet bereikbaar is of de aanroep tijdelijk weigert: de taak
+     *                      blijft het dan proberen zonder pogingen te verbruiken
      */
     record Uitgesteld(OffsetDateTime due, boolean teltAlsPoging) implements TaakUitkomst {
         public Uitgesteld {

@@ -16,8 +16,6 @@ import java.util.UUID;
 @Entity
 public class Notificatie {
 
-    public static final String PAD = "/api/nmc/v1/notificaties/";
-
     // Toegekend bij het aanmaken en niet bij de persist: de versleutelde velden zijn aan deze id
     // gebonden en worden vóór de eerste opslag gezet.
     @Id
