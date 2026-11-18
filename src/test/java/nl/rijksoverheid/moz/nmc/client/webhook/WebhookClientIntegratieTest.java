@@ -141,7 +141,7 @@ class WebhookClientIntegratieTest {
     }
 
     private static NotificatieStatusEvent event(UUID id) {
-        return NotificatieStatusEvent.of(UUID.randomUUID(), id, 3L, NotificatieStatus.VERZONDEN, NotificatieStatus.TECHNISCH_MISLUKT,
+        return NotificatieStatusEvent.of("urn:nld:oin:00000000000000000000:systeem:nmc", UUID.randomUUID(), id, 3L, NotificatieStatus.VERZONDEN, NotificatieStatus.TECHNISCH_MISLUKT,
                 Reden.TECHNISCH, OffsetDateTime.parse("2026-01-15T10:00:00Z"));
     }
 }

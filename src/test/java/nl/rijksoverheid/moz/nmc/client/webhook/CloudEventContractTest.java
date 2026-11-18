@@ -29,6 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @QuarkusTest
 class CloudEventContractTest {
 
+    private static final String SOURCE = "urn:nld:oin:00000000000000000000:systeem:nmc";
+
     @Inject
     ObjectMapper objectMapper;
 
@@ -48,6 +50,7 @@ class CloudEventContractTest {
         assertDoesNotThrow(() -> OffsetDateTime.parse(json.get("time").asText()));
         assertDoesNotThrow(() -> UUID.fromString(json.get("id").asText()), "id hoort de UUID van het event te zijn");
         assertDoesNotThrow(() -> UUID.fromString(json.get("subject").asText()));
+        assertEquals(SOURCE, json.get("source").asText());
         assertTrue(json.get("sequence").isTextual(), "sequence hoort volgens de CloudEvents-extensie een string te zijn");
         // Met voorloopnullen, zodat de tekstvergelijking uit de sequence-extensie de volgorde geeft.
         assertEquals(19, json.get("sequence").asText().length());
@@ -100,7 +103,7 @@ class CloudEventContractTest {
     }
 
     private static NotificatieStatusEvent verstuurdEvent(NotificatieStatus naar, Reden reden) {
-        return NotificatieStatusEvent.of(UUID.randomUUID(), UUID.randomUUID(), 3L, NotificatieStatus.VERZONDEN, naar, reden,
+        return NotificatieStatusEvent.of(SOURCE, UUID.randomUUID(), UUID.randomUUID(), 3L, NotificatieStatus.VERZONDEN, naar, reden,
                 OffsetDateTime.parse("2026-01-15T10:00:00Z"));
     }
 }

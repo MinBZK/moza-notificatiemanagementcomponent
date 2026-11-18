@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import io.quarkus.logging.Log;
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
@@ -99,6 +100,8 @@ public class AannameService {
             OffsetDateTime beginVanDeDag = LocalDate.now(clock).atStartOfDay().atOffset(ZoneOffset.UTC);
 
             if (notificatieRepository.telAangenomenSinds(dvId, beginVanDeDag) >= quotum) {
+                Log.infof("Dienstverlener %s heeft het quotum van %d notificaties per dag bereikt", dvId, quotum);
+
                 throw new QuotumOverschredenException(quotum);
             }
         });
