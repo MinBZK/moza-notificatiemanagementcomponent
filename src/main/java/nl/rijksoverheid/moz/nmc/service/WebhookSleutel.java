@@ -4,7 +4,7 @@ import io.quarkus.runtime.Startup;
 import io.smallrye.jwt.algorithm.SignatureAlgorithm;
 import io.smallrye.jwt.build.Jwt;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
+import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
 
 import java.math.BigInteger;
 import java.security.GeneralSecurityException;
@@ -16,7 +16,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Base64;
-import java.util.Optional;
 
 /**
  * De RSA-sleutel waarmee het NMC de bearer-JWT op elke webhook-aanroep ondertekent (RS256), en de
@@ -38,22 +37,13 @@ public class WebhookSleutel {
     private final Duration geldigheid;
     private final Clock clock;
 
-    public WebhookSleutel(Clock clock,
-                          @ConfigProperty(name = "nmc.webhook.jwt.private-key") Optional<String> pem,
-                          @ConfigProperty(name = "nmc.webhook.jwt.key-id") Optional<String> keyId,
-                          @ConfigProperty(name = "nmc.webhook.jwt.issuer") String issuer,
-                          @ConfigProperty(name = "nmc.webhook.jwt.geldigheid") Duration geldigheid) {
-        this.privateSleutel = leesSleutel(pem.filter(p -> !p.isBlank())
-                .orElseThrow(() -> new IllegalStateException("nmc.webhook.jwt.private-key ontbreekt")));
-        this.keyId = keyId.map(String::strip).filter(k -> !k.isEmpty())
-                .orElseThrow(() -> new IllegalStateException("nmc.webhook.jwt.key-id ontbreekt"));
+    public WebhookSleutel(Clock clock, WebhookConfig config) {
+        WebhookConfig.Jwt jwt = config.jwt();
 
-        if (geldigheid.isNegative() || geldigheid.isZero()) {
-            throw new IllegalStateException("nmc.webhook.jwt.geldigheid moet positief zijn, is " + geldigheid);
-        }
-
-        this.issuer = issuer;
-        this.geldigheid = geldigheid;
+        this.privateSleutel = leesSleutel(jwt.privateKey());
+        this.keyId = jwt.keyId().strip();
+        this.issuer = jwt.issuer();
+        this.geldigheid = jwt.geldigheid();
         this.clock = clock;
     }
 

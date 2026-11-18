@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import org.jose4j.jwk.RsaJsonWebKey;
 import org.jose4j.jwt.JwtClaims;
 import org.jose4j.jwt.consumer.JwtConsumerBuilder;
@@ -14,7 +15,6 @@ import java.security.spec.RSAPublicKeySpec;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Base64;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -55,18 +55,6 @@ class WebhookSleutelTest {
     }
 
     @Test
-    void constructor_zonderSleutelOfKeyId_weigert() throws Exception {
-        String pem = pem(rsa(2048));
-
-        assertThrows(IllegalStateException.class, () -> sleutel(null, "sleutel-1"));
-        assertThrows(IllegalStateException.class, () -> sleutel(" ", "sleutel-1"));
-        assertThrows(IllegalStateException.class, () -> sleutel(pem, null));
-        assertThrows(IllegalStateException.class, () -> sleutel(pem, " "));
-        assertThrows(IllegalStateException.class, () -> new WebhookSleutel(Clock.systemUTC(), Optional.of(pem), Optional.of("k"),
-                "https://nmc.example.nl", Duration.ZERO));
-    }
-
-    @Test
     void leesSleutel_ongeldigeInhoud_weigert() throws Exception {
         KeyPairGenerator ec = KeyPairGenerator.getInstance("EC");
         ec.initialize(256);
@@ -81,8 +69,8 @@ class WebhookSleutelTest {
     }
 
     private static WebhookSleutel sleutel(String pem, String keyId) {
-        return new WebhookSleutel(Clock.systemUTC(), Optional.ofNullable(pem), Optional.ofNullable(keyId),
-                "https://nmc.example.nl", Duration.ofMinutes(2));
+        return new WebhookSleutel(Clock.systemUTC(),
+                TestConfig.webhookJwt(pem, keyId, "https://nmc.example.nl", Duration.ofMinutes(2)));
     }
 
     private static KeyPair rsa(int bits) throws Exception {

@@ -4,7 +4,7 @@ import io.quarkus.rest.client.reactive.QuarkusRestClientBuilder;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Disposes;
 import jakarta.enterprise.inject.Produces;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
+import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -20,7 +20,9 @@ public class WebhookClientProducer {
      */
     @Produces
     @ApplicationScoped
-    WebhookClient webhookClient(@ConfigProperty(name = "nmc.webhook.timeout") Duration timeout) {
+    WebhookClient webhookClient(WebhookConfig config) {
+        Duration timeout = config.timeout();
+
         // De builder eist een basis-URL; @Url op lever vervangt hem bij elke aanroep. Een .invalid-naam
         // resolvet nooit.
         return QuarkusRestClientBuilder.newBuilder()

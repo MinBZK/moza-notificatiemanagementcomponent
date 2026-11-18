@@ -16,7 +16,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -332,11 +331,6 @@ class TaakClaimerTest {
 
         int tokens = QuarkusTransaction.requiringNew().call(() -> TaakFixtures.tokens(entityManager));
         assertEquals(17, tokens);
-    }
-
-    @Test
-    void constructor_nietPositieveLease_weigert() {
-        assertThrows(IllegalStateException.class, () -> new TaakClaimer(taakRepository, null, clock, Duration.ZERO));
     }
 
     private long plan(TaakSoort taakSoort, UUID dvId, OffsetDateTime due) {
