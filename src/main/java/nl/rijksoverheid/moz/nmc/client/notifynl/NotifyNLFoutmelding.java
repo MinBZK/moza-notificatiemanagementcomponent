@@ -25,7 +25,11 @@ final class NotifyNLFoutmelding {
     }
 
     static String beschrijf(Response response) {
-        String body = body(response);
+        return beschrijf(response, body(response));
+    }
+
+    /** Als {@link #beschrijf(Response)}, met een body die de aanroeper al gelezen heeft. */
+    static String beschrijf(Response response, String body) {
         List<String> fouten = notifyFouten(body);
 
         if (!fouten.isEmpty()) {
@@ -66,7 +70,8 @@ final class NotifyNLFoutmelding {
         return fouten;
     }
 
-    private static String body(Response response) {
+    // Een respons kan maar één keer gelezen worden; wie body en beschrijving allebei nodig heeft, leest hier.
+    static String body(Response response) {
         try {
             return response.readEntity(String.class);
         } catch (RuntimeException e) {
