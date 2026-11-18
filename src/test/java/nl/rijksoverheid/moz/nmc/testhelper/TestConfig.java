@@ -62,6 +62,7 @@ public final class TestConfig {
         when(config.maxAanroepenPerMinuut()).thenReturn(60);
         when(config.clusterEpoch()).thenReturn(1);
         when(config.maxCursorleeftijd()).thenReturn(Duration.ofDays(30));
+        when(config.source()).thenReturn("urn:nld:oin:00000000000000000000:systeem:nmc");
 
         return config;
     }

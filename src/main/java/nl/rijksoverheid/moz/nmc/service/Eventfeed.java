@@ -31,6 +31,7 @@ public class Eventfeed {
     private final Clock clock;
     private final int epoch;
     private final int maxPagina;
+    private final String source;
 
     public Eventfeed(EventRepository eventRepository, BevestigingRepository bevestigingRepository, Clock clock,
                      FeedConfig config) {
@@ -39,6 +40,12 @@ public class Eventfeed {
         this.clock = clock;
         this.epoch = config.clusterEpoch();
         this.maxPagina = config.maxPagina();
+        this.source = config.source();
+    }
+
+    /** De {@code source} van de CloudEvents die dit NMC uitgeeft. */
+    public String source() {
+        return source;
     }
 
     /**
