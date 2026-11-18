@@ -67,7 +67,7 @@ class GepubliceerdeSpecTest {
             assertNull(spec.get("paths.'" + pad + "'.post.callbacks"), pad + " hoort geen callback te beschrijven");
         }
 
-        assertNotNull(spec.get("paths.'/api/nmc/v1/notificaties/wijzigingen'.get.callbacks.webhook"));
+        assertNotNull(spec.get("paths.'/api/nmc/v1/notificaties/events'.get.callbacks.webhook"));
         assertNotNull(spec.get("paths.'/api/nmc/v1/.well-known/jwks.json'.get"));
     }
 

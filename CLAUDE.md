@@ -179,13 +179,13 @@ Geïmplementeerd:
 - **Eén geconfigureerde dienstverlener.** `dienstverlener` heeft één rij uit de
   migratie; `DvProvider` levert die `dv_id`, die op elke notificatie en elk event
   staat. Tokenvalidatie per dienstverlener vervangt later alleen de provider.
-- **Eventfeed met bevestiging.** `GET /api/nmc/v1/notificaties/wijzigingen` leest het
+- **Eventfeed met bevestiging.** `GET /api/nmc/v1/notificaties/events` leest het
   eventlog van de dienstverlener op (transactie-id, event-id) onder het watermerk
   `pg_snapshot_xmin(pg_current_snapshot())`, zodat een cursor nooit een event overslaat
   dat later committet dan een event met een hogere transactie-id. De cursor is
   base64url van `epoch:transactieId:eventId`; een ander epoch (`nmc.feed.cluster-epoch`),
   een positie onder het oudste event of boven de jongste transactie (`pg_snapshot_xmax`)
-  geeft 410. `PUT .../wijzigingen/bevestiging` schrijft `bevestiging`, alleen vooruit. Het
+  geeft 410. `PUT .../events/bevestiging` schrijft `bevestiging`, alleen vooruit. Het
   opruimen van het eventlog spaart alleen partities waar een bevestiging of leverpositie in
   wijst; een nog niet bevestigde cursor kan dus vervallen en krijgt bij de volgende aanroep
   410. Dat is bewust niet afgedekt. De aanroeplimiet (`Aanroeplimiet`) telt per pod en geeft
@@ -397,7 +397,7 @@ Aandachtspunten in de contracten:
 - **Validatie die de generator niet kan uitdrukken** gaat via
   `x-field-extra-annotation`. Let op bij `format: uri`: dat wordt een `java.net.URI`,
   waar Hibernate Validator geen `@Size` voor heeft (HV000030).
-- **De webhook staat als callback bij `GET .../wijzigingen`**, met als sleutel
+- **De webhook staat als callback bij `GET .../events`**, met als sleutel
   `{webhookUrl}`: OpenAPI 3.0 kent geen losse webhooks, en de URL komt uit het register.
 - **`IdentificatieType`** is via `importMappings` gekoppeld aan de bestaande enum
   in `controller/`, zodat er geen tweede klasse ontstaat. Zo ook
