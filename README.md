@@ -192,7 +192,7 @@ Het datamodel volgt ADR 0024 (georkestreerde state machine met eventlog):
   daarna toetst het claim-epoch, zodat een worker die zijn lease verloor niets meer
   kan afronden. Na het maximum aantal mislukkingen staat een taak op `MISLUKT` en
   telt hij in de metriek `nmc_taken_mislukt`.
-- **`verzendbudget`** is een rij per Notify-service per minuut met de resterende
+- **`verzendbudget`** is een rij per minuut met de resterende
   tokens; het verzenden en de navraag claimen ertegen. Elk heeft een reservering
   (`verzend_tokens`, `navraag_tokens`) die de ander laat staan; de rest is voor wie
   het eerst claimt.

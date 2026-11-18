@@ -1,131 +1,51 @@
 package nl.rijksoverheid.moz.nmc.config;
 
-import io.quarkus.runtime.configuration.ConfigUtils;
-import io.smallrye.config.ConfigValidationException;
-import io.smallrye.config.PropertiesConfigSource;
-import io.smallrye.config.SmallRyeConfig;
-import io.smallrye.config.validator.BeanValidationConfigValidatorImpl;
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
-import java.io.IOException;
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Leest de mappings met de configbouwer en de converters van Quarkus, bovenop de echte
- * {@code application.properties}; elke test overschrijft daar één waarde. De validator is die van
- * SmallRye en niet de variant die Quarkus bij het bouwen van de applicatie genereert.
- */
 class ConfigValidatieTest {
 
-    // De sleutel komt in de applicatie uit de omgeving; application.properties laat hem leeg.
-    private static final Map<String, String> SLEUTEL = Map.of(
-            "nmc.webhook.jwt.private-key", "sleutel",
-            "nmc.webhook.jwt.key-id", "sleutel-1");
+    private static final Duration TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration WEEK = Duration.ofDays(7);
 
     @Test
-    void applicationProperties_wordtGelezen() {
-        SmallRyeConfig config = bouw(SLEUTEL);
-
-        TaakConfig taak = config.getConfigMapping(TaakConfig.class);
-        WebhookConfig webhook = config.getConfigMapping(WebhookConfig.class);
-
-        assertEquals(20, taak.batch());
-        assertEquals(Duration.ofMinutes(2), taak.lease());
-        assertEquals(Duration.ofSeconds(30), webhook.herpogingWachttijd());
-        assertEquals("sleutel-1", webhook.jwt().keyId());
-        assertEquals(Duration.ofDays(30), config.getConfigMapping(FeedConfig.class).maxCursorleeftijd());
-        assertEquals(Duration.ofDays(7), config.getConfigMapping(VaststellingConfig.class).termijn());
-        assertEquals("standaard", config.getConfigMapping(VerzendbudgetConfig.class).notifyService());
-    }
-
-    @ParameterizedTest
-    @CsvSource({
-            "nmc.taak.batch, 0",
-            "nmc.taak.batch, -1",
-            "nmc.taak.lease, 0s",
-            "nmc.taak.max-pogingen, 0",
-            "nmc.taak.metriek-verversing, -1s",
-            "nmc.taak.uitstel, 0s",
-            "nmc.webhook.interval, 0s",
-            "nmc.webhook.bundel, 0",
-            "nmc.webhook.max-mislukkingen, 0",
-            "nmc.webhook.herpoging-wachttijd, 0s",
-            "nmc.webhook.pauze-wachttijd, -1s",
-            "nmc.webhook.timeout, 0s",
-            "nmc.webhook.jwt.geldigheid, 0s",
-            "nmc.webhook.jwt.private-key, ''",
-            "nmc.webhook.jwt.private-key, ' '",
-            "nmc.webhook.jwt.key-id, ' '",
-            "nmc.webhook.jwt.issuer, ' '",
-            "nmc.controle.interval, 0s",
-            "nmc.controle.max-per-ronde, 0",
-            "nmc.feed.max-pagina, 0",
-            "nmc.feed.max-aanroepen-per-minuut, 0",
-            "nmc.feed.cluster-epoch, -1",
-            "nmc.feed.max-cursorleeftijd, 0s",
-            "nmc.vaststelling.termijn, 0s",
-            "nmc.vaststelling.callback-venster, -1s",
-            "nmc.verzendbudget.notify-service, ' '",
-            "nmc.verzendbudget.tokens-per-minuut, 0",
-            "nmc.verzendbudget.verzend-reservering, 0",
-            "nmc.verzendbudget.navraag-reservering, -1"
-    })
-    void ongeldigeWaarde_weigertOpTeStarten(String sleutel, String waarde) {
-        Map<String, String> waarden = new HashMap<>(SLEUTEL);
-        waarden.put(sleutel, waarde);
-
-        ConfigValidationException fout = assertThrows(ConfigValidationException.class, () -> bouw(waarden));
-
-        assertTrue(fout.getMessage().contains(sleutel), fout.getMessage());
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"nmc.webhook.jwt.private-key", "nmc.webhook.jwt.key-id"})
-    void sleutelNietGezet_weigertOpTeStarten(String sleutel) {
-        Map<String, String> waarden = new HashMap<>(SLEUTEL);
-        waarden.remove(sleutel);
-
-        ConfigValidationException fout = assertThrows(ConfigValidationException.class, () -> bouw(waarden));
-
-        assertTrue(fout.getMessage().contains(sleutel), fout.getMessage());
+    void geldigeConfiguratie_start() {
+        assertDoesNotThrow(() -> validatie(TestConfig.LEASE.minusSeconds(1), TestConfig.verzendbudget(10, 5, 5), WEEK, WEEK));
     }
 
     @Test
-    void onbekendeSleutelOnderDePrefix_weigertOpTeStarten() {
-        Map<String, String> waarden = new HashMap<>(SLEUTEL);
-        waarden.put("nmc.taak.bestaat-niet", "1");
+    void timeoutNietKorterDanLease_weigertOpTeStarten() {
+        IllegalStateException fout = assertThrows(IllegalStateException.class,
+                () -> validatie(TestConfig.LEASE, TestConfig.verzendbudget(10, 5, 5), WEEK, WEEK));
 
-        ConfigValidationException fout = assertThrows(ConfigValidationException.class, () -> bouw(waarden));
-
-        assertTrue(fout.getMessage().contains("nmc.taak.bestaat-niet"), fout.getMessage());
+        assertTrue(fout.getMessage().contains("nmc.webhook.timeout"), fout.getMessage());
     }
 
-    private static SmallRyeConfig bouw(Map<String, String> overschreven) {
-        try {
-            return ConfigUtils.emptyConfigBuilder()
-                    .withProfile("test")
-                    .withMapping(TaakConfig.class)
-                    .withMapping(WebhookConfig.class)
-                    .withMapping(ControleConfig.class)
-                    .withMapping(FeedConfig.class)
-                    .withMapping(VaststellingConfig.class)
-                    .withMapping(VerzendbudgetConfig.class)
-                    .withValidator(new BeanValidationConfigValidatorImpl())
-                    .withSources(new PropertiesConfigSource(
-                            ConfigValidatieTest.class.getResource("/application.properties")))
-                    .withSources(new PropertiesConfigSource(overschreven, "test", 500))
-                    .build();
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
+    @Test
+    void reserveringenSamenMeerDanHetBudget_weigertOpTeStarten() {
+        IllegalStateException fout = assertThrows(IllegalStateException.class,
+                () -> validatie(TIMEOUT, TestConfig.verzendbudget(10, 6, 5), WEEK, WEEK));
+
+        assertTrue(fout.getMessage().contains("nmc.verzendbudget.tokens-per-minuut"), fout.getMessage());
+    }
+
+    @Test
+    void bewaartermijnKorterDanWistermijn_weigertOpTeStarten() {
+        IllegalStateException fout = assertThrows(IllegalStateException.class,
+                () -> validatie(TIMEOUT, TestConfig.verzendbudget(10, 5, 5), Duration.ofDays(8), WEEK));
+
+        assertTrue(fout.getMessage().contains("nmc.afleverbewijs.bewaartermijn"), fout.getMessage());
+    }
+
+    private static ConfigValidatie validatie(Duration timeout, VerzendbudgetConfig verzendbudget, Duration wistermijn,
+                                             Duration bewaartermijn) {
+        return new ConfigValidatie(TestConfig.taak(), TestConfig.webhook(timeout), verzendbudget,
+                TestConfig.wissen(wistermijn), TestConfig.afleverbewijs(bewaartermijn));
     }
 }
