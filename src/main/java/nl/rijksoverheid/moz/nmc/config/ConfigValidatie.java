@@ -19,7 +19,7 @@ public class ConfigValidatie {
                     + taak.lease() + ") zijn, is " + webhook.timeout());
         }
 
-        if (verzendbudget.verzendReservering() + verzendbudget.navraagReservering() > verzendbudget.tokensPerMinuut()) {
+        if ((long) verzendbudget.verzendReservering() + verzendbudget.navraagReservering() > verzendbudget.tokensPerMinuut()) {
             throw new IllegalStateException("nmc.verzendbudget.verzend-reservering en nmc.verzendbudget.navraag-reservering"
                     + " zijn samen meer dan nmc.verzendbudget.tokens-per-minuut: " + verzendbudget.verzendReservering()
                     + " + " + verzendbudget.navraagReservering() + " > " + verzendbudget.tokensPerMinuut());
