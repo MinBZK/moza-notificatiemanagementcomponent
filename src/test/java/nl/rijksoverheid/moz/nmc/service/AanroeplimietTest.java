@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import org.junit.jupiter.api.Test;
 
@@ -8,7 +9,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AanroeplimietTest {
@@ -20,7 +20,7 @@ class AanroeplimietTest {
 
     @Test
     void registreer_binnenDeMinuut_teltTotDeLimietPerDienstverlener() {
-        Aanroeplimiet limiet = new Aanroeplimiet(clock, 2);
+        Aanroeplimiet limiet = new Aanroeplimiet(clock, TestConfig.feedMetAanroeplimiet(2));
 
         assertTrue(limiet.registreer(DV_A));
         assertTrue(limiet.registreer(DV_A));
@@ -30,7 +30,7 @@ class AanroeplimietTest {
 
     @Test
     void registreer_inEenNieuweMinuut_begintOpnieuw() {
-        Aanroeplimiet limiet = new Aanroeplimiet(clock, 1);
+        Aanroeplimiet limiet = new Aanroeplimiet(clock, TestConfig.feedMetAanroeplimiet(1));
         limiet.registreer(DV_A);
         assertFalse(limiet.registreer(DV_A));
 
@@ -41,7 +41,7 @@ class AanroeplimietTest {
 
     @Test
     void secondenTotVolgendVenster_teltAfNaarDeVolgendeMinuut() {
-        Aanroeplimiet limiet = new Aanroeplimiet(clock, 1);
+        Aanroeplimiet limiet = new Aanroeplimiet(clock, TestConfig.feedMetAanroeplimiet(1));
 
         assertEquals(55, limiet.secondenTotVolgendVenster());
 
@@ -52,10 +52,5 @@ class AanroeplimietTest {
         clock.zet(Instant.parse("2030-01-01T10:01:00Z"));
 
         assertEquals(60, limiet.secondenTotVolgendVenster());
-    }
-
-    @Test
-    void constructor_nietPositieveLimiet_weigert() {
-        assertThrows(IllegalStateException.class, () -> new Aanroeplimiet(clock, 0));
     }
 }

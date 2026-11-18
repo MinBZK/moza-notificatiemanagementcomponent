@@ -3,6 +3,7 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import nl.rijksoverheid.moz.nmc.config.FeedConfig;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -24,10 +25,9 @@ public class Opruimtermijnen {
 
     public Opruimtermijnen(@ConfigProperty(name = "nmc.wissen.termijn") Duration wistermijn,
                            @ConfigProperty(name = "nmc.afleverbewijs.bewaartermijn") Duration afleverbewijstermijn,
-                           @ConfigProperty(name = "nmc.feed.max-cursorleeftijd") Duration maxCursorleeftijd) {
-        if (!isPositief(wistermijn) || !isPositief(afleverbewijstermijn) || !isPositief(maxCursorleeftijd)) {
-            throw new IllegalStateException("nmc.wissen.termijn, nmc.afleverbewijs.bewaartermijn en "
-                    + "nmc.feed.max-cursorleeftijd moeten positief zijn");
+                           FeedConfig feedConfig) {
+        if (!isPositief(wistermijn) || !isPositief(afleverbewijstermijn)) {
+            throw new IllegalStateException("nmc.wissen.termijn en nmc.afleverbewijs.bewaartermijn moeten positief zijn");
         }
 
         // De rij verdwijnt met de versleutelde gegevens; wissen moet dus eerder of tegelijk.
@@ -38,7 +38,7 @@ public class Opruimtermijnen {
 
         this.wistermijn = wistermijn;
         this.afleverbewijstermijn = afleverbewijstermijn;
-        this.maxCursorleeftijd = maxCursorleeftijd;
+        this.maxCursorleeftijd = feedConfig.maxCursorleeftijd();
     }
 
     /** Wanneer de sleutel van een notificatie die op {@code eindstatusOp} een eindstatus kreeg, gewist wordt. */

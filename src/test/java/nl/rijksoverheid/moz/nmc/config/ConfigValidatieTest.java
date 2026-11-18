@@ -42,6 +42,9 @@ class ConfigValidatieTest {
         assertEquals(Duration.ofMinutes(2), taak.lease());
         assertEquals(Duration.ofSeconds(30), webhook.herpogingWachttijd());
         assertEquals("sleutel-1", webhook.jwt().keyId());
+        assertEquals(Duration.ofDays(30), config.getConfigMapping(FeedConfig.class).maxCursorleeftijd());
+        assertEquals(Duration.ofDays(7), config.getConfigMapping(VaststellingConfig.class).termijn());
+        assertEquals("standaard", config.getConfigMapping(VerzendbudgetConfig.class).notifyService());
     }
 
     @ParameterizedTest
@@ -62,7 +65,19 @@ class ConfigValidatieTest {
             "nmc.webhook.jwt.private-key, ''",
             "nmc.webhook.jwt.private-key, ' '",
             "nmc.webhook.jwt.key-id, ' '",
-            "nmc.webhook.jwt.issuer, ' '"
+            "nmc.webhook.jwt.issuer, ' '",
+            "nmc.controle.interval, 0s",
+            "nmc.controle.max-per-ronde, 0",
+            "nmc.feed.max-pagina, 0",
+            "nmc.feed.max-aanroepen-per-minuut, 0",
+            "nmc.feed.cluster-epoch, -1",
+            "nmc.feed.max-cursorleeftijd, 0s",
+            "nmc.vaststelling.termijn, 0s",
+            "nmc.vaststelling.callback-venster, -1s",
+            "nmc.verzendbudget.notify-service, ' '",
+            "nmc.verzendbudget.tokens-per-minuut, 0",
+            "nmc.verzendbudget.verzend-reservering, 0",
+            "nmc.verzendbudget.navraag-reservering, -1"
     })
     void ongeldigeWaarde_weigertOpTeStarten(String sleutel, String waarde) {
         Map<String, String> waarden = new HashMap<>(SLEUTEL);
@@ -100,6 +115,10 @@ class ConfigValidatieTest {
                     .withProfile("test")
                     .withMapping(TaakConfig.class)
                     .withMapping(WebhookConfig.class)
+                    .withMapping(ControleConfig.class)
+                    .withMapping(FeedConfig.class)
+                    .withMapping(VaststellingConfig.class)
+                    .withMapping(VerzendbudgetConfig.class)
                     .withValidator(new BeanValidationConfigValidatorImpl())
                     .withSources(new PropertiesConfigSource(
                             ConfigValidatieTest.class.getResource("/application.properties")))

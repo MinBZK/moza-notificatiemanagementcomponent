@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import org.junit.jupiter.api.Test;
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -13,7 +14,7 @@ class OpruimtermijnenTest {
 
     private static final OffsetDateTime MOMENT = OffsetDateTime.parse("2026-09-01T10:00:00Z");
 
-    private final Opruimtermijnen termijnen = new Opruimtermijnen(Duration.ofDays(7), Duration.ofDays(365), Duration.ofDays(30));
+    private final Opruimtermijnen termijnen = new Opruimtermijnen(Duration.ofDays(7), Duration.ofDays(365), TestConfig.feedMetCursorleeftijd(Duration.ofDays(30)));
 
     @Test
     void wissenOp_ligtDeWistermijnNaDeEindstatus() {
@@ -33,7 +34,7 @@ class OpruimtermijnenTest {
     // Gelijke termijnen mogen: de rij en de sleutel verdwijnen dan in dezelfde ronde.
     @Test
     void constructor_bewaartermijnGelijkAanWistermijn_isToegestaan() {
-        Opruimtermijnen termijnen = new Opruimtermijnen(Duration.ofDays(7), Duration.ofDays(7), Duration.ofDays(1));
+        Opruimtermijnen termijnen = new Opruimtermijnen(Duration.ofDays(7), Duration.ofDays(7), TestConfig.feedMetCursorleeftijd(Duration.ofDays(1)));
 
         assertEquals(MOMENT.minusDays(7), termijnen.bewaargrens(MOMENT));
     }
@@ -41,7 +42,7 @@ class OpruimtermijnenTest {
     @Test
     void constructor_bewaartermijnKorterDanWistermijn_weigert() {
         IllegalStateException fout = assertThrows(IllegalStateException.class,
-                () -> new Opruimtermijnen(Duration.ofDays(8), Duration.ofDays(7), Duration.ofDays(30)));
+                () -> new Opruimtermijnen(Duration.ofDays(8), Duration.ofDays(7), TestConfig.feedMetCursorleeftijd(Duration.ofDays(30))));
 
         assertTrue(fout.getMessage().contains("nmc.afleverbewijs.bewaartermijn"), fout.getMessage());
     }
@@ -49,10 +50,8 @@ class OpruimtermijnenTest {
     @Test
     void constructor_nulOfNegatieveTermijn_weigert() {
         assertThrows(IllegalStateException.class,
-                () -> new Opruimtermijnen(Duration.ZERO, Duration.ofDays(7), Duration.ofDays(30)));
+                () -> new Opruimtermijnen(Duration.ZERO, Duration.ofDays(7), TestConfig.feedMetCursorleeftijd(Duration.ofDays(30))));
         assertThrows(IllegalStateException.class,
-                () -> new Opruimtermijnen(Duration.ofDays(1), Duration.ofDays(-7), Duration.ofDays(30)));
-        assertThrows(IllegalStateException.class,
-                () -> new Opruimtermijnen(Duration.ofDays(1), Duration.ofDays(7), Duration.ZERO));
+                () -> new Opruimtermijnen(Duration.ofDays(1), Duration.ofDays(-7), TestConfig.feedMetCursorleeftijd(Duration.ofDays(30))));
     }
 }

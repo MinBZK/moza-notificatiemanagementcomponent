@@ -3,10 +3,10 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
+import nl.rijksoverheid.moz.nmc.config.VerzendbudgetConfig;
 import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
 import nl.rijksoverheid.moz.nmc.domain.VerzendbudgetTijdvak;
 import nl.rijksoverheid.moz.nmc.repository.VerzendbudgetRepository;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Clock;
 import java.time.OffsetDateTime;
@@ -35,32 +35,13 @@ public class Verzendbudget {
     private final int verzendReservering;
     private final int navraagReservering;
 
-    public Verzendbudget(VerzendbudgetRepository verzendbudgetRepository, Clock clock,
-                         @ConfigProperty(name = "nmc.verzendbudget.notify-service") String notifyService,
-                         @ConfigProperty(name = "nmc.verzendbudget.tokens-per-minuut") int tokensPerMinuut,
-                         @ConfigProperty(name = "nmc.verzendbudget.verzend-reservering") int verzendReservering,
-                         @ConfigProperty(name = "nmc.verzendbudget.navraag-reservering") int navraagReservering) {
-        if (tokensPerMinuut < 1) {
-            throw new IllegalStateException("nmc.verzendbudget.tokens-per-minuut moet 1 of hoger zijn, is " + tokensPerMinuut);
-        }
-
-        if (verzendReservering < 1 || navraagReservering < 1) {
-            throw new IllegalStateException("nmc.verzendbudget.verzend-reservering en nmc.verzendbudget.navraag-reservering"
-                    + " moeten 1 of hoger zijn, zijn " + verzendReservering + " en " + navraagReservering);
-        }
-
-        if (verzendReservering + navraagReservering > tokensPerMinuut) {
-            throw new IllegalStateException("nmc.verzendbudget.verzend-reservering en nmc.verzendbudget.navraag-reservering"
-                    + " zijn samen meer dan nmc.verzendbudget.tokens-per-minuut: " + verzendReservering + " + "
-                    + navraagReservering + " > " + tokensPerMinuut);
-        }
-
+    public Verzendbudget(VerzendbudgetRepository verzendbudgetRepository, Clock clock, VerzendbudgetConfig config) {
         this.verzendbudgetRepository = verzendbudgetRepository;
         this.clock = clock;
-        this.notifyService = notifyService;
-        this.tokensPerMinuut = tokensPerMinuut;
-        this.verzendReservering = verzendReservering;
-        this.navraagReservering = navraagReservering;
+        this.notifyService = config.notifyService();
+        this.tokensPerMinuut = config.tokensPerMinuut();
+        this.verzendReservering = config.verzendReservering();
+        this.navraagReservering = config.navraagReservering();
     }
 
     /**
