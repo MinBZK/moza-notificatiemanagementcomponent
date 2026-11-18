@@ -17,7 +17,7 @@ info:
 tags:
   - name: CentraleNotificaties
     description: >-
-      Centrale notificaties (centraal profiel); de NMC raadpleegt de Profielservice
+      Centrale notificaties (centraal profiel); de NMC raadpleegt de Profieldienst
       voor de contactgegevens van de ontvanger.
   - name: DecentraleNotificaties
     description: >-
@@ -38,9 +38,9 @@ paths:
       operationId: notificatieVersturen
       summary: Notificatie versturen
       description: |
-        Neemt de notificatie aan op een identificerend nummer en antwoordt 202 zodra ze
-        duurzaam is opgeslagen. De verzending volgt asynchroon: het NMC haalt dan het
-        e-mailadres op bij de Profielservice en biedt het bericht aan bij NotifyNL. Is
+        Neemt de notificatie aan op een identificerend nummer en antwoordt 202 zodra de
+        notificatie is opgeslagen. De verzending volgt asynchroon: het NMC haalt dan het
+        e-mailadres op bij de Profieldienst en biedt het bericht aan bij NotifyNL. Is
         er geen partij of geen e-mailadres, dan eindigt de notificatie in
         `niet-bezorgbaar` met reden `geen-contactgegevens`. Elke statusovergang staat in de
         eventfeed en gaat naar de webhook van de Dienstverlener, als die er een heeft.
@@ -55,7 +55,7 @@ paths:
       responses:
         '202':
           description: >-
-            Notificatie aangenomen en duurzaam opgeslagen; de verzending volgt asynchroon. De
+            Notificatie aangenomen en opgeslagen voor verdere verwerking; de verzending volgt asynchroon. De
             uitkomst komt via de eventfeed en, als de Dienstverlener er een heeft, via de webhook.
           headers:
             API-Version:
@@ -95,9 +95,9 @@ paths:
       summary: Notificatie versturen op basis van een e-mailadres
       description: |
         Neemt een notificatie aan voor het opgegeven e-mailadres en antwoordt 202 zodra
-        ze duurzaam is opgeslagen. De verzending bij NotifyNL volgt asynchroon. Elke
-        statusovergang staat in de eventfeed en gaat naar de webhook van de Dienstverlener,
-        als die er een heeft.
+        de notificatie is opgeslagen voor verdere verwerking. De verzending bij NotifyNL volgt
+        asynchroon. Elke statusovergang staat in de eventfeed en gaat naar de webhook van de
+        Dienstverlener, als die er een heeft.
       tags:
         - DecentraleNotificaties
       requestBody:
@@ -109,7 +109,7 @@ paths:
       responses:
         '202':
           description: >-
-            Notificatie aangenomen en duurzaam opgeslagen; de verzending volgt asynchroon. De
+            Notificatie aangenomen en opgeslagen voor verdere verwerking; de verzending volgt asynchroon. De
             uitkomst komt via de eventfeed en, als de Dienstverlener er een heeft, via de webhook.
           headers:
             API-Version:
@@ -149,22 +149,20 @@ paths:
       summary: Statusovergangen lezen vanaf een cursor
       description: |
         Geeft de statusovergangen van de notificaties van de Dienstverlener terug als
-        CloudEvents (NL GOV profiel), op volgorde van transactie-id, vanaf de meegegeven cursor. Zonder
-        cursor begint de pagina bij het oudste beschikbare event. Elk antwoord draagt de
-        cursor voor de volgende pagina; een lege pagina betekent dat er op dit moment niets
+        CloudEvents (NL GOV profiel). Hiermee volgt de Dienstverlener wat er met een
+        aangeboden notificatie is gebeurd, bijvoorbeeld of het bericht is bezorgd.
+
+        Elk antwoord bevat een cursor. Geef die ongewijzigd mee bij de volgende aanroep om
+        verder te lezen waar het vorige antwoord ophield; zonder cursor begint de pagina bij
+        het oudste beschikbare event. Een lege pagina betekent dat er op dit moment niets
         nieuws is.
 
-        Een event verschijnt pas in de feed nadat elke oudere transactie is afgerond, zodat
-        een cursor nooit een laat gecommit event overslaat. De feed garandeert geen volgorde
-        tussen events van dezelfde notificatie: verwerk per `subject` op `sequence` en negeer
-        een lager volgnummer na een hoger.
+        Events van dezelfde notificatie komen niet gegarandeerd op volgorde: verwerk per
+        `subject` op `sequence` en negeer een lager volgnummer na een hoger.
 
-        De cursor is een ondoorzichtige tekst. Hij vervalt (410) wanneer het cluster na een
-        herstel uit back-up een nieuw epoch heeft gekregen, wanneer hij onder het oudste
-        beschikbare event wijst omdat dat deel van het log is opgeruimd, of wanneer hij boven
-        de jongste transactie wijst; lees dan opnieuw zonder cursor. De paginagrootte is
-        begrensd op een geconfigureerd maximum en het aantal aanroepen per Dienstverlener per
-        minuut ook (429, met `Retry-After`).
+        Een cursor kan vervallen (410), bijvoorbeeld omdat de events waar hij naar wijst
+        zijn opgeruimd; lees dan opnieuw zonder cursor. Het aantal events per pagina en het
+        aantal aanroepen per minuut zijn begrensd (429, met `Retry-After`).
       tags:
         - Wijzigingen
       parameters:
@@ -200,13 +198,9 @@ paths:
 
                 De bearer token is een JWT (RS256) met de webhook-URL als `aud`; controleer hem
                 met de sleutel uit `GET /api/nmc/v1/.well-known/jwks.json`.
+              security:
+                - webhookJwt: []
               parameters:
-                - name: Authorization
-                  in: header
-                  required: true
-                  description: '`Bearer` gevolgd door de door het NMC ondertekende JWT'
-                  schema:
-                    type: string
                 - name: Nmc-Cursor
                   in: header
                   required: true
@@ -326,6 +320,15 @@ paths:
                 $ref: '#/components/schemas/JsonWebKeySet'
 
 components:
+  securitySchemes:
+    webhookJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        De door het NMC ondertekende JWT op een webhook-aanroep. Geldt alleen voor de
+        aanroep van het NMC naar de webhook van de Dienstverlener.
+
   schemas:
     IdentificatieType:
       type: string
@@ -377,7 +380,7 @@ components:
       type: object
       description: >-
         Aanvraag om een notificatie te versturen naar een reeds bekend e-mailadres
-        (decentraal profiel; geen Profielservice-lookup)
+        (decentraal profiel; geen lookup bij de Profieldienst)
       required:
         - emailAdres
         - berichtType
@@ -558,7 +561,7 @@ components:
             $ref: '#/components/schemas/NotificatieStatusEvent'
         cursor:
           type: string
-          description: De cursor voor de volgende pagina; een ondoorzichtige tekst
+          description: De cursor voor de volgende pagina; ongewijzigd mee te geven bij de volgende aanroep
           example: MTo0MjoxMDQy
 
     BevestigingRequest:
