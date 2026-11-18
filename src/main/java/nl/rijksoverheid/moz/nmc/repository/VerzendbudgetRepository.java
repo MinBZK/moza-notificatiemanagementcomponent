@@ -9,7 +9,7 @@ import nl.rijksoverheid.moz.nmc.domain.VerzendbudgetTijdvak_;
 import java.time.OffsetDateTime;
 
 @ApplicationScoped
-public class VerzendbudgetRepository implements PanacheRepositoryBase<VerzendbudgetTijdvak, VerzendbudgetTijdvak.Sleutel> {
+public class VerzendbudgetRepository implements PanacheRepositoryBase<VerzendbudgetTijdvak, OffsetDateTime> {
 
     /**
      * Vergrendelt de rij van dit tijdvak tot het einde van de transactie, en maakt hem eerst aan met
@@ -17,21 +17,18 @@ public class VerzendbudgetRepository implements PanacheRepositoryBase<Verzendbud
      * voor de navraag, als hij er nog niet is. Een gelijktijdige claim wacht op die insert en leest daarna
      * de rij met wat de eerste er al uit nam.
      */
-    public VerzendbudgetTijdvak vergrendel(String notifyService, OffsetDateTime tijdvak, int tokens, int verzendTokens,
-                                           int navraagTokens) {
+    public VerzendbudgetTijdvak vergrendel(OffsetDateTime tijdvak, int tokens, int verzendTokens, int navraagTokens) {
         getSession().createMutationQuery("INSERT INTO VerzendbudgetTijdvak ("
-                        + String.join(", ", VerzendbudgetTijdvak_.NOTIFY_SERVICE, VerzendbudgetTijdvak_.TIJDVAK,
-                                VerzendbudgetTijdvak_.TOKENS, VerzendbudgetTijdvak_.VERZEND_TOKENS,
-                                VerzendbudgetTijdvak_.NAVRAAG_TOKENS)
-                        + ") VALUES (:notifyService, :tijdvak, :tokens, :verzendTokens, :navraagTokens) ON CONFLICT DO NOTHING")
-                .setParameter("notifyService", notifyService)
+                        + String.join(", ", VerzendbudgetTijdvak_.TIJDVAK, VerzendbudgetTijdvak_.TOKENS,
+                                VerzendbudgetTijdvak_.VERZEND_TOKENS, VerzendbudgetTijdvak_.NAVRAAG_TOKENS)
+                        + ") VALUES (:tijdvak, :tokens, :verzendTokens, :navraagTokens) ON CONFLICT DO NOTHING")
                 .setParameter("tijdvak", tijdvak)
                 .setParameter("tokens", tokens)
                 .setParameter("verzendTokens", verzendTokens)
                 .setParameter("navraagTokens", navraagTokens)
                 .executeUpdate();
 
-        return findById(new VerzendbudgetTijdvak.Sleutel(notifyService, tijdvak), LockModeType.PESSIMISTIC_WRITE);
+        return findById(tijdvak, LockModeType.PESSIMISTIC_WRITE);
     }
 
     /** Verwijdert de rijen van tijdvakken vóór {@code grens} en geeft het aantal terug. */

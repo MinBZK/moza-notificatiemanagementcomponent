@@ -14,11 +14,10 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 
 /**
- * Tokens per Notify-service per tijdvak van een minuut, als rij in {@code verzendbudget}. De eerste
+ * Tokens per tijdvak van een minuut, als rij in {@code verzendbudget}. De eerste
  * claim in een tijdvak maakt de rij aan met het volledige budget; elke claim neemt er tokens af.
  * Verzenden en navraag hebben elk een reservering die de ander laat staan; de rest van het tijdvak is
- * voor wie het eerst claimt. Er is één Notify-service; de sleutel blijft de service, zodat een tweede
- * later een tweede rij is.
+ * voor wie het eerst claimt.
  * <p>
  * Loopt in de transactie van de claim: de rij van het tijdvak blijft tot de commit vergrendeld, zodat
  * twee gelijktijdige claims elkaars tokens niet dubbel nemen.
@@ -30,7 +29,6 @@ public class Verzendbudget {
 
     private final VerzendbudgetRepository verzendbudgetRepository;
     private final Clock clock;
-    private final String notifyService;
     private final int tokensPerMinuut;
     private final int verzendReservering;
     private final int navraagReservering;
@@ -38,7 +36,6 @@ public class Verzendbudget {
     public Verzendbudget(VerzendbudgetRepository verzendbudgetRepository, Clock clock, VerzendbudgetConfig config) {
         this.verzendbudgetRepository = verzendbudgetRepository;
         this.clock = clock;
-        this.notifyService = config.notifyService();
         this.tokensPerMinuut = config.tokensPerMinuut();
         this.verzendReservering = config.verzendReservering();
         this.navraagReservering = config.navraagReservering();
@@ -57,7 +54,7 @@ public class Verzendbudget {
             return new Genomen(0, tijdvak, doel, 0);
         }
 
-        VerzendbudgetTijdvak budget = verzendbudgetRepository.vergrendel(notifyService, tijdvak, tokensPerMinuut,
+        VerzendbudgetTijdvak budget = verzendbudgetRepository.vergrendel(tijdvak, tokensPerMinuut,
                 verzendReservering, navraagReservering);
         int genomen = Math.min(gevraagd, budget.beschikbaar(doel));
         int uitReservering = budget.neem(doel, genomen);
@@ -80,7 +77,7 @@ public class Verzendbudget {
 
         int uitGedeeld = genomen.aantal() - genomen.uitReservering();
         int reservering = genomen.doel() == BudgetDoel.NAVRAAG ? navraagReservering : verzendReservering;
-        verzendbudgetRepository.vergrendel(notifyService, genomen.tijdvak(), tokensPerMinuut, verzendReservering,
+        verzendbudgetRepository.vergrendel(genomen.tijdvak(), tokensPerMinuut, verzendReservering,
                         navraagReservering)
                 .geefTerug(genomen.doel(), terug, Math.max(0, terug - uitGedeeld), tokensPerMinuut, reservering);
     }

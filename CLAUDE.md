@@ -146,7 +146,7 @@ Geïmplementeerd:
   bijwerkingen met `due` als timer; `TaakClaimer` claimt per ronde met
   `PESSIMISTIC_WRITE` en de skip-locked-hint (`FOR NO KEY UPDATE SKIP LOCKED`),
   verdeeld over de dienstverleners met werk en voor het
-  verzenden en de navraag binnen het `verzendbudget` per Notify-service per minuut.
+  verzenden en de navraag binnen het `verzendbudget` per minuut.
   `TaakWorker` draait per soort een `@Scheduled`-ronde en geeft elke taak aan de
   `TaakHandler` van die soort. Handlers: `VerzendTaakHandler`, `ReceiptTaakHandler`,
   `NotifyNLNavraagTaakHandler`, `BezorgingVaststellenTaakHandler`, `ControleTaakHandler`,
@@ -563,7 +563,7 @@ max-herverzendingen, per berichttype te overschrijven als `nmc.beleid.<berichtty
 `nmc.controle.*` (interval en maximum per ronde van de controletaak),
 `nmc.aanname.quotum-per-dag` (quotum voor een dienstverlener zonder eigen quotum in
 het register; leeg is onbeperkt),
-`nmc.verzendbudget.*` (Notify-service, tokens per minuut, de reservering van het verzenden en van de navraag),
+`nmc.verzendbudget.*` (tokens per minuut, de reservering van het verzenden en van de navraag),
 `nmc.feed.*` (grootste pagina, aanroepen per minuut, cluster-epoch, max-cursorleeftijd),
 `nmc.webhook.*` (interval, bundel, max-mislukkingen, herpoging- en pauzewachttijd,
 time-out, `jwt.issuer`, `jwt.geldigheid`), `nmc.wissen.termijn`,

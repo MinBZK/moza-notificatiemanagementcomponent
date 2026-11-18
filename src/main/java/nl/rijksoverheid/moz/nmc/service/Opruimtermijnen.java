@@ -2,8 +2,9 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
+import nl.rijksoverheid.moz.nmc.config.AfleverbewijsConfig;
 import nl.rijksoverheid.moz.nmc.config.FeedConfig;
+import nl.rijksoverheid.moz.nmc.config.WissenConfig;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -23,21 +24,9 @@ public class Opruimtermijnen {
     private final Duration afleverbewijstermijn;
     private final Duration maxCursorleeftijd;
 
-    public Opruimtermijnen(@ConfigProperty(name = "nmc.wissen.termijn") Duration wistermijn,
-                           @ConfigProperty(name = "nmc.afleverbewijs.bewaartermijn") Duration afleverbewijstermijn,
-                           FeedConfig feedConfig) {
-        if (!isPositief(wistermijn) || !isPositief(afleverbewijstermijn)) {
-            throw new IllegalStateException("nmc.wissen.termijn en nmc.afleverbewijs.bewaartermijn moeten positief zijn");
-        }
-
-        // De rij verdwijnt met de versleutelde gegevens; wissen moet dus eerder of tegelijk.
-        if (afleverbewijstermijn.compareTo(wistermijn) < 0) {
-            throw new IllegalStateException("nmc.afleverbewijs.bewaartermijn (" + afleverbewijstermijn
-                    + ") mag niet korter zijn dan nmc.wissen.termijn (" + wistermijn + ")");
-        }
-
-        this.wistermijn = wistermijn;
-        this.afleverbewijstermijn = afleverbewijstermijn;
+    public Opruimtermijnen(WissenConfig wissenConfig, AfleverbewijsConfig afleverbewijsConfig, FeedConfig feedConfig) {
+        this.wistermijn = wissenConfig.termijn();
+        this.afleverbewijstermijn = afleverbewijsConfig.bewaartermijn();
         this.maxCursorleeftijd = feedConfig.maxCursorleeftijd();
     }
 
@@ -54,9 +43,5 @@ public class Opruimtermijnen {
     /** De maximale cursorleeftijd voor een dienstverlener zonder eigen afspraak in het register. */
     public Duration maxCursorleeftijd() {
         return maxCursorleeftijd;
-    }
-
-    private static boolean isPositief(Duration duur) {
-        return !duur.isNegative() && !duur.isZero();
     }
 }

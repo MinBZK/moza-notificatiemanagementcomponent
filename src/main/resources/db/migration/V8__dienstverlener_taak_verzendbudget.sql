@@ -63,11 +63,9 @@ CREATE UNIQUE INDEX taak_open_per_notificatie_idx ON taak (notificatie_id, soort
 -- De claim leest op soort, dienstverlener en due, alleen open taken.
 CREATE INDEX taak_claim_idx ON taak (soort, dv_id, due) WHERE status = 'OPEN';
 
--- Tokens per Notify-service per tijdvak van een minuut; de eerste claim in een tijdvak maakt de
--- rij aan. Niet-gebruikte tokens vervallen met het tijdvak.
+-- Tokens per tijdvak van een minuut; de eerste claim in een tijdvak maakt de rij aan.
+-- Niet-gebruikte tokens vervallen met het tijdvak.
 CREATE TABLE verzendbudget (
-    notify_service varchar(64) NOT NULL,
-    tijdvak timestamp(6) with time zone NOT NULL,
-    tokens integer NOT NULL CHECK (tokens >= 0),
-    PRIMARY KEY (notify_service, tijdvak)
+    tijdvak timestamp(6) with time zone PRIMARY KEY,
+    tokens integer NOT NULL CHECK (tokens >= 0)
 );
