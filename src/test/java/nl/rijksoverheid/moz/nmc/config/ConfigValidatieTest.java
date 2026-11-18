@@ -60,7 +60,12 @@ class ConfigValidatieTest {
             "nmc.webhook.herpoging-wachttijd, PT0S",
             "nmc.webhook.pauze-wachttijd, PT-1S",
             "nmc.webhook.timeout, PT0S",
-            "nmc.webhook.jwt.geldigheid, PT0S"
+            "nmc.webhook.jwt.geldigheid, PT0S",
+            "nmc.taak.batch, -1",
+            "nmc.webhook.jwt.private-key, ''",
+            "nmc.webhook.jwt.private-key, ' '",
+            "nmc.webhook.jwt.key-id, ' '",
+            "nmc.webhook.jwt.issuer, ' '"
     })
     void ongeldigeWaarde_weigertOpTeStarten(String sleutel, String waarde) {
         Map<String, String> waarden = new HashMap<>(GELDIG);

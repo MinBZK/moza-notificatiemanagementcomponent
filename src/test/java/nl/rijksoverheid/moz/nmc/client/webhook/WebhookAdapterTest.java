@@ -36,7 +36,7 @@ class WebhookAdapterTest {
     void setUp() {
         client = Mockito.mock(WebhookClient.class);
         when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().voidItem());
-        adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(5)), TestConfig.taak());
+        adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -105,18 +105,12 @@ class WebhookAdapterTest {
     @Test
     void lever_geenAntwoordBinnenDeTermijn_gooitLeveringException() {
         when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().nothing());
-        WebhookAdapter kort = new WebhookAdapter(client, TestConfig.webhook(Duration.ofMillis(100)), TestConfig.taak());
+        WebhookAdapter kort = new WebhookAdapter(client, TestConfig.webhook(Duration.ofMillis(100)));
 
         WebhookLeveringException fout = assertThrows(WebhookLeveringException.class,
                 () -> kort.lever(URL, "Bearer jwt", "cursor", body()));
 
         assertTrue(fout.getMessage().contains("niet binnen"));
-    }
-
-    @Test
-    void timeoutNietKorterDanLease_weigertOpTeStarten() {
-        assertThrows(IllegalStateException.class,
-                () -> new WebhookAdapter(client, TestConfig.webhook(TestConfig.LEASE), TestConfig.taak()));
     }
 
     @Test
