@@ -4,11 +4,11 @@ import io.quarkus.logging.Log;
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
+import nl.rijksoverheid.moz.nmc.config.TaakConfig;
 import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -38,15 +38,11 @@ public class TaakClaimer {
     private final Duration lease;
 
     public TaakClaimer(TaakRepository taakRepository, Verzendbudget verzendbudget, Clock clock,
-                       @ConfigProperty(name = "nmc.taak.lease") Duration lease) {
-        if (lease.isNegative() || lease.isZero()) {
-            throw new IllegalStateException("nmc.taak.lease moet positief zijn, is " + lease);
-        }
-
+                       TaakConfig config) {
         this.taakRepository = taakRepository;
         this.verzendbudget = verzendbudget;
         this.clock = clock;
-        this.lease = lease;
+        this.lease = config.lease();
     }
 
     /**

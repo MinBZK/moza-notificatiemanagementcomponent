@@ -5,6 +5,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import nl.rijksoverheid.moz.nmc.client.webhook.NotificatieStatusEvent;
 import nl.rijksoverheid.moz.nmc.client.webhook.WebhookLeveringException;
+import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.domain.Dienstverlener;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
@@ -12,7 +13,6 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.Webhookpositie;
 import nl.rijksoverheid.moz.nmc.repository.DienstverlenerRepository;
 import nl.rijksoverheid.moz.nmc.repository.WebhookpositieRepository;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -61,32 +61,18 @@ public class TerugkoppelTaakHandler implements TaakHandler {
                                   WebhookpositieRepository webhookpositieRepository, Eventfeed eventfeed,
                                   WebhookUrlValidator webhookUrlValidator, WebhookDispatcher webhookDispatcher,
                                   TaakClaimer taakClaimer,
-                                  Clock clock,
-                                  @ConfigProperty(name = "nmc.webhook.interval") Duration interval,
-                                  @ConfigProperty(name = "nmc.webhook.bundel") int bundel,
-                                  @ConfigProperty(name = "nmc.webhook.max-mislukkingen") int maxMislukkingen,
-                                  @ConfigProperty(name = "nmc.webhook.herpoging-wachttijd") Duration herpogingWachttijd,
-                                  @ConfigProperty(name = "nmc.webhook.pauze-wachttijd") Duration pauzeWachttijd) {
-        if (bundel < 1 || maxMislukkingen < 1) {
-            throw new IllegalStateException("nmc.webhook.bundel en nmc.webhook.max-mislukkingen moeten 1 of hoger zijn");
-        }
-
-        if (!positief(interval) || !positief(herpogingWachttijd) || !positief(pauzeWachttijd)) {
-            throw new IllegalStateException(
-                    "nmc.webhook.interval, nmc.webhook.herpoging-wachttijd en nmc.webhook.pauze-wachttijd moeten positief zijn");
-        }
-
+                                  Clock clock, WebhookConfig config) {
         this.dienstverlenerRepository = dienstverlenerRepository;
         this.webhookpositieRepository = webhookpositieRepository;
         this.eventfeed = eventfeed;
         this.webhookUrlValidator = webhookUrlValidator;
         this.webhookDispatcher = webhookDispatcher;
         this.taakClaimer = taakClaimer;
-        this.interval = interval;
-        this.bundel = bundel;
-        this.maxMislukkingen = maxMislukkingen;
-        this.herpogingWachttijd = herpogingWachttijd;
-        this.pauzeWachttijd = pauzeWachttijd;
+        this.interval = config.interval();
+        this.bundel = config.bundel();
+        this.maxMislukkingen = config.maxMislukkingen();
+        this.herpogingWachttijd = config.herpogingWachttijd();
+        this.pauzeWachttijd = config.pauzeWachttijd();
         this.clock = clock;
     }
 
@@ -221,10 +207,6 @@ public class TerugkoppelTaakHandler implements TaakHandler {
         Duration wachttijd = basis.multipliedBy(1L << Math.min(stap, 20));
 
         return wachttijd.compareTo(MAX_WACHTTIJD) > 0 ? MAX_WACHTTIJD : wachttijd;
-    }
-
-    private static boolean positief(Duration duur) {
-        return !duur.isNegative() && !duur.isZero();
     }
 
     private OffsetDateTime nu() {

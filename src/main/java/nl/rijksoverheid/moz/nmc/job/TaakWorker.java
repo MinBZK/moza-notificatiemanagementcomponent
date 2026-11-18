@@ -8,6 +8,7 @@ import io.quarkus.runtime.Startup;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
+import nl.rijksoverheid.moz.nmc.config.TaakConfig;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
@@ -16,7 +17,6 @@ import nl.rijksoverheid.moz.nmc.service.TaakClaimer;
 import nl.rijksoverheid.moz.nmc.service.TaakHandler;
 import nl.rijksoverheid.moz.nmc.service.TaakUitkomst;
 import nl.rijksoverheid.moz.nmc.service.TaakVerlorenException;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -54,20 +54,13 @@ public class TaakWorker {
     private boolean geteld;
 
     public TaakWorker(TaakClaimer taakClaimer, TaakRepository taakRepository, Instance<TaakHandler> handlerBeans,
-                      MeterRegistry meterRegistry, Clock clock,
-                      @ConfigProperty(name = "nmc.taak.batch") int batch,
-                      @ConfigProperty(name = "nmc.taak.max-pogingen") int maxPogingen,
-                      @ConfigProperty(name = "nmc.taak.metriek-verversing") Duration metriekVerversing) {
-        if (batch < 1 || maxPogingen < 1) {
-            throw new IllegalStateException("nmc.taak.batch en nmc.taak.max-pogingen moeten 1 of hoger zijn");
-        }
-
+                      MeterRegistry meterRegistry, Clock clock, TaakConfig config) {
         this.taakClaimer = taakClaimer;
         this.taakRepository = taakRepository;
         this.clock = clock;
-        this.batch = batch;
-        this.maxPogingen = maxPogingen;
-        this.metriekVerversing = metriekVerversing;
+        this.batch = config.batch();
+        this.maxPogingen = config.maxPogingen();
+        this.metriekVerversing = config.metriekVerversing();
 
         for (TaakHandler handler : handlerBeans) {
             TaakHandler eerder = handlers.putIfAbsent(handler.taakSoort(), handler);
