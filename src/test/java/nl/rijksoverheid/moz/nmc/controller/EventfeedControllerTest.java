@@ -35,7 +35,7 @@ import static org.mockito.Mockito.when;
 @QuarkusTest
 class EventfeedControllerTest {
 
-    private static final String FEED = "/api/nmc/v1/notificaties/wijzigingen";
+    private static final String FEED = "/api/nmc/v1/notificaties/events";
     private static final String BEVESTIGING = FEED + "/bevestiging";
 
     @InjectMock
@@ -67,7 +67,7 @@ class EventfeedControllerTest {
     }
 
     @Test
-    void wijzigingen_metLimietEnCursor_leestVerder() {
+    void events_metLimietEnCursor_leestVerder() {
         verzondenNotificatie();
 
         String cursor = given().queryParam("limiet", 2).when().get(FEED)
@@ -77,12 +77,12 @@ class EventfeedControllerTest {
     }
 
     @Test
-    void wijzigingen_ongeldigeCursor_geeft400() {
+    void events_ongeldigeCursor_geeft400() {
         given().queryParam("cursor", "geen cursor !").when().get(FEED).then().statusCode(400);
     }
 
     @Test
-    void wijzigingen_cursorUitAnderEpoch_geeft410MetEigenType() {
+    void events_cursorUitAnderEpoch_geeft410MetEigenType() {
         given().queryParam("cursor", new Cursor(2, 1, 1).codeer()).when().get(FEED)
                 .then()
                 .statusCode(410)
@@ -90,7 +90,7 @@ class EventfeedControllerTest {
     }
 
     @Test
-    void wijzigingen_aanroeplimietBereikt_geeft429MetEigenTypeEnRetryAfter() {
+    void events_aanroeplimietBereikt_geeft429MetEigenTypeEnRetryAfter() {
         when(aanroeplimiet.registreer(any())).thenReturn(false);
         when(aanroeplimiet.secondenTotVolgendVenster()).thenReturn(17);
 

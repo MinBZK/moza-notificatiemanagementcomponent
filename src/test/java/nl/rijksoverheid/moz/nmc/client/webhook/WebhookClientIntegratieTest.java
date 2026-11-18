@@ -81,7 +81,7 @@ class WebhookClientIntegratieTest {
                         .when().get("/q/openapi")
                         .then().statusCode(200)
                         .extract().asString())
-                .path("paths").path("/api/nmc/v1/notificaties/wijzigingen").path("get").path("callbacks")
+                .path("paths").path("/api/nmc/v1/notificaties/events").path("get").path("callbacks")
                 .path("webhook").path("{webhookUrl}").path("post").path("requestBody").path("content");
         assertEquals(1, content.size(), "precies één mediatype verwacht voor de webhook");
         String verzonden = WebhookOntvanger.AANROEPEN.getFirst().contentType();
