@@ -28,12 +28,4 @@ class OpruimtermijnenTest {
     void maxCursorleeftijd_komtUitDeConfiguratie() {
         assertEquals(Duration.ofDays(30), termijnen.maxCursorleeftijd());
     }
-
-    // Gelijke termijnen mogen: de rij en de sleutel verdwijnen dan in dezelfde ronde.
-    @Test
-    void constructor_bewaartermijnGelijkAanWistermijn_isToegestaan() {
-        Opruimtermijnen termijnen = TestConfig.opruimtermijnen(Duration.ofDays(7), Duration.ofDays(7), Duration.ofDays(1));
-
-        assertEquals(MOMENT.minusDays(7), termijnen.bewaargrens(MOMENT));
-    }
 }

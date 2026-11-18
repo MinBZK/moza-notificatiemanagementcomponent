@@ -12,8 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConfiguratieBijOpstartenTest {
 
     @ParameterizedTest
-    @ValueSource(classes = {AannameService.class, TaakClaimer.class, Verzendbudget.class, NotifyNLNavraagmomenten.class,
-            Verzendbeleid.class, Opruimtermijnen.class, EventlogPartitiebeheer.class, ConfigValidatie.class})
+    @ValueSource(classes = {AannameService.class, NotifyNLNavraagmomenten.class, Verzendbeleid.class,
+            EventlogPartitiebeheer.class, ConfigValidatie.class})
     void beanMetConfiguratiecontrole_wordtBijHetOpstartenGemaakt(Class<?> bean) {
         assertTrue(bean.isAnnotationPresent(Startup.class), bean.getSimpleName() + " mist @Startup");
     }

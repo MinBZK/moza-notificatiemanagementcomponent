@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -60,6 +61,7 @@ class ConfigMappingTest {
             "nmc.webhook.max-mislukkingen, 0",
             "nmc.webhook.herpoging-wachttijd, 0s",
             "nmc.webhook.pauze-wachttijd, -1s",
+            "nmc.webhook.pauze-wachttijd, 0s",
             "nmc.webhook.timeout, 0s",
             "nmc.webhook.jwt.geldigheid, 0s",
             "nmc.webhook.jwt.private-key, ''",
@@ -77,8 +79,10 @@ class ConfigMappingTest {
             "nmc.verzendbudget.tokens-per-minuut, 0",
             "nmc.verzendbudget.verzend-reservering, 0",
             "nmc.verzendbudget.navraag-reservering, -1",
+            "nmc.verzendbudget.navraag-reservering, 0",
             "nmc.wissen.termijn, 0s",
-            "nmc.afleverbewijs.bewaartermijn, -1d"
+            "nmc.afleverbewijs.bewaartermijn, -1d",
+            "nmc.afleverbewijs.bewaartermijn, 0s"
     })
     void ongeldigeWaarde_weigertOpTeStarten(String sleutel, String waarde) {
         Map<String, String> waarden = new HashMap<>(SLEUTEL);
@@ -100,6 +104,32 @@ class ConfigMappingTest {
         assertTrue(fout.getMessage().contains(sleutel), fout.getMessage());
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            "nmc.taak.metriek-verversing, 0s",
+            "nmc.feed.cluster-epoch, 0",
+            "nmc.vaststelling.callback-venster, 0s"
+    })
+    void grenswaarde_isToegestaan(String sleutel, String waarde) {
+        Map<String, String> waarden = new HashMap<>(SLEUTEL);
+        waarden.put(sleutel, waarde);
+
+        assertDoesNotThrow(() -> bouw("test", waarden));
+    }
+
+    // De waarden waarmee de applicatie buiten het testprofiel start.
+    @Test
+    void standaardwaarden_voldoenAanDeRegelsOverMeerdereProperties() {
+        SmallRyeConfig config = bouw("prod", SLEUTEL);
+
+        assertDoesNotThrow(() -> new ConfigValidatie(
+                config.getConfigMapping(TaakConfig.class),
+                config.getConfigMapping(WebhookConfig.class),
+                config.getConfigMapping(VerzendbudgetConfig.class),
+                config.getConfigMapping(WissenConfig.class),
+                config.getConfigMapping(AfleverbewijsConfig.class)));
+    }
+
     @Test
     void onbekendeSleutelOnderDePrefix_weigertOpTeStarten() {
         Map<String, String> waarden = new HashMap<>(SLEUTEL);
@@ -111,9 +141,13 @@ class ConfigMappingTest {
     }
 
     private static SmallRyeConfig bouw(Map<String, String> overschreven) {
+        return bouw("test", overschreven);
+    }
+
+    private static SmallRyeConfig bouw(String profiel, Map<String, String> overschreven) {
         try {
             return ConfigUtils.emptyConfigBuilder()
-                    .withProfile("test")
+                    .withProfile(profiel)
                     .withMapping(TaakConfig.class)
                     .withMapping(WebhookConfig.class)
                     .withMapping(ControleConfig.class)
