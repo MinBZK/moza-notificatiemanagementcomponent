@@ -20,13 +20,13 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * De eventfeed en de bevestiging, binnen de dienstverlener uit {@link DvProvider}. Per opgevraagde
- * pagina één LDV-registratie, met de dienstverlener als betrokkene: het log is pseudoniem, maar de
- * Dienstverlener kan het herleiden.
+ * De eventfeed en de bevestiging, binnen de dienstverlener uit {@link DvProvider}.
  */
 public class EventfeedController implements EventsApi {
 
-    private static final String BETROKKENE_TYPE_DIENSTVERLENER = "DIENSTVERLENER";
+    // TODO vervang door een registratie per event met de ontvanger van de notificatie als betrokkene.
+    private static final String BETROKKENE_ONBEKEND = "onbekend";
+    private static final String BETROKKENE_TYPE_ONBEKEND = "ONBEKEND";
 
     private final Eventfeed eventfeed;
     private final Aanroeplimiet aanroeplimiet;
@@ -47,8 +47,8 @@ public class EventfeedController implements EventsApi {
     @Logboek(name = "eventsLezen", processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
     public Response eventsLezen(String cursor, Integer limiet) {
         UUID dvId = dvProvider.huidigeDvId();
-        logboekContext.setDataSubjectId(dvId.toString());
-        logboekContext.setDataSubjectType(BETROKKENE_TYPE_DIENSTVERLENER);
+        logboekContext.setDataSubjectId(BETROKKENE_ONBEKEND);
+        logboekContext.setDataSubjectType(BETROKKENE_TYPE_ONBEKEND);
 
         if (!aanroeplimiet.registreer(dvId)) {
             throw Problems.tooManyRequests(Problems.TYPE_AANROEPLIMIET_OVERSCHREDEN, "Aanroeplimiet bereikt",
