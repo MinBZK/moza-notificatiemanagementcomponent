@@ -1,13 +1,13 @@
 # Testverbeterplan NotificatieManagementComponent
 
-**Peildatum: 11 november 2026.** Vorige peildatums: 7 oktober, 30, 23 en 7 september, 12 augustus 2026.
+**Peildatum: 19 november 2026.** Vorige peildatums: 7 oktober, 30, 23 en 7 september, 12 augustus 2026.
 
 Dit document beschrijft de afstand tussen het **testplan** en de huidige werkelijkheid in
-**moza-notificatiemanagementcomponent (NMC)**. Het bevat eenmalige acties. Zodra een item is afgerond
-dient het verwijderd te worden.
+**moza-notificatiemanagementcomponent (NMC)**. Het bevat eenmalige acties.
 
-Deze peildatum beschrijft de stand van branch `1150-event-driven-core` (PR #66), de event-driven core
-die `main` vervangt. Wat hieronder over de code staat, geldt voor die branch.
+Deze peildatum beschrijft de stand van branch `1150-event-driven-core` (PR #66) op commit `8dab766`
+(18 november), de event-driven core die `main` vervangt. Wat hieronder over de code staat, geldt voor
+die branch.
 
 De teststrategie en het testplan staan in
 [hoofdstuk 12 *Testen*](https://docs.mijnoverheidzakelijk.nl/workspace/documentation#testen) van de
@@ -18,7 +18,7 @@ De Profielservice heeft haar [eigen plan](https://docs.rijksapp.nl/docs/23220aa3
 Een aantal items geldt voor beide services. Deze staan in beide documenten, toegespitst op de eigen
 situatie. Wie zo'n item oppakt, werkt beide documenten bij.
 
-De gapnummers zijn stabiel: een afgerond gap blijft als *vervallen* staan, zodat verwijzingen vanuit
+De gapnummers zijn stabiel: een afgerond gap wordt niet verwijderd maar blijft als *vervallen* staan, zodat verwijzingen vanuit
 stories en het Profielservice-plan blijven kloppen. Elk open gap verwijst naar de story waarin het
 werk staat.
 
@@ -34,7 +34,7 @@ bij te houden.
 | Coverage-gate              | 90/75 (INSTRUCTION/BRANCH), draait in CI                                                  |
 | Testdatabase               | embedded PostgreSQL (zonky, zonder Docker)                                                |
 | Flyway draait in tests     | ja, de volledige set op PostgreSQL; eigen migratietests voor V2, V5, V8, V14 en V16       |
-| Unitlaag (containervrij)   | 29 van 67 klassen (43%), zonder Quarkus en zonder database                                |
+| Unitlaag (containervrij)   | 31 van 69 klassen (45%), zonder Quarkus en zonder database                                |
 | Externe services in tests  | mocks op de client-interface; webhook en NotifyNL-foutmelding wél over echt HTTP          |
 | OpenAPI-validatie in tests | nee (wel een eigen spec-controle op enums en het CloudEvent-schema)                       |
 | Fuzzing                    | ja (Jazzer + ClusterFuzzLite)                                                             |
@@ -53,20 +53,23 @@ en `OvergangsfunctieTest` dekken de toegestane statusovergangen, `ReceiptVerwerk
 `NotifyNLCallbackBotsingTest` de verwerking van at-least-once en ongeordend binnenkomende receipts,
 `NotifyNLNavraagTaakHandlerTest` en `BezorgingVaststellenTest` het vaststellen van een uitkomst
 zonder receipt. De terugmelding zelf loopt via de eventfeed (`EventfeedTest`) en de webhook
-(`TerugkoppelTaakHandlerTest`, `WebhookClientIntegratieTest`). `CloudEventContractTest` toetst het
-CloudEvent per status aan het schema in het gepubliceerde `/q/openapi`. Wat voor R8 nog ontbreekt is
-de contractlaag met een echte tegenpartij (gap 5) en een e2e-journey op het nieuwe model (gap 15).
+(`TerugkoppelTaakHandlerTest`, `WebhookClientIntegratieTest`). `CloudEventContractTest` toetst per
+status of de velden aanwezig zijn en de enumwaarden kloppen, tegen het schema in het gepubliceerde
+`/q/openapi`; het `type` van het event toetst hij niet. Wat voor R8 nog ontbreekt is de contractlaag met
+een echte tegenpartij (gap 5) en een e2e-journey op het nieuwe model (gap 15).
 
 Voor **R9** (onterecht uitgebleven uitkomst) zijn de uitsluitingsregels veranderd. Een notificatie
 verdwijnt niet meer zodra de terugmelding slaagt. De wistaak wist de sleutel zeven dagen na de
 eindstatus (`nmc.wissen.termijn`), waarna de rij pseudoniem is; het onderhoud verwijdert de rij na de
 bewaartermijn van het afleverbewijs, 365 dagen (`nmc.afleverbewijs.bewaartermijn`). Beide regels zijn
-getest, ook op het geval dat er nog niet onder valt (`wistaak_voorDeWistermijn_…`). Maar
-`WisTaakHandler` en `OnderhoudTaakHandler` vergelijken met een bare `now()`, dus die grensgevallen
-liggen niet vast op het moment zelf; zie gap 7.
+getest, ook op het geval dat er nog niet onder valt (`wistaak_voorDeWistermijn_…`). De
+productiecode gebruikt overal de geïnjecteerde `Clock`, maar `WisTaakHandlerTest` en
+`OnderhoudTaakHandlerTest` zetten hem niet vast: ze zijn `@QuarkusTest`, krijgen de systeemklok van
+de `ClockProducer` en rekenen zelf met `now()`. Die grensgevallen liggen dus niet vast op het moment
+zelf; zie gap 7.
 
-**De vorm van de piramide is stabiel, niet beter.** Het aantal testklassen ging van 30 naar 67, en de
-containervrije laag groeide mee van 13 naar 29. Het aandeel bleef 43%. De drie migratietests die zelf
+**De vorm van de piramide is stabiel, niet beter.** Het aantal testklassen ging van 30 naar 69, en de
+containervrije laag groeide mee van 13 naar 31. Het aandeel ging van 43% naar 45%. De drie migratietests die zelf
 een embedded PostgreSQL starten (V5, V14, V16) tellen hier niet als containervrij. De doorlooptijd van
 de PR-checks blijft een punt om op te volgen: de teststrategie noemt 15 minuten als streven.
 
@@ -126,7 +129,7 @@ systeem-`mvn` aan in plaats van `./mvnw`, waarmee de buildversie van de runner a
 van de repo. Er worden geen Surefire- of JaCoCo-rapporten als artifact gepubliceerd, wat het testplan
 onder *Pipeline-integratie* wel vraagt. En er is geen diff-coverage per pull request.
 
-→ `./mvnw` gebruiken, rapporten uploaden, diff-coverage toevoegen. Story: #1575.
+→ `./mvnw` gebruiken, rapporten uploaden, diff-coverage toevoegen. Story: #1575, samen met gap 18.
 
 #### 2. Componenttests mocken de gegenereerde REST-clients
 
@@ -180,7 +183,23 @@ Aan de R8-kant is de NMC zelf provider: Dienstverleners lezen de eventfeed en on
 een eigen assertie, geen afspraak met een tegenpartij; een Dienstverlener die de feed of de webhook
 consumeert heeft nog geen contract.
 
-→ Na gap 2: echte consumertests hier; daarna pas de broker. Story: #748 (verkenning).
+Dat die lus echt gesloten is, blijkt uit het `type` van het statusevent. Daarvan zijn drie waarden in
+omloop, en niets merkt het, omdat `CloudEventContractTest` het type niet toetst:
+
+| Bron                                          | `type`                                                   |
+| --------------------------------------------- | -------------------------------------------------------- |
+| ADR 0024 (zoals vastgelegd op `main`)         | `nl.overheid.moz.notificatie.status.<naar>`              |
+| `main` (`ConsumentCallbackAdapter`)           | `nl.rijksoverheid.moz.nmc.notificatie.status`            |
+| PR #66 (`NotificatieStatusEvent`)             | `nl.mijnoverheidzakelijk.nmc.notificatie.status.<status>` |
+
+In `data` hetzelfde: ADR 0024 schrijft `van` en `naar` voor, de branch stuurt `vorigeStatus` en
+`nieuweStatus`. Een Dienstverlener filtert op het type, dus drie domeinnamen voor hetzelfde event is
+geen stijlkwestie. De waarde van `main` verdwijnt met de merge van PR #66, en #1374 trekt ADR 0024
+gelijk met de branch (type en datavelden).
+
+→ Vóór de eerste Dienstverlener de feed of de webhook afneemt: #1374 mergen en het type asserten in
+`CloudEventContractTest`. Daarna, na gap 2: echte consumertests hier; daarna pas de broker. Story:
+#748 (verkenning).
 
 #### 6. Callback-auth is niet volledig negatief getest
 
@@ -192,19 +211,18 @@ verkeerd en bijna-goed. Los daarvan ontbreekt de `WWW-Authenticate`-header op de
 → De twee ontbrekende gevallen toevoegen, en de misbruikcases bij het filter zelf plaatsen in plaats
 van bij de controller. Story: #1569.
 
-#### 7. `Clock` wordt maar deels gebruikt — *(ook in het Profielservice-plan)*
+#### 7. De tests zetten de `Clock` niet vast — *(ook in het Profielservice-plan)*
 
-Er is een `ClockProducer`, en `TaakWorker`, `TaakClaimer`, `Verzendbudget`, `Eventfeed` en
-`Aanroeplimiet` krijgen de `Clock` geïnjecteerd. Ruim twintig plekken roepen nog direct `now()` aan,
-waaronder de twee uitsluitingsregels van R9: `WisTaakHandler` (sleutel wissen na de wistermijn) en
-`OnderhoudTaakHandler` (rijen verwijderen na de bewaartermijn). Ook `NotifyNLNavraagTaakHandler`,
-`ControleTaakHandler`, `VerzendTaakHandler`, `ReceiptVerwerker`, `AannameService` (dagquotum) en de
-constructors van `Notificatie` en `Event` gebruiken de wandklok. Zolang dat zo is, ligt het geval dat
-er nét niet onder valt niet vast op het moment zelf, en is R9 formeel gedekt en feitelijk niet.
+De `Clock` is doorgevoerd in de productiecode: er staat in `src/main` geen klokloze `now()` meer, en
+ook `WisTaakHandler` en `OnderhoudTaakHandler`, de twee uitsluitingsregels van R9, krijgen hem in hun
+constructor. De tests zetten hem alleen niet overal vast. `AannameQuotumTest` gebruikt `Clock.fixed`,
+en een handvol tests gebruikt `VerstelbareClock`, maar `WisTaakHandlerTest` en
+`OnderhoudTaakHandlerTest` zijn `@QuarkusTest` en krijgen de systeemklok van de `ClockProducer`. Zo
+hangt `wistaak_voorDeWistermijn_…` nog aan de wandklok: het geval dat er nét niet onder valt ligt niet
+vast op het moment zelf, en R9 is formeel gedekt en feitelijk niet.
 
-→ De resterende `now()`-aanroepen vervangen door de geïnjecteerde `Clock`, te beginnen bij de wis- en
-onderhoudstaak. Voeg daarna per uitsluitingsregel een geval toe op de grens, dat er níét onder valt en
-dus moet blijven staan. Story: #1566.
+→ De klok in de wis- en onderhoudstests vastzetten (`VerstelbareClock`), en per uitsluitingsregel een
+geval op de grens toevoegen, dat er níét onder valt en dus moet blijven staan. Story: #1566.
 
 ### Middel
 
@@ -217,11 +235,11 @@ core verdwenen; de vervangende tests bouwen hun toestand via `NotificatieFixture
 
 Het testplan schrijft onder *Grondregels voor testautomatisering* voor dat de scheiding tussen
 container en geen container wordt afgedwongen, met een eigen ingang voor de snelle laag. Die is er
-niet: nul `@Tag` in de repo, en 35 van de 67 testklassen starten Quarkus in dezelfde surefire-run als
+niet: nul `@Tag` in de repo, en 35 van de 69 testklassen starten Quarkus in dezelfde surefire-run als
 de klassen die dat niet doen. Drie migratietests zonder Quarkus starten zelf een embedded PostgreSQL;
 ook die horen niet in de snelle laag.
 
-→ Drie stappen: `@Tag("unit")` op de 29 klassen zonder Quarkus en zonder database; surefire een tweede
+→ Drie stappen: `@Tag("unit")` op de 31 klassen zonder Quarkus en zonder database; surefire een tweede
 ingang geven met `<groups>${test.groups}</groups>` en een lege default; en een ArchUnit-test die de
 scheiding afdwingt in plaats van haar te benoemen, inclusief de omgekeerde regel dat een klasse met
 "Unit" in de naam geen container of database mag starten. Deze repo heeft nog geen ArchUnit, dus die
@@ -279,17 +297,31 @@ testsuite), onder #1526.
 #### 15. De e2e-suite dekt alleen de decentrale route, op het oude model — *(ook in het Profielservice-plan)*
 
 ADR 0023 kiest Bruno voor de nachtelijke run, met Playwright voor journeys met polling of tijdgebonden
-asserties en REST Assured als een journey liever in Java blijft. Met #1141 (loopt nog) draait er 's nachts een
-NMC-journey tegen ZAD `stable` (`moza-mock/bruno/e2e-nmc`, achter `NMC_KETEN_ROND`): een decentrale
-notificatie versturen, de verzending in het journal van de NotifyNL-mock terugvinden, en wachten tot de
-bezorgstatus als CloudEvent op de `callbackUrl` binnenkomt. Dat is de asynchrone bezorgstatus over de
-hele keten, precies wat het toelatingscriterium vraagt.
+asserties en REST Assured als een journey liever in Java blijft. Met #1141 (loopt nog) draait er sinds
+16 november elke nacht groen een NMC-journey tegen ZAD `stable` (`moza-mock/bruno/e2e-nmc`, aangezet met
+`NMC_KETEN_ROND`): een decentrale notificatie versturen, de verzending in het journal van de
+NotifyNL-mock terugvinden, en wachten tot de bezorgstatus als CloudEvent op de `callbackUrl`
+binnenkomt. Dat is de asynchrone bezorgstatus over de hele keten, precies wat het toelatingscriterium
+vraagt.
 
 Die journey gaat uit van het model op `main`: een 200 op de aanname, synchroon versturen en een
 `callbackUrl` op het verzoek. Met de event-driven core vervallen alle drie. De aanname antwoordt 202,
-de verzending gebeurt later door een worker, en de status komt via de eventfeed of de webhook. Zonder
-aanpassing wordt de nachtrun rood zodra PR #66 op `stable` staat. De journey pollt dan op twee
-plekken, en dat is volgens ADR 0023 het punt om naar Playwright over te stappen.
+de verzending gebeurt later door een worker, en `callbackUrl` komt in de broncode niet meer voor. De
+status komt via de eventfeed of via de webhook, waarvan de URL op de Dienstverlener-rij in de database
+van de NMC staat, met een JWT-ondertekende levering en de sleutels op `/.well-known/jwks.json`. Zodra
+PR #66 op `stable` staat, breken drie asserties: de 200 op de aanname, het `callbackUrl`-veld in de
+body en het `type` van het event (zie gap 5).
+
+Er zijn twee routes om de status op te halen, en ze zijn niet gelijkwaardig:
+
+- de Dienstverlener-rij op ZAD `stable` naar de mock laten wijzen, en de mock een JWT-ondertekende
+  levering laten accepteren;
+- de eventfeed pollen met een cursor.
+
+De keuze staat nog open en hangt af van configuratie buiten `moza-mock`: de webhookroute vraagt een
+aangepaste rij en webhooksleutels op `stable`. Ze bepaalt ook of de omzetting een aanpassing in Bruno
+blijft of een Playwright-journey wordt: met de feed pollt de journey op twee plekken, en dat is volgens
+ADR 0023 het punt om over te stappen.
 
 #1141 levert daarnaast drie vervolgstories op: de centrale journey (via de Profielservice), de
 FSC-route naar de NMC (in september met Bruno handmatig doorlopen tegen ZAD) en Schemathesis.
@@ -317,7 +349,7 @@ een soak-scenario met een trage of niet-antwoordende Profielservice of NotifyNL.
 De hele `build`-job heeft schrijfrechten omdat de dependency-submission-stap die nodig heeft, ook op
 pull requests. De Profielservice heeft dit in een aparte job gezet die alleen op `main` draait.
 
-→ Dezelfde splitsing overnemen. Story: #1575.
+→ Dezelfde splitsing overnemen. Story: #1575, samen met gap 1.
 
 ### Nieuw
 
