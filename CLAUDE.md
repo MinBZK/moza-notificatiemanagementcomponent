@@ -484,6 +484,20 @@ de opgeslagen corpus. De standalone targets (`NotificatieVerwerkingFuzzer`,
 `BerichtTypeFuzzer`, `HashHelperFuzzer`, `JsonDeserializationFuzzer`) bouwt
 ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
 
+### DAST
+
+`.github/workflows/zap.yml` draait een actieve OWASP ZAP API-scan tegen de
+`stable`-deployment op ZAD, aangestuurd door `/q/openapi`: na elke geslaagde
+deploy vanuit `main`, elke nacht en handmatig via `workflow_dispatch`. Een PR die
+`zap.yml` of `.zap/` wijzigt, draait de scan tegen de eigen preview. Het rapport
+staat als artifact `zap-rapport` bij de run, en de run wordt rood zodra ZAP een
+melding geeft.
+
+- **Geaccepteerde meldingen** staan in `.zap/rules.tsv`, één regel per scanregel
+  met de reden erbij.
+- **Een reproduceerbare bevinding** krijgt eerst een regressietest en dan de fix.
+  De test blijft staan, met een verwijzing naar de bevinding.
+
 ## Database en migraties
 
 - **Migraties zijn onveranderlijk na toepassing.** Wijzig een bestaande `V*.sql`
@@ -754,7 +768,8 @@ twee kanten zichtbaar zijn:
 | `docs/lokaal-testen.md` | Container-image lokaal bouwen en draaien met jib en Podman |
 | `docs/zad-deploy.md` | ZAD PR-preview-deploys, benodigde env-vars en debugroutes |
 | `.clusterfuzzlite/` | Build voor de standalone fuzz-targets |
-| `.github/workflows/` | CI: Maven-build, CodeQL, Scorecard, ClusterFuzzLite, ZAD-deploy |
+| `.zap/rules.tsv` | Geaccepteerde meldingen van de ZAP API-scan |
+| `.github/workflows/` | CI: Maven-build, CodeQL, Scorecard, ClusterFuzzLite, ZAD-deploy, ZAP API-scan |
 
 ## Deploy
 
@@ -767,6 +782,11 @@ cluster.
 De workflow bepaalt alleen wélk container-image draait, en deployt op digest.
 Applicatieconfiguratie (datasource, NotifyNL-keys, pepper) staat in de deployment
 zelf, in de ZAD Operations Manager, niet in de workflow en niet in deze repo.
+
+De ZAP API-scan stuurt bij elke run honderden aanvalsachtige verzoeken naar
+`stable`, ook naar de endpoints die een notificatie versturen, en op een PR die de
+scan wijzigt naar de preview van die PR. Laat `QUARKUS_REST_CLIENT_NOTIFY_URL` daarom
+op `stable` en op `feature` op de NotifyNL-mock staan.
 
 Details en debugroutes: `docs/zad-deploy.md`.
 
