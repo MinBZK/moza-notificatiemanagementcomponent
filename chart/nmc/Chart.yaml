@@ -1,0 +1,6 @@
+apiVersion: v2
+name: nmc
+description: NotificatieManagementComponent met een eigen CloudNativePG-database, voor een Kubernetes-namespace (zoals op Fundament)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
