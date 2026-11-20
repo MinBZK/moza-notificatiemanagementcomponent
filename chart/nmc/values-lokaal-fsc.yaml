@@ -1,0 +1,7 @@
+# Bovenop values-lokaal.yaml: de Profielservice via FSC in plaats van direct naar moza-mock.
+#   helm -n nmc upgrade nmc chart/nmc -f chart/nmc/values-lokaal.yaml -f chart/nmc/values-lokaal-fsc.yaml
+# De NMC belt de outway van zijn eigen peer (FSCInstallation in namespace nmc). Die koppelt het pad
+# `profielservice` aan de ServiceConnection-grant (grant link in de FSC Controller), dus de NMC hoeft
+# geen Fsc-Grant-Hash mee te sturen. Zie docs/fundament-deploy.md, "FSC".
+profielservice:
+  url: http://fsc-outway-default.nmc.svc/profielservice
