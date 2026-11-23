@@ -8,8 +8,7 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
  */
 public final class TaakRonde {
 
-    private TaakRonde() {
-    }
+    private TaakRonde() {}
 
     /** @return het aantal geclaimde taken */
     public static int draai(TaakWorker taakWorker, TaakSoort taakSoort) {

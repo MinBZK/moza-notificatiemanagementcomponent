@@ -1,11 +1,18 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.verifyNoInteractions;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
@@ -18,14 +25,6 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.UUID;
-
-import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 /** De intake is een aanname: 202 na de commit, zonder aanroep van de Profielservice of NotifyNL. */
 @QuarkusTest
@@ -65,71 +64,65 @@ class CentraleNotificatieControllerTest {
 
     @Test
     void notificatieAannemen_happyFlow_retourneert202EnPlantDeVerzendtaak() {
-        String id = given()
-                .contentType(ContentType.JSON)
+        String id = given().contentType(ContentType.JSON)
                 .body(aanvraag("Stuurgroep Agenda", "\"dienst\": \"Parkeervergunning\","))
-                .when().post(PAD)
+                .when()
+                .post(PAD)
                 .then()
                 .statusCode(202)
                 .body("notificatieId", notNullValue())
-                .extract().path("notificatieId");
+                .extract()
+                .path("notificatieId");
 
         QuarkusTransaction.requiringNew().run(() -> {
-            assertEquals(NotificatieStatus.AANGENOMEN, notificatieRepository.findById(UUID.fromString(id)).getStatus());
-            assertEquals(TaakSoort.VERZENDEN, taakRepository.listAll().getFirst().getTaakSoort());
+            assertEquals(
+                    NotificatieStatus.AANGENOMEN,
+                    notificatieRepository.findById(UUID.fromString(id)).getStatus());
+            assertEquals(
+                    TaakSoort.VERZENDEN, taakRepository.listAll().getFirst().getTaakSoort());
         });
         verifyNoInteractions(profielApi, sendAMessageApi);
     }
 
     @Test
     void notificatieAannemen_zonderDienst_retourneert202() {
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(aanvraag("Stuurgroep Agenda", ""))
-                .when().post(PAD)
+                .when()
+                .post(PAD)
                 .then()
                 .statusCode(202);
     }
 
     @Test
     void notificatieAannemen_ontbrekendIdentificatieNummer_retourneert400() {
-        given()
-                .contentType(ContentType.JSON)
-                .body("""
+        given().contentType(ContentType.JSON).body("""
                         {
                           "identificatieType": "KVK",
                           "dienstverlener": "Gemeente Voorbeeld",
                           "berichtType": "Stuurgroep Agenda"
                         }
-                        """)
-                .when().post(PAD)
-                .then()
-                .statusCode(400);
+                        """).when().post(PAD).then().statusCode(400);
     }
 
     @Test
     void notificatieAannemen_leegIdentificatieNummer_retourneert400() {
-        given()
-                .contentType(ContentType.JSON)
-                .body("""
+        given().contentType(ContentType.JSON).body("""
                         {
                           "identificatieType": "KVK",
                           "identificatieNummer": " ",
                           "dienstverlener": "Gemeente Voorbeeld",
                           "berichtType": "Stuurgroep Agenda"
                         }
-                        """)
-                .when().post(PAD)
-                .then()
-                .statusCode(400);
+                        """).when().post(PAD).then().statusCode(400);
     }
 
     @Test
     void notificatieAannemen_onbekendBerichtType_retourneert400() {
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(aanvraag("Bestaat Niet", ""))
-                .when().post(PAD)
+                .when()
+                .post(PAD)
                 .then()
                 .statusCode(400)
                 .body("title", equalTo("Notificatie niet aangenomen."));
@@ -138,12 +131,17 @@ class CentraleNotificatieControllerTest {
     @Test
     void notificatieAannemen_quotumBereikt_retourneert429MetEigenType() {
         zetQuotum(1);
-        given().contentType(ContentType.JSON).body(aanvraag("Stuurgroep Agenda", "")).when().post(PAD).then().statusCode(202);
-
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(aanvraag("Stuurgroep Agenda", ""))
-                .when().post(PAD)
+                .when()
+                .post(PAD)
+                .then()
+                .statusCode(202);
+
+        given().contentType(ContentType.JSON)
+                .body(aanvraag("Stuurgroep Agenda", ""))
+                .when()
+                .post(PAD)
                 .then()
                 .statusCode(429)
                 .contentType("application/problem+json")
@@ -158,10 +156,10 @@ class CentraleNotificatieControllerTest {
         }
         gegevens.append("}");
 
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(aanvraagMetBerichtgegevens(gegevens.toString()))
-                .when().post(PAD)
+                .when()
+                .post(PAD)
                 .then()
                 .statusCode(400)
                 .body("violations", notNullValue());
@@ -169,10 +167,10 @@ class CentraleNotificatieControllerTest {
 
     @Test
     void notificatieAannemen_berichtgegevenLangerDan2000Tekens_retourneert400() {
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(aanvraagMetBerichtgegevens("{ \"naam\": \"" + "x".repeat(2001) + "\" }"))
-                .when().post(PAD)
+                .when()
+                .post(PAD)
                 .then()
                 .statusCode(400)
                 .body("violations", notNullValue());
@@ -204,7 +202,7 @@ class CentraleNotificatieControllerTest {
     }
 
     private void zetQuotum(Integer quotum) {
-        QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.zetQuotumPerDag(entityManager, NotificatieFixtures.DV_ID, quotum));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.zetQuotumPerDag(entityManager, NotificatieFixtures.DV_ID, quotum));
     }
 }

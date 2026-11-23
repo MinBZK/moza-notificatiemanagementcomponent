@@ -1,17 +1,16 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.smallrye.config.PropertiesConfigSource;
 import io.smallrye.config.SmallRyeConfigBuilder;
-import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
-import nl.rijksoverheid.moz.nmc.domain.VersleuteldeGegevens;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
-
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
@@ -19,14 +18,14 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
-
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
+import nl.rijksoverheid.moz.nmc.domain.VersleuteldeGegevens;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class SleutelbeheerTest {
 
@@ -70,7 +69,8 @@ class SleutelbeheerTest {
     @ParameterizedTest
     @MethodSource("personalisations")
     void ontsleutelPersonalisation_naVersleutelen_levertOorspronkelijkeMapOp(Map<String, String> personalisation) {
-        VersleuteldeGegevens gegevens = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), personalisation);
+        VersleuteldeGegevens gegevens =
+                sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), personalisation);
 
         assertEquals(personalisation, sleutelbeheer.ontsleutelPersonalisation(ID, gegevens));
     }
@@ -84,10 +84,14 @@ class SleutelbeheerTest {
 
     @Test
     void versleutel_tweeNotificaties_krijgenElkEenEigenSleutelEnIv() {
-        VersleuteldeGegevens eerste = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of("naam", "Voorbeeld BV"));
-        VersleuteldeGegevens tweede = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of("naam", "Voorbeeld BV"));
+        VersleuteldeGegevens eerste =
+                sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of("naam", "Voorbeeld BV"));
+        VersleuteldeGegevens tweede =
+                sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of("naam", "Voorbeeld BV"));
 
-        assertFalse(Arrays.equals(sleutelbeheer.pakUit(ID, eerste).getEncoded(), sleutelbeheer.pakUit(ID, tweede).getEncoded()));
+        assertFalse(Arrays.equals(
+                sleutelbeheer.pakUit(ID, eerste).getEncoded(),
+                sleutelbeheer.pakUit(ID, tweede).getEncoded()));
         assertFalse(Arrays.equals(iv(eerste.ontvangerVersleuteld()), iv(tweede.ontvangerVersleuteld())));
         assertFalse(Arrays.equals(iv(eerste.personalisationVersleuteld()), iv(tweede.personalisationVersleuteld())));
         assertFalse(Arrays.equals(eerste.ontvangerVersleuteld(), tweede.ontvangerVersleuteld()));
@@ -111,7 +115,8 @@ class SleutelbeheerTest {
         byte[] ciphertext = gegevens.ontvangerVersleuteld().clone();
         ciphertext[ciphertext.length - 1] ^= 1;
 
-        OntsleutelenMisluktException fout = assertThrows(OntsleutelenMisluktException.class,
+        OntsleutelenMisluktException fout = assertThrows(
+                OntsleutelenMisluktException.class,
                 () -> sleutelbeheer.ontsleutelOntvanger(ID, metOntvanger(gegevens, ciphertext)));
         assertFalse(fout instanceof SleutelGewistException);
     }
@@ -122,7 +127,8 @@ class SleutelbeheerTest {
         byte[] ciphertext = gegevens.ontvangerVersleuteld().clone();
         ciphertext[0] ^= 1;
 
-        assertThrows(OntsleutelenMisluktException.class,
+        assertThrows(
+                OntsleutelenMisluktException.class,
                 () -> sleutelbeheer.ontsleutelOntvanger(ID, metOntvanger(gegevens, ciphertext)));
     }
 
@@ -130,8 +136,10 @@ class SleutelbeheerTest {
     void ontsleutelOntvanger_verwisseldMetPersonalisation_gooitOntsleutelenMisluktException() {
         VersleuteldeGegevens gegevens = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
 
-        assertThrows(OntsleutelenMisluktException.class,
-                () -> sleutelbeheer.ontsleutelOntvanger(ID, metOntvanger(gegevens, gegevens.personalisationVersleuteld())));
+        assertThrows(
+                OntsleutelenMisluktException.class,
+                () -> sleutelbeheer.ontsleutelOntvanger(
+                        ID, metOntvanger(gegevens, gegevens.personalisationVersleuteld())));
     }
 
     @Test
@@ -139,7 +147,8 @@ class SleutelbeheerTest {
         VersleuteldeGegevens eerste = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
         VersleuteldeGegevens tweede = sleutelbeheer.versleutel(ID, Ontvanger.email("ander@example.nl"), Map.of());
 
-        assertThrows(OntsleutelenMisluktException.class,
+        assertThrows(
+                OntsleutelenMisluktException.class,
                 () -> sleutelbeheer.ontsleutelOntvanger(ID, metOntvanger(eerste, tweede.ontvangerVersleuteld())));
     }
 
@@ -147,17 +156,20 @@ class SleutelbeheerTest {
     void ontsleutelOntvanger_teKorteOfOntbrekendeCiphertext_gooitOntsleutelenMisluktException() {
         VersleuteldeGegevens gegevens = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
 
-        assertThrows(OntsleutelenMisluktException.class,
+        assertThrows(
+                OntsleutelenMisluktException.class,
                 () -> sleutelbeheer.ontsleutelOntvanger(ID, metOntvanger(gegevens, new byte[27])));
-        assertThrows(OntsleutelenMisluktException.class,
+        assertThrows(
+                OntsleutelenMisluktException.class,
                 () -> sleutelbeheer.ontsleutelOntvanger(ID, metOntvanger(gegevens, null)));
     }
 
     @Test
     void ontsleutel_gewisteSleutel_gooitSleutelGewistException() {
-        VersleuteldeGegevens gegevens = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of("naam", "Voorbeeld BV"));
-        VersleuteldeGegevens gewist = new VersleuteldeGegevens(gegevens.ontvangerVersleuteld(),
-                gegevens.personalisationVersleuteld(), null, gegevens.kekVersie());
+        VersleuteldeGegevens gegevens =
+                sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of("naam", "Voorbeeld BV"));
+        VersleuteldeGegevens gewist = new VersleuteldeGegevens(
+                gegevens.ontvangerVersleuteld(), gegevens.personalisationVersleuteld(), null, gegevens.kekVersie());
 
         assertThrows(SleutelGewistException.class, () -> sleutelbeheer.ontsleutelOntvanger(ID, gewist));
         assertThrows(SleutelGewistException.class, () -> sleutelbeheer.ontsleutelPersonalisation(ID, gewist));
@@ -166,8 +178,11 @@ class SleutelbeheerTest {
     @Test
     void ontsleutel_sleutelZonderKekVersie_gooitOntsleutelenMisluktException() {
         VersleuteldeGegevens gegevens = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
-        VersleuteldeGegevens zonderVersie = new VersleuteldeGegevens(gegevens.ontvangerVersleuteld(),
-                gegevens.personalisationVersleuteld(), gegevens.sleutelGewrapt(), null);
+        VersleuteldeGegevens zonderVersie = new VersleuteldeGegevens(
+                gegevens.ontvangerVersleuteld(),
+                gegevens.personalisationVersleuteld(),
+                gegevens.sleutelGewrapt(),
+                null);
 
         assertThrows(OntsleutelenMisluktException.class, () -> sleutelbeheer.ontsleutelOntvanger(ID, zonderVersie));
     }
@@ -175,11 +190,11 @@ class SleutelbeheerTest {
     @Test
     void ontsleutel_onbekendeKekVersie_gooitOntsleutelenMisluktException() {
         VersleuteldeGegevens gegevens = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
-        VersleuteldeGegevens versie7 = new VersleuteldeGegevens(gegevens.ontvangerVersleuteld(),
-                gegevens.personalisationVersleuteld(), gegevens.sleutelGewrapt(), 7);
+        VersleuteldeGegevens versie7 = new VersleuteldeGegevens(
+                gegevens.ontvangerVersleuteld(), gegevens.personalisationVersleuteld(), gegevens.sleutelGewrapt(), 7);
 
-        OntsleutelenMisluktException fout = assertThrows(OntsleutelenMisluktException.class,
-                () -> sleutelbeheer.ontsleutelOntvanger(ID, versie7));
+        OntsleutelenMisluktException fout =
+                assertThrows(OntsleutelenMisluktException.class, () -> sleutelbeheer.ontsleutelOntvanger(ID, versie7));
         assertTrue(fout.getMessage().contains("7"));
     }
 
@@ -196,16 +211,18 @@ class SleutelbeheerTest {
         VersleuteldeGegevens gegevens = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
         Sleutelbeheer andereKek = sleutelbeheer(1, Map.of(1, ANDERE_KEK));
 
-        OntsleutelenMisluktException fout = assertThrows(OntsleutelenMisluktException.class,
-                () -> andereKek.ontsleutelOntvanger(ID, gegevens));
+        OntsleutelenMisluktException fout =
+                assertThrows(OntsleutelenMisluktException.class, () -> andereKek.ontsleutelOntvanger(ID, gegevens));
         assertNotNull(fout.getCause());
     }
 
     @Test
     void ontsleutel_naKekRotatie_ontsleuteltOudeEnNieuweVersie() {
-        VersleuteldeGegevens oud = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of("naam", "Oud BV"));
+        VersleuteldeGegevens oud =
+                sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of("naam", "Oud BV"));
         Sleutelbeheer naRotatie = sleutelbeheer(2, Map.of(1, KEK_1, 2, KEK_2));
-        VersleuteldeGegevens nieuw = naRotatie.versleutel(ID, Ontvanger.email("ander@example.nl"), Map.of("naam", "Nieuw BV"));
+        VersleuteldeGegevens nieuw =
+                naRotatie.versleutel(ID, Ontvanger.email("ander@example.nl"), Map.of("naam", "Nieuw BV"));
 
         assertEquals(2, nieuw.kekVersie());
         assertEquals(Ontvanger.email("burger@example.nl"), naRotatie.ontsleutelOntvanger(ID, oud));
@@ -217,7 +234,8 @@ class SleutelbeheerTest {
     // ook als de oude KEK inmiddels uit de configuratie is.
     @Test
     void herwrap_naKekRotatie_laatDeGegevensOngewijzigdEnOntsleutelbaarOnderDeNieuweVersie() {
-        VersleuteldeGegevens oud = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of("naam", "Oud BV"));
+        VersleuteldeGegevens oud =
+                sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of("naam", "Oud BV"));
         Sleutelbeheer naRotatie = sleutelbeheer(2, Map.of(1, KEK_1, 2, KEK_2));
 
         byte[] herwrapt = naRotatie.herwrap(ID, oud.sleutelGewrapt(), oud.kekVersie());
@@ -253,10 +271,11 @@ class SleutelbeheerTest {
                 return "geheim".getBytes(StandardCharsets.UTF_8);
             }
         });
-        VersleuteldeGegevens gegevens = kapotSerialiserend.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
+        VersleuteldeGegevens gegevens =
+                kapotSerialiserend.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
 
-        OntsleutelenMisluktException fout = assertThrows(OntsleutelenMisluktException.class,
-                () -> sleutelbeheer.ontsleutelPersonalisation(ID, gegevens));
+        OntsleutelenMisluktException fout = assertThrows(
+                OntsleutelenMisluktException.class, () -> sleutelbeheer.ontsleutelPersonalisation(ID, gegevens));
         assertNull(fout.getCause());
         assertFalse(fout.getMessage().contains("geheim"));
     }
@@ -266,10 +285,12 @@ class SleutelbeheerTest {
     @Test
     void ontsleutel_gegevensVanEenAndereNotificatie_gooitOntsleutelenMisluktException() {
         UUID andereId = UUID.fromString("3f1a2b4c-0000-4000-8000-000000000002");
-        VersleuteldeGegevens vanAndereRij = sleutelbeheer.versleutel(andereId, Ontvanger.email("ander@example.nl"), Map.of("naam", "Ander BV"));
+        VersleuteldeGegevens vanAndereRij =
+                sleutelbeheer.versleutel(andereId, Ontvanger.email("ander@example.nl"), Map.of("naam", "Ander BV"));
 
         assertThrows(OntsleutelenMisluktException.class, () -> sleutelbeheer.ontsleutelOntvanger(ID, vanAndereRij));
-        assertThrows(OntsleutelenMisluktException.class, () -> sleutelbeheer.ontsleutelPersonalisation(ID, vanAndereRij));
+        assertThrows(
+                OntsleutelenMisluktException.class, () -> sleutelbeheer.ontsleutelPersonalisation(ID, vanAndereRij));
     }
 
     @Test
@@ -287,7 +308,9 @@ class SleutelbeheerTest {
         VersleuteldeGegevens gegevens = sleutelbeheer.versleutel(ID, ontvanger, Map.of());
 
         // De ontvanger gaat als JSON de versleuteling in.
-        assertEquals(12 + new ObjectMapper().writeValueAsBytes(ontvanger).length + 16, gegevens.ontvangerVersleuteld().length);
+        assertEquals(
+                12 + new ObjectMapper().writeValueAsBytes(ontvanger).length + 16,
+                gegevens.ontvangerVersleuteld().length);
         assertEquals(12 + 32 + 16, gegevens.sleutelGewrapt().length);
     }
 
@@ -301,8 +324,16 @@ class SleutelbeheerTest {
         byte[] tweede = sleutelbeheer.wrap(ID, sleutel, 1);
 
         assertFalse(Arrays.equals(eerste, tweede));
-        assertArrayEquals(sleutel.getEncoded(), sleutelbeheer.pakUit(ID, new VersleuteldeGegevens(null, null, eerste, 1)).getEncoded());
-        assertArrayEquals(sleutel.getEncoded(), sleutelbeheer.pakUit(ID, new VersleuteldeGegevens(null, null, tweede, 1)).getEncoded());
+        assertArrayEquals(
+                sleutel.getEncoded(),
+                sleutelbeheer
+                        .pakUit(ID, new VersleuteldeGegevens(null, null, eerste, 1))
+                        .getEncoded());
+        assertArrayEquals(
+                sleutel.getEncoded(),
+                sleutelbeheer
+                        .pakUit(ID, new VersleuteldeGegevens(null, null, tweede, 1))
+                        .getEncoded());
     }
 
     @Test
@@ -311,7 +342,8 @@ class SleutelbeheerTest {
         byte[] gewrapt = gegevens.sleutelGewrapt().clone();
         gewrapt[gewrapt.length - 1] ^= 1;
 
-        OntsleutelenMisluktException fout = assertThrows(OntsleutelenMisluktException.class,
+        OntsleutelenMisluktException fout = assertThrows(
+                OntsleutelenMisluktException.class,
                 () -> sleutelbeheer.ontsleutelOntvanger(ID, metSleutel(gegevens, gewrapt, 1)));
         assertFalse(fout instanceof SleutelGewistException);
     }
@@ -320,7 +352,8 @@ class SleutelbeheerTest {
     void ontsleutel_teKorteGewrapteSleutel_gooitOntsleutelenMisluktException() {
         VersleuteldeGegevens gegevens = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
 
-        assertThrows(OntsleutelenMisluktException.class,
+        assertThrows(
+                OntsleutelenMisluktException.class,
                 () -> sleutelbeheer.ontsleutelOntvanger(ID, metSleutel(gegevens, new byte[27], 1)));
     }
 
@@ -329,7 +362,8 @@ class SleutelbeheerTest {
         Sleutelbeheer tweeVersies = sleutelbeheer(1, Map.of(1, KEK_1, 2, KEK_2));
         VersleuteldeGegevens gegevens = tweeVersies.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
 
-        assertThrows(OntsleutelenMisluktException.class,
+        assertThrows(
+                OntsleutelenMisluktException.class,
                 () -> tweeVersies.ontsleutelOntvanger(ID, metSleutel(gegevens, gegevens.sleutelGewrapt(), 2)));
     }
 
@@ -338,7 +372,8 @@ class SleutelbeheerTest {
         Sleutelbeheer zelfdeKek = sleutelbeheer(1, Map.of(1, KEK_1, 2, KEK_1));
         VersleuteldeGegevens gegevens = zelfdeKek.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
 
-        assertThrows(OntsleutelenMisluktException.class,
+        assertThrows(
+                OntsleutelenMisluktException.class,
                 () -> zelfdeKek.ontsleutelOntvanger(ID, metSleutel(gegevens, gegevens.sleutelGewrapt(), 2)));
     }
 
@@ -346,7 +381,8 @@ class SleutelbeheerTest {
     void ontsleutel_gewrapteSleutelAlsVeldAangeboden_gooitOntsleutelenMisluktException() {
         VersleuteldeGegevens gegevens = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
 
-        assertThrows(OntsleutelenMisluktException.class,
+        assertThrows(
+                OntsleutelenMisluktException.class,
                 () -> sleutelbeheer.ontsleutelOntvanger(ID, metOntvanger(gegevens, gegevens.sleutelGewrapt())));
     }
 
@@ -359,12 +395,12 @@ class SleutelbeheerTest {
     }
 
     private static VersleuteldeGegevens metOntvanger(VersleuteldeGegevens gegevens, byte[] ontvanger) {
-        return new VersleuteldeGegevens(ontvanger, gegevens.personalisationVersleuteld(),
-                gegevens.sleutelGewrapt(), gegevens.kekVersie());
+        return new VersleuteldeGegevens(
+                ontvanger, gegevens.personalisationVersleuteld(), gegevens.sleutelGewrapt(), gegevens.kekVersie());
     }
 
     private static VersleuteldeGegevens metSleutel(VersleuteldeGegevens gegevens, byte[] gewrapt, int kekVersie) {
-        return new VersleuteldeGegevens(gegevens.ontvangerVersleuteld(), gegevens.personalisationVersleuteld(),
-                gewrapt, kekVersie);
+        return new VersleuteldeGegevens(
+                gegevens.ontvangerVersleuteld(), gegevens.personalisationVersleuteld(), gewrapt, kekVersie);
     }
 }

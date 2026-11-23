@@ -1,24 +1,23 @@
 package nl.rijksoverheid.moz.nmc.config;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.quarkus.runtime.configuration.ConfigUtils;
 import io.smallrye.config.ConfigValidationException;
 import io.smallrye.config.PropertiesConfigSource;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.validator.BeanValidationConfigValidatorImpl;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
-
 import java.io.IOException;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * Leest de mappings met de configbouwer en de converters van Quarkus, bovenop de echte
@@ -44,48 +43,51 @@ class ConfigMappingTest {
         assertEquals(Duration.ofMinutes(2), taak.lease());
         assertEquals(Duration.ofSeconds(30), webhook.herpogingWachttijd());
         assertEquals("sleutel-1", webhook.jwt().keyId());
-        assertEquals(Duration.ofDays(30), config.getConfigMapping(FeedConfig.class).maxCursorleeftijd());
-        assertEquals(Duration.ofDays(7), config.getConfigMapping(VaststellingConfig.class).termijn());
+        assertEquals(
+                Duration.ofDays(30), config.getConfigMapping(FeedConfig.class).maxCursorleeftijd());
+        assertEquals(
+                Duration.ofDays(7),
+                config.getConfigMapping(VaststellingConfig.class).termijn());
         assertEquals(20, config.getConfigMapping(VerzendbudgetConfig.class).tokensPerMinuut());
     }
 
     @ParameterizedTest
     @CsvSource({
-            "nmc.taak.batch, 0",
-            "nmc.taak.batch, -1",
-            "nmc.taak.lease, 0s",
-            "nmc.taak.max-pogingen, 0",
-            "nmc.taak.metriek-verversing, -1s",
-            "nmc.taak.uitstel, 0s",
-            "nmc.webhook.interval, 0s",
-            "nmc.webhook.bundel, 0",
-            "nmc.webhook.max-mislukkingen, 0",
-            "nmc.webhook.herpoging-wachttijd, 0s",
-            "nmc.webhook.pauze-wachttijd, -1s",
-            "nmc.webhook.pauze-wachttijd, 0s",
-            "nmc.webhook.timeout, 0s",
-            "nmc.webhook.jwt.geldigheid, 0s",
-            "nmc.webhook.jwt.private-key, ''",
-            "nmc.webhook.jwt.private-key, ' '",
-            "nmc.webhook.jwt.key-id, ' '",
-            "nmc.webhook.jwt.issuer, ' '",
-            "nmc.controle.interval, 0s",
-            "nmc.controle.max-per-ronde, 0",
-            "nmc.feed.max-pagina, 0",
-            "nmc.feed.max-aanroepen-per-minuut, 0",
-            "nmc.feed.cluster-epoch, -1",
-            "nmc.feed.max-cursorleeftijd, 0s",
-            "nmc.feed.source, /api/nmc/v1/notificaties",
-            "nmc.feed.source, urn:nld:oin:123:systeem:nmc",
-            "nmc.vaststelling.termijn, 0s",
-            "nmc.vaststelling.callback-venster, -1s",
-            "nmc.verzendbudget.tokens-per-minuut, 0",
-            "nmc.verzendbudget.verzend-reservering, 0",
-            "nmc.verzendbudget.navraag-reservering, -1",
-            "nmc.verzendbudget.navraag-reservering, 0",
-            "nmc.wissen.termijn, 0s",
-            "nmc.afleverbewijs.bewaartermijn, -1d",
-            "nmc.afleverbewijs.bewaartermijn, 0s"
+        "nmc.taak.batch, 0",
+        "nmc.taak.batch, -1",
+        "nmc.taak.lease, 0s",
+        "nmc.taak.max-pogingen, 0",
+        "nmc.taak.metriek-verversing, -1s",
+        "nmc.taak.uitstel, 0s",
+        "nmc.webhook.interval, 0s",
+        "nmc.webhook.bundel, 0",
+        "nmc.webhook.max-mislukkingen, 0",
+        "nmc.webhook.herpoging-wachttijd, 0s",
+        "nmc.webhook.pauze-wachttijd, -1s",
+        "nmc.webhook.pauze-wachttijd, 0s",
+        "nmc.webhook.timeout, 0s",
+        "nmc.webhook.jwt.geldigheid, 0s",
+        "nmc.webhook.jwt.private-key, ''",
+        "nmc.webhook.jwt.private-key, ' '",
+        "nmc.webhook.jwt.key-id, ' '",
+        "nmc.webhook.jwt.issuer, ' '",
+        "nmc.controle.interval, 0s",
+        "nmc.controle.max-per-ronde, 0",
+        "nmc.feed.max-pagina, 0",
+        "nmc.feed.max-aanroepen-per-minuut, 0",
+        "nmc.feed.cluster-epoch, -1",
+        "nmc.feed.max-cursorleeftijd, 0s",
+        "nmc.feed.source, /api/nmc/v1/notificaties",
+        "nmc.feed.source, urn:nld:oin:123:systeem:nmc",
+        "nmc.vaststelling.termijn, 0s",
+        "nmc.vaststelling.callback-venster, -1s",
+        "nmc.verzendbudget.tokens-per-minuut, 0",
+        "nmc.verzendbudget.verzend-reservering, 0",
+        "nmc.verzendbudget.navraag-reservering, -1",
+        "nmc.verzendbudget.navraag-reservering, 0",
+        "nmc.wissen.termijn, 0s",
+        "nmc.afleverbewijs.bewaartermijn, -1d",
+        "nmc.afleverbewijs.bewaartermijn, 0s"
     })
     void ongeldigeWaarde_weigertOpTeStarten(String sleutel, String waarde) {
         Map<String, String> waarden = new HashMap<>(SLEUTEL);
@@ -109,10 +111,7 @@ class ConfigMappingTest {
     }
 
     @ParameterizedTest
-    @CsvSource({
-            "nmc.taak.metriek-verversing, 0s",
-            "nmc.feed.cluster-epoch, 0",
-            "nmc.vaststelling.callback-venster, 0s"
+    @CsvSource({"nmc.taak.metriek-verversing, 0s", "nmc.feed.cluster-epoch, 0", "nmc.vaststelling.callback-venster, 0s"
     })
     void grenswaarde_isToegestaan(String sleutel, String waarde) {
         Map<String, String> waarden = new HashMap<>(SLEUTEL);
@@ -161,8 +160,8 @@ class ConfigMappingTest {
                     .withMapping(WissenConfig.class)
                     .withMapping(AfleverbewijsConfig.class)
                     .withValidator(new BeanValidationConfigValidatorImpl())
-                    .withSources(new PropertiesConfigSource(
-                            ConfigMappingTest.class.getResource("/application.properties")))
+                    .withSources(
+                            new PropertiesConfigSource(ConfigMappingTest.class.getResource("/application.properties")))
                     .withSources(new PropertiesConfigSource(overschreven, "test", 500))
                     .build();
         } catch (IOException e) {

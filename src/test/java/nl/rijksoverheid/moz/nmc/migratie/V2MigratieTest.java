@@ -1,13 +1,10 @@
 package nl.rijksoverheid.moz.nmc.migratie;
 
-import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
-import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -16,10 +13,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 /**
  * Draait de V2-backfill over bestaande V1-rijen. De gewone tests migreren een lege database, waar de
@@ -57,7 +56,7 @@ class V2MigratieTest {
         String beheerUrl = "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres";
 
         try (Connection beheer = DriverManager.getConnection(beheerUrl, DB_USER, DB_PASSWORD);
-             var statement = beheer.createStatement()) {
+                var statement = beheer.createStatement()) {
             statement.execute("CREATE DATABASE " + database);
         }
 
@@ -118,8 +117,12 @@ class V2MigratieTest {
                 assertTrue(rij.next(), "geen geschiedenisrecord voor " + id);
                 assertEquals(0, rij.getInt("volgnummer"));
                 assertEquals(status, rij.getString("status"));
-                assertEquals(AANGEMAAKT.toInstant(), rij.getObject("tijdstip", OffsetDateTime.class).toInstant());
-                assertEquals(AANGEMAAKT.toInstant(), rij.getObject("geregistreerd", OffsetDateTime.class).toInstant());
+                assertEquals(
+                        AANGEMAAKT.toInstant(),
+                        rij.getObject("tijdstip", OffsetDateTime.class).toInstant());
+                assertEquals(
+                        AANGEMAAKT.toInstant(),
+                        rij.getObject("geregistreerd", OffsetDateTime.class).toInstant());
                 assertFalse(rij.next(), "precies één geschiedenisrecord verwacht voor " + id);
             }
         }
@@ -132,8 +135,10 @@ class V2MigratieTest {
             try (ResultSet rij = select.executeQuery()) {
                 assertTrue(rij.next());
                 assertEquals(status, rij.getString("laatste_status"));
-                assertEquals(AANGEMAAKT.toInstant(),
-                        rij.getObject("laatste_status_update", OffsetDateTime.class).toInstant());
+                assertEquals(
+                        AANGEMAAKT.toInstant(),
+                        rij.getObject("laatste_status_update", OffsetDateTime.class)
+                                .toInstant());
                 assertEquals(0, rij.getLong("versie"));
             }
         }

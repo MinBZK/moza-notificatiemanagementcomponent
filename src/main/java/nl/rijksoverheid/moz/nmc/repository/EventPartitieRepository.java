@@ -2,13 +2,12 @@ package nl.rijksoverheid.moz.nmc.repository;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
-import org.hibernate.query.NativeQuery;
-import org.hibernate.type.StandardBasicTypes;
-
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.hibernate.query.NativeQuery;
+import org.hibernate.type.StandardBasicTypes;
 
 /**
  * De partities van het eventlog en wat ze tegenhoudt. Alles is native SQL: het gaat om de catalogus,
@@ -72,14 +71,17 @@ public class EventPartitieRepository {
     /** De bereikpartities, oudste eerst; de default-partitie hoort er niet bij. */
     @SuppressWarnings("unchecked")
     public List<EventPartitie> bereikpartities() {
-        List<Object[]> rijen = entityManager.createNativeQuery(BEREIKPARTITIES_SQL)
+        List<Object[]> rijen = entityManager
+                .createNativeQuery(BEREIKPARTITIES_SQL)
                 .unwrap(NativeQuery.class)
                 .addScalar("naam", StandardBasicTypes.STRING)
                 .addScalar("van", StandardBasicTypes.LONG)
                 .addScalar("tot", StandardBasicTypes.LONG)
                 .getResultList();
 
-        return rijen.stream().map(rij -> new EventPartitie((String) rij[0], (Long) rij[1], (Long) rij[2])).toList();
+        return rijen.stream()
+                .map(rij -> new EventPartitie((String) rij[0], (Long) rij[1], (Long) rij[2]))
+                .toList();
     }
 
     /** De transactie-id die als volgende wordt uitgedeeld. */
@@ -94,18 +96,26 @@ public class EventPartitieRepository {
 
     /** Laat DDL in de lopende transactie opgeven in plaats van wachten als het eventlog bezet is. */
     public void zetLockTimeout(Duration timeout) {
-        entityManager.createNativeQuery("SET LOCAL lock_timeout = '" + timeout.toMillis() + "ms'").executeUpdate();
+        entityManager
+                .createNativeQuery("SET LOCAL lock_timeout = '" + timeout.toMillis() + "ms'")
+                .executeUpdate();
     }
 
     /** Geeft de lopende transactie meer tijd dan de timeouts van de databaserol (V16) toestaan. */
     public void zetTransactieTimeouts(Duration timeout) {
-        entityManager.createNativeQuery("SET LOCAL statement_timeout = '" + timeout.toMillis() + "ms'").executeUpdate();
-        entityManager.createNativeQuery("SET LOCAL transaction_timeout = '" + timeout.toMillis() + "ms'").executeUpdate();
+        entityManager
+                .createNativeQuery("SET LOCAL statement_timeout = '" + timeout.toMillis() + "ms'")
+                .executeUpdate();
+        entityManager
+                .createNativeQuery("SET LOCAL transaction_timeout = '" + timeout.toMillis() + "ms'")
+                .executeUpdate();
     }
 
     /** Houdt tot het einde van de transactie elke lezer en schrijver van het eventlog tegen. */
     public void vergrendelEventlog() {
-        entityManager.createNativeQuery("LOCK TABLE event IN ACCESS EXCLUSIVE MODE").executeUpdate();
+        entityManager
+                .createNativeQuery("LOCK TABLE event IN ACCESS EXCLUSIVE MODE")
+                .executeUpdate();
     }
 
     /**
@@ -115,15 +125,19 @@ public class EventPartitieRepository {
      * is tijdens die controle vergrendeld. De indexen van {@code event} komen mee en worden aangehangen.
      */
     public void maak(EventPartitie partitie) {
-        entityManager.createNativeQuery("CREATE TABLE " + partitie.naam() + " (LIKE event INCLUDING ALL EXCLUDING IDENTITY)")
+        entityManager
+                .createNativeQuery("CREATE TABLE " + partitie.naam() + " (LIKE event INCLUDING ALL EXCLUDING IDENTITY)")
                 .executeUpdate();
-        entityManager.createNativeQuery("ALTER TABLE event ATTACH PARTITION " + partitie.naam() + " FOR VALUES FROM ('"
-                + partitie.van() + "') TO ('" + partitie.tot() + "')").executeUpdate();
+        entityManager
+                .createNativeQuery("ALTER TABLE event ATTACH PARTITION " + partitie.naam() + " FOR VALUES FROM ('"
+                        + partitie.van() + "') TO ('" + partitie.tot() + "')")
+                .executeUpdate();
     }
 
     /** Of de default-partitie nog events heeft met een transactie-id onder {@code transactieId}. */
     public boolean standaardpartitieHeeftEventsOnder(long transactieId) {
-        return (Boolean) entityManager.createNativeQuery("SELECT EXISTS (SELECT 1 FROM event_standaard "
+        return (Boolean) entityManager
+                .createNativeQuery("SELECT EXISTS (SELECT 1 FROM event_standaard "
                         + "WHERE transactie_id < CAST(CAST(?1 AS text) AS xid8))")
                 .setParameter(1, transactieId)
                 .getSingleResult();
@@ -140,7 +154,8 @@ public class EventPartitieRepository {
      */
     @SuppressWarnings("unchecked")
     public Optional<OffsetDateTime> registratieVanJongsteEvent(EventPartitie partitie) {
-        List<OffsetDateTime> rijen = entityManager.createNativeQuery("SELECT geregistreerd FROM " + partitie.naam()
+        List<OffsetDateTime> rijen = entityManager
+                .createNativeQuery("SELECT geregistreerd FROM " + partitie.naam()
                         + " ORDER BY transactie_id DESC, id DESC FETCH FIRST 1 ROWS ONLY")
                 .unwrap(NativeQuery.class)
                 .addScalar("geregistreerd", StandardBasicTypes.OFFSET_DATE_TIME)
@@ -159,7 +174,8 @@ public class EventPartitieRepository {
      */
     @SuppressWarnings("unchecked")
     public Optional<Long> oudsteBeschermdeTransactieId(int epoch, OffsetDateTime nu, Duration standaardLeeftijd) {
-        List<Long> rijen = entityManager.createNativeQuery(OUDSTE_BESCHERMDE_TRANSACTIE_ID_SQL)
+        List<Long> rijen = entityManager
+                .createNativeQuery(OUDSTE_BESCHERMDE_TRANSACTIE_ID_SQL)
                 .unwrap(NativeQuery.class)
                 .addScalar("transactie_id_nr", StandardBasicTypes.LONG)
                 .setParameter(1, epoch)
@@ -177,7 +193,8 @@ public class EventPartitieRepository {
      * @return het aantal verwijderde events
      */
     public int verwijderUitStandaardpartitie(OffsetDateTime grens, long onderTransactieId, int maximum) {
-        return entityManager.createNativeQuery(VERWIJDER_UIT_STANDAARD_SQL)
+        return entityManager
+                .createNativeQuery(VERWIJDER_UIT_STANDAARD_SQL)
                 .setParameter(1, grens)
                 .setParameter(2, onderTransactieId)
                 .setParameter(3, maximum)
@@ -186,7 +203,8 @@ public class EventPartitieRepository {
 
     @SuppressWarnings("unchecked")
     private long transactieId(String sql) {
-        List<Long> rijen = entityManager.createNativeQuery(sql)
+        List<Long> rijen = entityManager
+                .createNativeQuery(sql)
                 .unwrap(NativeQuery.class)
                 .addScalar("transactie_id_nr", StandardBasicTypes.LONG)
                 .getResultList();

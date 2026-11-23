@@ -3,14 +3,13 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.config.Config;
-
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+import org.eclipse.microprofile.config.Config;
 
 /**
  * Leest de KEK's uit de configuratie: {@code nmc.kek.huidige-versie} en per versie
@@ -50,8 +49,8 @@ public class ConfigKekProvider implements KekProvider {
         }
 
         if (!keks.containsKey(huidigeVersie)) {
-            throw new IllegalStateException(VERSIE_PREFIX + huidigeVersie
-                    + " is niet geconfigureerd, terwijl " + HUIDIGE_VERSIE + " naar die versie wijst");
+            throw new IllegalStateException(VERSIE_PREFIX + huidigeVersie + " is niet geconfigureerd, terwijl "
+                    + HUIDIGE_VERSIE + " naar die versie wijst");
         }
     }
 
@@ -75,7 +74,8 @@ public class ConfigKekProvider implements KekProvider {
         }
 
         if (versie < 1 || versie > MAX_VERSIE) {
-            throw new IllegalStateException(HUIDIGE_VERSIE + " moet tussen 1 en " + MAX_VERSIE + " liggen, is " + versie);
+            throw new IllegalStateException(
+                    HUIDIGE_VERSIE + " moet tussen 1 en " + MAX_VERSIE + " liggen, is " + versie);
         }
 
         return versie;

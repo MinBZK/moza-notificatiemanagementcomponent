@@ -6,7 +6,6 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Version;
-
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
@@ -128,9 +127,8 @@ public class Notificatie {
     public void pasOvergangToe(NotificatieStatus status, Reden reden, OffsetDateTime nu) {
         this.status = Objects.requireNonNull(status, "status is verplicht");
         this.reden = reden;
-        this.eindstatusOp = status.isEindstatus()
-                ? nu.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS)
-                : null;
+        this.eindstatusOp =
+                status.isEindstatus() ? nu.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS) : null;
     }
 
     public void bewaarVersleuteldeGegevens(VersleuteldeGegevens gegevens) {

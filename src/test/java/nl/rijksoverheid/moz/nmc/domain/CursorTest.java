@@ -1,15 +1,14 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class CursorTest {
 
@@ -36,9 +35,11 @@ class CursorTest {
 
     @Test
     void decodeer_getalBuitenBereik_gooitOngeldigeCursor() {
-        String tekst = Base64.getUrlEncoder().withoutPadding()
+        String tekst = Base64.getUrlEncoder()
+                .withoutPadding()
                 .encodeToString("1:99999999999999999999:1".substring(0, 23).getBytes(StandardCharsets.UTF_8));
-        String teGroot = Base64.getUrlEncoder().withoutPadding()
+        String teGroot = Base64.getUrlEncoder()
+                .withoutPadding()
                 .encodeToString("1:9999999999999999999:1".getBytes(StandardCharsets.UTF_8));
 
         assertThrows(OngeldigeCursorException.class, () -> Cursor.decodeer(tekst));

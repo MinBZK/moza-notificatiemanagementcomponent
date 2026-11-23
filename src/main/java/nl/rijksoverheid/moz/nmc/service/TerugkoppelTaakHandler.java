@@ -3,6 +3,13 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.client.webhook.NotificatieStatusEvent;
 import nl.rijksoverheid.moz.nmc.client.webhook.WebhookLeveringException;
 import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
@@ -13,14 +20,6 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.Webhookpositie;
 import nl.rijksoverheid.moz.nmc.repository.DienstverlenerRepository;
 import nl.rijksoverheid.moz.nmc.repository.WebhookpositieRepository;
-
-import java.time.Clock;
-import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 /**
  * De terugkoppeltaak: één taak per dienstverlener met een webhook, die zichzelf steeds opnieuw plant.
@@ -57,11 +56,15 @@ public class TerugkoppelTaakHandler implements TaakHandler {
     private final Duration pauzeWachttijd;
     private final Clock clock;
 
-    public TerugkoppelTaakHandler(DienstverlenerRepository dienstverlenerRepository,
-                                  WebhookpositieRepository webhookpositieRepository, Eventfeed eventfeed,
-                                  WebhookUrlValidator webhookUrlValidator, WebhookDispatcher webhookDispatcher,
-                                  TaakClaimer taakClaimer,
-                                  Clock clock, WebhookConfig config) {
+    public TerugkoppelTaakHandler(
+            DienstverlenerRepository dienstverlenerRepository,
+            WebhookpositieRepository webhookpositieRepository,
+            Eventfeed eventfeed,
+            WebhookUrlValidator webhookUrlValidator,
+            WebhookDispatcher webhookDispatcher,
+            TaakClaimer taakClaimer,
+            Clock clock,
+            WebhookConfig config) {
         this.dienstverlenerRepository = dienstverlenerRepository;
         this.webhookpositieRepository = webhookpositieRepository;
         this.eventfeed = eventfeed;
@@ -103,7 +106,8 @@ public class TerugkoppelTaakHandler implements TaakHandler {
                 yield TaakUitkomst.alAfgerond();
             }
             case OngeldigeUrl o -> {
-                Log.errorf("Webhook-URL van dienstverlener %s is ongeldig (%s); de webhook pauzeert zonder aanroep",
+                Log.errorf(
+                        "Webhook-URL van dienstverlener %s is ongeldig (%s); de webhook pauzeert zonder aanroep",
                         dvId, o.reden());
                 QuarkusTransaction.requiringNew().run(() -> registreerMislukking(taak, o.maxMislukkingen(), true));
                 yield TaakUitkomst.alAfgerond();
@@ -118,8 +122,11 @@ public class TerugkoppelTaakHandler implements TaakHandler {
         try {
             webhookDispatcher.lever(levering.url(), levering.events(), levering.cursor());
         } catch (WebhookLeveringException e) {
-            Log.warnf(e, "Levering van %d event(s) aan de webhook van dienstverlener %s mislukt",
-                    levering.events().size(), taak.getDvId());
+            Log.warnf(
+                    e,
+                    "Levering van %d event(s) aan de webhook van dienstverlener %s mislukt",
+                    levering.events().size(),
+                    taak.getDvId());
             QuarkusTransaction.requiringNew().run(() -> registreerMislukking(taak, levering.maxMislukkingen(), false));
 
             return TaakUitkomst.alAfgerond();
@@ -153,8 +160,9 @@ public class TerugkoppelTaakHandler implements TaakHandler {
             // De eerste ronde is het registratiemoment: de webhook krijgt alleen events van daarna.
             positie = new Webhookpositie(dvId, eventfeed.kopVanHetLog(), positie.getMislukkingen(), null);
             webhookpositieRepository.bewaar(positie, nu());
-            Log.infof("Webhook van dienstverlener %s geregistreerd; de levering begint na positie %s", dvId,
-                    positie.getPositie().codeer());
+            Log.infof(
+                    "Webhook van dienstverlener %s geregistreerd; de levering begint na positie %s",
+                    dvId, positie.getPositie().codeer());
         }
 
         String url;
@@ -199,8 +207,10 @@ public class TerugkoppelTaakHandler implements TaakHandler {
                 new Webhookpositie(taak.getDvId(), positie.getPositie(), mislukkingen, pauzeert ? due : null), nu);
 
         if (pauzeert) {
-            Log.warnf("Webhook van dienstverlener %s gepauzeerd tot %s na %d mislukte levering(en) op rij; de feed "
-                    + "blijft beschikbaar", taak.getDvId(), due, mislukkingen);
+            Log.warnf(
+                    "Webhook van dienstverlener %s gepauzeerd tot %s na %d mislukte levering(en) op rij; de feed "
+                            + "blijft beschikbaar",
+                    taak.getDvId(), due, mislukkingen);
         }
     }
 
@@ -215,22 +225,16 @@ public class TerugkoppelTaakHandler implements TaakHandler {
         return OffsetDateTime.now(clock).truncatedTo(ChronoUnit.MICROS);
     }
 
-    private sealed interface Ronde {
-    }
+    private sealed interface Ronde {}
 
-    private record GeenWebhook() implements Ronde {
-    }
+    private record GeenWebhook() implements Ronde {}
 
-    private record Gepauzeerd(OffsetDateTime tot) implements Ronde {
-    }
+    private record Gepauzeerd(OffsetDateTime tot) implements Ronde {}
 
-    private record GeenEvents() implements Ronde {
-    }
+    private record GeenEvents() implements Ronde {}
 
-    private record OngeldigeUrl(String reden, int maxMislukkingen) implements Ronde {
-    }
+    private record OngeldigeUrl(String reden, int maxMislukkingen) implements Ronde {}
 
     private record Levering(String url, List<NotificatieStatusEvent> events, Cursor cursor, int maxMislukkingen)
-            implements Ronde {
-    }
+            implements Ronde {}
 }

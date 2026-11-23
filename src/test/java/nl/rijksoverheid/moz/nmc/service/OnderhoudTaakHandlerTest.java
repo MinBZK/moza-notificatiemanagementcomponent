@@ -1,9 +1,24 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
@@ -24,22 +39,6 @@ import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // %test: bewaartermijn afleverbewijs 365 dagen, maximale cursorleeftijd 30 dagen, batch 2, hoogstens
 // 3 batches per stap, partities van 50 transactie-ids, huidige KEK-versie 2, cluster-epoch 1.
@@ -96,8 +95,8 @@ class OnderhoudTaakHandlerTest {
 
     @AfterEach
     void herstelRegister() {
-        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetMaxCursorleeftijd(entityManager,
-                NotificatieFixtures.DV_ID, null));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.zetMaxCursorleeftijd(entityManager, NotificatieFixtures.DV_ID, null));
     }
 
     // Zeven verlopen notificaties bij batches van twee en hoogstens drie batches: zes in de eerste
@@ -105,14 +104,16 @@ class OnderhoudTaakHandlerTest {
     @Test
     void onderhoud_naDeBewaartermijn_verwijdertNotificatiesEnPogingenInBatches() {
         OffsetDateTime nu = OffsetDateTime.now(ZoneOffset.UTC);
-        NotificatieFixtures.plantNotificaties(entityManager, 7, nu.minusDays(400), NotificatieStatus.NIET_BEZORGBAAR, 2);
+        NotificatieFixtures.plantNotificaties(
+                entityManager, 7, nu.minusDays(400), NotificatieStatus.NIET_BEZORGBAAR, 2);
         UUID recent = UUID.randomUUID();
         UUID lopend = UUID.randomUUID();
         QuarkusTransaction.requiringNew().run(() -> {
-            NotificatieFixtures.voegNotificatieToe(entityManager, recent, NotificatieStatus.NIET_BEZORGBAAR, nu.minusDays(364));
+            NotificatieFixtures.voegNotificatieToe(
+                    entityManager, recent, NotificatieStatus.NIET_BEZORGBAAR, nu.minusDays(364));
             NotificatieFixtures.voegNotificatieToe(entityManager, lopend, NotificatieStatus.VERZONDEN, null);
-            NotificatieFixtures.voegPogingToe(entityManager, lopend, 1, UUID.randomUUID(),
-                    PogingStatus.VERZONDEN, nu.minusDays(400));
+            NotificatieFixtures.voegPogingToe(
+                    entityManager, lopend, 1, UUID.randomUUID(), PogingStatus.VERZONDEN, nu.minusDays(400));
         });
 
         onderhoud();
@@ -124,8 +125,12 @@ class OnderhoudTaakHandlerTest {
 
         assertEquals(2, aantal(notificatieRepository::count));
         assertEquals(1, aantal(pogingRepository::count));
-        assertTrue(QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findByIdOptional(recent)).isPresent());
-        assertTrue(QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findByIdOptional(lopend)).isPresent());
+        assertTrue(QuarkusTransaction.requiringNew()
+                .call(() -> notificatieRepository.findByIdOptional(recent))
+                .isPresent());
+        assertTrue(QuarkusTransaction.requiringNew()
+                .call(() -> notificatieRepository.findByIdOptional(lopend))
+                .isPresent());
     }
 
     // Een KEK-rotatie wrapt alleen de sleutel opnieuw: de versleutelde gegevens blijven byte voor byte
@@ -157,7 +162,13 @@ class OnderhoudTaakHandlerTest {
     @Test
     void onderhoud_viaDeWorker_plantZichzelfOpnieuw() {
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
-            Taak taak = new Taak(TaakSoort.ONDERHOUD, null, null, OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1), null, null);
+            Taak taak = new Taak(
+                    TaakSoort.ONDERHOUD,
+                    null,
+                    null,
+                    OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1),
+                    null,
+                    null);
             taakRepository.persist(taak);
 
             return taak.getId();
@@ -165,7 +176,9 @@ class OnderhoudTaakHandlerTest {
 
         assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.ONDERHOUD));
 
-        Taak taak = QuarkusTransaction.requiringNew().call(() -> taakRepository.zoek(TaakSoort.ONDERHOUD, id)).orElseThrow();
+        Taak taak = QuarkusTransaction.requiringNew()
+                .call(() -> taakRepository.zoek(TaakSoort.ONDERHOUD, id))
+                .orElseThrow();
         assertTrue(taak.getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(59)));
         assertEquals(0, taak.getPogingen());
     }
@@ -180,7 +193,9 @@ class OnderhoudTaakHandlerTest {
         assertEquals(Optional.of(EventPartitie.vanaf(lopend.tot(), lopend.tot() + 50)), volgende);
         assertTrue(partities().contains(volgende.get()));
         assertEquals(Optional.empty(), eventlogPartitiebeheer.maakVolgendeAan(), "de nieuwe is nog leeg");
-        assertEquals(lopend.naam(), partitieVan(nieuwEvent(OffsetDateTime.now(ZoneOffset.UTC))),
+        assertEquals(
+                lopend.naam(),
+                partitieVan(nieuwEvent(OffsetDateTime.now(ZoneOffset.UTC))),
                 "een nieuw event landt in een bereikpartitie, niet in de default");
     }
 
@@ -202,7 +217,9 @@ class OnderhoudTaakHandlerTest {
     void ruimOp_oudePartitieZonderCursor_verwijdertHaar() {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
 
-        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
 
         assertFalse(partities().contains(oud.partitie()));
         assertEquals(0, events(oud.notificatieId()));
@@ -220,16 +237,22 @@ class OnderhoudTaakHandlerTest {
         verbruikTransactieIdsTot(partitie.van());
         UUID inPartitie = nieuwEvent(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         verbruikTransactieIdsTot(partitie.tot());
-        QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.verwijderEventsOnder(entityManager, lopend.tot()));
+        QuarkusTransaction.requiringNew()
+                .run(() -> NotificatieFixtures.verwijderEventsOnder(entityManager, lopend.tot()));
 
-        assertFalse(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(partitie),
+        assertFalse(
+                eventlogPartitiebeheer
+                        .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                        .contains(partitie),
                 "de partitie blijft zolang de default-partitie er oudere events onder heeft");
         assertEquals(1, events(tussen));
 
         eventlogPartitiebeheer.ruimStandaardpartitieOp(OffsetDateTime.now(ZoneOffset.UTC), 100);
         assertEquals(0, events(tussen));
 
-        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(partitie));
+        assertTrue(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(partitie));
         assertEquals(0, events(inPartitie));
     }
 
@@ -237,7 +260,9 @@ class OnderhoudTaakHandlerTest {
     void ruimOp_jongsteEventBinnenDeBewaartermijn_laatDePartitieStaan() {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(364));
 
-        assertFalse(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertFalse(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
 
         assertTrue(partities().contains(oud.partitie()));
     }
@@ -247,7 +272,9 @@ class OnderhoudTaakHandlerTest {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(1, oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC).minusDays(29));
 
-        assertFalse(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertFalse(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
 
         assertTrue(partities().contains(oud.partitie()));
     }
@@ -257,17 +284,22 @@ class OnderhoudTaakHandlerTest {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(1, oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
 
-        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
     }
 
     @Test
     void ruimOp_eigenCursorleeftijdInHetRegister_gaatVoorDeDefault() {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(1, oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
-        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetMaxCursorleeftijd(entityManager,
-                NotificatieFixtures.DV_ID, Duration.ofDays(90)));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.zetMaxCursorleeftijd(
+                        entityManager, NotificatieFixtures.DV_ID, Duration.ofDays(90)));
 
-        assertFalse(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertFalse(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
 
         assertTrue(partities().contains(oud.partitie()));
     }
@@ -277,7 +309,9 @@ class OnderhoudTaakHandlerTest {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(0, oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC));
 
-        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
     }
 
     // Een cursor achter de partitie heeft haar events al gelezen.
@@ -286,15 +320,22 @@ class OnderhoudTaakHandlerTest {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(1, oud.partitie().tot(), OffsetDateTime.now(ZoneOffset.UTC));
 
-        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
     }
 
     @Test
     void ruimOp_geldigeLeverpositieInDePartitie_laatHaarStaan() {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
-        leverpositie(oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC).minusDays(1), OffsetDateTime.now(ZoneOffset.UTC));
+        leverpositie(
+                oud.transactieId(),
+                OffsetDateTime.now(ZoneOffset.UTC).minusDays(1),
+                OffsetDateTime.now(ZoneOffset.UTC));
 
-        assertFalse(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertFalse(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
 
         assertTrue(partities().contains(oud.partitie()));
     }
@@ -303,9 +344,14 @@ class OnderhoudTaakHandlerTest {
     @Test
     void ruimOp_leverpositieLangNietVerschoven_houdtNietsTegen() {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
-        leverpositie(oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), OffsetDateTime.now(ZoneOffset.UTC));
+        leverpositie(
+                oud.transactieId(),
+                OffsetDateTime.now(ZoneOffset.UTC).minusDays(31),
+                OffsetDateTime.now(ZoneOffset.UTC));
 
-        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
     }
 
     // Wat buiten de bereiken valt (de onderhoudstaak liep achter), gaat per rij weg uit de default-partitie.
@@ -352,16 +398,15 @@ class OnderhoudTaakHandlerTest {
     }
 
     private void onderhoud() {
-        onderhoudTaakHandler.voerUit(new Taak(TaakSoort.ONDERHOUD, null, null, OffsetDateTime.now(ZoneOffset.UTC), null, null),
-                () -> {
-                });
+        onderhoudTaakHandler.voerUit(
+                new Taak(TaakSoort.ONDERHOUD, null, null, OffsetDateTime.now(ZoneOffset.UTC), null, null), () -> {});
     }
 
     private UUID opgeslagen(Sleutelbeheer beheer) {
         return QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
-            notificatie.bewaarVersleuteldeGegevens(beheer.versleutel(notificatie.getId(), ONTVANGER,
-                    Map.of("naam", "Voorbeeld BV")));
+            notificatie.bewaarVersleuteldeGegevens(
+                    beheer.versleutel(notificatie.getId(), ONTVANGER, Map.of("naam", "Voorbeeld BV")));
             overgangsfunctie.neemAan(notificatie);
 
             return notificatie.getId();
@@ -393,15 +438,17 @@ class OnderhoudTaakHandlerTest {
         UUID notificatieId = nieuwEvent(tijdstip);
         assertEquals(partitie.naam(), partitieVan(notificatieId));
         verbruikTransactieIdsTot(partitie.tot());
-        QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.verwijderEventsOnder(entityManager, partitie.van()));
+        QuarkusTransaction.requiringNew()
+                .run(() -> NotificatieFixtures.verwijderEventsOnder(entityManager, partitie.van()));
 
         return new OudePartitie(partitie, notificatieId, transactieIdVan(notificatieId));
     }
 
     private UUID nieuwEvent(OffsetDateTime tijdstip) {
         UUID notificatieId = UUID.randomUUID();
-        QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.voegEventToe(entityManager, notificatieId, 0,
-                null, NotificatieStatus.AANGENOMEN, tijdstip));
+        QuarkusTransaction.requiringNew()
+                .run(() -> NotificatieFixtures.voegEventToe(
+                        entityManager, notificatieId, 0, null, NotificatieStatus.AANGENOMEN, tijdstip));
 
         return notificatieId;
     }
@@ -411,8 +458,12 @@ class OnderhoudTaakHandlerTest {
         String sql = "SELECT count(*) FROM pg_index x WHERE x.indrelid = CAST(?1 AS regclass)"
                 + (aangehangen ? " AND EXISTS (SELECT 1 FROM pg_inherits i WHERE i.inhrelid = x.indexrelid)" : "");
 
-        return QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager.createNativeQuery(sql)
-                .setParameter(1, tabel).getSingleResult()).longValue());
+        return QuarkusTransaction.requiringNew()
+                .call(() -> ((Number) entityManager
+                                .createNativeQuery(sql)
+                                .setParameter(1, tabel)
+                                .getSingleResult())
+                        .longValue());
     }
 
     private void verbruikTransactieIdsTot(long transactieId) {
@@ -426,31 +477,35 @@ class OnderhoudTaakHandlerTest {
     }
 
     private String partitieVan(UUID notificatieId) {
-        return QuarkusTransaction.requiringNew().call(() -> NotificatieFixtures.partitieVan(entityManager, notificatieId));
+        return QuarkusTransaction.requiringNew()
+                .call(() -> NotificatieFixtures.partitieVan(entityManager, notificatieId));
     }
 
     private long transactieIdVan(UUID notificatieId) {
-        return QuarkusTransaction.requiringNew().call(() -> NotificatieFixtures.transactieIdVan(entityManager, notificatieId));
+        return QuarkusTransaction.requiringNew()
+                .call(() -> NotificatieFixtures.transactieIdVan(entityManager, notificatieId));
     }
 
     private void bevestiging(int epoch, long transactieId, OffsetDateTime bevestigdOp) {
-        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.voegBevestigingToe(entityManager, NotificatieFixtures.DV_ID,
-                epoch, transactieId, bevestigdOp));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.voegBevestigingToe(
+                        entityManager, NotificatieFixtures.DV_ID, epoch, transactieId, bevestigdOp));
     }
 
     private void leverpositie(long transactieId, OffsetDateTime geleverdOp, OffsetDateTime bijgewerktOp) {
-        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.voegWebhookpositieToe(entityManager,
-                NotificatieFixtures.DV_ID, transactieId, geleverdOp, bijgewerktOp));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.voegWebhookpositieToe(
+                        entityManager, NotificatieFixtures.DV_ID, transactieId, geleverdOp, bijgewerktOp));
     }
 
     private long events(UUID notificatieId) {
-        return QuarkusTransaction.requiringNew().call(() -> NotificatieFixtures.telEvents(entityManager, notificatieId));
+        return QuarkusTransaction.requiringNew()
+                .call(() -> NotificatieFixtures.telEvents(entityManager, notificatieId));
     }
 
     private static long aantal(Supplier<Long> teller) {
         return QuarkusTransaction.requiringNew().call(teller::get);
     }
 
-    private record OudePartitie(EventPartitie partitie, UUID notificatieId, long transactieId) {
-    }
+    private record OudePartitie(EventPartitie partitie, UUID notificatieId, long transactieId) {}
 }

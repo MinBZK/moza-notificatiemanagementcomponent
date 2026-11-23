@@ -7,8 +7,7 @@ import java.util.Objects;
 public sealed interface TaakUitkomst {
 
     /** De taak is klaar; de worker verwijdert de rij. */
-    record Afgerond() implements TaakUitkomst {
-    }
+    record Afgerond() implements TaakUitkomst {}
 
     /**
      * De taak komt later opnieuw aan de beurt.
@@ -37,8 +36,7 @@ public sealed interface TaakUitkomst {
     }
 
     /** De handler heeft de rij zelf al afgerond of uitgesteld in zijn eigen transactie; de worker doet niets meer. */
-    record AlAfgerond() implements TaakUitkomst {
-    }
+    record AlAfgerond() implements TaakUitkomst {}
 
     static TaakUitkomst afgerond() {
         return new Afgerond();

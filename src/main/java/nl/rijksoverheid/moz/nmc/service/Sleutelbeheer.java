@@ -4,15 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
-import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
-import nl.rijksoverheid.moz.nmc.domain.VersleuteldeGegevens;
-
-import javax.crypto.AEADBadTagException;
-import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
@@ -21,6 +12,14 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import javax.crypto.AEADBadTagException;
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
+import nl.rijksoverheid.moz.nmc.domain.VersleuteldeGegevens;
 
 /**
  * Versleutelt ontvanger en personalisation van een notificatie met een eigen AES-256-GCM-sleutel per
@@ -41,10 +40,8 @@ public class Sleutelbeheer {
     private static final int IV_BYTES = 12;
     // Integriteitscontrole achter de versleutelde tekst; ontsleutelen faalt als data of AAD gewijzigd is.
     private static final int TAG_BITS = 128;
-    private static final TypeReference<Map<String, String>> PERSONALISATION_TYPE = new TypeReference<>() {
-    };
-    private static final TypeReference<Ontvanger> ONTVANGER_TYPE = new TypeReference<>() {
-    };
+    private static final TypeReference<Map<String, String>> PERSONALISATION_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Ontvanger> ONTVANGER_TYPE = new TypeReference<>() {};
 
     private final KekProvider kekProvider;
     private final ObjectMapper objectMapper;
@@ -61,7 +58,8 @@ public class Sleutelbeheer {
      * @param personalisation null wordt als een lege map versleuteld; NotifyNL krijgt in beide gevallen
      *                        een lege personalisation
      */
-    public VersleuteldeGegevens versleutel(UUID notificatieId, Ontvanger ontvanger, Map<String, String> personalisation) {
+    public VersleuteldeGegevens versleutel(
+            UUID notificatieId, Ontvanger ontvanger, Map<String, String> personalisation) {
         Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
         Objects.requireNonNull(ontvanger, "ontvanger is verplicht");
 
@@ -74,7 +72,10 @@ public class Sleutelbeheer {
 
             return new VersleuteldeGegevens(
                     versleutelVeld(sleutel, aad("ontvanger", notificatieId), serialiseer(ontvanger)),
-                    versleutelVeld(sleutel, aad("personalisation", notificatieId), serialiseer(personalisatieOfLeeg(personalisation))),
+                    versleutelVeld(
+                            sleutel,
+                            aad("personalisation", notificatieId),
+                            serialiseer(personalisatieOfLeeg(personalisation))),
                     wrap(notificatieId, sleutel, kekVersie),
                     kekVersie);
         } catch (GeneralSecurityException e) {
@@ -83,14 +84,16 @@ public class Sleutelbeheer {
     }
 
     public Ontvanger ontsleutelOntvanger(UUID notificatieId, VersleuteldeGegevens gegevens) {
-        byte[] json = ontsleutelVeld(pakUit(notificatieId, gegevens), aad("ontvanger", notificatieId),
-                gegevens.ontvangerVersleuteld());
+        byte[] json = ontsleutelVeld(
+                pakUit(notificatieId, gegevens), aad("ontvanger", notificatieId), gegevens.ontvangerVersleuteld());
 
         return leesJson(json, ONTVANGER_TYPE, "ontvanger");
     }
 
     public Map<String, String> ontsleutelPersonalisation(UUID notificatieId, VersleuteldeGegevens gegevens) {
-        byte[] json = ontsleutelVeld(pakUit(notificatieId, gegevens), aad("personalisation", notificatieId),
+        byte[] json = ontsleutelVeld(
+                pakUit(notificatieId, gegevens),
+                aad("personalisation", notificatieId),
                 gegevens.personalisationVersleuteld());
 
         return leesJson(json, PERSONALISATION_TYPE, "personalisation");
@@ -129,7 +132,8 @@ public class Sleutelbeheer {
         Objects.requireNonNull(gegevens, "gegevens is verplicht");
 
         if (gegevens.sleutelGewrapt() == null) {
-            throw new SleutelGewistException("De notificatie heeft geen sleutel; de gegevens zijn gewist of nooit vastgelegd");
+            throw new SleutelGewistException(
+                    "De notificatie heeft geen sleutel; de gegevens zijn gewist of nooit vastgelegd");
         }
 
         if (gegevens.kekVersie() == null) {
@@ -140,7 +144,8 @@ public class Sleutelbeheer {
         SecretKey kek = kek(kekVersie);
 
         try {
-            return new SecretKeySpec(ontsleutelVeld(kek, aadSleutel(kekVersie, notificatieId), gegevens.sleutelGewrapt()), "AES");
+            return new SecretKeySpec(
+                    ontsleutelVeld(kek, aadSleutel(kekVersie, notificatieId), gegevens.sleutelGewrapt()), "AES");
         } catch (OntsleutelenMisluktException e) {
             throw new OntsleutelenMisluktException("Gewrapte sleutel past niet bij KEK-versie " + kekVersie, e);
         }
@@ -164,7 +169,8 @@ public class Sleutelbeheer {
     }
 
     private SecretKey kek(int versie) {
-        return kekProvider.kek(versie)
+        return kekProvider
+                .kek(versie)
                 .orElseThrow(() -> new KekOntbreektException("KEK-versie " + versie + " is niet geconfigureerd"));
     }
 
@@ -195,7 +201,8 @@ public class Sleutelbeheer {
 
             return cipher.doFinal(versleuteld, IV_BYTES, versleuteld.length - IV_BYTES);
         } catch (AEADBadTagException e) {
-            throw new OntsleutelenMisluktException("Versleutelde waarde is gewijzigd of hoort niet bij deze sleutel", e);
+            throw new OntsleutelenMisluktException(
+                    "Versleutelde waarde is gewijzigd of hoort niet bij deze sleutel", e);
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("Ontsleutelen mislukt", e);
         }

@@ -4,8 +4,6 @@ import io.quarkus.runtime.Startup;
 import io.smallrye.jwt.algorithm.SignatureAlgorithm;
 import io.smallrye.jwt.build.Jwt;
 import jakarta.enterprise.context.ApplicationScoped;
-import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
-
 import java.math.BigInteger;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
@@ -16,6 +14,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Base64;
+import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
 
 /**
  * De RSA-sleutel waarmee het NMC de bearer-JWT op elke webhook-aanroep ondertekent (RS256), en de
@@ -86,7 +85,8 @@ public class WebhookSleutel {
         try {
             byte[] der = Base64.getDecoder().decode(base64);
 
-            if (!(KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(der)) instanceof RSAPrivateCrtKey sleutel)) {
+            if (!(KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(der))
+                    instanceof RSAPrivateCrtKey sleutel)) {
                 throw new IllegalStateException("nmc.webhook.jwt.private-key bevat geen volledige RSA-sleutel");
             }
 

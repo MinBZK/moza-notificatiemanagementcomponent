@@ -1,23 +1,22 @@
 package nl.rijksoverheid.moz.nmc.job;
 
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import jakarta.enterprise.inject.Instance;
-import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-import nl.rijksoverheid.moz.nmc.service.TaakClaimer;
-import nl.rijksoverheid.moz.nmc.service.TaakHandler;
-import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
-import org.junit.jupiter.api.Test;
-
-import java.time.Clock;
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import jakarta.enterprise.inject.Instance;
+import java.time.Clock;
+import java.util.List;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.service.TaakClaimer;
+import nl.rijksoverheid.moz.nmc.service.TaakHandler;
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
+import org.junit.jupiter.api.Test;
 
 // Zonder Quarkus: in de applicatie heeft inmiddels elke soort een handler.
 class TaakWorkerUnitTest {
@@ -48,7 +47,12 @@ class TaakWorkerUnitTest {
         Instance<TaakHandler> beans = mock(Instance.class);
         when(beans.iterator()).thenReturn(List.of(handlers).iterator());
 
-        return new TaakWorker(taakClaimer, mock(TaakRepository.class), beans, new SimpleMeterRegistry(), Clock.systemUTC(),
+        return new TaakWorker(
+                taakClaimer,
+                mock(TaakRepository.class),
+                beans,
+                new SimpleMeterRegistry(),
+                Clock.systemUTC(),
                 TestConfig.taak());
     }
 

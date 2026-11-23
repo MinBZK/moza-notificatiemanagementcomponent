@@ -3,6 +3,11 @@ package nl.rijksoverheid.moz.nmc.repository;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.LockModeType;
+import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
@@ -10,12 +15,6 @@ import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import org.hibernate.query.NativeQuery;
 import org.hibernate.type.StandardBasicTypes;
-
-import java.time.OffsetDateTime;
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 @ApplicationScoped
 public class NotificatieRepository implements PanacheRepositoryBase<Notificatie, UUID> {
@@ -72,7 +71,8 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
      * @return het aantal verwijderde notificaties
      */
     public int verwijderMetEindstatusOuderDan(OffsetDateTime grens, int maximum) {
-        return getEntityManager().createNativeQuery(VERWIJDER_MET_EINDSTATUS_OUDER_DAN_SQL)
+        return getEntityManager()
+                .createNativeQuery(VERWIJDER_MET_EINDSTATUS_OUDER_DAN_SQL)
                 .setParameter(1, grens)
                 .setParameter(2, maximum)
                 .executeUpdate();
@@ -84,7 +84,8 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
      */
     @SuppressWarnings("unchecked")
     public List<GewrapteSleutel> vergrendelOudeSleutels(int huidigeVersie, UUID naId, int maximum) {
-        List<Object[]> rijen = getEntityManager().createNativeQuery(VERGRENDEL_OUDE_SLEUTELS_SQL)
+        List<Object[]> rijen = getEntityManager()
+                .createNativeQuery(VERGRENDEL_OUDE_SLEUTELS_SQL)
                 .unwrap(NativeQuery.class)
                 .addScalar("id", UUID.class)
                 .addScalar("sleutel_gewrapt", StandardBasicTypes.BINARY)
@@ -94,19 +95,23 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
                 .setParameter(3, maximum)
                 .getResultList();
 
-        return rijen.stream().map(rij -> new GewrapteSleutel((UUID) rij[0], (byte[]) rij[1], (Integer) rij[2])).toList();
+        return rijen.stream()
+                .map(rij -> new GewrapteSleutel((UUID) rij[0], (byte[]) rij[1], (Integer) rij[2]))
+                .toList();
     }
 
     /** Wist de gewrapte sleutel en de KEK-versie, zonder de versie van de notificatie te verhogen. */
     public void wisSleutel(UUID notificatieId) {
-        getEntityManager().createNativeQuery(WIS_SLEUTEL_SQL)
+        getEntityManager()
+                .createNativeQuery(WIS_SLEUTEL_SQL)
                 .setParameter(1, notificatieId)
                 .executeUpdate();
     }
 
     /** Vervangt de gewrapte sleutel, zonder de versie van de notificatie te verhogen. */
     public void zetSleutel(UUID notificatieId, byte[] sleutelGewrapt, int kekVersie) {
-        getEntityManager().createNativeQuery(ZET_SLEUTEL_SQL)
+        getEntityManager()
+                .createNativeQuery(ZET_SLEUTEL_SQL)
                 .setParameter(1, notificatieId)
                 .setParameter(2, sleutelGewrapt)
                 .setParameter(3, kekVersie)
@@ -127,8 +132,10 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
      */
     public List<UUID> zonderTaak(Collection<NotificatieStatus> openStatussen, OffsetDateTime nu, int limiet) {
         return getEntityManager()
-                .createQuery("SELECT n." + Notificatie_.ID + " FROM Notificatie n WHERE " + ZONDER_TAAK
-                        + " ORDER BY n." + Notificatie_.AANGENOMEN_OP, UUID.class)
+                .createQuery(
+                        "SELECT n." + Notificatie_.ID + " FROM Notificatie n WHERE " + ZONDER_TAAK + " ORDER BY n."
+                                + Notificatie_.AANGENOMEN_OP,
+                        UUID.class)
                 .setParameter("statussen", openStatussen)
                 .setParameter("open", TaakStatus.OPEN)
                 .setParameter("nu", nu)
@@ -139,12 +146,16 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
     /** Of deze notificatie nog altijd een open status heeft zonder taak, volgens dezelfde regel als {@link #zonderTaak}. */
     public boolean isZonderTaak(UUID id, Collection<NotificatieStatus> openStatussen, OffsetDateTime nu) {
         return getEntityManager()
-                .createQuery("SELECT COUNT(n) FROM Notificatie n WHERE n." + Notificatie_.ID + " = :id AND " + ZONDER_TAAK, Long.class)
-                .setParameter("id", id)
-                .setParameter("statussen", openStatussen)
-                .setParameter("open", TaakStatus.OPEN)
-                .setParameter("nu", nu)
-                .getSingleResult() > 0;
+                        .createQuery(
+                                "SELECT COUNT(n) FROM Notificatie n WHERE n." + Notificatie_.ID + " = :id AND "
+                                        + ZONDER_TAAK,
+                                Long.class)
+                        .setParameter("id", id)
+                        .setParameter("statussen", openStatussen)
+                        .setParameter("open", TaakStatus.OPEN)
+                        .setParameter("nu", nu)
+                        .getSingleResult()
+                > 0;
     }
 
     // De subquery noemt geen soort: een taak van elke soort telt, dus hij leest elke partitie.

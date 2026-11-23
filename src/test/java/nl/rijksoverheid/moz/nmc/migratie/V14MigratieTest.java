@@ -1,11 +1,9 @@
 package nl.rijksoverheid.moz.nmc.migratie;
 
-import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
-import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
+import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -14,9 +12,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 /**
  * Draait V14 over een database waarin de controletaak vaststeltaken plande voordat de termijn bestond.
@@ -77,8 +76,8 @@ class V14MigratieTest {
         String database = "v14migratie_" + UUID.randomUUID().toString().replace("-", "");
 
         try (Connection beheer = DriverManager.getConnection(
-                "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres", DB_USER, DB_PASSWORD);
-             var statement = beheer.createStatement()) {
+                        "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres", DB_USER, DB_PASSWORD);
+                var statement = beheer.createStatement()) {
             statement.execute("CREATE DATABASE " + database);
         }
 
@@ -106,8 +105,9 @@ class V14MigratieTest {
 
     private static void poging(Connection verbinding, UUID notificatieId, String status, OffsetDateTime receipt)
             throws SQLException {
-        try (PreparedStatement insert = verbinding.prepareStatement("INSERT INTO poging "
-                + "(id, notificatie_id, nummer, status, notify_id, verzonden_op, receipt_tijdstip) VALUES (?, ?, 1, ?, ?, ?, ?)")) {
+        try (PreparedStatement insert = verbinding.prepareStatement(
+                "INSERT INTO poging "
+                        + "(id, notificatie_id, nummer, status, notify_id, verzonden_op, receipt_tijdstip) VALUES (?, ?, 1, ?, ?, ?, ?)")) {
             insert.setObject(1, UUID.randomUUID());
             insert.setObject(2, notificatieId);
             insert.setString(3, status);
@@ -129,7 +129,8 @@ class V14MigratieTest {
     }
 
     private static OffsetDateTime bezorgdOp(Connection verbinding, UUID notificatieId) throws SQLException {
-        try (PreparedStatement select = verbinding.prepareStatement("SELECT bezorgd_op FROM poging WHERE notificatie_id = ?")) {
+        try (PreparedStatement select =
+                verbinding.prepareStatement("SELECT bezorgd_op FROM poging WHERE notificatie_id = ?")) {
             select.setObject(1, notificatieId);
 
             try (ResultSet rij = select.executeQuery()) {

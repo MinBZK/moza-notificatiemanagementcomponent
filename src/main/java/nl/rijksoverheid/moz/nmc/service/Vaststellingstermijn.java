@@ -1,11 +1,10 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import nl.rijksoverheid.moz.nmc.config.VaststellingConfig;
-
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Objects;
+import nl.rijksoverheid.moz.nmc.config.VaststellingConfig;
 
 /**
  * De termijn uit de MEBV waarbinnen een {@code delivered} nog door een faalreceipt herroepen kan

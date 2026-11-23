@@ -17,7 +17,6 @@ import nl.rijksoverheid.moz.nmc.service.OnbekendBerichtTypeException;
 import nl.rijksoverheid.moz.nmc.service.QuotumOverschredenException;
 import nl.rijksoverheid.moz.nmc.service.Regie;
 
-
 /**
  * Intake bij centrale regie: de aanroeper levert een identificerend nummer, het NMC haalt het adres
  * pas in de verzendtaak op. De aanname antwoordt 202 zodra notificatie, event en verzendtaak zijn
@@ -29,7 +28,8 @@ public class CentraleNotificatieController implements CentraleNotificatiesApi {
     private final LogboekContext logboekContext;
     private final HashHelper hashHelper;
 
-    public CentraleNotificatieController(AannameService aannameService, LogboekContext logboekContext, HashHelper hashHelper) {
+    public CentraleNotificatieController(
+            AannameService aannameService, LogboekContext logboekContext, HashHelper hashHelper) {
         this.aannameService = aannameService;
         this.logboekContext = logboekContext;
         this.hashHelper = hashHelper;
@@ -38,7 +38,9 @@ public class CentraleNotificatieController implements CentraleNotificatiesApi {
     @Override
     // TODO #754 (LDV Logboek annotaties hebben placeholder URL)
     // processingActivityId is een placeholder, vervang door de echte URL uit het privacy-register.
-    @Logboek(name = "notificatieAannemen", processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
+    @Logboek(
+            name = "notificatieAannemen",
+            processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
     public Response notificatieVersturen(NotificatieAanvraagRequest notificatieAanvraagRequest) {
         // TODO #758 (Logboek context setten via annotatie ipv in method body)
         logboekContext.setDataSubjectId(hashHelper.hashIdentifier(notificatieAanvraagRequest.getIdentificatieNummer()));

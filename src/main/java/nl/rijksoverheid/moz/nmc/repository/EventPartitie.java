@@ -18,7 +18,8 @@ public record EventPartitie(String naam, long van, long tot) {
         }
 
         if (van < 0 || tot <= van) {
-            throw new IllegalArgumentException("Ongeldig bereik voor eventpartitie " + naam + ": " + van + " tot " + tot);
+            throw new IllegalArgumentException(
+                    "Ongeldig bereik voor eventpartitie " + naam + ": " + van + " tot " + tot);
         }
     }
 
@@ -32,7 +33,8 @@ public record EventPartitie(String naam, long van, long tot) {
      * default-partitie kan rijen tussen de laatste en die transactie-id hebben, en een transactie die
      * tijdens het aanmaken een event schrijft, mag niet in het nieuwe bereik vallen.
      */
-    public static Optional<EventPartitie> volgende(Optional<EventPartitie> laatste, long volgendeTransactieId, long omvang, long marge) {
+    public static Optional<EventPartitie> volgende(
+            Optional<EventPartitie> laatste, long volgendeTransactieId, long omvang, long marge) {
         if (laatste.isEmpty() || volgendeTransactieId >= laatste.get().tot()) {
             return Optional.of(vanaf(volgendeTransactieId + marge, volgendeTransactieId + marge + omvang));
         }

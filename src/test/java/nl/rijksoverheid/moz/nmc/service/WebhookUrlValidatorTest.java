@@ -1,14 +1,13 @@
 package nl.rijksoverheid.moz.nmc.service;
 
-import org.junit.jupiter.api.Test;
-
-import java.net.URI;
-
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.net.URI;
+import org.junit.jupiter.api.Test;
 
 class WebhookUrlValidatorTest {
 
@@ -33,13 +32,15 @@ class WebhookUrlValidatorTest {
     void hoofdletterSchemeWordtGenormaliseerdNaarKleineLetters() {
         // De uitgaande REST-client vergelijkt het scheme hoofdlettergevoelig, dus "HTTPS"
         // mag niet ongewijzigd worden opgeslagen (anders gaat de callback over plain HTTP).
-        assertEquals("https://consument.example.nl/status",
+        assertEquals(
+                "https://consument.example.nl/status",
                 VALIDATOR.normaliseer(URI.create("HTTPS://consument.example.nl/status")));
     }
 
     @Test
     void kleineletterSchemeWordtOngewijzigdTeruggegeven() {
-        assertEquals("https://consument.example.nl:8443/pad?notificatie=1",
+        assertEquals(
+                "https://consument.example.nl:8443/pad?notificatie=1",
                 VALIDATOR.normaliseer(URI.create("https://consument.example.nl:8443/pad?notificatie=1")));
     }
 
@@ -137,7 +138,8 @@ class WebhookUrlValidatorTest {
 
     @Test
     void foutmeldingBenoemtDeWebhookUrl() {
-        OngeldigeWebhookUrlException e = assertThrows(OngeldigeWebhookUrlException.class,
+        OngeldigeWebhookUrlException e = assertThrows(
+                OngeldigeWebhookUrlException.class,
                 () -> VALIDATOR.valideer(URI.create("http://consument.example.nl/status")));
         assertTrue(e.getMessage().contains("webhook-URL"));
     }
@@ -159,16 +161,15 @@ class WebhookUrlValidatorTest {
     }
 
     private static void assertGeaccepteerd(String url) {
-        assertDoesNotThrow(() -> VALIDATOR.valideer(URI.create(url)),
-                url + " zou geaccepteerd moeten worden");
+        assertDoesNotThrow(() -> VALIDATOR.valideer(URI.create(url)), url + " zou geaccepteerd moeten worden");
     }
 
     /** Asserts both the rejection and the reden, so a case cannot pass via another regel. */
     private static void assertGeweigerd(String url, String reden) {
-        OngeldigeWebhookUrlException e = assertThrows(OngeldigeWebhookUrlException.class,
+        OngeldigeWebhookUrlException e = assertThrows(
+                OngeldigeWebhookUrlException.class,
                 () -> VALIDATOR.valideer(URI.create(url)),
                 url + " zou geweigerd moeten worden");
-        assertTrue(e.getMessage().contains(reden),
-                url + " werd geweigerd om een andere reden: " + e.getMessage());
+        assertTrue(e.getMessage().contains(reden), url + " werd geweigerd om een andere reden: " + e.getMessage());
     }
 }

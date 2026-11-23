@@ -1,13 +1,12 @@
 package nl.rijksoverheid.moz.nmc.migratie;
 
-import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
-import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -20,12 +19,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 /**
  * Draait de V5-backfill over rijen zoals het oude schrijfpad ze achterliet: een projectie in
@@ -59,8 +58,8 @@ class V5MigratieTest {
     void setUp() throws SQLException {
         String database = "v5migratie_" + UUID.randomUUID().toString().replace("-", "");
         try (Connection beheer = DriverManager.getConnection(
-                "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres", DB_USER, DB_PASSWORD);
-             var statement = beheer.createStatement()) {
+                        "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres", DB_USER, DB_PASSWORD);
+                var statement = beheer.createStatement()) {
             statement.execute("CREATE DATABASE " + database);
         }
 
@@ -91,8 +90,15 @@ class V5MigratieTest {
     @Test
     void v5_terugkerendeStatus_wordtOvergenomenAlsGeschiedenis() throws SQLException {
         migreerTot("4");
-        UUID id = oudeNotificatie(UUID.randomUUID(), "PERMANENT_FAILURE", 4,
-                "CREATED", "SENDING", "PERMANENT_FAILURE", "DELIVERED", "PERMANENT_FAILURE");
+        UUID id = oudeNotificatie(
+                UUID.randomUUID(),
+                "PERMANENT_FAILURE",
+                4,
+                "CREATED",
+                "SENDING",
+                "PERMANENT_FAILURE",
+                "DELIVERED",
+                "PERMANENT_FAILURE");
 
         migreerTot("5");
 
@@ -145,8 +151,8 @@ class V5MigratieTest {
         migreerTot("5");
 
         assertThrows(SQLException.class, () -> {
-            try (PreparedStatement update = verbinding.prepareStatement(
-                    "UPDATE notificatie SET versie = 2, status = 'BEZORGD' WHERE id = ?")) {
+            try (PreparedStatement update =
+                    verbinding.prepareStatement("UPDATE notificatie SET versie = 2, status = 'BEZORGD' WHERE id = ?")) {
                 update.setObject(1, id);
                 update.executeUpdate();
             }
@@ -164,7 +170,8 @@ class V5MigratieTest {
         migreerTot("6");
 
         try (ResultSet tabellen = verbinding.getMetaData().getTables(null, null, "notificatie_status", null);
-             ResultSet kolommen = verbinding.getMetaData().getColumns(null, null, "notificatie", "external_reference")) {
+                ResultSet kolommen =
+                        verbinding.getMetaData().getColumns(null, null, "notificatie", "external_reference")) {
             assertFalse(tabellen.next(), "notificatie_status hoort vervallen te zijn");
             assertFalse(kolommen.next(), "notificatie.external_reference hoort vervallen te zijn");
         }
@@ -228,8 +235,8 @@ class V5MigratieTest {
     }
 
     private List<String> notificatie(UUID id) throws SQLException {
-        try (PreparedStatement select = verbinding.prepareStatement(
-                "SELECT status, reden, versie FROM notificatie WHERE id = ?")) {
+        try (PreparedStatement select =
+                verbinding.prepareStatement("SELECT status, reden, versie FROM notificatie WHERE id = ?")) {
             select.setObject(1, id);
             try (ResultSet rij = select.executeQuery()) {
                 assertTrue(rij.next());
@@ -244,8 +251,8 @@ class V5MigratieTest {
     }
 
     private List<String> poging(UUID id) throws SQLException {
-        try (PreparedStatement select = verbinding.prepareStatement(
-                "SELECT status, notify_id FROM poging WHERE notificatie_id = ?")) {
+        try (PreparedStatement select =
+                verbinding.prepareStatement("SELECT status, notify_id FROM poging WHERE notificatie_id = ?")) {
             select.setObject(1, id);
             try (ResultSet rij = select.executeQuery()) {
                 if (!rij.next()) {

@@ -1,24 +1,14 @@
 package nl.rijksoverheid.moz.nmc.notifynlcallback.controller;
 
-import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
-import nl.rijksoverheid.moz.nmc.domain.Event;
-import nl.rijksoverheid.moz.nmc.domain.Notificatie;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
-import nl.rijksoverheid.moz.nmc.domain.Poging;
-import nl.rijksoverheid.moz.nmc.repository.EventRepository;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
-import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
-import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
-import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
-import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -28,11 +18,19 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
+import nl.rijksoverheid.moz.nmc.domain.Event;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Poging;
+import nl.rijksoverheid.moz.nmc.repository.EventRepository;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
+import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
+import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 /**
  * Twee receipts voor dezelfde notificatie die echt tegelijk lopen. De eerste houdt de rijvergrendeling
@@ -77,8 +75,14 @@ class NotifyNLCallbackBotsingTest {
 
         laatTegelijkLopen(notifyId, "delivered", "2025-01-01T12:00:01Z", "permanent-failure", "2025-01-01T12:00:02Z");
 
-        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
-                NotificatieStatus.BEZORGD, NotificatieStatus.NIET_BEZORGBAAR), overgangen(notifyId));
+        assertEquals(
+                List.of(
+                        NotificatieStatus.AANGENOMEN,
+                        NotificatieStatus.IN_VERZENDING,
+                        NotificatieStatus.VERZONDEN,
+                        NotificatieStatus.BEZORGD,
+                        NotificatieStatus.NIET_BEZORGBAAR),
+                overgangen(notifyId));
     }
 
     // Een herhaling door NotifyNL die binnenkomt terwijl de eerste nog loopt: de tweede ziet na het
@@ -89,8 +93,13 @@ class NotifyNLCallbackBotsingTest {
 
         laatTegelijkLopen(notifyId, "delivered", "2025-01-01T12:00:01Z", "delivered", "2025-01-01T12:00:01Z");
 
-        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
-                NotificatieStatus.BEZORGD), overgangen(notifyId));
+        assertEquals(
+                List.of(
+                        NotificatieStatus.AANGENOMEN,
+                        NotificatieStatus.IN_VERZENDING,
+                        NotificatieStatus.VERZONDEN,
+                        NotificatieStatus.BEZORGD),
+                overgangen(notifyId));
     }
 
     // De tweede receipt is ouder dan de eerste en las de poging al vóór hij op de vergrendeling ging
@@ -102,29 +111,38 @@ class NotifyNLCallbackBotsingTest {
 
         laatTegelijkLopen(notifyId, "delivered", "2025-01-01T12:00:02Z", "permanent-failure", "2025-01-01T12:00:01Z");
 
-        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
-                NotificatieStatus.BEZORGD), overgangen(notifyId));
+        assertEquals(
+                List.of(
+                        NotificatieStatus.AANGENOMEN,
+                        NotificatieStatus.IN_VERZENDING,
+                        NotificatieStatus.VERZONDEN,
+                        NotificatieStatus.BEZORGD),
+                overgangen(notifyId));
     }
 
     // De eerste receipt houdt de vergrendeling vast tot de tweede aantoonbaar op de rijvergrendeling
     // wacht; anders kunnen de twee na elkaar lopen en slaagt de test ook zonder vergrendeling.
-    private void laatTegelijkLopen(UUID notifyId, String eersteStatus, String eersteTijdstip,
-                                   String tweedeStatus, String tweedeTijdstip) throws Exception {
+    private void laatTegelijkLopen(
+            UUID notifyId, String eersteStatus, String eersteTijdstip, String tweedeStatus, String tweedeTijdstip)
+            throws Exception {
         CountDownLatch eersteHeeftVergrendeld = new CountDownLatch(1);
         AtomicBoolean eersteAanroep = new AtomicBoolean(true);
         doAnswer(aanroep -> {
-            Object resultaat = aanroep.callRealMethod();
+                    Object resultaat = aanroep.callRealMethod();
 
-            if (eersteAanroep.compareAndSet(true, false)) {
-                eersteHeeftVergrendeld.countDown();
-                wachtTotEenTransactieOpDeLockWacht();
-            }
+                    if (eersteAanroep.compareAndSet(true, false)) {
+                        eersteHeeftVergrendeld.countDown();
+                        wachtTotEenTransactieOpDeLockWacht();
+                    }
 
-            return resultaat;
-        }).when(overgangsfunctie).vergrendel(any());
+                    return resultaat;
+                })
+                .when(overgangsfunctie)
+                .vergrendel(any());
 
         Future<?> eerste = executor.submit(() -> verwerkReceipt(notifyId, eersteStatus, eersteTijdstip));
-        assertTrue(eersteHeeftVergrendeld.await(10, TimeUnit.SECONDS), "eerste receipt vergrendelde de notificatie niet");
+        assertTrue(
+                eersteHeeftVergrendeld.await(10, TimeUnit.SECONDS), "eerste receipt vergrendelde de notificatie niet");
         verwerkReceipt(notifyId, tweedeStatus, tweedeTijdstip);
 
         eerste.get(10, TimeUnit.SECONDS);
@@ -158,9 +176,16 @@ class NotifyNLCallbackBotsingTest {
     }
 
     private List<NotificatieStatus> overgangen(UUID notifyId) {
-        return QuarkusTransaction.requiringNew().call(() -> eventRepository
-                .findByNotificatie(pogingRepository.findByNotifyId(notifyId).orElseThrow().getNotificatieId())
-                .stream().map(Event::getNaar).toList());
+        return QuarkusTransaction.requiringNew()
+                .call(
+                        () -> eventRepository
+                                .findByNotificatie(pogingRepository
+                                        .findByNotifyId(notifyId)
+                                        .orElseThrow()
+                                        .getNotificatieId())
+                                .stream()
+                                .map(Event::getNaar)
+                                .toList());
     }
 
     // De callback slaat alleen op; de receipttaak roept de verwerker aan, dus daar botsen twee receipts.

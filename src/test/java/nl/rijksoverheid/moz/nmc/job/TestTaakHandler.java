@@ -1,14 +1,13 @@
 package nl.rijksoverheid.moz.nmc.job;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.service.TaakHandler;
 import nl.rijksoverheid.moz.nmc.service.TaakUitkomst;
-
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiFunction;
 
 /**
  * Handler voor de soort ONGELDIG_MELDEN in de testsuite; er is nog geen echte, en de worker staat
@@ -22,7 +21,8 @@ public class TestTaakHandler implements TaakHandler {
     static final AtomicReference<BiFunction<Taak, Lease, TaakUitkomst>> GEDRAG =
             new AtomicReference<>((taak, lease) -> TaakUitkomst.afgerond());
 
-    static final AtomicReference<java.util.function.Predicate<Taak>> BIJ_UITPUTTING = new AtomicReference<>(taak -> false);
+    static final AtomicReference<java.util.function.Predicate<Taak>> BIJ_UITPUTTING =
+            new AtomicReference<>(taak -> false);
 
     static final AtomicBoolean PERIODIEK = new AtomicBoolean();
 

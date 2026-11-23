@@ -3,6 +3,14 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.config.ControleConfig;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
@@ -14,15 +22,6 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-
-import java.time.Clock;
-import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Vangnet voor notificaties die zijn blijven steken: elke notificatie zonder eindstatus en
@@ -52,10 +51,15 @@ public class ControleTaakHandler implements TaakHandler {
     private final int maxPerRonde;
     private final Clock clock;
 
-    public ControleTaakHandler(NotificatieRepository notificatieRepository, PogingRepository pogingRepository,
-                               TaakRepository taakRepository, Overgangsfunctie overgangsfunctie,
-                               Vaststellingstermijn vaststellingstermijn, Verzendbeleid verzendbeleid,
-                               Clock clock, ControleConfig config) {
+    public ControleTaakHandler(
+            NotificatieRepository notificatieRepository,
+            PogingRepository pogingRepository,
+            TaakRepository taakRepository,
+            Overgangsfunctie overgangsfunctie,
+            Vaststellingstermijn vaststellingstermijn,
+            Verzendbeleid verzendbeleid,
+            Clock clock,
+            ControleConfig config) {
         this.notificatieRepository = notificatieRepository;
         this.pogingRepository = pogingRepository;
         this.taakRepository = taakRepository;
@@ -89,7 +93,9 @@ public class ControleTaakHandler implements TaakHandler {
                 .call(() -> taakRepository.planTerugkoppeltaken(OffsetDateTime.now(clock)));
 
         if (terugkoppeltaken > 0) {
-            Log.infof("Controletaak: terugkoppeltaak gepland voor %d dienstverlener(s) met een webhook", terugkoppeltaken);
+            Log.infof(
+                    "Controletaak: terugkoppeltaak gepland voor %d dienstverlener(s) met een webhook",
+                    terugkoppeltaken);
         }
 
         return TaakUitkomst.herpland(OffsetDateTime.now(clock).plus(interval));
@@ -148,15 +154,22 @@ public class ControleTaakHandler implements TaakHandler {
 
         if (soort.isEmpty()) {
             // Zonder eindstatus komen wissen en opruimen nooit aan de beurt en blijft de sleutel staan.
-            Log.errorf("Controletaak: notificatie %s staat op %s zonder lopende of herverzendbare poging; "
-                    + "afgesloten als technisch-mislukt", notificatie.getId(), notificatie.getStatus());
+            Log.errorf(
+                    "Controletaak: notificatie %s staat op %s zonder lopende of herverzendbare poging; "
+                            + "afgesloten als technisch-mislukt",
+                    notificatie.getId(), notificatie.getStatus());
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.TECHNISCH_MISLUKT, Reden.TECHNISCH);
 
             return false;
         }
 
-        taakRepository.persist(new Taak(soort.get(), notificatie.getDvId(), notificatie.getId(),
-                due(soort.get(), notificatie, laatste, nu), null, soort.get() == TaakSoort.VERZENDEN ? null : pogingPayload(laatste)));
+        taakRepository.persist(new Taak(
+                soort.get(),
+                notificatie.getDvId(),
+                notificatie.getId(),
+                due(soort.get(), notificatie, laatste, nu),
+                null,
+                soort.get() == TaakSoort.VERZENDEN ? null : pogingPayload(laatste)));
 
         return true;
     }
@@ -192,18 +205,22 @@ public class ControleTaakHandler implements TaakHandler {
     // herverzending wacht de herverzend-wachttijd vanaf de fout af.
     private OffsetDateTime due(TaakSoort soort, Notificatie notificatie, Optional<Poging> laatste, OffsetDateTime nu) {
         if (soort == TaakSoort.BEZORGING_VASTSTELLEN) {
-            return vaststellingstermijn.vaststellenOp(laatste.map(Poging::getBezorgdOp).orElse(nu));
+            return vaststellingstermijn.vaststellenOp(
+                    laatste.map(Poging::getBezorgdOp).orElse(nu));
         }
 
-        Optional<OffsetDateTime> herverzendenOp = laatste
-                .filter(p -> verzendbeleid.magHerverzenden(p, notificatie.getBerichtType()))
-                .map(p -> Optional.ofNullable(p.getReceiptTijdstip()).orElse(nu)
+        Optional<OffsetDateTime> herverzendenOp = laatste.filter(
+                        p -> verzendbeleid.magHerverzenden(p, notificatie.getBerichtType()))
+                .map(p -> Optional.ofNullable(p.getReceiptTijdstip())
+                        .orElse(nu)
                         .plus(verzendbeleid.herverzendWachttijd(notificatie.getBerichtType())));
 
         return herverzendenOp.filter(nu::isBefore).orElse(nu);
     }
 
     private static Map<String, String> pogingPayload(Optional<Poging> laatste) {
-        return laatste.map(p -> Map.of(VerzendTaakHandler.PAYLOAD_POGING_ID, p.getId().toString())).orElse(Map.of());
+        return laatste.map(p ->
+                        Map.of(VerzendTaakHandler.PAYLOAD_POGING_ID, p.getId().toString()))
+                .orElse(Map.of());
     }
 }

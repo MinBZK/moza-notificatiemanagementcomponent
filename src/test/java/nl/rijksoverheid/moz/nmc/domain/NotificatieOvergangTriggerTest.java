@@ -1,24 +1,22 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
-import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Toetst de databasetrigger op {@code notificatie} met SQL buiten de applicatie om, zoals een script of
@@ -51,8 +49,11 @@ class NotificatieOvergangTriggerTest {
     void nieuweVersieZonderEvent_wordtGeweigerd() {
         UUID id = aangenomenNotificatie();
 
-        Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() ->
-                sql("UPDATE notificatie SET versie = 1, status = 'IN_VERZENDING' WHERE id = ?1", id)));
+        Throwable fout = assertThrows(
+                RuntimeException.class,
+                () -> QuarkusTransaction.requiringNew()
+                        .run(() ->
+                                sql("UPDATE notificatie SET versie = 1, status = 'IN_VERZENDING' WHERE id = ?1", id)));
 
         assertTrue(bevat(fout, "heeft geen event"), fout.toString());
     }
@@ -72,10 +73,12 @@ class NotificatieOvergangTriggerTest {
     void versieMeerDanEenOmhoog_wordtGeweigerd() {
         UUID id = aangenomenNotificatie();
 
-        Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
-            sql("UPDATE notificatie SET versie = 2, status = 'IN_VERZENDING' WHERE id = ?1", id);
-            schrijfEvent(id, 2, NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING);
-        }));
+        Throwable fout = assertThrows(
+                RuntimeException.class,
+                () -> QuarkusTransaction.requiringNew().run(() -> {
+                    sql("UPDATE notificatie SET versie = 2, status = 'IN_VERZENDING' WHERE id = ?1", id);
+                    schrijfEvent(id, 2, NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING);
+                }));
 
         assertTrue(bevat(fout, "niet precies 1 omhoog"), fout.toString());
     }
@@ -84,8 +87,10 @@ class NotificatieOvergangTriggerTest {
     void statuswijzigingZonderNieuweVersie_wordtGeweigerd() {
         UUID id = aangenomenNotificatie();
 
-        Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() ->
-                sql("UPDATE notificatie SET status = 'IN_VERZENDING' WHERE id = ?1", id)));
+        Throwable fout = assertThrows(
+                RuntimeException.class,
+                () -> QuarkusTransaction.requiringNew()
+                        .run(() -> sql("UPDATE notificatie SET status = 'IN_VERZENDING' WHERE id = ?1", id)));
 
         assertTrue(bevat(fout, "zonder nieuwe versie"), fout.toString());
     }
@@ -95,11 +100,14 @@ class NotificatieOvergangTriggerTest {
     @Test
     void eventUitEenEerdereTransactie_teltNiet() {
         UUID id = aangenomenNotificatie();
-        QuarkusTransaction.requiringNew().run(() ->
-                schrijfEvent(id, 1, NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING));
+        QuarkusTransaction.requiringNew()
+                .run(() -> schrijfEvent(id, 1, NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING));
 
-        Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() ->
-                sql("UPDATE notificatie SET versie = 1, status = 'IN_VERZENDING' WHERE id = ?1", id)));
+        Throwable fout = assertThrows(
+                RuntimeException.class,
+                () -> QuarkusTransaction.requiringNew()
+                        .run(() ->
+                                sql("UPDATE notificatie SET versie = 1, status = 'IN_VERZENDING' WHERE id = ?1", id)));
 
         assertTrue(bevat(fout, "heeft geen event"), fout.toString());
     }
@@ -108,11 +116,15 @@ class NotificatieOvergangTriggerTest {
     void nieuweNotificatieNietOpAangenomen_wordtGeweigerd() {
         UUID id = UUID.randomUUID();
 
-        Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
-            sql("INSERT INTO notificatie (id, dv_id, versie, status) "
-                    + "VALUES (?1, '00000000-0000-4000-8000-000000000001', 0, 'VERZONDEN')", id);
-            schrijfEvent(id, 0, null, NotificatieStatus.VERZONDEN);
-        }));
+        Throwable fout = assertThrows(
+                RuntimeException.class,
+                () -> QuarkusTransaction.requiringNew().run(() -> {
+                    sql(
+                            "INSERT INTO notificatie (id, dv_id, versie, status) "
+                                    + "VALUES (?1, '00000000-0000-4000-8000-000000000001', 0, 'VERZONDEN')",
+                            id);
+                    schrijfEvent(id, 0, null, NotificatieStatus.VERZONDEN);
+                }));
 
         assertTrue(bevat(fout, "niet op AANGENOMEN"), fout.toString());
     }
@@ -121,9 +133,13 @@ class NotificatieOvergangTriggerTest {
     void nieuweNotificatieZonderEvent_wordtGeweigerd() {
         UUID id = UUID.randomUUID();
 
-        Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() ->
-                sql("INSERT INTO notificatie (id, dv_id, versie, status) "
-                        + "VALUES (?1, '00000000-0000-4000-8000-000000000001', 0, 'AANGENOMEN')", id)));
+        Throwable fout = assertThrows(
+                RuntimeException.class,
+                () -> QuarkusTransaction.requiringNew()
+                        .run(() -> sql(
+                                "INSERT INTO notificatie (id, dv_id, versie, status) "
+                                        + "VALUES (?1, '00000000-0000-4000-8000-000000000001', 0, 'AANGENOMEN')",
+                                id)));
 
         assertTrue(bevat(fout, "heeft geen event"), fout.toString());
     }

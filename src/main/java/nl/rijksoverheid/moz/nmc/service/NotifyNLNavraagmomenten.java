@@ -2,12 +2,11 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
-
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  * Wanneer de afleverstatus van een poging wordt nagevraagd: op de geconfigureerde momenten na de
@@ -22,8 +21,9 @@ public class NotifyNLNavraagmomenten {
     private final List<Duration> momenten;
     private final Duration bewaartermijn;
 
-    public NotifyNLNavraagmomenten(@ConfigProperty(name = "nmc.navraag.momenten") List<Duration> momenten,
-                         @ConfigProperty(name = "nmc.navraag.bewaartermijn-notifynl") Duration bewaartermijn) {
+    public NotifyNLNavraagmomenten(
+            @ConfigProperty(name = "nmc.navraag.momenten") List<Duration> momenten,
+            @ConfigProperty(name = "nmc.navraag.bewaartermijn-notifynl") Duration bewaartermijn) {
         if (momenten.isEmpty() || momenten.stream().anyMatch(m -> m.isNegative() || m.isZero())) {
             throw new IllegalStateException("nmc.navraag.momenten moet positieve duren bevatten, is " + momenten);
         }

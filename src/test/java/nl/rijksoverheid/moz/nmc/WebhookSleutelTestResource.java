@@ -1,7 +1,6 @@
 package nl.rijksoverheid.moz.nmc;
 
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
-
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
@@ -20,14 +19,15 @@ public class WebhookSleutelTestResource implements QuarkusTestResourceLifecycleM
             byte[] pkcs8 = generator.generateKeyPair().getPrivate().getEncoded();
 
             return Map.of(
-                    "nmc.webhook.jwt.private-key", Base64.getEncoder().encodeToString(pkcs8),
-                    "nmc.webhook.jwt.key-id", KEY_ID);
+                    "nmc.webhook.jwt.private-key",
+                    Base64.getEncoder().encodeToString(pkcs8),
+                    "nmc.webhook.jwt.key-id",
+                    KEY_ID);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }
     }
 
     @Override
-    public void stop() {
-    }
+    public void stop() {}
 }

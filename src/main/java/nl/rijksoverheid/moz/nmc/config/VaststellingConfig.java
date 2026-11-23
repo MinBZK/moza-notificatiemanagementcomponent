@@ -1,9 +1,8 @@
 package nl.rijksoverheid.moz.nmc.config;
 
 import io.smallrye.config.ConfigMapping;
-import org.hibernate.validator.constraints.time.DurationMin;
-
 import java.time.Duration;
+import org.hibernate.validator.constraints.time.DurationMin;
 
 /**
  * De instellingen van de vaststelling van een bezorging onder {@code nmc.vaststelling}. Een ongeldige

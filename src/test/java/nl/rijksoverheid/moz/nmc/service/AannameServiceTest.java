@@ -1,11 +1,22 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.verifyNoInteractions;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.domain.Event;
@@ -24,18 +35,6 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.time.Clock;
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 @QuarkusTest
 class AannameServiceTest {
@@ -96,9 +95,11 @@ class AannameServiceTest {
             assertEquals(0, notificatie.getVersie());
             assertEquals(NotificatieFixtures.DV_ID, notificatie.getDvId());
             assertFalse(notificatie.getAangenomenOp().isAfter(clock.nu()));
-            assertEquals(new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
+            assertEquals(
+                    new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
                     sleutelbeheer.ontsleutelOntvanger(id, notificatie.getVersleuteldeGegevens()));
-            assertEquals(Map.of("naam", "Voorbeeld BV"),
+            assertEquals(
+                    Map.of("naam", "Voorbeeld BV"),
                     sleutelbeheer.ontsleutelPersonalisation(id, notificatie.getVersleuteldeGegevens()));
 
             List<Event> events = eventRepository.findByNotificatie(id);
@@ -122,12 +123,13 @@ class AannameServiceTest {
 
     @Test
     void neemAan_decentraal_bewaartHetAdresVersleuteldEnLaatDienstverlenerUitDePayload() {
-        UUID id = aannameService.neemAan(new AannameOpdracht(Regie.DECENTRAAL, Ontvanger.email("burger@example.nl"),
-                null, null, BerichtType.DEMO_TEMPLATE, null));
+        UUID id = aannameService.neemAan(new AannameOpdracht(
+                Regie.DECENTRAAL, Ontvanger.email("burger@example.nl"), null, null, BerichtType.DEMO_TEMPLATE, null));
 
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie notificatie = notificatieRepository.findById(id);
-            assertEquals(Ontvanger.email("burger@example.nl"),
+            assertEquals(
+                    Ontvanger.email("burger@example.nl"),
                     sleutelbeheer.ontsleutelOntvanger(id, notificatie.getVersleuteldeGegevens()));
             assertEquals(Map.of(), sleutelbeheer.ontsleutelPersonalisation(id, notificatie.getVersleuteldeGegevens()));
 
@@ -175,17 +177,23 @@ class AannameServiceTest {
 
     @Test
     void aannameOpdracht_zonderOntvanger_weigert() {
-        assertThrows(NullPointerException.class,
+        assertThrows(
+                NullPointerException.class,
                 () -> new AannameOpdracht(Regie.DECENTRAAL, null, null, null, BerichtType.DEMO_TEMPLATE, null));
     }
 
     private static AannameOpdracht centraal() {
-        return new AannameOpdracht(Regie.CENTRAAL, new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
-                "Gemeente Voorbeeld", "Parkeervergunning", BerichtType.DEMO_TEMPLATE, Map.of("naam", "Voorbeeld BV"));
+        return new AannameOpdracht(
+                Regie.CENTRAAL,
+                new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
+                "Gemeente Voorbeeld",
+                "Parkeervergunning",
+                BerichtType.DEMO_TEMPLATE,
+                Map.of("naam", "Voorbeeld BV"));
     }
 
     private void zetQuotum(Integer quotum) {
-        QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.zetQuotumPerDag(entityManager, NotificatieFixtures.DV_ID, quotum));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.zetQuotumPerDag(entityManager, NotificatieFixtures.DV_ID, quotum));
     }
 }

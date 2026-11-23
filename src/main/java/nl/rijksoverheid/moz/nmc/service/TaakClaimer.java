@@ -3,12 +3,6 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
-import nl.rijksoverheid.moz.nmc.config.TaakConfig;
-import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
-import nl.rijksoverheid.moz.nmc.domain.Taak;
-import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-
 import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -16,6 +10,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.config.TaakConfig;
+import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
+import nl.rijksoverheid.moz.nmc.domain.Taak;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 
 /**
  * Claimt taken voor een worker en werkt geclaimde taken bij. Een claimronde kiest de dienstverleners
@@ -35,8 +34,7 @@ public class TaakClaimer {
     private final Clock clock;
     private final Duration lease;
 
-    public TaakClaimer(TaakRepository taakRepository, Verzendbudget verzendbudget, Clock clock,
-                       TaakConfig config) {
+    public TaakClaimer(TaakRepository taakRepository, Verzendbudget verzendbudget, Clock clock, TaakConfig config) {
         this.taakRepository = taakRepository;
         this.verzendbudget = verzendbudget;
         this.clock = clock;

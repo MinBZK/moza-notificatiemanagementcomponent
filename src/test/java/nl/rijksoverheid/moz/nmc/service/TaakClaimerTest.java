@@ -1,20 +1,16 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
-import nl.rijksoverheid.moz.nmc.domain.Taak;
-import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
-import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
-import nl.rijksoverheid.moz.nmc.domain.Taak_;
-import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -30,12 +26,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.when;
+import nl.rijksoverheid.moz.nmc.domain.Taak;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 // %test: 20 tokens per minuut, 10 gereserveerd voor het verzenden en 5 voor de navraag, lease 2m.
 @QuarkusTest
@@ -117,12 +116,16 @@ class TaakClaimerTest {
         taakClaimer.claim(TaakSoort.ONDERHOUD, 10);
         UUID markering = UUID.randomUUID();
 
-        assertThrows(TaakVerlorenException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
-            TaakFixtures.voegDienstverlenerToe(entityManager, markering, "markering00000000001", "markering");
-            taakClaimer.rondAf(eerste);
-        }));
+        assertThrows(
+                TaakVerlorenException.class,
+                () -> QuarkusTransaction.requiringNew().run(() -> {
+                    TaakFixtures.voegDienstverlenerToe(entityManager, markering, "markering00000000001", "markering");
+                    taakClaimer.rondAf(eerste);
+                }));
 
-        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> TaakFixtures.telDienstverleners(entityManager, markering)),
+        assertEquals(
+                0,
+                QuarkusTransaction.requiringNew().call(() -> TaakFixtures.telDienstverleners(entityManager, markering)),
                 "het werk in dezelfde transactie is teruggerold");
     }
 
@@ -159,8 +162,8 @@ class TaakClaimerTest {
     void verleng_zetDeLeaseVerderVooruit() {
         UUID id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         Taak taak = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
-        QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.zetLeaseTot(entityManager, TaakSoort.ONDERHOUD, id, nu().plusSeconds(5)));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.zetLeaseTot(entityManager, TaakSoort.ONDERHOUD, id, nu().plusSeconds(5)));
 
         taakClaimer.verleng(taak);
 
@@ -171,10 +174,12 @@ class TaakClaimerTest {
     void eisClaim_naEenClaimDoorEenAndereWorker_gooitTaakVerlorenException() {
         UUID id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         Taak taak = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
-        QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.ONDERHOUD, id));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.ONDERHOUD, id));
 
-        assertThrows(TaakVerlorenException.class, () -> QuarkusTransaction.requiringNew().run(() -> taakClaimer.eisClaim(taak)));
+        assertThrows(
+                TaakVerlorenException.class,
+                () -> QuarkusTransaction.requiringNew().run(() -> taakClaimer.eisClaim(taak)));
     }
 
     // Twee workers op dezelfde achterstand krijgen elk een deel en nooit dezelfde taak.
@@ -224,18 +229,20 @@ class TaakClaimerTest {
         ExecutorService threads = Executors.newFixedThreadPool(2);
 
         try {
-            Future<?> houder = threads.submit(() -> QuarkusTransaction.requiringNew().run(() -> {
-                TaakFixtures.vergrendel(entityManager, TaakSoort.ONDERHOUD, vergrendeld);
-                vast.countDown();
-                try {
-                    los.await(20, TimeUnit.SECONDS);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }));
+            Future<?> houder =
+                    threads.submit(() -> QuarkusTransaction.requiringNew().run(() -> {
+                        TaakFixtures.vergrendel(entityManager, TaakSoort.ONDERHOUD, vergrendeld);
+                        vast.countDown();
+                        try {
+                            los.await(20, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }));
             assertTrue(vast.await(10, TimeUnit.SECONDS));
 
-            List<Taak> geclaimd = threads.submit(() -> taakClaimer.claim(TaakSoort.ONDERHOUD, 10)).get(5, TimeUnit.SECONDS);
+            List<Taak> geclaimd = threads.submit(() -> taakClaimer.claim(TaakSoort.ONDERHOUD, 10))
+                    .get(5, TimeUnit.SECONDS);
 
             assertEquals(List.of(vrij), geclaimd.stream().map(Taak::getId).toList());
             los.countDown();
@@ -258,8 +265,13 @@ class TaakClaimerTest {
         List<Taak> geclaimd = taakClaimer.claim(TaakSoort.ONDERHOUD, 4);
 
         assertEquals(4, geclaimd.size());
-        assertEquals(2, geclaimd.stream().filter(t -> NotificatieFixtures.DV_ID.equals(t.getDvId())).count());
-        assertEquals(2, geclaimd.stream().filter(t -> TWEEDE_DV.equals(t.getDvId())).count());
+        assertEquals(
+                2,
+                geclaimd.stream()
+                        .filter(t -> NotificatieFixtures.DV_ID.equals(t.getDvId()))
+                        .count());
+        assertEquals(
+                2, geclaimd.stream().filter(t -> TWEEDE_DV.equals(t.getDvId())).count());
     }
 
     // Een dienstverlener met weinig werk laat zijn aandeel niet ongebruikt: de rest gaat naar wie meer heeft.
@@ -274,8 +286,13 @@ class TaakClaimerTest {
         List<Taak> geclaimd = taakClaimer.claim(TaakSoort.ONDERHOUD, 6);
 
         assertEquals(6, geclaimd.size());
-        assertEquals(1, geclaimd.stream().filter(t -> NotificatieFixtures.DV_ID.equals(t.getDvId())).count());
-        assertEquals(5, geclaimd.stream().filter(t -> TWEEDE_DV.equals(t.getDvId())).count());
+        assertEquals(
+                1,
+                geclaimd.stream()
+                        .filter(t -> NotificatieFixtures.DV_ID.equals(t.getDvId()))
+                        .count());
+        assertEquals(
+                5, geclaimd.stream().filter(t -> TWEEDE_DV.equals(t.getDvId())).count());
         assertEquals(6, geclaimd.stream().map(Taak::getId).distinct().count(), "geen taak twee keer geclaimd");
     }
 
@@ -315,8 +332,11 @@ class TaakClaimerTest {
 
         assertEquals(15, taakClaimer.claim(TaakSoort.VERZENDEN, 100).size());
         assertEquals(0, taakClaimer.claim(TaakSoort.VERZENDEN, 100).size(), "budget voor dit tijdvak is op");
-        assertEquals(15, taakRepository.count(Taak_.TAAK_SOORT + " = ?1 AND " + Taak_.LEASE_TOT + " IS NULL AND "
-                        + Taak_.POGINGEN + " = 0", TaakSoort.VERZENDEN),
+        assertEquals(
+                15,
+                taakRepository.count(
+                        Taak_.TAAK_SOORT + " = ?1 AND " + Taak_.LEASE_TOT + " IS NULL AND " + Taak_.POGINGEN + " = 0",
+                        TaakSoort.VERZENDEN),
                 "de niet-geclaimde taken zijn onaangeraakt");
     }
 
@@ -343,12 +363,13 @@ class TaakClaimerTest {
     }
 
     private Taak zoek(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.zoek(TaakSoort.ONDERHOUD, id).orElseThrow());
+        return QuarkusTransaction.requiringNew()
+                .call(() -> taakRepository.zoek(TaakSoort.ONDERHOUD, id).orElseThrow());
     }
 
     private void laatLeaseVerlopen(UUID id) {
-        QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.zetLeaseTot(entityManager, TaakSoort.ONDERHOUD, id, nu().minusSeconds(1)));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.zetLeaseTot(entityManager, TaakSoort.ONDERHOUD, id, nu().minusSeconds(1)));
     }
 
     private OffsetDateTime nu() {

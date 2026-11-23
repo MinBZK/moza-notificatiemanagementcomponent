@@ -1,9 +1,8 @@
 package nl.rijksoverheid.moz.nmc.service;
 
-import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
-
 import java.util.Map;
 import java.util.Objects;
+import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 
 /**
  * Een notificatieverzoek zoals de controller het aan de aanname geeft.
@@ -15,12 +14,13 @@ import java.util.Objects;
  * @param berichtType     het soort bericht dat wordt verstuurd
  * @param berichtgegevens de variabelen voor het bericht, op naam
  */
-public record AannameOpdracht(Regie regie,
-                              Ontvanger ontvanger,
-                              String dienstverlener,
-                              String dienst,
-                              BerichtType berichtType,
-                              Map<String, String> berichtgegevens) {
+public record AannameOpdracht(
+        Regie regie,
+        Ontvanger ontvanger,
+        String dienstverlener,
+        String dienst,
+        BerichtType berichtType,
+        Map<String, String> berichtgegevens) {
 
     public AannameOpdracht {
         Objects.requireNonNull(regie, "regie is verplicht");

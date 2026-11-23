@@ -3,6 +3,13 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLConfiguratieException;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendException;
@@ -23,14 +30,6 @@ import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-
-import java.time.Clock;
-import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Verstuurt een aangenomen notificatie. Drie stappen: in een eigen transactie de overgang naar
@@ -66,11 +65,18 @@ public class VerzendTaakHandler implements TaakHandler {
     private final Verzendbeleid verzendbeleid;
     private final Clock clock;
 
-    public VerzendTaakHandler(Overgangsfunctie overgangsfunctie, PogingRepository pogingRepository,
-                              TaakRepository taakRepository, TaakClaimer taakClaimer, Sleutelbeheer sleutelbeheer,
-                              ProfielServiceAdapter profielServiceAdapter, NotifyNLVerzendAdapter verzendAdapter,
-                              NotifyNLNavraagmomenten notifyNLNavraagmomenten, Verzendbeleid verzendbeleid,
-                              Clock clock, TaakConfig config) {
+    public VerzendTaakHandler(
+            Overgangsfunctie overgangsfunctie,
+            PogingRepository pogingRepository,
+            TaakRepository taakRepository,
+            TaakClaimer taakClaimer,
+            Sleutelbeheer sleutelbeheer,
+            ProfielServiceAdapter profielServiceAdapter,
+            NotifyNLVerzendAdapter verzendAdapter,
+            NotifyNLNavraagmomenten notifyNLNavraagmomenten,
+            Verzendbeleid verzendbeleid,
+            Clock clock,
+            TaakConfig config) {
         this.overgangsfunctie = overgangsfunctie;
         this.pogingRepository = pogingRepository;
         this.taakRepository = taakRepository;
@@ -102,9 +108,12 @@ public class VerzendTaakHandler implements TaakHandler {
 
         if (notificatie.getStatus() == NotificatieStatus.AANGENOMEN) {
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
-        } else if (pogingRepository.findLaatsteVan(notificatie.getId())
-                .filter(p -> isInVerzending(notificatie, p) || isHerverzendbaar(notificatie, p)).isEmpty()) {
-            Log.infof("Notificatie %s staat inmiddels op %s; uitgeputte verzendtaak afgerond zonder overgang",
+        } else if (pogingRepository
+                .findLaatsteVan(notificatie.getId())
+                .filter(p -> isInVerzending(notificatie, p) || isHerverzendbaar(notificatie, p))
+                .isEmpty()) {
+            Log.infof(
+                    "Notificatie %s staat inmiddels op %s; uitgeputte verzendtaak afgerond zonder overgang",
                     notificatie.getId(), notificatie.getStatus());
 
             return true;
@@ -157,7 +166,10 @@ public class VerzendTaakHandler implements TaakHandler {
                 }
 
                 lease.verleng();
-                notifyId = verzendAdapter.verstuurEmail(emailAdres, verzending.templateId(), verzending.personalisation(),
+                notifyId = verzendAdapter.verstuurEmail(
+                        emailAdres,
+                        verzending.templateId(),
+                        verzending.personalisation(),
                         verzending.pogingId().toString());
             }
         } catch (ProfielServiceException e) {
@@ -165,23 +177,33 @@ public class VerzendTaakHandler implements TaakHandler {
             // anders in de tijd dat de toegang hapert op technisch-mislukt eindigen. Het wachten wordt
             // alleen door geldig_tot begrensd.
             if (e.status().filter(s -> s == 401 || s == 403).isPresent()) {
-                Log.errorf(e, "Profielservice weigert de aanroep voor notificatie %s; verzendtaak uitgesteld",
+                Log.errorf(
+                        e,
+                        "Profielservice weigert de aanroep voor notificatie %s; verzendtaak uitgesteld",
                         verzending.notificatieId());
 
                 return uitgesteld();
             }
 
-            Log.warnf(e, "Profielservice niet beschikbaar voor notificatie %s; verzendtaak uitgesteld", verzending.notificatieId());
+            Log.warnf(
+                    e,
+                    "Profielservice niet beschikbaar voor notificatie %s; verzendtaak uitgesteld",
+                    verzending.notificatieId());
 
             return uitgesteld();
         } catch (NotifyNLConfiguratieException e) {
             // Een configuratiefout raakt elke notificatie tegelijk en kost daarom geen poging.
-            Log.errorf(e, "NotifyNL-configuratie ongeldig; verzendtaak voor notificatie %s uitgesteld", verzending.notificatieId());
+            Log.errorf(
+                    e,
+                    "NotifyNL-configuratie ongeldig; verzendtaak voor notificatie %s uitgesteld",
+                    verzending.notificatieId());
 
             return uitgesteld();
         } catch (NotifyNLVerzendException e) {
             if (e.isAdresAfgewezen()) {
-                Log.warnf("NotifyNL weigert het adres van notificatie %s (%s)", verzending.notificatieId(), e.getMessage());
+                Log.warnf(
+                        "NotifyNL weigert het adres van notificatie %s (%s)",
+                        verzending.notificatieId(), e.getMessage());
 
                 return rondAfAls(taak, verzending, NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR);
             }
@@ -191,13 +213,20 @@ public class VerzendTaakHandler implements TaakHandler {
             // dat zich bij elke herhaling herhaalt. 401, 403, 429, 5xx en een verbindingsfout betreffen de
             // aanroep, niet de poging, en kosten geen poging: een haperende key of toegang zou anders elke
             // notificatie van dat moment op technisch-mislukt zetten.
-            if (e.isOnbruikbaarAntwoord() || e.status().filter(VerzendTaakHandler::isFoutVanHetNmc).isPresent()) {
-                Log.errorf(e, "NotifyNL weigert het verzoek voor notificatie %s; verzendtaak uitgesteld", verzending.notificatieId());
+            if (e.isOnbruikbaarAntwoord()
+                    || e.status().filter(VerzendTaakHandler::isFoutVanHetNmc).isPresent()) {
+                Log.errorf(
+                        e,
+                        "NotifyNL weigert het verzoek voor notificatie %s; verzendtaak uitgesteld",
+                        verzending.notificatieId());
 
                 return uitgesteldAlsPoging();
             }
 
-            Log.warnf(e, "NotifyNL niet beschikbaar voor notificatie %s; verzendtaak uitgesteld", verzending.notificatieId());
+            Log.warnf(
+                    e,
+                    "NotifyNL niet beschikbaar voor notificatie %s; verzendtaak uitgesteld",
+                    verzending.notificatieId());
 
             return uitgesteld();
         }
@@ -274,19 +303,30 @@ public class VerzendTaakHandler implements TaakHandler {
             return null;
         }
 
-        Ontvanger ontvanger = sleutelbeheer.ontsleutelOntvanger(notificatie.getId(), notificatie.getVersleuteldeGegevens());
-        Map<String, String> personalisation = sleutelbeheer.ontsleutelPersonalisation(notificatie.getId(),
-                notificatie.getVersleuteldeGegevens());
+        Ontvanger ontvanger =
+                sleutelbeheer.ontsleutelOntvanger(notificatie.getId(), notificatie.getVersleuteldeGegevens());
+        Map<String, String> personalisation =
+                sleutelbeheer.ontsleutelPersonalisation(notificatie.getId(), notificatie.getVersleuteldeGegevens());
 
-        return new Verzending(notificatie.getId(), notificatie.getDvId(), poging.getId(), herclaim,
-                herclaim && notificatie.isVerlopen(nu), ontvanger,
-                Regie.valueOf(notificatie.getRegie()), notificatie.getDienstverlenerNaam(), notificatie.getDienst(),
-                notificatie.getTemplateId(), personalisation, taak.getTraceId());
+        return new Verzending(
+                notificatie.getId(),
+                notificatie.getDvId(),
+                poging.getId(),
+                herclaim,
+                herclaim && notificatie.isVerlopen(nu),
+                ontvanger,
+                Regie.valueOf(notificatie.getRegie()),
+                notificatie.getDienstverlenerNaam(),
+                notificatie.getDienst(),
+                notificatie.getTemplateId(),
+                personalisation,
+                taak.getTraceId());
     }
 
     private Verzending verloop(Taak taak, Notificatie notificatie) {
-        Log.infof("Notificatie %s is verlopen (geldig tot %s); geen verzending gestart", notificatie.getId(),
-                notificatie.getGeldigTot());
+        Log.infof(
+                "Notificatie %s is verlopen (geldig tot %s); geen verzending gestart",
+                notificatie.getId(), notificatie.getGeldigTot());
         overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERLOPEN, Reden.VERLOPEN);
         taakClaimer.rondAf(taak);
 
@@ -294,7 +334,8 @@ public class VerzendTaakHandler implements TaakHandler {
     }
 
     private Verzending rondAfZonderVerzending(Taak taak, Notificatie notificatie) {
-        Log.infof("Notificatie %s staat op %s; verzendtaak %s afgerond zonder verzending",
+        Log.infof(
+                "Notificatie %s staat op %s; verzendtaak %s afgerond zonder verzending",
                 notificatie.getId(), notificatie.getStatus(), taak.getId());
         taakClaimer.rondAf(taak);
 
@@ -317,7 +358,8 @@ public class VerzendTaakHandler implements TaakHandler {
         try {
             // Het adres uit de Profielservice wordt alleen gebruikt en niet opgeslagen.
             return profielServiceAdapter.zoekEmailAdres(new PartijIdentificatie(
-                    IdentificatieType.valueOf(verzending.ontvanger().soort().name()), verzending.ontvanger().waarde(),
+                    IdentificatieType.valueOf(verzending.ontvanger().soort().name()),
+                            verzending.ontvanger().waarde(),
                     verzending.dienstverlener(), verzending.dienst()));
         } catch (PartijNietGevondenException | GeenEmailadresGevondenException e) {
             Log.infof("Geen contactgegevens voor notificatie %s: %s", verzending.notificatieId(), e.getMessage());
@@ -349,8 +391,13 @@ public class VerzendTaakHandler implements TaakHandler {
 
         // De navraag bewaakt de eindstatus als de receipt uitblijft; is die er al, dan is hij overbodig.
         if (notificatie.getStatus() == NotificatieStatus.VERZONDEN) {
-            taakRepository.persist(new Taak(TaakSoort.RECONCILIEREN, verzending.dvId(), notificatie.getId(),
-                    notifyNLNavraagmomenten.eerste(poging.getVerzondenOp()), verzending.traceId(), Map.of(PAYLOAD_POGING_ID, poging.getId().toString())));
+            taakRepository.persist(new Taak(
+                    TaakSoort.RECONCILIEREN,
+                    verzending.dvId(),
+                    notificatie.getId(),
+                    notifyNLNavraagmomenten.eerste(poging.getVerzondenOp()),
+                    verzending.traceId(),
+                    Map.of(PAYLOAD_POGING_ID, poging.getId().toString())));
         }
 
         taakClaimer.rondAf(taak);
@@ -367,7 +414,8 @@ public class VerzendTaakHandler implements TaakHandler {
             if (isInVerzending(notificatie, poging)) {
                 overgangsfunctie.voerUit(notificatie.getId(), naar, reden);
             } else {
-                Log.infof("Notificatie %s staat inmiddels op %s; uitkomst %s van de verzendtaak niet toegepast",
+                Log.infof(
+                        "Notificatie %s staat inmiddels op %s; uitkomst %s van de verzendtaak niet toegepast",
                         notificatie.getId(), notificatie.getStatus(), naar);
             }
 
@@ -385,7 +433,7 @@ public class VerzendTaakHandler implements TaakHandler {
     private static boolean isInVerzending(Notificatie notificatie, Poging poging) {
         return poging.getStatus() == PogingStatus.GEPLAND
                 && (notificatie.getStatus() == NotificatieStatus.IN_VERZENDING
-                    || notificatie.getStatus() == NotificatieStatus.VERZONDEN);
+                        || notificatie.getStatus() == NotificatieStatus.VERZONDEN);
     }
 
     private TaakUitkomst uitgesteld() {
@@ -400,8 +448,17 @@ public class VerzendTaakHandler implements TaakHandler {
         return status >= 400 && status < 500 && status != 401 && status != 403 && status != 429;
     }
 
-    private record Verzending(UUID notificatieId, UUID dvId, UUID pogingId, boolean herclaim, boolean verlopen,
-                              Ontvanger ontvanger, Regie regie, String dienstverlener, String dienst, String templateId,
-                              Map<String, String> personalisation, String traceId) {
-    }
+    private record Verzending(
+            UUID notificatieId,
+            UUID dvId,
+            UUID pogingId,
+            boolean herclaim,
+            boolean verlopen,
+            Ontvanger ontvanger,
+            Regie regie,
+            String dienstverlener,
+            String dienst,
+            String templateId,
+            Map<String, String> personalisation,
+            String traceId) {}
 }

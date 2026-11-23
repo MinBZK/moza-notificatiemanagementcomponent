@@ -1,11 +1,22 @@
 package nl.rijksoverheid.moz.nmc.service;
 
-import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import nl.rijksoverheid.moz.nmc.domain.Event;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.UUID;
+import java.util.logging.Level;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLAfleverstatus;
+import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
@@ -15,23 +26,11 @@ import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.UUID;
-import java.util.logging.Level;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 class ReceiptVerwerkerTest {
@@ -65,12 +64,12 @@ class ReceiptVerwerkerTest {
     // Een tijdelijke of technische fout op de eerste poging plant een herverzending; zie HerverzendingTest.
     @ParameterizedTest
     @CsvSource({
-            "delivered, BEZORGD, BEZORGD, ",
-            "permanent-failure, PERMANENT_MISLUKT, NIET_BEZORGBAAR, ONBEREIKBAAR",
-            "DELIVERED, BEZORGD, BEZORGD, "
+        "delivered, BEZORGD, BEZORGD, ",
+        "permanent-failure, PERMANENT_MISLUKT, NIET_BEZORGBAAR, ONBEREIKBAAR",
+        "DELIVERED, BEZORGD, BEZORGD, "
     })
-    void verwerk_uitkomst_legtVastOpPogingEnVoertOvergangUit(String receipt, PogingStatus pogingStatus,
-                                                             NotificatieStatus naar, Reden reden) {
+    void verwerk_uitkomst_legtVastOpPogingEnVoertOvergangUit(
+            String receipt, PogingStatus pogingStatus, NotificatieStatus naar, Reden reden) {
         UUID notifyId = verzondenNotificatie();
 
         receiptVerwerker.verwerk(notifyId, null, receipt, T1);
@@ -131,7 +130,8 @@ class ReceiptVerwerkerTest {
     @Test
     void verwerk_tijdstipBinnenDeKlokmarge_blijftStaan() {
         UUID notifyId = verzondenNotificatie();
-        OffsetDateTime ietsVooruit = OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(1).truncatedTo(ChronoUnit.MICROS);
+        OffsetDateTime ietsVooruit =
+                OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(1).truncatedTo(ChronoUnit.MICROS);
 
         receiptVerwerker.verwerk(notifyId, null, "delivered", ietsVooruit);
 
@@ -211,7 +211,8 @@ class ReceiptVerwerkerTest {
 
         assertEquals(PogingStatus.VERZONDEN, poging(notifyId).getStatus());
         assertNull(poging(notifyId).getReceiptTijdstip());
-        assertEquals("een-rare-status", poging(notifyId).getLaatsteNotifyStatus(), "wat NotifyNL meldde blijft zichtbaar");
+        assertEquals(
+                "een-rare-status", poging(notifyId).getLaatsteNotifyStatus(), "wat NotifyNL meldde blijft zichtbaar");
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(notifyId).getStatus());
         overgangenNaVerzending(notifyId, 0);
         assertEquals(1, fouten.size());
@@ -231,7 +232,8 @@ class ReceiptVerwerkerTest {
 
     @Test
     void verwerk_onbekendNotifyId_gooitNietGevonden() {
-        assertThrows(NotificatieNietGevondenException.class,
+        assertThrows(
+                NotificatieNietGevondenException.class,
                 () -> receiptVerwerker.verwerk(UUID.randomUUID(), null, "delivered", T1));
     }
 
@@ -261,19 +263,28 @@ class ReceiptVerwerkerTest {
     }
 
     private Poging poging(UUID notifyId) {
-        return QuarkusTransaction.requiringNew().call(() -> pogingRepository.findByNotifyId(notifyId).orElseThrow());
+        return QuarkusTransaction.requiringNew()
+                .call(() -> pogingRepository.findByNotifyId(notifyId).orElseThrow());
     }
 
     private Notificatie notificatie(UUID notifyId) {
-        return QuarkusTransaction.requiringNew().call(() ->
-                notificatieRepository.findById(pogingRepository.findByNotifyId(notifyId).orElseThrow().getNotificatieId()));
+        return QuarkusTransaction.requiringNew()
+                .call(() -> notificatieRepository.findById(
+                        pogingRepository.findByNotifyId(notifyId).orElseThrow().getNotificatieId()));
     }
 
     // De events na de overgang naar verzonden (volgnummer 2): wat de receipts hebben vastgelegd.
     private List<Event> overgangenNaVerzending(UUID notifyId, int aantal) {
-        List<Event> events = QuarkusTransaction.requiringNew().call(() -> eventRepository
-                .findByNotificatie(pogingRepository.findByNotifyId(notifyId).orElseThrow().getNotificatieId())
-                .stream().filter(e -> e.getVolgnummer() > 2).toList());
+        List<Event> events = QuarkusTransaction.requiringNew()
+                .call(
+                        () -> eventRepository
+                                .findByNotificatie(pogingRepository
+                                        .findByNotifyId(notifyId)
+                                        .orElseThrow()
+                                        .getNotificatieId())
+                                .stream()
+                                .filter(e -> e.getVolgnummer() > 2)
+                                .toList());
         assertEquals(aantal, events.size());
 
         return events;

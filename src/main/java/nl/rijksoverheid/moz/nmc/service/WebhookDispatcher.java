@@ -3,16 +3,15 @@ package nl.rijksoverheid.moz.nmc.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
-import nl.rijksoverheid.moz.nmc.client.webhook.WebhookAdapter;
-import nl.rijksoverheid.moz.nmc.client.webhook.NotificatieStatusEvent;
-import nl.rijksoverheid.moz.nmc.client.webhook.WebhookLeveringException;
-import nl.rijksoverheid.moz.nmc.domain.Cursor;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.List;
+import nl.rijksoverheid.moz.nmc.client.webhook.NotificatieStatusEvent;
+import nl.rijksoverheid.moz.nmc.client.webhook.WebhookAdapter;
+import nl.rijksoverheid.moz.nmc.client.webhook.WebhookLeveringException;
+import nl.rijksoverheid.moz.nmc.domain.Cursor;
 
 /**
  * Levert een bundel events in één aanroep aan de webhook van een Dienstverlener, met een vers
@@ -27,8 +26,7 @@ public class WebhookDispatcher {
     private final WebhookSleutel webhookSleutel;
     private final ObjectMapper objectMapper;
 
-    public WebhookDispatcher(WebhookAdapter webhookAdapter, WebhookSleutel webhookSleutel,
-                             ObjectMapper objectMapper) {
+    public WebhookDispatcher(WebhookAdapter webhookAdapter, WebhookSleutel webhookSleutel, ObjectMapper objectMapper) {
         this.webhookAdapter = webhookAdapter;
         this.webhookSleutel = webhookSleutel;
         this.objectMapper = objectMapper;

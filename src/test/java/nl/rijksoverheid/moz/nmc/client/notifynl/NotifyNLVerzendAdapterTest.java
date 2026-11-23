@@ -1,8 +1,19 @@
 package nl.rijksoverheid.moz.nmc.client.notifynl;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
+import java.time.OffsetDateTime;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.GetMessageDataApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.GetOneMessageResponse;
@@ -10,18 +21,6 @@ import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailRespons
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-
-import java.time.OffsetDateTime;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 
 class NotifyNLVerzendAdapterTest {
 
@@ -39,8 +38,8 @@ class NotifyNLVerzendAdapterTest {
         getMessageDataApi = Mockito.mock(GetMessageDataApi.class);
         notifyNLJwtFactory = Mockito.mock(NotifyNLJwtFactory.class);
         authorizationHolder = new NotifyNLAuthorizationHolder();
-        adapter = new NotifyNLVerzendAdapter(sendAMessageApi, getMessageDataApi, notifyNLJwtFactory, authorizationHolder,
-                Optional.of("test-key"));
+        adapter = new NotifyNLVerzendAdapter(
+                sendAMessageApi, getMessageDataApi, notifyNLJwtFactory, authorizationHolder, Optional.of("test-key"));
 
         Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
     }
@@ -56,7 +55,8 @@ class NotifyNLVerzendAdapterTest {
     }
 
     @Test
-    void verstuurEmail_nullBerichtgegevens_werktZonderPersonalisatie() throws NotifyNLConfiguratieException, NotifyNLVerzendException {
+    void verstuurEmail_nullBerichtgegevens_werktZonderPersonalisatie()
+            throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(notifyNlId.toString()));
 
@@ -66,8 +66,10 @@ class NotifyNLVerzendAdapterTest {
     }
 
     @Test
-    void verstuurEmail_zetBearerTokenZonderPrefixOpHolder() throws NotifyNLConfiguratieException, NotifyNLVerzendException {
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
+    void verstuurEmail_zetBearerTokenZonderPrefixOpHolder()
+            throws NotifyNLConfiguratieException, NotifyNLVerzendException {
+        Mockito.when(sendAMessageApi.sendEmail(any()))
+                .thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
 
         adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of());
 
@@ -76,27 +78,36 @@ class NotifyNLVerzendAdapterTest {
 
     @Test
     void verstuurEmail_ongeldigeApiKey_gooitNotifyNLConfiguratieException() {
-        Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenThrow(new IllegalArgumentException("Ongeldige key"));
+        Mockito.when(notifyNLJwtFactory.authorizationHeader(any()))
+                .thenThrow(new IllegalArgumentException("Ongeldige key"));
 
-        assertThrows(NotifyNLConfiguratieException.class,
+        assertThrows(
+                NotifyNLConfiguratieException.class,
                 () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
     }
 
     @Test
     void verstuurEmail_notifyNlFout_gooitNotifyNLVerzendException() {
         Mockito.when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build()));
+                .thenThrow(new WebApplicationException(
+                        Response.status(Response.Status.BAD_REQUEST).build()));
 
-        assertThrows(NotifyNLVerzendException.class,
+        assertThrows(
+                NotifyNLVerzendException.class,
                 () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
     }
 
     @Test
     void verstuurEmail_validationErrorOpHetAdres_isAdresafwijzing() {
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenThrow(new WebApplicationException(fout(400, "{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}],\"status_code\":400}")));
+        Mockito.when(sendAMessageApi.sendEmail(any()))
+                .thenThrow(
+                        new WebApplicationException(
+                                fout(
+                                        400,
+                                        "{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}],\"status_code\":400}")));
 
-        NotifyNLVerzendException e = assertThrows(NotifyNLVerzendException.class,
-                () -> adapter.verstuurEmail("geen-adres", TEST_TEMPLATE_ID, Map.of()));
+        NotifyNLVerzendException e = assertThrows(
+                NotifyNLVerzendException.class, () -> adapter.verstuurEmail("geen-adres", TEST_TEMPLATE_ID, Map.of()));
 
         assertTrue(e.isAdresAfgewezen());
     }
@@ -104,9 +115,15 @@ class NotifyNLVerzendAdapterTest {
     // Een team-key weigert elke ontvanger buiten de whitelist met een 400; dat ligt niet aan het adres.
     @Test
     void verstuurEmail_andere400_isGeenAdresafwijzing() {
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenThrow(new WebApplicationException(fout(400, "{\"errors\":[{\"error\":\"BadRequestError\",\"message\":\"Can't send to this recipient using a team-only API key\"}],\"status_code\":400}")));
+        Mockito.when(sendAMessageApi.sendEmail(any()))
+                .thenThrow(
+                        new WebApplicationException(
+                                fout(
+                                        400,
+                                        "{\"errors\":[{\"error\":\"BadRequestError\",\"message\":\"Can't send to this recipient using a team-only API key\"}],\"status_code\":400}")));
 
-        NotifyNLVerzendException e = assertThrows(NotifyNLVerzendException.class,
+        NotifyNLVerzendException e = assertThrows(
+                NotifyNLVerzendException.class,
                 () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
 
         assertFalse(e.isAdresAfgewezen());
@@ -117,7 +134,11 @@ class NotifyNLVerzendAdapterTest {
     void isAdresAfwijzing_zonderBodyOngeldigeBodyOfAndereStatus_isGeenAdresafwijzing() {
         assertFalse(NotifyNLVerzendAdapter.isAdresAfwijzing(Response.status(400).build()));
         assertFalse(NotifyNLVerzendAdapter.isAdresAfwijzing(fout(400, "geen json")));
-        assertFalse(NotifyNLVerzendAdapter.isAdresAfwijzing(fout(403, "{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}],\"status_code\":400}")));
+        assertFalse(
+                NotifyNLVerzendAdapter.isAdresAfwijzing(
+                        fout(
+                                403,
+                                "{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}],\"status_code\":400}")));
     }
 
     private static Response fout(int status, String body) {
@@ -128,7 +149,8 @@ class NotifyNLVerzendAdapterTest {
     void verstuurEmail_geenId_gooitNotifyNLVerzendException() {
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse());
 
-        assertThrows(NotifyNLVerzendException.class,
+        assertThrows(
+                NotifyNLVerzendException.class,
                 () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
     }
 
@@ -136,21 +158,27 @@ class NotifyNLVerzendAdapterTest {
     void verstuurEmail_ongeldigId_gooitNotifyNLVerzendException() {
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id("niet-een-uuid"));
 
-        assertThrows(NotifyNLVerzendException.class,
+        assertThrows(
+                NotifyNLVerzendException.class,
                 () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
     }
 
     @Test
     void constructor_ontbrekendeApiKey_gooitIllegalStateException() {
-        assertThrows(IllegalStateException.class, () -> new NotifyNLVerzendAdapter(sendAMessageApi, getMessageDataApi, notifyNLJwtFactory,
-                authorizationHolder, Optional.empty()));
+        assertThrows(
+                IllegalStateException.class,
+                () -> new NotifyNLVerzendAdapter(
+                        sendAMessageApi, getMessageDataApi, notifyNLJwtFactory, authorizationHolder, Optional.empty()));
     }
 
     @Test
     void vraagStatusOp_geeftStatusEnHetEersteBruikbareTijdstip() throws Exception {
         UUID id = UUID.randomUUID();
-        Mockito.when(getMessageDataApi.getMessageData(id.toString())).thenReturn(new GetOneMessageResponse()
-                .status("delivered").completedAt("onleesbaar").sentAt("2030-01-01T10:00:00Z"));
+        Mockito.when(getMessageDataApi.getMessageData(id.toString()))
+                .thenReturn(new GetOneMessageResponse()
+                        .status("delivered")
+                        .completedAt("onleesbaar")
+                        .sentAt("2030-01-01T10:00:00Z"));
 
         NotifyNLAfleverstatus status = adapter.vraagStatusOp(id).orElseThrow();
 
@@ -161,7 +189,8 @@ class NotifyNLVerzendAdapterTest {
     @Test
     void vraagStatusOp_zonderTijdstip_geeftNull() throws Exception {
         UUID id = UUID.randomUUID();
-        Mockito.when(getMessageDataApi.getMessageData(id.toString())).thenReturn(new GetOneMessageResponse().status("sending"));
+        Mockito.when(getMessageDataApi.getMessageData(id.toString()))
+                .thenReturn(new GetOneMessageResponse().status("sending"));
 
         assertNull(adapter.vraagStatusOp(id).orElseThrow().tijdstip());
     }
@@ -182,7 +211,8 @@ class NotifyNLVerzendAdapterTest {
         UUID leeg = UUID.randomUUID();
         Mockito.when(getMessageDataApi.getMessageData(fout.toString()))
                 .thenThrow(new WebApplicationException(Response.status(500).build()));
-        Mockito.when(getMessageDataApi.getMessageData(onbereikbaar.toString())).thenThrow(new ProcessingException("time-out"));
+        Mockito.when(getMessageDataApi.getMessageData(onbereikbaar.toString()))
+                .thenThrow(new ProcessingException("time-out"));
         Mockito.when(getMessageDataApi.getMessageData(leeg.toString())).thenReturn(new GetOneMessageResponse());
 
         assertThrows(NotifyNLVerzendException.class, () -> adapter.vraagStatusOp(fout));

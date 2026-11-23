@@ -1,6 +1,8 @@
 package nl.rijksoverheid.moz.nmc.fuzzing;
 
-import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import static org.hamcrest.Matchers.lessThan;
+import static org.mockito.ArgumentMatchers.any;
+
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,6 +13,10 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
@@ -20,20 +26,13 @@ import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.mockito.Mockito;
-
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.List;
-import java.util.UUID;
-
-import static org.hamcrest.Matchers.lessThan;
-import static org.mockito.ArgumentMatchers.any;
 
 /**
  * HTTP counterpart of {@link NotificatieVerwerkingFuzzer} through a @QuarkusTest, which adds the
@@ -107,11 +106,11 @@ public class EndpointFuzzTest {
     @FuzzTest
     public void fuzzCentraleNotificatie(FuzzedDataProvider data) {
         ObjectNode body = objectMapper.createObjectNode();
-        body.put("identificatieType", data.pickValue(new String[]{"BSN", "KVK", "RSIN", "INVALID"}));
+        body.put("identificatieType", data.pickValue(new String[] {"BSN", "KVK", "RSIN", "INVALID"}));
         body.put("identificatieNummer", data.consumeString(20));
         body.put("dienstverlener", data.consumeString(50));
         body.put("dienst", data.consumeString(50));
-        body.put("berichtType", data.pickValue(new String[]{"Stuurgroep Agenda", "Demo template", "onbekend"}));
+        body.put("berichtType", data.pickValue(new String[] {"Stuurgroep Agenda", "Demo template", "onbekend"}));
 
         post("/api/nmc/v1/centraal/notificaties", body.toString(), null);
     }
@@ -120,7 +119,7 @@ public class EndpointFuzzTest {
     public void fuzzDecentraleNotificatie(FuzzedDataProvider data) {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("emailAdres", data.consumeString(60));
-        body.put("berichtType", data.pickValue(new String[]{"Stuurgroep Agenda", "Demo template", "onbekend"}));
+        body.put("berichtType", data.pickValue(new String[] {"Stuurgroep Agenda", "Demo template", "onbekend"}));
 
         post("/api/nmc/v1/decentraal/notificaties", body.toString(), null);
     }
@@ -131,8 +130,9 @@ public class EndpointFuzzTest {
         body.put("id", data.consumeString(40));
         body.put("reference", data.consumeString(40));
         body.put("to", data.consumeString(60));
-        body.put("status", data.pickValue(new String[]{
-                "delivered", "permanent-failure", "temporary-failure", "technical-failure", "onbekend"}));
+        body.put("status", data.pickValue(new String[] {
+            "delivered", "permanent-failure", "temporary-failure", "technical-failure", "onbekend"
+        }));
         body.put("notification_type", data.consumeString(20));
         body.put("created_at", data.consumeString(30));
 
@@ -145,9 +145,8 @@ public class EndpointFuzzTest {
 
     @FuzzTest
     public void fuzzRawJsonBody(FuzzedDataProvider data) {
-        String path = data.consumeBoolean()
-                ? "/api/nmc/v1/centraal/notificaties"
-                : "/api/nmc/v1/decentraal/notificaties";
+        String path =
+                data.consumeBoolean() ? "/api/nmc/v1/centraal/notificaties" : "/api/nmc/v1/decentraal/notificaties";
 
         post(path, data.consumeRemainingAsString(), null);
     }

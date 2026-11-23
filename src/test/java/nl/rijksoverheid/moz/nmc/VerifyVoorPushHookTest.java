@@ -1,11 +1,11 @@
 package nl.rijksoverheid.moz.nmc;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -19,11 +19,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Test van de Claude Code-hook {@code .claude/hooks/verify-voor-push.sh}, die vóór een git push
@@ -33,7 +32,8 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
  */
 class VerifyVoorPushHookTest {
 
-    private static final Path HOOK = Path.of(".claude/hooks/verify-voor-push.sh").toAbsolutePath();
+    private static final Path HOOK =
+            Path.of(".claude/hooks/verify-voor-push.sh").toAbsolutePath();
     private static final ObjectMapper JSON = new ObjectMapper();
 
     @TempDir
@@ -46,7 +46,8 @@ class VerifyVoorPushHookTest {
     // Zonder jq slaat de hook alles over en falen de tests met een onduidelijke melding.
     @BeforeAll
     static void jqIsGeinstalleerd() {
-        assertTrue(zoek("jq").isPresent(),
+        assertTrue(
+                zoek("jq").isPresent(),
                 "jq is verplicht voor de build; installeer het met brew, dnf of apt install jq");
     }
 
@@ -356,8 +357,9 @@ class VerifyVoorPushHookTest {
         Path map = Files.createDirectory(tijdelijk.resolve(naam));
 
         for (String programma : programmas) {
-            maakLink(map.resolve(programma), zoek(programma).orElseThrow(
-                    () -> new IllegalStateException(programma + " staat niet op PATH")));
+            maakLink(
+                    map.resolve(programma),
+                    zoek(programma).orElseThrow(() -> new IllegalStateException(programma + " staat niet op PATH")));
         }
 
         return map;
@@ -383,8 +385,8 @@ class VerifyVoorPushHookTest {
                 "tool_input", Map.of("command", commando),
                 "cwd", cwd.toString()));
 
-        ProcessBuilder builder = new ProcessBuilder(zoek("bash").orElseThrow().toString(), HOOK.toString())
-                .directory(cwd.toFile());
+        ProcessBuilder builder =
+                new ProcessBuilder(zoek("bash").orElseThrow().toString(), HOOK.toString()).directory(cwd.toFile());
         Map<String, String> omgeving = builder.environment();
         omgeving.put("PATH", pad);
         // Een lege HOME, zodat de hook geen echte SDKMAN-Java laadt.
@@ -401,7 +403,8 @@ class VerifyVoorPushHookTest {
             fail("De hook liep niet binnen 60 seconden af");
         }
 
-        return new Uitkomst(proces.exitValue(),
+        return new Uitkomst(
+                proces.exitValue(),
                 new String(proces.getInputStream().readAllBytes(), StandardCharsets.UTF_8),
                 new String(proces.getErrorStream().readAllBytes(), StandardCharsets.UTF_8));
     }
@@ -441,6 +444,5 @@ class VerifyVoorPushHookTest {
         Files.setPosixFilePermissions(bestand, PosixFilePermissions.fromString("rwxr-xr-x"));
     }
 
-    private record Uitkomst(int exitcode, String stdout, String stderr) {
-    }
+    private record Uitkomst(int exitcode, String stdout, String stderr) {}
 }

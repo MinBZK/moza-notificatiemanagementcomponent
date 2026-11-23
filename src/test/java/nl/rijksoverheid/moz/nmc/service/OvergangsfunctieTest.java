@@ -1,12 +1,25 @@
 package nl.rijksoverheid.moz.nmc.service;
 
-import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.transaction.TransactionalException;
-
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
@@ -21,22 +34,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 class OvergangsfunctieTest {
@@ -84,8 +81,10 @@ class OvergangsfunctieTest {
     void neemAan_alAangenomen_gooit() {
         UUID id = aangenomenNotificatieMetStatus(NotificatieStatus.AANGENOMEN);
 
-        assertThrows(IllegalStateException.class, () -> QuarkusTransaction.requiringNew().run(() ->
-                overgangsfunctie.neemAan(notificatieRepository.findById(id))));
+        assertThrows(
+                IllegalStateException.class,
+                () -> QuarkusTransaction.requiringNew()
+                        .run(() -> overgangsfunctie.neemAan(notificatieRepository.findById(id))));
     }
 
     @ParameterizedTest
@@ -93,8 +92,8 @@ class OvergangsfunctieTest {
     void voerUit_toegestaneOvergang_verhoogtVersieMetEenEnSchrijftEvent(NotificatieStatus van, NotificatieStatus naar) {
         UUID id = aangenomenNotificatieMetStatus(van);
 
-        OvergangUitkomst uitkomst = QuarkusTransaction.requiringNew().call(() ->
-                overgangsfunctie.voerUit(id, naar, redenVoor(naar)));
+        OvergangUitkomst uitkomst =
+                QuarkusTransaction.requiringNew().call(() -> overgangsfunctie.voerUit(id, naar, redenVoor(naar)));
 
         assertTrue(uitkomst.isUitgevoerd());
         assertEquals(van, uitkomst.van());
@@ -118,8 +117,8 @@ class OvergangsfunctieTest {
     void voerUit_nietToegestaneOvergang_wijzigtNiets(NotificatieStatus van, NotificatieStatus naar) {
         UUID id = aangenomenNotificatieMetStatus(van);
 
-        OvergangUitkomst uitkomst = QuarkusTransaction.requiringNew().call(() ->
-                overgangsfunctie.voerUit(id, naar, redenVoor(naar)));
+        OvergangUitkomst uitkomst =
+                QuarkusTransaction.requiringNew().call(() -> overgangsfunctie.voerUit(id, naar, redenVoor(naar)));
 
         assertFalse(uitkomst.isUitgevoerd());
 
@@ -153,16 +152,20 @@ class OvergangsfunctieTest {
     void voerUit_eindstatusZonderReden_gooit() {
         UUID id = aangenomenNotificatieMetStatus(NotificatieStatus.VERZONDEN);
 
-        assertThrows(IllegalArgumentException.class, () -> QuarkusTransaction.requiringNew().run(() ->
-                overgangsfunctie.voerUit(id, NotificatieStatus.NIET_BEZORGBAAR, null)));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> QuarkusTransaction.requiringNew()
+                        .run(() -> overgangsfunctie.voerUit(id, NotificatieStatus.NIET_BEZORGBAAR, null)));
     }
 
     @Test
     void voerUit_redenBijStatusZonderReden_gooit() {
         UUID id = aangenomenNotificatieMetStatus(NotificatieStatus.VERZONDEN);
 
-        assertThrows(IllegalArgumentException.class, () -> QuarkusTransaction.requiringNew().run(() ->
-                overgangsfunctie.voerUit(id, NotificatieStatus.BEZORGD, Reden.TECHNISCH)));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> QuarkusTransaction.requiringNew()
+                        .run(() -> overgangsfunctie.voerUit(id, NotificatieStatus.BEZORGD, Reden.TECHNISCH)));
     }
 
     @Test
@@ -175,7 +178,9 @@ class OvergangsfunctieTest {
         });
 
         QuarkusTransaction.requiringNew().run(() -> {
-            List<Long> volgnummers = eventRepository.findByNotificatie(id).stream().map(Event::getVolgnummer).toList();
+            List<Long> volgnummers = eventRepository.findByNotificatie(id).stream()
+                    .map(Event::getVolgnummer)
+                    .toList();
 
             assertEquals(List.of(0L, 1L, 2L), volgnummers);
             assertEquals(2, notificatieRepository.findById(id).getVersie());
@@ -184,13 +189,16 @@ class OvergangsfunctieTest {
 
     @Test
     void voerUit_onbekendeNotificatie_gooitNietGevonden() {
-        assertThrows(NotificatieNietGevondenException.class, () -> QuarkusTransaction.requiringNew().run(() ->
-                overgangsfunctie.voerUit(UUID.randomUUID(), NotificatieStatus.VERZONDEN, null)));
+        assertThrows(
+                NotificatieNietGevondenException.class,
+                () -> QuarkusTransaction.requiringNew()
+                        .run(() -> overgangsfunctie.voerUit(UUID.randomUUID(), NotificatieStatus.VERZONDEN, null)));
     }
 
     @Test
     void voerUit_zonderTransactie_gooit() {
-        assertThrows(TransactionalException.class,
+        assertThrows(
+                TransactionalException.class,
                 () -> overgangsfunctie.voerUit(UUID.randomUUID(), NotificatieStatus.VERZONDEN, null));
     }
 
@@ -203,18 +211,19 @@ class OvergangsfunctieTest {
         ExecutorService pool = Executors.newFixedThreadPool(2);
 
         try {
-            Future<OvergangUitkomst> eerste = pool.submit(() -> QuarkusTransaction.requiringNew().call(() -> {
-                OvergangUitkomst uitkomst = overgangsfunctie.voerUit(id, NotificatieStatus.BEZORGD, null);
-                eersteHeeftVergrendeld.countDown();
-                wachtTotEenTransactieOpDeLockWacht();
+            Future<OvergangUitkomst> eerste =
+                    pool.submit(() -> QuarkusTransaction.requiringNew().call(() -> {
+                        OvergangUitkomst uitkomst = overgangsfunctie.voerUit(id, NotificatieStatus.BEZORGD, null);
+                        eersteHeeftVergrendeld.countDown();
+                        wachtTotEenTransactieOpDeLockWacht();
 
-                return uitkomst;
-            }));
+                        return uitkomst;
+                    }));
 
             assertTrue(eersteHeeftVergrendeld.await(10, TimeUnit.SECONDS));
 
-            Future<OvergangUitkomst> tweede = pool.submit(() -> QuarkusTransaction.requiringNew().call(() ->
-                    overgangsfunctie.voerUit(id, NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR)));
+            Future<OvergangUitkomst> tweede = pool.submit(() -> QuarkusTransaction.requiringNew()
+                    .call(() -> overgangsfunctie.voerUit(id, NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR)));
 
             assertTrue(eerste.get(10, TimeUnit.SECONDS).isUitgevoerd());
             OvergangUitkomst tweedeUitkomst = tweede.get(10, TimeUnit.SECONDS);
@@ -226,10 +235,14 @@ class OvergangsfunctieTest {
         }
 
         QuarkusTransaction.requiringNew().run(() -> {
-            List<Long> volgnummers = eventRepository.findByNotificatie(id).stream().map(Event::getVolgnummer).toList();
+            List<Long> volgnummers = eventRepository.findByNotificatie(id).stream()
+                    .map(Event::getVolgnummer)
+                    .toList();
 
             assertEquals(List.of(0L, 1L, 2L), volgnummers);
-            assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatieRepository.findById(id).getStatus());
+            assertEquals(
+                    NotificatieStatus.NIET_BEZORGBAAR,
+                    notificatieRepository.findById(id).getStatus());
         });
     }
 
@@ -268,8 +281,8 @@ class OvergangsfunctieTest {
             return notificatie.getId();
         });
 
-        QuarkusTransaction.requiringNew().run(() ->
-                NotificatieFixtures.zetStatus(notificatieRepository.getEntityManager(), id, status));
+        QuarkusTransaction.requiringNew()
+                .run(() -> NotificatieFixtures.zetStatus(notificatieRepository.getEntityManager(), id, status));
 
         return id;
     }

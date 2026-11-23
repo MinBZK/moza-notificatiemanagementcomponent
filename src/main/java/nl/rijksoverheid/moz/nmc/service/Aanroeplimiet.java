@@ -1,12 +1,11 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import nl.rijksoverheid.moz.nmc.config.FeedConfig;
-
 import java.time.Clock;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import nl.rijksoverheid.moz.nmc.config.FeedConfig;
 
 /**
  * Telt de feedaanroepen per dienstverlener per minuut, in het geheugen van deze pod. Met meerdere
@@ -27,9 +26,11 @@ public class Aanroeplimiet {
     /** Telt een aanroep en geeft terug of hij nog binnen de limiet van de lopende minuut valt. */
     public boolean registreer(UUID dvId) {
         long minuut = clock.instant().getEpochSecond() / 60;
-        Venster venster = vensters.compute(dvId, (id, huidig) -> huidig == null || huidig.minuut() != minuut
-                ? new Venster(minuut, 1)
-                : new Venster(minuut, huidig.aantal() + 1));
+        Venster venster = vensters.compute(
+                dvId,
+                (id, huidig) -> huidig == null || huidig.minuut() != minuut
+                        ? new Venster(minuut, 1)
+                        : new Venster(minuut, huidig.aantal() + 1));
 
         return venster.aantal() <= maxPerMinuut;
     }
@@ -39,6 +40,5 @@ public class Aanroeplimiet {
         return (int) (60 - clock.instant().getEpochSecond() % 60);
     }
 
-    private record Venster(long minuut, int aantal) {
-    }
+    private record Venster(long minuut, int aantal) {}
 }

@@ -1,10 +1,5 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
-import java.util.EnumMap;
-import java.util.EnumSet;
-import java.util.Map;
-import java.util.Set;
-
 import static nl.rijksoverheid.moz.nmc.domain.NotificatieStatus.AANGENOMEN;
 import static nl.rijksoverheid.moz.nmc.domain.NotificatieStatus.BEZORGD;
 import static nl.rijksoverheid.moz.nmc.domain.NotificatieStatus.BEZORGSTATUS_ONBEKEND;
@@ -16,6 +11,11 @@ import static nl.rijksoverheid.moz.nmc.domain.NotificatieStatus.TECHNISCH_MISLUK
 import static nl.rijksoverheid.moz.nmc.domain.NotificatieStatus.VERLOPEN;
 import static nl.rijksoverheid.moz.nmc.domain.NotificatieStatus.VERZONDEN;
 
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.Map;
+import java.util.Set;
+
 /**
  * De toegestane statusovergangen van een notificatie.
  * <p>
@@ -25,7 +25,8 @@ import static nl.rijksoverheid.moz.nmc.domain.NotificatieStatus.VERZONDEN;
  */
 public final class Overgangsregels {
 
-    private static final Map<NotificatieStatus, Set<NotificatieStatus>> TOEGESTAAN = new EnumMap<>(NotificatieStatus.class);
+    private static final Map<NotificatieStatus, Set<NotificatieStatus>> TOEGESTAAN =
+            new EnumMap<>(NotificatieStatus.class);
 
     // De reden is wat de Dienstverlener te zien krijgt; alleen deze eindstatussen dragen er een.
     private static final Map<NotificatieStatus, Set<Reden>> REDENEN = new EnumMap<>(NotificatieStatus.class);
@@ -37,14 +38,14 @@ public final class Overgangsregels {
         REDENEN.put(GEANNULEERD, EnumSet.of(Reden.GEANNULEERD));
         TOEGESTAAN.put(AANGENOMEN, EnumSet.of(IN_VERZENDING, VERLOPEN, GEANNULEERD));
         TOEGESTAAN.put(IN_VERZENDING, EnumSet.of(VERZONDEN, TECHNISCH_MISLUKT, VERLOPEN, NIET_BEZORGBAAR));
-        TOEGESTAAN.put(VERZONDEN, EnumSet.of(VERZONDEN, VERLOPEN, BEZORGD, NIET_BEZORGBAAR, TECHNISCH_MISLUKT,
-                BEZORGSTATUS_ONBEKEND));
+        TOEGESTAAN.put(
+                VERZONDEN,
+                EnumSet.of(VERZONDEN, VERLOPEN, BEZORGD, NIET_BEZORGBAAR, TECHNISCH_MISLUKT, BEZORGSTATUS_ONBEKEND));
         TOEGESTAAN.put(BEZORGSTATUS_ONBEKEND, EnumSet.of(BEZORGD, NIET_BEZORGBAAR));
         TOEGESTAAN.put(BEZORGD, EnumSet.of(DEFINITIEF_BEZORGD, VERZONDEN, NIET_BEZORGBAAR, VERLOPEN));
     }
 
-    private Overgangsregels() {
-    }
+    private Overgangsregels() {}
 
     public static boolean isToegestaan(NotificatieStatus van, NotificatieStatus naar) {
         return TOEGESTAAN.getOrDefault(van, Set.of()).contains(naar);

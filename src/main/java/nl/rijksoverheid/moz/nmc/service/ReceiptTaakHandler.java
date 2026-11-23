@@ -3,13 +3,12 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
-import nl.rijksoverheid.moz.nmc.domain.Taak;
-import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
-
 import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.domain.Taak;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 
 /**
  * Verwerkt een opgeslagen receipt via {@link ReceiptVerwerker}. Verwerking en afronden van de taak
@@ -23,7 +22,8 @@ public class ReceiptTaakHandler implements TaakHandler {
     private final PogingRepository pogingRepository;
     private final TaakClaimer taakClaimer;
 
-    public ReceiptTaakHandler(ReceiptVerwerker receiptVerwerker, PogingRepository pogingRepository, TaakClaimer taakClaimer) {
+    public ReceiptTaakHandler(
+            ReceiptVerwerker receiptVerwerker, PogingRepository pogingRepository, TaakClaimer taakClaimer) {
         this.receiptVerwerker = receiptVerwerker;
         this.pogingRepository = pogingRepository;
         this.taakClaimer = taakClaimer;
@@ -46,7 +46,10 @@ public class ReceiptTaakHandler implements TaakHandler {
             if (pogingRepository.findById(UUID.fromString(pogingId)) == null) {
                 Log.infof("Receipt voor poging %s die niet meer bestaat; taak %s afgerond", pogingId, taak.getId());
             } else {
-                receiptVerwerker.verwerk(notifyId, pogingId, payload.get(ReceiptOpslag.PAYLOAD_STATUS),
+                receiptVerwerker.verwerk(
+                        notifyId,
+                        pogingId,
+                        payload.get(ReceiptOpslag.PAYLOAD_STATUS),
                         tijdstip == null || tijdstip.isEmpty() ? null : OffsetDateTime.parse(tijdstip));
             }
 

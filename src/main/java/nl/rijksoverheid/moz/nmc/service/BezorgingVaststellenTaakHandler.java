@@ -20,8 +20,8 @@ public class BezorgingVaststellenTaakHandler implements TaakHandler {
     private final NotificatieRepository notificatieRepository;
     private final TaakClaimer taakClaimer;
 
-    public BezorgingVaststellenTaakHandler(Overgangsfunctie overgangsfunctie, NotificatieRepository notificatieRepository,
-                                           TaakClaimer taakClaimer) {
+    public BezorgingVaststellenTaakHandler(
+            Overgangsfunctie overgangsfunctie, NotificatieRepository notificatieRepository, TaakClaimer taakClaimer) {
         this.overgangsfunctie = overgangsfunctie;
         this.notificatieRepository = notificatieRepository;
         this.taakClaimer = taakClaimer;
@@ -51,7 +51,8 @@ public class BezorgingVaststellenTaakHandler implements TaakHandler {
         Notificatie notificatie = overgangsfunctie.vergrendel(taak.getNotificatieId());
 
         if (notificatie.getStatus() != NotificatieStatus.BEZORGD) {
-            Log.infof("Notificatie %s staat op %s; vaststeltaak %s afgerond zonder overgang",
+            Log.infof(
+                    "Notificatie %s staat op %s; vaststeltaak %s afgerond zonder overgang",
                     notificatie.getId(), notificatie.getStatus(), taak.getId());
 
             return;

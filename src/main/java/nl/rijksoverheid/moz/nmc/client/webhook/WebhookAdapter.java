@@ -6,13 +6,12 @@ import io.vertx.core.http.StreamResetException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
-import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
-
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeoutException;
+import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
 
 /**
  * Levert een bundel CloudEvents in één POST aan de webhook van een Dienstverlener. Eén poging: de
@@ -50,11 +49,14 @@ public class WebhookAdapter {
             // De read-time-out van de client geldt tussen twee stukken antwoord; een webhook die blijft
             // druppelen houdt de aanroep anders langer open dan de lease van de taak.
             client.lever(url, autorisatie, cursor, body)
-                    .ifNoItem().after(timeout)
+                    .ifNoItem()
+                    .after(timeout)
                     .failWith(() -> new WebhookLeveringException("Webhook antwoordde niet binnen " + timeout))
-                    .await().indefinitely();
+                    .await()
+                    .indefinitely();
         } catch (WebApplicationException e) {
-            throw new WebhookLeveringException("Webhook antwoordde met HTTP " + e.getResponse().getStatus(), e);
+            throw new WebhookLeveringException(
+                    "Webhook antwoordde met HTTP " + e.getResponse().getStatus(), e);
         } catch (ProcessingException | CompletionException e) {
             throw vertaal(e);
         }
@@ -71,7 +73,12 @@ public class WebhookAdapter {
         }
 
         if (heeftOorzaak(e, JsonProcessingException.class)
-                || !heeftOorzaak(e, IOException.class, TimeoutException.class, HttpClosedException.class, StreamResetException.class)) {
+                || !heeftOorzaak(
+                        e,
+                        IOException.class,
+                        TimeoutException.class,
+                        HttpClosedException.class,
+                        StreamResetException.class)) {
             return e;
         }
 
