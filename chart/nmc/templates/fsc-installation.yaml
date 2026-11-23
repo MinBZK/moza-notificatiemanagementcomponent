@@ -1,0 +1,49 @@
+{{- if .Values.fsc.enabled }}
+{{- $f := .Values.fsc }}
+# Een eigen FSC-peer in deze namespace (openfsc-operator, External mode: de Directory is van een ander).
+# De Secrets (groepscertificaten en trust anchor) komen van de certportal van de groep; zie
+# docs/fundament-deploy.md in de NMC-repo.
+apiVersion: openfsc.fundament.io/v1
+kind: FSCInstallation
+metadata:
+  name: fsc
+  labels:
+    {{- include "nmc.labels" . | nindent 4 }}
+  annotations:
+    # De peer bewaart zijn contracten in zijn eigen database; helm uninstall laat hem staan.
+    helm.sh/resource-policy: keep
+spec:
+  groupID: {{ required "fsc.groupID is verplicht" $f.groupID | quote }}
+  peerID: {{ required "fsc.peerID is verplicht" $f.peerID | quote }}
+  directory:
+    mode: External
+    external:
+      address: {{ required "fsc.directory.address is verplicht" $f.directory.address }}
+      peerID: {{ required "fsc.directory.peerID is verplicht" $f.directory.peerID | quote }}
+      trustAnchor:
+        name: {{ $f.directory.trustAnchor.secretName }}
+        key: {{ $f.directory.trustAnchor.key }}
+  certificate:
+    existingSecret: {{ $f.certificateSecretName }}
+  {{- with $f.autoSignGrants }}
+  autoSignGrants:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if $f.inway.enabled }}
+  inways:
+    - name: default
+      certificate:
+        existingSecret: {{ $f.inway.certificateSecretName }}
+  {{- end }}
+  {{- if $f.outway.enabled }}
+  outways:
+    - name: default
+      certificate:
+        existingSecret: {{ $f.outway.certificateSecretName }}
+  {{- end }}
+  postgres:
+    image: {{ $f.postgres.image }}
+    instances: 1
+    storageClass: {{ required "fsc.postgres.storageClass is verplicht" $f.postgres.storageClass }}
+    storageSize: {{ $f.postgres.storageSize }}
+{{- end }}

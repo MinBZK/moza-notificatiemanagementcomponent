@@ -1,9 +1,9 @@
 # NMC op Fundament
 
 De NMC draait op [Fundament](https://docs.fundament-poc.nl) als gewone workload in een namespace,
-met een eigen PostgreSQL uit de CloudNativePG-plug-in. De externe diensten (Profielservice, NotifyNL)
-komen uit [moza-mock](https://github.com/MinBZK/moza-mock). De Profielservice kan ook via FSC lopen;
-zie [FSC](#fsc-lokaal).
+met een eigen PostgreSQL uit CloudNativePG. De externe diensten (Profielservice, NotifyNL) komen uit
+[moza-mock](https://github.com/MinBZK/moza-mock). De Profielservice kan ook via FSC lopen; zie
+[FSC](#fsc-lokaal). Voor het fieldlab: [De gedeelde omgeving](#de-gedeelde-omgeving-fieldlab).
 
 Issue: MinBZK/MijnOverheidZakelijk#1637. Plannen: `docs/plans/2026-11-19-nmc-op-fundament.md` (fase 1)
 en `docs/plans/2026-11-20-nmc-fsc-op-fundament.md` (fase 2, FSC).
@@ -284,6 +284,141 @@ mise exec -- k3d cluster start fundament fundament-plugin                # weer 
 De overige configuratie en wat elke env-var doet, staat in `docs/zad-deploy.md`. Eén replica: Flyway
 migreert bij het starten.
 
+## De gedeelde omgeving (fieldlab)
+
+Op `fundament-poc.nl`, organisatie `fieldlab-c`, cluster `cluster-c` (één node, gedeeld met de andere
+projecten van het fieldlab), project `notificatiedienst`. Het FBS zit in een eigen project
+(`federatiefberichtenstelsel`) op hetzelfde cluster.
+
+```text
+project notificatiedienst
+├─ nmc                  NMC + nmc-db (CNPG, PG 18)
+├─ mock-profielservice  moza-mock, als Profielservice; wordt een FSC-peer
+└─ mock-notifynl        moza-mock, als NotifyNL; geen FSC (ook de echte NotifyNL is een publieke API)
+```
+
+Een namespace `X` van het project heet in Kubernetes **`tnt-notificatiedienst--X`**. De mocks zijn
+twee installaties van dezelfde chart; elk gebruikt alleen zijn eigen deel van de mappings.
+
+### Toegang
+
+`functl` met een API-key uit de console, in een eigen configmap, zodat een lokale sandbox-login
+blijft werken. Gebruik het binaire `functl` (de kubeconfig roept het aan), niet `just functl`.
+
+```bash
+curl -fsSL https://github.com/fundament-oss/fundament/releases/download/functl-latest/functl_linux_amd64.tar.gz \
+  | tar -xzf - -C ~/.local/bin functl
+export FUNCTL_CONFIG_DIR=$HOME/.config/fundament-poc
+functl auth login                                   # API-key uit de console
+functl org list; functl cluster list --org=<ORG_ID>
+functl cluster kubeconfig <CLUSTER_ID> --org=<ORG_ID> > kubeconfig
+export KUBECONFIG=$PWD/kubeconfig
+```
+
+Het exec-blok in die kubeconfig roept `functl cluster token` aan. Zet daar `FUNCTL_CONFIG_DIR` in
+(`env:`) en het volledige pad naar `functl`, anders gebruikt `kubectl` de lokale login.
+
+### Installeren
+
+```bash
+P=<PROJECT_ID>; NS=tnt-notificatiedienst
+for n in nmc mock-profielservice mock-notifynl; do functl namespace create --project=$P $n --org=<ORG_ID>; done
+```
+
+De Secrets zoals bij [Lokaal](#1-geheimen), maar per namespace: `moza-mock-admin` in beide mocks,
+`moza-mock-notifynl` in `mock-notifynl` (hetzelfde token als `NOTIFY_CALLBACK_BEARER_TOKEN` in
+`nmc-secrets`) en in `mock-profielservice` (een willekeurig token; de chart vraagt het Secret, die mock
+gebruikt het niet). Daarna:
+
+```bash
+for m in mock-profielservice mock-notifynl; do
+  helm -n $NS--$m install moza-mock <moza-mock>/chart/moza-mock -f <moza-mock>/chart/moza-mock/values-fieldlab.yaml
+done
+helm -n $NS--nmc install nmc chart/nmc -f chart/nmc/values-fieldlab.yaml
+```
+
+Controleren zoals bij [Lokaal](#3-controleren), met `-n $NS--nmc`. Op 23 november 2026 gaven de
+centrale notificatie en de vaste BSN's dezelfde uitkomst als lokaal.
+
+### Wat er op het cluster staat
+
+- **CloudNativePG** komt van Haven+ (Flux, release `cloudnative-pg` 0.29.0, operator 1.30.0), met de
+  catalogus `postgresql-standard-trixie` (PG 15 tot en met 18). De CNPG-plug-in staat op `Failed`,
+  omdat hij die operator niet overneemt; we hebben hem niet nodig.
+- **cert-manager** v1.21.0, ook van Haven+ via Flux, release `cert-manager`.
+- **Opslag:** `ceph-incluster` (default).
+- **Kyverno** dwingt het restricted-profiel af (non-root, geen privilege escalation, seccomp, alleen
+  veilige volumetypes). Beide charts voldoen.
+- Geen ResourceQuota, LimitRange of NetworkPolicies in de namespaces van het project.
+- Een projectlid heeft hier ruime rechten (ook buiten het project): blijf in de eigen namespaces.
+- **Geen OpenFSC.** De OpenFSC-plug-in installeert zelf cert-manager v1.17.2 onder dezelfde
+  releasenaam (`cert-manager`) en een tweede CNPG (release `cnpg`). Hier zou dat cert-manager voor
+  alle teams terugzetten, en Flux zet hem daarna weer terug: niet installeren zolang
+  miscellaneous#1289 open staat. Alleen de openfsc-operator zou genoeg zijn.
+
+### FSC op het fieldlab (zodra de Directory er is)
+
+Beide charts hebben een optionele `FSCInstallation` (`fsc.enabled`, standaard uit), in External mode:
+de NMC met inway en outway, de Profielservice-mock met alleen een inway. De NotifyNL-mock krijgt
+geen peer. Nodig, per peer:
+
+1. De openfsc-operator op het cluster (zie de open vragen).
+2. Van de groep (`fsc-fieldlab`): het adres en de peer-ID van de Directory, en het CA-certificaat als
+   trust anchor (`fsc-group-trust`, sleutel `ca.crt`).
+3. Van de certportal: groepscertificaten als `kubernetes.io/tls`, met de peer-ID als `serialNumber`
+   en de SAN's uit [Certificaten](#1-certificaten), met `tnt-notificatiedienst--<namespace>` als
+   namespace: `fsc-manager-group-tls`, plus `fsc-inway-default-group-tls` en (NMC)
+   `fsc-outway-default-group-tls`.
+4. Een values-bestand met `fsc.enabled: true`, `groupID`, `peerID`, `directory.address`,
+   `directory.peerID` en `postgres.storageClass: ceph-incluster`, en daarmee `helm upgrade`.
+5. De services en contracten zoals [lokaal](#3-service-en-contracten), met een geldigheid van een jaar;
+   de NMC daarna naar zijn eigen outway (`profielservice.url`).
+
+Lokaal getest: met de waarden van `fsc-demo` geeft de template dezelfde spec als de werkende peer in
+`nmc`. De `FSCInstallation` heeft `helm.sh/resource-policy: keep`: de peer bewaart zijn contracten in
+zijn eigen database.
+
+### Publiek adres
+
+Net als op ZAD is de NMC publiek bereikbaar, op **https://nmc.cluster-c.fieldlab2026.nl**, zodat een
+dienstverlener-mock buiten Fundament hem kan aanroepen. De NMC heeft nog geen authenticatie: iedereen
+kan dus notificaties aanbieden.
+
+De chart maakt daarvoor met `gateway.enabled` een eigen Envoy Gateway (`className: eg`), net als het
+FBS voor `fbs-magazijn.cluster-c.fieldlab2026.nl`: een Let's Encrypt-certificaat via HTTP-01, een
+`HTTPRoute` voor `gateway.paths` (standaard alleen `/q/openapi` en `/q/swagger-ui`; op het fieldlab
+`/`), en een `DNSEndpoint` voor external-dns. Het publieke IP kent de Gateway pas na het aanmaken, dus
+dat gaat in twee stappen: installeren, `status.addresses` van de Gateway in `gateway.address` zetten,
+nog een `helm upgrade`.
+
+### NotifyNL
+
+Op het fieldlab de echte NotifyNL van Worth (`https://api.notifynl.nl`), met een team-key: die bezorgt
+alleen bij de adressen van het team, dus een centrale notificatie naar het adres van de
+Profielservice-mock wordt geweigerd. De key zet je zelf in het Secret, zonder dat hij in een bestand of
+de shellhistorie komt:
+
+```bash
+read -rs K
+jq -n --arg k "$K" '{stringData:{NOTIFY_API_KEY:$k}}' \
+  | kubectl -n tnt-notificatiedienst--nmc patch secret nmc-secrets --type merge --patch-file /dev/stdin
+unset K
+```
+
+- De templates in `BerichtType` zijn die van de NotifyNL van het LPC. Worth heeft andere: zet ze met
+  `NMC_BELEID_<BERICHTTYPE>_TEMPLATE_ID` (in `values-fieldlab.yaml` via `extraEnv`). Anders weigert
+  NotifyNL met `400 Template not found`. Het template-ID komt bij de aanname op de notificatie, dus een
+  wijziging geldt alleen voor nieuwe notificaties.
+- De receipt-callback staat in het dashboard van Worth op de NMC van ZAD; deze NMC krijgt de afleverstatus
+  door zelf na te vragen.
+- Terug naar de mock: `notify.url` op `http://moza-mock.tnt-notificatiedienst--mock-notifynl.svc:8080/notifynl/lokaal`.
+
+### Aanroepen vanuit het FBS
+
+Binnen het cluster, zonder FSC: `http://nmc.tnt-notificatiedienst--nmc.svc:8080/api/nmc/v1/…`. De
+spec staat op `/q/openapi` (en `/q/swagger-ui/`). Met FSC blijven de paden gelijk en verandert alleen
+het begin van de URL: `http://<outway van het FBS>/nmc/api/nmc/v1/…`, met een grant link `nmc`.
+
 ## Lokaal tegenover de gedeelde omgeving
 
 Lokaal wijkt af van `fundament-poc.nl`:
@@ -304,16 +439,16 @@ Lokaal wijkt af van `fundament-poc.nl`:
 
 ## Open vragen voor de gedeelde omgeving
 
-- Is digilab miscellaneous#1289 opgelost in de OpenFSC-versie in de catalogus? Zo niet: OpenFSC niet
-  naast de CNPG-plug-in installeren.
-- Staan cert-manager en de Gateway API-CRD's op het cluster (via Haven+)?
-- Welke Pod Security-level en storageClass hebben de namespaces van een project?
-- Mag een projectlid een CNPG-`Cluster` aanmaken en bijwerken? De CNPG-plug-in geeft projectbeheerders
-  geen `update`; een `helm upgrade` die het `Cluster` wijzigt, vraagt dan een organisatiebeheerder.
-- FSC (`fsc-fieldlab`): hoe komen we via de certportal aan certificaten, en wat hebben ze van ons nodig
-  (peer-ID/OIN)? Wat zijn het adres, de peer-ID en de trust anchor van hun Directory? Lokaal vervangt
-  `fsc-demo` die drie; in de `FSCInstallation`s veranderen alleen `groupID`, `directory.external` en de
-  Secrets.
+Beantwoord op 23 november (zie [hierboven](#wat-er-op-het-cluster-staat)): cert-manager en de Gateway
+API-CRD's staan er, Kyverno dwingt restricted af, de storageClass is Ceph, en een projectlid mag een
+CNPG-`Cluster` aanmaken en bijwerken. Nog open:
+
+- Komt OpenFSC op `cluster-c` zonder de gedeelde cert-manager en CNPG te raken (alleen de operator,
+  of een plug-in waarin miscellaneous#1289 is opgelost)? Het OpenFSC-team werkt de plug-in bij.
+- FSC (`fsc-fieldlab`): waar komt de Directory, en wat zijn het adres, de peer-ID en de trust anchor?
+  Hoe komen we via de certportal aan certificaten, en wat hebben ze van ons nodig (peer-ID/OIN)? Op
+  23 november stond er op `cluster-c` nog niets van FSC. Lokaal vervangt `fsc-demo` die drie; in de
+  `FSCInstallation`s veranderen alleen `groupID`, `directory.external` en de Secrets.
 
 ## Bekende beperkingen
 

@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import io.smallrye.config.EnvConfigSource;
 import io.smallrye.config.PropertiesConfigSource;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
@@ -70,6 +71,38 @@ class VerzendbeleidTest {
         assertThrows(IllegalStateException.class, () -> beleid(-1, Map.of()));
         assertThrows(IllegalStateException.class,
                 () -> beleid(1, Map.of("nmc.beleid.demo_template.max-herverzendingen", "-1")));
+    }
+
+    // Een andere NotifyNL (bijvoorbeeld op Fundament) heeft andere templates dan die in BerichtType.
+    @Test
+    void templateId_perBerichttypeOfStandaard() {
+        Verzendbeleid anderNotifyNL = beleid(1, Map.of(
+                "nmc.beleid.demo_template.template-id", "a1f49022-846c-420d-b7f7-dd7b328f1474"));
+
+        assertEquals("a1f49022-846c-420d-b7f7-dd7b328f1474", anderNotifyNL.templateId(BerichtType.DEMO_TEMPLATE));
+        assertEquals(BerichtType.STUURGROEP_AGENDA.getTemplateId(), anderNotifyNL.templateId(BerichtType.STUURGROEP_AGENDA));
+        assertEquals(BerichtType.DEMO_TEMPLATE.getTemplateId(), beleid.templateId(BerichtType.DEMO_TEMPLATE));
+    }
+
+    // NotifyNL zou een onbekend template pas bij elke verzending weigeren.
+    @Test
+    void templateIdDatGeenUuidIs_laatDeApplicatieNietStarten() {
+        assertThrows(IllegalStateException.class,
+                () -> beleid(1, Map.of("nmc.beleid.demo_template.template-id", "demo-template")));
+        assertThrows(IllegalStateException.class,
+                () -> beleid(1, Map.of("nmc.beleid.stuurgroep_agenda.template-id", " ")));
+        assertThrows(IllegalStateException.class,
+                () -> beleid(1, Map.of("nmc.beleid.demo_template.template-id", "1-1-1-1-1")), "verkorte vorm");
+    }
+
+    // Zo zetten de deployments het: als env-var, met de enum-naam in hoofdletters.
+    @Test
+    void templateId_alsEnvVar() {
+        Verzendbeleid beleidUitEnv = new Verzendbeleid(Duration.ofDays(7), Duration.ofHours(1), 1,
+                new SmallRyeConfigBuilder().withSources(new EnvConfigSource(
+                        Map.of("NMC_BELEID_DEMO_TEMPLATE_TEMPLATE_ID", "a1f49022-846c-420d-b7f7-dd7b328f1474"), 300)).build());
+
+        assertEquals("a1f49022-846c-420d-b7f7-dd7b328f1474", beleidUitEnv.templateId(BerichtType.DEMO_TEMPLATE));
     }
 
     // Een typfout in een env-var zou anders elke notificatie direct laten verlopen of meteen herverzenden.

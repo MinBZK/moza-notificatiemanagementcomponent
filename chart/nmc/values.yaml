@@ -78,3 +78,46 @@ containerSecurityContext:
   readOnlyRootFilesystem: true
   capabilities:
     drop: ["ALL"]
+
+gateway:
+  # Een publieke hostname via een eigen Envoy Gateway (zie templates/gateway.yaml). Standaard alleen de
+  # OpenAPI-spec en Swagger UI: de NMC heeft nog geen authenticatie, dus de API blijft dicht.
+  enabled: false
+  className: eg
+  hostname: ""
+  # Het publieke IP van de Gateway (status.addresses), na de eerste installatie; dan komt het DNS-record.
+  address: ""
+  acmeServer: https://acme-v02.api.letsencrypt.org/directory
+  paths:
+    - type: Exact
+      value: /q/openapi
+    - type: PathPrefix
+      value: /q/swagger-ui
+
+fsc:
+  # Een eigen FSC-peer (FSCInstallation) in deze namespace; vraagt de openfsc-operator op het cluster.
+  enabled: false
+  groupID: ""
+  # 20 cijfers; op het fieldlab nog een placeholder, er is geen eigen OIN.
+  peerID: ""
+  directory:
+    # Manager van de Directory van de groep, bijvoorbeeld https://<manager>:8443.
+    address: ""
+    peerID: ""
+    trustAnchor:
+      # Secret met het CA-certificaat van de groep (zonder sleutel).
+      secretName: fsc-group-trust
+      key: ca.crt
+  # Groepscertificaat van de Manager (kubernetes.io/tls), met de peer-ID als serialNumber.
+  certificateSecretName: fsc-manager-group-tls
+  autoSignGrants: []
+  inway:
+    enabled: true
+    certificateSecretName: fsc-inway-default-group-tls
+  outway:
+    enabled: true
+    certificateSecretName: fsc-outway-default-group-tls
+  postgres:
+    image: ghcr.io/cloudnative-pg/postgresql:16
+    storageClass: ""
+    storageSize: 1Gi
