@@ -21,6 +21,7 @@ import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,11 +36,19 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 // %test: bewaartermijn afleverbewijs 365 dagen, maximale cursorleeftijd 30 dagen, batch 2, hoogstens
 // 3 batches per stap, partities van 50 transactie-ids, huidige KEK-versie 2, cluster-epoch 1.
@@ -154,6 +163,22 @@ class OnderhoudTaakHandlerTest {
         assertEquals(1, notificatie(kapot).getVersleuteldeGegevens().kekVersie());
     }
 
+    // Zeven sleutels bij batches van twee en hoogstens drie batches: zes in de eerste ronde, de zevende
+    // in de volgende.
+    @Test
+    void onderhoud_meerSleutelsDanEenRondeAankan_herwraptDeRestDeVolgendeRonde() {
+        Sleutelbeheer versie1 = SleutelbeheerTest.sleutelbeheer(1, Map.of(1, TEST_KEK_1));
+        List<UUID> ids = IntStream.range(0, 7).mapToObj(i -> opgeslagen(versie1)).toList();
+
+        onderhoud();
+
+        assertEquals(6, ids.stream().filter(id -> notificatie(id).getVersleuteldeGegevens().kekVersie() == 2).count());
+
+        onderhoud();
+
+        assertTrue(ids.stream().allMatch(id -> notificatie(id).getVersleuteldeGegevens().kekVersie() == 2));
+    }
+
     @Test
     void onderhoud_viaDeWorker_plantZichzelfOpnieuw() {
         UUID id = QuarkusTransaction.requiringNew().call(() -> {
@@ -206,6 +231,28 @@ class OnderhoudTaakHandlerTest {
 
         assertFalse(partities().contains(oud.partitie()));
         assertEquals(0, events(oud.notificatieId()));
+    }
+
+    // Een bevestiging die commit tussen de toets zonder vergrendeling en die eronder, houdt de partitie
+    // alsnog tegen; de partities erboven komen dan niet meer aan de beurt.
+    @Test
+    void ruimOp_bevestigingTussenDeToetsEnDeVergrendeling_laatDePartitieStaanEnStopt() {
+        EventPartitieRepository repository = mock(EventPartitieRepository.class);
+        EventPartitie oudste = new EventPartitie("event_1", 0, 50);
+        when(repository.bereikpartities()).thenReturn(List.of(oudste, new EventPartitie("event_2", 50, 100)));
+        when(repository.watermerk()).thenReturn(1000L);
+        when(repository.oudsteBeschermdeTransactieId(anyInt(), any(), any()))
+                .thenReturn(Optional.empty(), Optional.of(10L));
+        when(repository.registratieVanJongsteEvent(oudste)).thenReturn(Optional.empty());
+        EventlogPartitiebeheer beheer = new EventlogPartitiebeheer(repository,
+                TestConfig.opruimtermijnen(Duration.ofDays(1), Duration.ofDays(2), Duration.ofDays(3)),
+                50, 5, Duration.ofMillis(500), TestConfig.feed());
+
+        assertTrue(beheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).isEmpty());
+
+        verify(repository).vergrendelEventlog();
+        verify(repository, times(2)).oudsteBeschermdeTransactieId(anyInt(), any(), any());
+        verify(repository, never()).verwijder(any());
     }
 
     // Liep het onderhoud achter, dan staan er events in de default-partitie onder een bereikpartitie. Die
