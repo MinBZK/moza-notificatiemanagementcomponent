@@ -103,10 +103,10 @@ podman compose up -d                    # PostgreSQL voor dev-mode (docker compo
 
 ## Configuratie en secrets
 
-Deze waarden staan leeg in `application.properties` en zijn **verplicht**: zonder `nmc.kek.*` of
-`nmc.webhook.jwt.*` start de applicatie niet, de andere falen pas bij het eerste gebruik. Lokaal
-horen ze in een niet-ingecheckte `src/main/resources/application-dev.properties`; onder `%test`
-staan dummywaarden.
+Deze waarden staan leeg in `application.properties` en zijn **verplicht**: zonder `nmc.kek.*`,
+`nmc.webhook.jwt.*` of `notify.callback.bearer-token` start de applicatie niet, `notify.api-key`
+en `hash.pepper` falen pas bij het eerste gebruik. Lokaal horen ze in een niet-ingecheckte
+`src/main/resources/application-dev.properties`; onder `%test` staan dummywaarden.
 
 | Property | Gebruikt door |
 |----------|---------------|

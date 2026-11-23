@@ -8,6 +8,9 @@
 # (zoals een commitmessage of PR-body) tellen niet mee. Een push die niet herkend wordt,
 # bijvoorbeeld na een cd naar een pad met spaties, gaat zonder verify door; CI draait verify dan
 # alsnog als verplichte check.
+#
+# Loopt de hook over zijn time-out uit settings.json, dan stopt Claude Code hem met SIGTERM,
+# samen met Maven, en voert het commando toch uit. De EXIT-trap ruimt de worktree dan nog op.
 set -uo pipefail
 
 invoer=$(cat)

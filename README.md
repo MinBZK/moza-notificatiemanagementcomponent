@@ -396,8 +396,9 @@ clients (zie "OpenAPI-specificatie & codegen" hierboven), geconfigureerd in
   op die poort draaien. In `%test` staat dit op `http://localhost:8081`, maar
   daar wordt de client toch gemockt.
 - `quarkus.rest-client.notify.url` en `notify.api-key`: adres en API-key van NotifyNL.
-  De API-key staat leeg in de repository; zonder waarde start de applicatie niet op.
-  Lokaal in te vullen via `application-dev.properties` (niet ingecheckt).
+  De API-key staat leeg in de repository; zonder waarde start de applicatie wel, maar faalt
+  het eerste gebruik van `NotifyNLVerzendAdapter`. Lokaal in te vullen via
+  `application-dev.properties` (niet ingecheckt).
 - `notify.callback.bearer-token`: het bearer token waarmee NotifyNL zich
   authenticeert op het `/notifynl-callback`-endpoint. Staat leeg in de
   repository; zonder waarde start de applicatie niet op. Lokaal in te vullen
@@ -408,7 +409,7 @@ clients (zie "OpenAPI-specificatie & codegen" hierboven), geconfigureerd in
   (gebruikt om BSN/KVK/RSIN en e-mailadressen te pseudonimiseren voor de
   logboek-context). Staat
   ook leeg in de repository; zonder waarde (en zonder `%dev`/`%test`-override)
-  start de applicatie niet op. Lokaal in te vullen via
+  start de applicatie wel, maar faalt het eerste gebruik van `HashHelper`. Lokaal in te vullen via
   `application-dev.properties`.
 - `nmc.kek.huidige-versie` en `nmc.kek.versie.<n>`: de sleutel (KEK) waarmee de NMC de
   sleutel per notificatie versleutelt, als base64 van 32 bytes per versie. Leeg in de
