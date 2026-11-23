@@ -4,6 +4,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import nl.rijksoverheid.moz.nmc.config.ControleConfig;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
@@ -15,6 +16,7 @@ import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
@@ -27,16 +29,32 @@ import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentCaptor;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @QuarkusTest
 class ControleTaakHandlerTest {
@@ -233,6 +251,88 @@ class ControleTaakHandlerTest {
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
         assertEquals(0, LeesHelper.aantalTaken(TaakSoort.TERUGKOPPELEN));
+    }
+
+    // Tussen de selectie en de vergrendeling kan een notificatie verdwijnen of een taak krijgen; de eerste
+    // gooit een exception, de tweede valt onder de vergrendeling af. De ronde gaat door met de volgende.
+    @Test
+    void controle_notificatieNaDeSelectieVerwijderdOfVoorzien_slaatHaarOverEnHerstelDeVolgende() {
+        UUID verwijderd = UUID.randomUUID();
+        UUID voorzien = UUID.randomUUID();
+        UUID zonderTaak = UUID.randomUUID();
+        MetMocks mocks = new MetMocks();
+        Notificatie voorzienMock = notificatieMock(voorzien);
+        Notificatie zonderTaakMock = notificatieMock(zonderTaak);
+        when(mocks.notificatieRepository.zonderTaak(any(), any(), anyInt())).thenReturn(List.of(verwijderd, voorzien, zonderTaak));
+        when(mocks.overgangsfunctie.vergrendel(verwijderd)).thenThrow(new NotificatieNietGevondenException("weg"));
+        when(mocks.overgangsfunctie.vergrendel(voorzien)).thenReturn(voorzienMock);
+        when(mocks.overgangsfunctie.vergrendel(zonderTaak)).thenReturn(zonderTaakMock);
+        when(mocks.notificatieRepository.isZonderTaak(eq(voorzien), any(), any())).thenReturn(false);
+        when(mocks.notificatieRepository.isZonderTaak(eq(zonderTaak), any(), any())).thenReturn(true);
+        when(mocks.pogingRepository.findLaatsteVan(zonderTaak)).thenReturn(Optional.empty());
+
+        TaakUitkomst uitkomst = mocks.handler.voerUit(controletaak(), () -> {
+        });
+
+        ArgumentCaptor<Taak> gepland = ArgumentCaptor.forClass(Taak.class);
+        verify(mocks.taakRepository).persist(gepland.capture());
+        assertEquals(zonderTaak, gepland.getValue().getNotificatieId());
+        assertEquals(TaakSoort.VERZENDEN, gepland.getValue().getTaakSoort());
+        verify(mocks.overgangsfunctie, never()).voerUit(any(), any(), any());
+        TaakUitkomst.Herpland herpland = assertInstanceOf(TaakUitkomst.Herpland.class, uitkomst);
+        assertEquals(clock.nu().plusMinutes(5).toInstant(), herpland.due().toInstant());
+    }
+
+    // Een ronde bestaat uit losse transacties; de lease wordt na elke honderd notificaties verlengd.
+    @ParameterizedTest
+    @CsvSource({"0, 0", "99, 0", "100, 1", "199, 1", "200, 2"})
+    void controle_veleNotificaties_verlengtDeLeasePerHonderd(int aantal, int verlengingen) {
+        MetMocks mocks = new MetMocks();
+        when(mocks.notificatieRepository.zonderTaak(any(), any(), anyInt()))
+                .thenReturn(IntStream.range(0, aantal).mapToObj(i -> UUID.randomUUID()).toList());
+        when(mocks.overgangsfunctie.vergrendel(any())).thenAnswer(aanroep -> notificatieMock(aanroep.getArgument(0)));
+        AtomicInteger verlengd = new AtomicInteger();
+
+        mocks.handler.voerUit(controletaak(), verlengd::incrementAndGet);
+
+        assertEquals(verlengingen, verlengd.get());
+    }
+
+    // Een periodieke taak gaat na het maximum aantal pogingen niet op mislukt: niets maakt hem opnieuw aan.
+    @Test
+    void periodiek_isWaar() {
+        assertTrue(new MetMocks().handler.periodiek());
+    }
+
+    /** De handler met gemockte repositories en overgangsfunctie, voor toestanden die alleen bij gelijktijdigheid ontstaan. */
+    private final class MetMocks {
+
+        final NotificatieRepository notificatieRepository = mock(NotificatieRepository.class);
+        final PogingRepository pogingRepository = mock(PogingRepository.class);
+        final TaakRepository taakRepository = mock(TaakRepository.class);
+        final Overgangsfunctie overgangsfunctie = mock(Overgangsfunctie.class);
+        final ControleTaakHandler handler;
+
+        MetMocks() {
+            ControleConfig config = mock(ControleConfig.class);
+            when(config.interval()).thenReturn(Duration.ofMinutes(5));
+            when(config.maxPerRonde()).thenReturn(1000);
+            handler = new ControleTaakHandler(notificatieRepository, pogingRepository, taakRepository, overgangsfunctie,
+                    null, null, clock, config);
+        }
+    }
+
+    private static Notificatie notificatieMock(UUID id) {
+        Notificatie notificatie = mock(Notificatie.class);
+        when(notificatie.getId()).thenReturn(id);
+        when(notificatie.getDvId()).thenReturn(NotificatieFixtures.DV_ID);
+        when(notificatie.getStatus()).thenReturn(NotificatieStatus.AANGENOMEN);
+
+        return notificatie;
+    }
+
+    private Taak controletaak() {
+        return new Taak(TaakSoort.CONTROLE, null, null, clock.nu(), null, null);
     }
 
     private void zetWebhook(String url) {
