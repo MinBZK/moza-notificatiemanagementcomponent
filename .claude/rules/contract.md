@@ -1,6 +1,8 @@
 ---
 paths:
   - "src/main/resources/META-INF/*.yaml"
+  - "src/main/resources/META-INF/*.json"
+  - "src/main/resources/openapi-callback/**"
   - "src/main/resources/openapi/**"
   - "src/main/java/nl/rijksoverheid/moz/nmc/controller/**"
   - "src/main/java/nl/rijksoverheid/moz/nmc/notifynlcallback/**"
@@ -8,17 +10,24 @@ paths:
 
 # Contracten en controllers
 
-Er zijn twee servercontracten, elk met een eigen execution van de
+Er zijn drie servercontracten, elk met een eigen execution van de
 `openapi-generator-maven-plugin` (`jaxrs-spec`, `interfaceOnly=true`):
 
 | Contract | Interfaces en modellen in | `returnResponse` |
 |----------|---------------------------|------------------|
 | `src/main/resources/META-INF/openapi.yaml` | `nl.rijksoverheid.moz.nmc.api(.model)` | `true`, zodat de controllers 202 antwoorden |
-| `src/main/resources/META-INF/notifynl-callback-openapi.yaml` | `nl.rijksoverheid.moz.nmc.notifynlcallback.api(.model)` | `false` |
+| `src/main/resources/META-INF/contactherstel-openapi.json` | `nl.rijksoverheid.moz.nmc.api.contactherstel(.model)` | `true` |
+| `src/main/resources/openapi-callback/notifynl-callback-openapi.yaml` | `nl.rijksoverheid.moz.nmc.notifynlcallback.api(.model)` | `false` |
 
 - **Het contract is de bron.** Schrijf geen DTO met de hand en bewerk niets onder
   `target/generated-sources`; pas het contract aan en bouw opnieuw. Annotatie-scanning staat uit
-  (`mp.openapi.scan.disable=true`); Quarkus publiceert het statische `openapi.yaml` op `/q/openapi`.
+  (`mp.openapi.scan.disable=true`).
+- **Wat in `META-INF/` staat, wordt gepubliceerd.** Quarkus publiceert `openapi.yaml` op
+  `/q/openapi`, samengevoegd met elk ander contract in `META-INF/`
+  (`quarkus.smallrye-openapi.additional-docs-directory`). Bij een botsing wint `openapi.yaml`:
+  `info`, `Problem` en `Violation` komen daaruit. Het callbackcontract staat daarom buiten
+  `META-INF/`, in `openapi-callback/`; `GepubliceerdeSpecTest` bewaakt dat het niet op
+  `/q/openapi` komt.
 - **Controllers implementeren de gegenereerde interface.** De interface draagt pad,
   HTTP-methode, mediatypes en bodyvalidatie; de controller alleen de implementatie. **Geen
   `@POST`, `@Path`, `@Consumes`, `@Produces` of `@Valid` op een controllermethode**: volgens de
@@ -30,7 +39,8 @@ Er zijn twee servercontracten, elk met een eigen execution van de
 - **De webhook staat als callback bij `GET .../events`**, met als sleutel `{webhookUrl}`:
   OpenAPI 3.0 kent geen losse webhooks, en de URL komt uit het register.
 - **`IdentificatieType` en `NotificatieStatusEvent`** zijn via `importMappings` gekoppeld aan de
-  bestaande klassen, zodat er geen tweede klasse ontstaat.
+  bestaande klassen, zodat er geen tweede klasse ontstaat; `IdentificatieType` ook in het
+  contactherstelcontract.
 - **Op twee plekken, en gelijk te houden:**
   - de geldige berichttypes: in de `description` van `berichtType` en in de enum `BerichtType`;
   - de contractversie: `info.version` in `openapi.yaml` en `mp.openapi.info.version` in

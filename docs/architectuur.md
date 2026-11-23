@@ -133,6 +133,11 @@ ook alleen een identificatie doorgeven en de NMC de regie laten.
 - `GET /api/nmc/v1/notificaties/events` en `PUT .../events/bevestiging`: de
   eventfeed, zie hieronder.
 - `GET /api/nmc/v1/.well-known/jwks.json`: de publieke sleutel van de webhook-JWT.
+- `POST /api/nmc/v1/contactherstellen` en `GET` en `PATCH .../contactherstellen/{contactherstelId}`:
+  alleen het contract en `ContactherstelController`. Elke operatie antwoordt 501
+  (`Problems.notImplemented`), na de bodyvalidatie uit het contract. Alle drie hebben `@Logboek`:
+  het starten met de gehashte ontvanger als betrokkene, de andere twee voorlopig met de
+  dienstverlener.
 
 ### Aanname
 
@@ -371,7 +376,8 @@ partitienaam komt in DDL; `EventPartitie` laat alleen `event_<getal>` toe.
 ### Nog niet gebouwd
 
 - een endpoint om de status van één notificatie op te vragen;
-- contactherstel, en dus ook de keuze tussen herverzending en contactherstel. Laat daar
+- contactherstel (alleen het contract staat er), en dus ook de keuze tussen herverzending en
+  contactherstel. Laat daar
   een uitbreidingspunt voor open en bouw het niet zonder afstemming;
 - de handler voor `ONGELDIG_MELDEN` (wacht op een operatie in het Profielservice-contract);
 - de Templating Service-koppeling: templates staan als vaste NotifyNL-template-IDs in
@@ -383,8 +389,8 @@ partitienaam komt in DDL; `EventPartitie` laat alleen `event_<getal>` toe.
 ## Technische stack
 
 - **Runtime:** Quarkus 3.40.1, Java 25; één Maven-module met wrapper `./mvnw`
-- **API:** contract-first uit `META-INF/openapi.yaml` en
-  `META-INF/notifynl-callback-openapi.yaml`, Quarkus REST + Jackson
+- **API:** contract-first uit `META-INF/openapi.yaml`, `META-INF/contactherstel-openapi.json`
+  en `openapi-callback/notifynl-callback-openapi.yaml`, Quarkus REST + Jackson
 - **Uitgaande clients:** quarkus-openapi-generator voor Profielservice en NotifyNL; één
   REST-client voor de webhooks van de dienstverleners, met de URL per aanroep (`@Url`)
 - **Persistentie:** PostgreSQL 18 + Hibernate ORM Panache + Flyway; in tests een embedded
