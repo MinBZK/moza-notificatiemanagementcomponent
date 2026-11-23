@@ -1,7 +1,8 @@
 # Lokale Fundament-sandbox (k3d-fundament-plugin), met moza-mock in namespace `moza-mock`.
 image:
-  # ghcr.io/minbzk/moza-notificatiemanagementcomponent:pr-66 op 19 november 2026 (#66, 8dab766)
-  digest: sha256:95445e8014ce5def6a52d31f80436340e736c11cb43cd5b3659bc739f121635c
+  # ghcr.io/minbzk/moza-notificatiemanagementcomponent:pr-109 op 23 november 2026 (#109, eabd479), gelijk aan
+  # de gedeelde omgeving. Bij een nieuwe digest met aangepaste migraties: zie "Een nieuw image en Flyway".
+  digest: sha256:d7618dc0ecf2549ae6350919166a238c7085a1315748a25c7e3e7048e61ecee9
 
 profielservice:
   url: http://moza-mock.moza-mock.svc:8080
