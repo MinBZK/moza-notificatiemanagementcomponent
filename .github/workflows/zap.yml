@@ -1,0 +1,82 @@
+# DAST: actieve OWASP ZAP API-scan tegen een deployment op ZAD, aangestuurd door de
+# gepubliceerde OpenAPI-spec. Tegen 'stable' na elke geslaagde deploy vanuit main en 's nachts;
+# op een PR die de scan zelf wijzigt tegen de preview van die PR.
+#
+# De scan stuurt per endpoint honderden aanvalsachtige verzoeken, ook naar de endpoints die
+# een notificatie versturen. Richt deze scan niet op een omgeving die naar het echte NotifyNL
+# wijst: 'stable' en 'feature' (waar een preview van erft) horen op een NotifyNL-mock te staan.
+
+name: ZAP API-scan
+
+on:
+  workflow_run:
+    workflows: ["ZAD Deploy"]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: '30 1 * * *' # elke nacht om 01:30 UTC
+  workflow_dispatch:
+  # Een PR die de scan wijzigt, draait hem direct tegen de eigen preview.
+  pull_request:
+    paths:
+      - .github/workflows/zap.yml
+      - .zap/**
+
+permissions: read-all
+
+# Twee scans tegelijk tegen dezelfde omgeving verstoren elkaars resultaat.
+concurrency:
+  group: zap-api-scan-${{ github.event.pull_request.number || 'stable' }}
+  cancel-in-progress: false
+
+env:
+  DOEL_URL: >-
+    ${{ github.event_name == 'pull_request'
+    && format('https://nmcapi-pr-{0}-nd-j7s.rig.prd1.gn2.quattro.rijksapps.nl', github.event.pull_request.number)
+    || 'https://nmcapi-stable-nd-j7s.rig.prd1.gn2.quattro.rijksapps.nl' }}
+
+jobs:
+  scan:
+    # 'ZAD Deploy' draait ook voor PR's; alleen een geslaagde push-deploy naar main telt.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read # de status van de preview-deploy lezen
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # 'ZAD Deploy' start tegelijk met deze workflow; zonder wachten scant ZAP het vorige image.
+      - name: Wacht op de preview-deploy
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          for poging in $(seq 90); do
+            status=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/check-runs?check_name=deploy-preview" \
+              --jq '.check_runs[0] | "\(.status) \(.conclusion)"')
+            case "$status" in
+              "completed success") exit 0 ;;
+              completed*) echo "De preview-deploy is niet geslaagd: $status"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "De preview-deploy was na een kwartier nog niet klaar."
+          exit 1
+      - name: ZAP API-scan
+        uses: zaproxy/action-api-scan@5158fe4d9d8fcc75ea204db81317cce7f9e5453d # v0.10.0
+        with:
+          target: ${{ env.DOEL_URL }}/q/openapi?format=json
+          format: openapi
+          rules_file_name: .zap/rules.tsv
+          # Het rapport (HTML/JSON/Markdown) komt als artifact bij de run; bevindingen
+          # worden opgevolgd in MinBZK/MijnOverheidZakelijk, niet als issue in deze repo.
+          artifact_name: zap-rapport
+          allow_issue_writing: false
+          fail_action: true

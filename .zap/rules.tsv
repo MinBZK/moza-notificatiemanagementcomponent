@@ -1,0 +1,4 @@
+# Geaccepteerde ZAP-meldingen voor de nachtelijke API-scan (.github/workflows/zap.yml).
+# Eén regel per scanregel, gescheiden door tabs: <regel-id>	<IGNORE|WARN|FAIL>	<reden>
+100001	IGNORE	Unexpected Content-Type: 404 op paden die ZAP zelf probeert en die het NMC niet heeft
+10054	IGNORE	Cookie with SameSite Attribute None: routeringscookie van het ZAD-platform, niet van het NMC
