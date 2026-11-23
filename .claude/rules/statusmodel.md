@@ -40,7 +40,9 @@ een wijziging niet mag breken.
   Anders claimt een tweede pod dezelfde taak.
 - **Onderscheid een externe fout van een eigen fout.** Een externe storing (5xx,
   verbindingsfout, 429) stelt uit zonder poging te verbruiken; alleen een fout in het verzoek
-  van de NMC kost een poging. Een onverwachte exception telt als poging.
+  van de NMC kost een poging. Een onverwachte exception telt als poging. Uitzondering: een 400
+  van de Profielservice stelt uit, omdat een gewijzigd contract anders elke centrale
+  notificatie op een eindstatus zet.
 - **Een query op `taak` noemt de `soort`**: de tabel is per soort gepartitioneerd.
 
 ## Ontvangen en terugmelden

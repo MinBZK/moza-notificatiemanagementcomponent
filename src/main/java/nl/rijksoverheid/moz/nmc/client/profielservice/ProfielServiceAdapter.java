@@ -59,8 +59,9 @@ public class ProfielServiceAdapter {
         } catch (WebApplicationException e) {
             int status = e.getResponse().getStatus();
 
-            // 400, 404 en 422 gaan over de partij: een onbekend of ongeldig nummer.
-            if (status == 400 || status == 404 || status == 422) {
+            // 404 en 422 gaan over de partij: een onbekend nummer. Een 400 gaat over de vorm van het
+            // verzoek van het NMC en zegt niets over de partij.
+            if (status == 404 || status == 422) {
                 throw new PartijNietGevondenException("Geen partij gevonden met de opgegeven identificatie (status "
                         + status + ")");
             }

@@ -97,11 +97,22 @@ class ProfielServiceAdapterTest {
         assertThrows(ProfielServiceException.class, () -> adapter.zoekEmailAdres(standaardIdentificatie()));
     }
 
-    // Een ongeldig nummer gaat over de partij, net als een onbekend nummer.
+    // Een 400 gaat over de vorm van het verzoek van het NMC, niet over de partij.
     @Test
-    void zoekEmailAdres_400_gooitPartijNietGevondenException() {
+    void zoekEmailAdres_400_gooitProfielServiceExceptionMetStatus() {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
                 .thenThrow(new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build()));
+
+        ProfielServiceException e = assertThrows(ProfielServiceException.class,
+                () -> adapter.zoekEmailAdres(standaardIdentificatie()));
+
+        assertEquals(Optional.of(400), e.status());
+    }
+
+    @Test
+    void zoekEmailAdres_422_gooitPartijNietGevondenException() {
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenThrow(new WebApplicationException(Response.status(422).build()));
 
         assertThrows(PartijNietGevondenException.class, () -> adapter.zoekEmailAdres(standaardIdentificatie()));
     }

@@ -18,6 +18,8 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.UUID;
 
@@ -122,6 +124,26 @@ class CentraleNotificatieControllerTest {
                 .when().post(PAD)
                 .then()
                 .statusCode(400);
+    }
+
+    // De Profielservice wijst deze waarden met een 400 af; de intake weigert ze daarom zelf.
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "\"dienstverlener\": \" \"",
+            "\"dienstverlener\": \"Gemeente\\nVoorbeeld\"",
+            "\"dienstverlener\": \"Gemeente Voorbeeld\", \"dienst\": \" \"",
+            "\"dienstverlener\": \"Gemeente Voorbeeld\", \"dienst\": \"Parkeer\\nvergunning\""
+    })
+    void notificatieAannemen_dienstverlenerOfDienstBlancoOfMetRegeleinde_retourneert400(String velden) {
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"identificatieType\": \"KVK\", \"identificatieNummer\": \"12345678\", " + velden
+                        + ", \"berichtType\": \"Stuurgroep Agenda\"}")
+                .when().post(PAD)
+                .then()
+                .statusCode(400);
+
+        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
     }
 
     @Test

@@ -17,9 +17,9 @@ asynchrone bezorgstatus:
    `reference`. De notificatie gaat via `in-verzending` naar `verzonden`.
 4. Is er geen partij of geen e-mailadres, of weigert NotifyNL het adres, dan eindigt
    de notificatie in `niet-bezorgbaar`. Een storing bij de Profielservice of NotifyNL, ook
-   een geweigerde key of toegang (401, 403), stelt de taak uit; een fout in het verzoek
-   van de NMC kost een poging, en na `nmc.taak.max-pogingen` eindigt de notificatie in
-   `technisch-mislukt`.
+   een geweigerde key of toegang (401, 403) of een 400 van de Profielservice, stelt de taak
+   uit; een fout in het verzoek van de NMC aan NotifyNL kost een poging, en na
+   `nmc.taak.max-pogingen` eindigt de notificatie in `technisch-mislukt`.
 5. NotifyNL roept asynchroon `POST /api/nmc/v1/notifynl-callback` aan met de
    bezorgstatus (delivery receipt).
 6. De NMC legt de uitkomst op de verzendpoging vast en voert de bijbehorende

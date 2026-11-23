@@ -161,10 +161,10 @@ public class VerzendTaakHandler implements TaakHandler {
                         verzending.pogingId().toString());
             }
         } catch (ProfielServiceException e) {
-            // Een 401 of 403 ligt aan de aanroep van het NMC, niet aan de poging: elke notificatie zou
-            // anders in de tijd dat de toegang hapert op technisch-mislukt eindigen. Het wachten wordt
-            // alleen door geldig_tot begrensd.
-            if (e.status().filter(s -> s == 401 || s == 403).isPresent()) {
+            // Een 400, 401 of 403 ligt aan de aanroep van het NMC, niet aan de poging: elke notificatie
+            // zou anders in de tijd dat het verzoek of de toegang niet klopt op een eindstatus eindigen.
+            // Het wachten wordt alleen door geldig_tot begrensd.
+            if (e.status().filter(s -> s == 400 || s == 401 || s == 403).isPresent()) {
                 Log.errorf(e, "Profielservice weigert de aanroep voor notificatie %s; verzendtaak uitgesteld",
                         verzending.notificatieId());
 
