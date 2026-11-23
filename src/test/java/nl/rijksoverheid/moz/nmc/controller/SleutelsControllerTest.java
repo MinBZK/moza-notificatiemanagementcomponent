@@ -20,6 +20,7 @@ class SleutelsControllerTest {
                 .then()
                 .statusCode(200)
                 .contentType("application/json")
+                .header("Cache-Control", "public, max-age=3600")
                 .body("keys", hasSize(1))
                 .body("keys[0].kty", equalTo("RSA"))
                 .body("keys[0].use", equalTo("sig"))

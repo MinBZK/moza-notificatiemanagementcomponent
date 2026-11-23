@@ -10,6 +10,7 @@ import nl.rijksoverheid.moz.nmc.config.WissenConfig;
 import nl.rijksoverheid.moz.nmc.service.Opruimtermijnen;
 
 import java.time.Duration;
+import java.util.Optional;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -52,6 +53,20 @@ public final class TestConfig {
 
         WebhookConfig config = mock(WebhookConfig.class);
         when(config.jwt()).thenReturn(jwt);
+
+        return config;
+    }
+
+    /**
+     * Een webhook-configuratie met de extra sleutel van een rotatie; {@code null} laat een waarde weg.
+     */
+    public static WebhookConfig webhookJwtMetExtraSleutel(String privateKey, String keyId, String extraPublicKey,
+                                                          String extraKeyId, Duration jwksMaxAge) {
+        WebhookConfig config = webhookJwt(privateKey, keyId, "https://nmc.example.nl", Duration.ofMinutes(2));
+        WebhookConfig.Jwt jwt = config.jwt();
+        when(jwt.extraPublicKey()).thenReturn(Optional.ofNullable(extraPublicKey));
+        when(jwt.extraKeyId()).thenReturn(Optional.ofNullable(extraKeyId));
+        when(jwt.jwksMaxAge()).thenReturn(jwksMaxAge);
 
         return config;
     }
