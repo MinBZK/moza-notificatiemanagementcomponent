@@ -1,0 +1,4 @@
+# Dekkingscontrole op gewijzigde regels (.github/workflows/maven.yml). Na een wijziging hier
+# requirements.txt opnieuw genereren met:
+#   pip-compile --generate-hashes --strip-extras --no-header requirements.in
+diff-cover==11.0.4
