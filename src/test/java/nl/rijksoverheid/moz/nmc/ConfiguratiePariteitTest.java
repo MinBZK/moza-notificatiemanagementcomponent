@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -42,6 +43,42 @@ class ConfiguratiePariteitTest {
         assertEquals(jacocoExcludesUitPom(), uitProperties);
     }
 
+    // Excludes op een execution zou de pariteitstest hierboven niet zien.
+    @Test
+    void jacocoExecutions_inPom_hebbenGeenEigenExcludes() throws Exception {
+        assertEquals(List.of(), executionsMetEigenExcludes(POM));
+    }
+
+    @Test
+    void executionsMetEigenExcludes_vindtAlleenDieMetExcludes(@TempDir Path map) throws Exception {
+        Path pom = map.resolve("pom.xml");
+        Files.writeString(pom, """
+                <project><build><plugins><plugin>
+                  <artifactId>jacoco-maven-plugin</artifactId>
+                  <configuration><excludes><exclude>**/api/**</exclude></excludes></configuration>
+                  <executions>
+                    <execution><id>prepare-agent</id></execution>
+                    <execution><id>report</id><configuration><formats/></configuration></execution>
+                    <execution><id>check</id><configuration><excludes><exclude>x</exclude></excludes></configuration></execution>
+                  </executions>
+                </plugin></plugins></build></project>
+                """);
+
+        assertEquals(List.of("check"), executionsMetEigenExcludes(pom));
+    }
+
+    @Test
+    void executionsMetEigenExcludes_zonderExecutions_isLeeg(@TempDir Path map) throws Exception {
+        Path pom = map.resolve("pom.xml");
+        Files.writeString(pom, """
+                <project><build><plugins><plugin>
+                  <artifactId>jacoco-maven-plugin</artifactId>
+                </plugin></plugins></build></project>
+                """);
+
+        assertEquals(List.of(), executionsMetEigenExcludes(pom));
+    }
+
     // ApiVersionFilter stuurt de waarde uit application.properties mee als API-Version-header.
     @Test
     void contractversie_inContractEnProperties_isGelijk() throws Exception {
@@ -62,31 +99,59 @@ class ConfiguratiePariteitTest {
     }
 
     private static List<String> jacocoExcludesUitPom() throws Exception {
-        Document pom = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(POM.toFile());
-        NodeList plugins = pom.getElementsByTagName("plugin");
+        Element configuratie = kind(jacocoPlugin(POM), "configuration");
+        assertNotNull(configuratie, "jacoco-maven-plugin heeft geen configuration op pluginniveau");
+        NodeList excludes = configuratie.getElementsByTagName("exclude");
+        List<String> resultaat = new ArrayList<>();
+
+        for (int j = 0; j < excludes.getLength(); j++) {
+            resultaat.add(excludes.item(j).getTextContent().trim());
+        }
+
+        assertFalse(resultaat.isEmpty(), "jacoco-maven-plugin heeft geen excludes");
+
+        return resultaat;
+    }
+
+    /**
+     * De id's van de executions van de jacoco-maven-plugin met eigen {@code excludes}. Die vervangen
+     * de excludes op pluginniveau, en die vergelijkt de pariteitstest alleen.
+     */
+    private static List<String> executionsMetEigenExcludes(Path pom) throws Exception {
+        List<String> resultaat = new ArrayList<>();
+        Element executions = kind(jacocoPlugin(pom), "executions");
+
+        if (executions == null) {
+            return resultaat;
+        }
+
+        NodeList kinderen = executions.getElementsByTagName("execution");
+
+        for (int i = 0; i < kinderen.getLength(); i++) {
+            Element execution = (Element) kinderen.item(i);
+            Element configuratie = kind(execution, "configuration");
+
+            if (configuratie != null && kind(configuratie, "excludes") != null) {
+                resultaat.add(kindTekst(execution, "id"));
+            }
+        }
+
+        return resultaat;
+    }
+
+    private static Element jacocoPlugin(Path pom) throws Exception {
+        Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(pom.toFile());
+        NodeList plugins = document.getElementsByTagName("plugin");
 
         for (int i = 0; i < plugins.getLength(); i++) {
             Element plugin = (Element) plugins.item(i);
 
-            if (!"jacoco-maven-plugin".equals(kindTekst(plugin, "artifactId"))) {
-                continue;
+            if ("jacoco-maven-plugin".equals(kindTekst(plugin, "artifactId"))) {
+                return plugin;
             }
-
-            Element configuratie = kind(plugin, "configuration");
-            assertNotNull(configuratie, "jacoco-maven-plugin heeft geen configuration op pluginniveau");
-            NodeList excludes = configuratie.getElementsByTagName("exclude");
-            List<String> resultaat = new ArrayList<>();
-
-            for (int j = 0; j < excludes.getLength(); j++) {
-                resultaat.add(excludes.item(j).getTextContent().trim());
-            }
-
-            assertFalse(resultaat.isEmpty(), "jacoco-maven-plugin heeft geen excludes");
-
-            return resultaat;
         }
 
-        throw new AssertionError("jacoco-maven-plugin niet gevonden in " + POM);
+        throw new AssertionError("jacoco-maven-plugin niet gevonden in " + pom);
     }
 
     // Het eerste ingesprongen version-veld onder het topniveau-blok info.
