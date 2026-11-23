@@ -114,6 +114,22 @@ class EventfeedControllerTest {
     }
 
     @Test
+    void bevestiging_aanroeplimietBereikt_geeft429MetRetryAfterEnSchrijftNiets() {
+        when(aanroeplimiet.registreer(any())).thenReturn(false);
+        when(aanroeplimiet.secondenTotVolgendVenster()).thenReturn(17);
+
+        given().contentType(ContentType.JSON).body("{\"cursor\": \"" + new Cursor(1, 1, 1).codeer() + "\"}")
+                .when().put(BEVESTIGING)
+                .then()
+                .statusCode(429)
+                .header("Retry-After", "17")
+                .body("type", equalTo(Problems.TYPE_AANROEPLIMIET_OVERSCHREDEN.toString()));
+
+        assertTrue(QuarkusTransaction.requiringNew()
+                .call(() -> bevestigingRepository.findByIdOptional(NotificatieFixtures.DV_ID).isEmpty()));
+    }
+
+    @Test
     void bevestiging_zonderOfMetOngeldigeCursor_geeft400_enVervallen_geeft410() {
         given().contentType(ContentType.JSON).body("{\"cursor\": \" \"}").when().put(BEVESTIGING).then().statusCode(400);
         given().contentType(ContentType.JSON).when().put(BEVESTIGING).then().statusCode(400);
