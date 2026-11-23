@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -8,6 +9,7 @@ import java.time.OffsetDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@Tag("unit")
 class OpruimtermijnenTest {
 
     private static final OffsetDateTime MOMENT = OffsetDateTime.parse("2026-09-01T10:00:00Z");

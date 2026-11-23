@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -10,6 +11,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+@Tag("unit")
 class NotifyNLNavraagmomentenTest {
 
     private static final OffsetDateTime VERZONDEN = OffsetDateTime.parse("2030-01-01T10:00:00Z");

@@ -7,6 +7,7 @@ import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.service.TaakClaimer;
 import nl.rijksoverheid.moz.nmc.service.TaakHandler;
 import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -20,6 +21,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 // Zonder Quarkus: in de applicatie heeft inmiddels elke soort een handler.
+@Tag("unit")
 class TaakWorkerUnitTest {
 
     private final TaakClaimer taakClaimer = mock(TaakClaimer.class);

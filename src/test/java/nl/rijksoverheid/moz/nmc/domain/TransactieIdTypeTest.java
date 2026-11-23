@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.sql.ResultSet;
@@ -13,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+@Tag("unit")
 class TransactieIdTypeTest {
 
     private final TransactieIdType type = new TransactieIdType();

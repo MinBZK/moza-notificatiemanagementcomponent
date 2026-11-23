@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
@@ -8,6 +9,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@Tag("unit")
 class NotificatieStatusTest {
 
     // Legt de volledige set vast, zodat een nieuwe status een bewuste keuze vraagt.

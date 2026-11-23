@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -26,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * Leest de bronbestanden en niet de gestarte applicatie: een afwijking moet hier falen, ook als
  * Quarkus de ene waarde over de andere heen legt.
  */
+@Tag("unit")
 class ConfiguratiePariteitTest {
 
     private static final Path POM = Path.of("pom.xml");

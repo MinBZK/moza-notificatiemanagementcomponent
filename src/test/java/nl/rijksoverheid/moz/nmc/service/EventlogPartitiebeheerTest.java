@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -8,6 +9,7 @@ import java.time.Duration;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 // De configuratiecontroles; het partitieplan staat in EventPartitieTest, de DDL in OnderhoudTaakHandlerTest.
+@Tag("unit")
 class EventlogPartitiebeheerTest {
 
     @Test

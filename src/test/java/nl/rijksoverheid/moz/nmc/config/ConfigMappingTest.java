@@ -5,6 +5,7 @@ import io.smallrye.config.ConfigValidationException;
 import io.smallrye.config.PropertiesConfigSource;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.validator.BeanValidationConfigValidatorImpl;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -25,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code application.properties}; elke test overschrijft daar één waarde. De validator is die van
  * SmallRye en niet de variant die Quarkus bij het bouwen van de applicatie genereert.
  */
+@Tag("unit")
 class ConfigMappingTest {
 
     // Deze waarden komen in de applicatie uit de omgeving; application.properties laat ze leeg.
