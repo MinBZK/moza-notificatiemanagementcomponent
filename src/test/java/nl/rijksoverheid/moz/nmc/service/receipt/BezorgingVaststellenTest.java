@@ -29,6 +29,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -41,7 +42,12 @@ import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.poging;
 import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.taken;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 // %test: vaststellingstermijn 7 dagen, callback-venster 1 dag.
 @QuarkusTest
@@ -226,6 +232,26 @@ class BezorgingVaststellenTest {
 
         assertEquals(NotificatieStatus.BEZORGD, notificatie(bezorgd.notificatieId()).getStatus());
         assertEquals(List.of(taak.getId()), taken().stream().map(Taak::getId).toList());
+    }
+
+    // Het verwijderen van een notificatie neemt haar taken mee; zonder notificatie is er niets vast te stellen.
+    // Met mocks, omdat de taak in de database met de notificatie verdwijnt.
+    @Test
+    void voerUit_notificatieBestaatNietMeer_rondtAfZonderOvergang() {
+        Overgangsfunctie overgangsfunctieMock = mock(Overgangsfunctie.class);
+        NotificatieRepository notificatieRepositoryMock = mock(NotificatieRepository.class);
+        TaakClaimer taakClaimer = mock(TaakClaimer.class);
+        BezorgingVaststellenTaakHandler handler = new BezorgingVaststellenTaakHandler(overgangsfunctieMock,
+                notificatieRepositoryMock, taakClaimer);
+        Taak taak = new Taak(TaakSoort.BEZORGING_VASTSTELLEN, NotificatieFixtures.DV_ID, UUID.randomUUID(),
+                OffsetDateTime.now(ZoneOffset.UTC), null, null);
+        when(notificatieRepositoryMock.vergrendel(taak.getNotificatieId())).thenReturn(Optional.empty());
+
+        assertInstanceOf(TaakUitkomst.AlAfgerond.class, handler.voerUit(taak, () -> {
+        }));
+
+        verifyNoInteractions(overgangsfunctieMock);
+        verify(taakClaimer).rondAf(taak);
     }
 
     private record Bezorgd(UUID notificatieId, UUID pogingId, UUID notifyId) {
