@@ -8,6 +8,9 @@ import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.service.DvProvider;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -35,11 +38,16 @@ class ContactherstelControllerTest {
     @Inject
     DvProvider dvProvider;
 
-    @Test
-    void contactherstelStarten_geldigeAanvraag_geeft501() {
+    @ParameterizedTest
+    @CsvSource({"niet-bezorgbaar, kennisgeving", "bezorgstatus-onbekend, attendering"})
+    void contactherstelStarten_geldigeAanvraag_geeft501(String notificatieStatus, String berichtsoort) {
+        Map<String, Object> aanvraag = geldigeStartAanvraag();
+        aanvraag.put("notificatieStatus", notificatieStatus);
+        aanvraag.put("berichtsoort", berichtsoort);
+
         given()
                 .contentType(ContentType.JSON)
-                .body(geldigeStartAanvraag())
+                .body(aanvraag)
                 .when().post(PAD)
                 .then()
                 .statusCode(501)
@@ -132,11 +140,12 @@ class ContactherstelControllerTest {
         verify(logboekContext).setDataSubjectType("DIENSTVERLENER");
     }
 
-    @Test
-    void contactherstelBijwerken_afgerond_geeft501() {
+    @ParameterizedTest
+    @ValueSource(strings = {"afgerond", "ingetrokken"})
+    void contactherstelBijwerken_geldigeStatus_geeft501(String status) {
         given()
                 .contentType(ContentType.JSON)
-                .body(Map.of("status", "afgerond"))
+                .body(Map.of("status", status))
                 .when().patch(PAD_MET_ID, UUID.randomUUID())
                 .then()
                 .statusCode(501)
