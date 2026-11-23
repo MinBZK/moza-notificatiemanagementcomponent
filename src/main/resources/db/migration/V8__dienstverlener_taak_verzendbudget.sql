@@ -39,7 +39,7 @@ CREATE TABLE taak (
     due timestamp(6) with time zone NOT NULL,
     lease_tot timestamp(6) with time zone,
     claim_epoch bigint NOT NULL DEFAULT 0,
-    pogingen integer NOT NULL DEFAULT 0,
+    pogingen smallint NOT NULL DEFAULT 0,
     trace_id varchar(64),
     status varchar(16) NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'MISLUKT')),
     payload jsonb,

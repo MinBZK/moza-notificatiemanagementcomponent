@@ -13,7 +13,7 @@ ALTER TABLE notificatie ADD COLUMN reden varchar(32) CHECK (reden IN (
 CREATE TABLE poging (
     id uuid PRIMARY KEY,
     notificatie_id uuid NOT NULL REFERENCES notificatie(id) ON DELETE CASCADE,
-    nummer integer NOT NULL,
+    nummer smallint NOT NULL,
     status varchar(32) NOT NULL CHECK (status IN (
         'GEPLAND', 'VERZONDEN', 'BEZORGD', 'TIJDELIJK_MISLUKT', 'PERMANENT_MISLUKT', 'TECHNISCH_MISLUKT', 'ONBEKEND'
     )),
