@@ -22,11 +22,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * Draait V16 over een database met notificaties met en zonder eindstatus, events in de oude
- * default-partitie en een webhookpositie. Eigen embedded PostgreSQL, omdat de database op V15
+ * Draait V15 over een database met notificaties met en zonder eindstatus, events in de oude
+ * default-partitie en een webhookpositie. Eigen embedded PostgreSQL, omdat de database op V14
  * stilgezet moet worden.
  */
-class V16MigratieTest {
+class V15MigratieTest {
 
     private static final String DB_USER = "postgres";
     private static final String DB_PASSWORD = "postgres";
@@ -48,9 +48,9 @@ class V16MigratieTest {
     }
 
     @Test
-    void v16_vultEindstatusOpPlantWistakenEnVerplaatstHetEventlogNaarEenBereikpartitie() throws SQLException {
+    void v15_vultEindstatusOpPlantWistakenEnVerplaatstHetEventlogNaarEenBereikpartitie() throws SQLException {
         String jdbcUrl = nieuweDatabase();
-        migreerTot(jdbcUrl, "15");
+        migreerTot(jdbcUrl, "14");
 
         UUID eindstatus = UUID.randomUUID();
         UUID eindstatusGewist = UUID.randomUUID();
@@ -69,7 +69,7 @@ class V16MigratieTest {
             verbinding.commit();
         }
 
-        migreerTot(jdbcUrl, "16");
+        migreerTot(jdbcUrl, "15");
 
         try (Connection verbinding = DriverManager.getConnection(jdbcUrl, DB_USER, DB_PASSWORD)) {
             assertEquals(LAATSTE_OVERGANG.toInstant(), eindstatusOp(verbinding, eindstatus).toInstant());
@@ -105,7 +105,7 @@ class V16MigratieTest {
     }
 
     private static String nieuweDatabase() throws SQLException {
-        String database = "v16migratie_" + UUID.randomUUID().toString().replace("-", "");
+        String database = "v15migratie_" + UUID.randomUUID().toString().replace("-", "");
 
         try (Connection beheer = DriverManager.getConnection(
                 "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres", DB_USER, DB_PASSWORD);

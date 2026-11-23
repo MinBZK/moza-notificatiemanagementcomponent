@@ -326,10 +326,10 @@ de logica die kiest tussen herverzending en contactherstel.
   wist met native SQL in `NotificatieRepository`, zonder versie en event. De versleutelde
   kolommen en `kek_versie` staan daarom op `updatable = false`: een overgang op een eerder
   geladen entity schrijft een gewiste of geherwrapte sleutel anders terug.
-  `OnderhoudTaakHandler` is een taak per systeem (eerste rij uit V16) die zichzelf opnieuw
+  `OnderhoudTaakHandler` is een taak per systeem (eerste rij uit V15) die zichzelf opnieuw
   plant; elke stap loopt in batches van `nmc.onderhoud.batch` met een eigen transactie, en
   een stap die faalt houdt de andere niet op.
-- **Het eventlog heeft bereikpartities op `transactie_id`.** V16 maakte van de oude
+- **Het eventlog heeft bereikpartities op `transactie_id`.** V15 maakte van de oude
   default-partitie `event_0` (tot de eerstvolgende transactie-id plus de Flyway-placeholder
   `event_marge`) en een nieuwe, lege `event_standaard`. `EventlogPartitiebeheer` maakt `event_<van>` aan
   zodra de lopende partitie voor 80% gevuld is, als losse tabel die met `ATTACH PARTITION` wordt
@@ -510,8 +510,8 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
   met `-- flyway:executeInTransaction=false`. Faalt de bouw halverwege, dan blijft er een
   `INVALID` index achter die handmatig gedropt moet worden. `V3__notificatie_retentie.sql` en
   `V9__aanname_verzendtaak.sql` doen het bewust zonder: die indexen zijn er vóór de eerste
-  productiedata. V16 ook, omdat de retentiejob het register tot dan op zeven dagen hield.
-- **De databaserol heeft timeouts** (V16): `statement_timeout` 30s, `transaction_timeout`
+  productiedata. V15 ook, omdat de retentiejob het register tot dan op zeven dagen hield.
+- **De databaserol heeft timeouts** (V15): `statement_timeout` 30s, `transaction_timeout`
   1min en `idle_in_transaction_session_timeout` 30s, per database gezet met `ALTER ROLE`.
   Ze gelden ook voor Flyway. Een migratie die langer kan duren zet ze voor de eigen
   transactie uit met `SET LOCAL statement_timeout = 0` en `SET LOCAL transaction_timeout = 0`.
@@ -520,7 +520,7 @@ ClusterFuzzLite via `.clusterfuzzlite/build.sh`; zie de `cflite_*`-workflows.
   zijn, anders breekt het statement na 30 seconden af en blijft er een `INVALID` index achter.
 - **Een `UPDATE` op `notificatie` in een migratie zet deferred triggercontroles klaar**, en
   zolang die openstaan weigert PostgreSQL DDL op die tabel ("pending trigger events"). Zet
-  na zo'n update `SET CONSTRAINTS notificatie_overgang IMMEDIATE`, zoals V16 doet.
+  na zo'n update `SET CONSTRAINTS notificatie_overgang IMMEDIATE`, zoals V15 doet.
 - **Houd de migratie en de entity gelijk.** In elk profiel staat
   `schema-management.strategy=validate`: wijkt een entity af van het gemigreerde
   schema, dan start de applicatie niet, en de testsuite dus ook niet.

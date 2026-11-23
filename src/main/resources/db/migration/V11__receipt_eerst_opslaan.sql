@@ -1,4 +1,4 @@
--- V12: receipts van NotifyNL worden eerst als taak opgeslagen en daarna verwerkt. Meerdere receipts
+-- V11: receipts van NotifyNL worden eerst als taak opgeslagen en daarna verwerkt. Meerdere receipts
 -- voor één notificatie mogen tegelijk open staan, dus receipttaken vallen buiten de unieke index op
 -- (notificatie, soort); een receipt is uniek op poging, status en tijdstip uit de receipt, zodat
 -- een herhaling van NotifyNL geen tweede taak oplevert.

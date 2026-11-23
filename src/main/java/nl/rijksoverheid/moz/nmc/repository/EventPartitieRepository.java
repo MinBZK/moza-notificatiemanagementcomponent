@@ -97,7 +97,7 @@ public class EventPartitieRepository {
         entityManager.createNativeQuery("SET LOCAL lock_timeout = '" + timeout.toMillis() + "ms'").executeUpdate();
     }
 
-    /** Geeft de lopende transactie meer tijd dan de timeouts van de databaserol (V16) toestaan. */
+    /** Geeft de lopende transactie meer tijd dan de timeouts van de databaserol (V15) toestaan. */
     public void zetTransactieTimeouts(Duration timeout) {
         entityManager.createNativeQuery("SET LOCAL statement_timeout = '" + timeout.toMillis() + "ms'").executeUpdate();
         entityManager.createNativeQuery("SET LOCAL transaction_timeout = '" + timeout.toMillis() + "ms'").executeUpdate();

@@ -78,7 +78,7 @@ Benodigde env-vars op die deployment:
 > `application.properties` bevat hiervoor geen placeholders meer — alle prod-config loopt
 > uniform via deze `QUARKUS_*`-env-vars.
 
-> Migratie V16 zet `statement_timeout` (30s), `transaction_timeout` (1min) en
+> Migratie V15 zet `statement_timeout` (30s), `transaction_timeout` (1min) en
 > `idle_in_transaction_session_timeout` (30s) op de databaserol van de datasource, voor
 > deze database. Dat vraagt geen extra rechten: een rol mag zijn eigen defaults zetten.
 > `transaction_timeout` bestaat vanaf PostgreSQL 17. De onderhoudstaak maakt en verwijdert
@@ -89,7 +89,7 @@ Benodigde env-vars op die deployment:
 > opruimen van het eventlog lezen onder het watermerk van de oudste lopende transactie, en
 > dat watermerk geldt per instantie, niet per database: een lange of vergeten
 > schrijftransactie van een andere applicatie op dezelfde instantie zet de feed voor alle
-> dienstverleners stil, en de timeouts uit V16 gelden alleen voor de rol van de NMC. Is een
+> dienstverleners stil, en de timeouts uit V15 gelden alleen voor de rol van de NMC. Is een
 > gedeelde instantie onvermijdelijk, bewaak dan de leeftijd van de oudste open transactie
 > van de hele instantie (de watermerkmetriek uit MinBZK/MijnOverheidZakelijk#1253).
 
