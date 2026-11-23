@@ -20,7 +20,8 @@ import java.util.function.IntSupplier;
 /**
  * Het onderhoud per systeem: maakt de volgende partitie van het eventlog aan, herwrapt sleutels onder
  * een oudere KEK-versie, verwijdert notificaties (met hun pogingen) na de bewaartermijn van het
- * afleverbewijs en ruimt het eventlog op. Alles in kleine batches met een eigen, korte transactie,
+ * afleverbewijs en ruimt het eventlog op. Alles in batches van {@code nmc.onderhoud.batch} met een
+ * eigen, korte transactie,
  * omdat elke lopende schrijftransactie het watermerk van de feed vasthoudt.
  * <p>
  * De taak plant zichzelf na elke ronde opnieuw; migratie V16 zet de eerste rij. Een stap die faalt

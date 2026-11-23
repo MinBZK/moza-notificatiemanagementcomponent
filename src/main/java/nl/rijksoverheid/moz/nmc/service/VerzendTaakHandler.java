@@ -44,8 +44,12 @@ import java.util.UUID;
  * ({@code verzonden} naar {@code verzonden}). Na {@code geldig_tot} wordt geen poging meer gestart en
  * eindigt de notificatie in {@code verlopen}; een poging die al bij NotifyNL ligt loopt door.
  * <p>
- * Een fout over het adres of de partij leidt tot een eindstatus; een storing bij NotifyNL of de Profielservice
- * stelt de taak uit zonder dat het de notificatie een poging kost. Een herclaim na een verlopen lease
+ * Een fout over het adres of de partij leidt tot een eindstatus ({@code niet-bezorgbaar}): een partij die
+ * de Profielservice niet kent of die geen e-mailadres heeft, of een {@code ValidationError} van NotifyNL op {@code email_address}. Een andere
+ * 4xx van NotifyNL, behalve 401, 403 en 429, ligt aan het verzoek van het NMC en kost een poging. Een
+ * 401, 403, 429, 5xx of verbindingsfout, een ongeldige NotifyNL-configuratie, elke andere fout van de
+ * Profielservice en een ontbrekende KEK-versie stellen de taak uit zonder poging, begrensd door
+ * {@code geldig_tot}. Een herclaim na een verlopen lease
  * hergebruikt de poging en zoekt eerst op {@code reference}, zodat een al aangeboden e-mail niet nog
  * eens gaat.
  */

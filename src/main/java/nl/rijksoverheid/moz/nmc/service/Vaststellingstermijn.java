@@ -11,6 +11,9 @@ import java.util.Objects;
  * De termijn uit de MEBV waarbinnen een {@code delivered} nog door een faalreceipt herroepen kan
  * worden. De vaststeltaak wacht daarnaast het callback-venster van NotifyNL af, zodat een faalreceipt
  * met een tijdstip binnen de termijn die taak niet kan kruisen.
+ * <p>
+ * De termijn loopt vanaf {@code poging.bezorgd_op}, dat een latere faalreceipt niet overschrijft; pas
+ * een nieuwe bezorging na een fout begint een nieuwe termijn.
  */
 @ApplicationScoped
 public class Vaststellingstermijn {

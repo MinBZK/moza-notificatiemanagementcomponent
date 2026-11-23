@@ -4,7 +4,8 @@ Werkregels voor de NotificatieManagementComponent (NMC): wat je moet weten om
 wijzigingen aan te brengen zonder iets stilzwijgend te breken.
 
 - Overzicht, domeinmodel, API en lokaal draaien: [`README.md`](README.md).
-- Begrippen, de twee assen en hoe de mechanismen werken: [`docs/architectuur.md`](docs/architectuur.md).
+- Begrippen, de twee assen en een overzicht van de mechanismen: [`docs/architectuur.md`](docs/architectuur.md).
+  Hoe een mechanisme in detail werkt, staat in de javadoc van de klasse die het uitvoert.
 - Regels voor een deel van de code staan in `.claude/rules/`: migraties, contracten, tests en
   het statusmodel. Claude Code laadt ze vanzelf zodra je in die bestanden werkt; werk je met een
   ander hulpmiddel, lees ze dan zelf.
@@ -170,7 +171,7 @@ Haal die override pas weg als de Quarkus-BOM zelf een veilige versie levert.
   "beleveren", en niet "gooit" zonder te zeggen wat: "gooit een exception".
 - **Verwijs in commentaar niet naar dit bestand**; beschrijf de regel zelf.
 - **Houd documentatie bij in dezelfde PR.** Verander je het gedrag van een klasse, werk dan de
-  javadoc bij en, als het mechanisme daar beschreven staat, `docs/architectuur.md`. Verandert een
+  javadoc bij en, als het overzicht daar niet meer klopt, `docs/architectuur.md`. Verandert een
   regel hier of in `.claude/rules/`, pas die dan ook aan.
 
 ## Git-werkwijze

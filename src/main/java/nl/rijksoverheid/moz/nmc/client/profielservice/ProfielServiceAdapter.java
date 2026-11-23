@@ -15,6 +15,16 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 import java.util.List;
 import java.util.function.Predicate;
 
+/**
+ * De adapter naar de Profielservice: zoekt bij centrale regie het e-mailadres van een partij op. Uit de
+ * contactgegevens kiest hij eerst een e-mailadres met exact de scope Dienstverlener plus dienst, dan een
+ * met alleen de Dienstverlener als scope, dan het default-adres en dan een adres zonder scopes. Is er
+ * geen, dan gooit hij een {@link GeenEmailadresGevondenException}.
+ * <p>
+ * Een 400, 404 of 422 betekent een onbekende of ongeldige partij en wordt een
+ * {@link PartijNietGevondenException}; elke andere status en een verbindingsfout worden een
+ * {@link ProfielServiceException}.
+ */
 @ApplicationScoped
 public class ProfielServiceAdapter {
 

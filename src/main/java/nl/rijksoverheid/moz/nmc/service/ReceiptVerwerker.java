@@ -32,6 +32,18 @@ import java.util.UUID;
  * een tijdstip dat verder dan {@code nmc.receipt.klokmarge} vooruit ligt op de eigen klok wordt het
  * moment van ontvangst, omdat dat tijdstip het afleverbewijs is en een tijdstip ver in de toekomst
  * anders elke latere receipt op de poging zou blokkeren.
+ * <p>
+ * De poging wordt gezocht op de {@code reference} (het poging-id) en anders op het NotifyNL-id. Heeft
+ * de poging nog geen NotifyNL-id, dan is de receipt er eerder dan de verzend-commit: de poging neemt het
+ * id over en de verwerker doet de overgang naar {@code verzonden} namens de worker. Een ander NotifyNL-id
+ * dan dat op de poging komt van een tweede verzending na een herclaim en wordt als duplicaat op dezelfde
+ * poging vastgelegd. De poging wordt pas na het vergrendelen van de notificatie opnieuw gelezen, zodat
+ * een receipt die op de vergrendeling wachtte de uitkomst van de eerste ziet.
+ * <p>
+ * Alleen op de poging vastgelegd, zonder overgang: een faalreceipt voor een poging die niet meer de
+ * laatste is, op een bezorgde notificatie een technische fout of een faalreceipt na de
+ * vaststellingstermijn of voor een andere poging, en een tijdelijke of technische fout op {@code bezorgstatus-onbekend}. Een tussenstatus
+ * verandert niets; een onbekende status komt op de poging en wordt als ERROR gelogd.
  */
 @ApplicationScoped
 public class ReceiptVerwerker {

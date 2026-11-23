@@ -10,8 +10,10 @@ Het ontwerp van het statusmodel, het eventlog en de takentabel staat in
 in de MijnOverheidZakelijk-repo. Dit document beschrijft hoe de NMC dat ontwerp
 uitvoert.
 
-**Houd dit document bij.** Verandert het gedrag van een mechanisme dat hier beschreven
-staat, werk dan de betreffende sectie in dezelfde PR bij.
+Dit document geeft het overzicht. Hoe een mechanisme in detail werkt (foutafhandeling,
+wachttijden, cursorformaat, partitiegrenzen) staat in de javadoc van de klasse die hier
+genoemd wordt. **Houd beide bij.** Verandert het gedrag van een mechanisme, werk dan de
+javadoc bij en, als het overzicht hier niet meer klopt, de betreffende sectie.
 
 ## Wat de NMC is
 
@@ -137,11 +139,8 @@ ook alleen een identificatie doorgeven en de NMC de regie laten.
 ### Aanname
 
 Beide intakes gaan via `AannameService`: notificatie op `aangenomen` met event 0, de
-versleutelde payload en een verzendtaak in één transactie; het quotum per
-dienstverlener per dag (`dienstverlener.quotum_per_dag`, zonder waarde daar
-`nmc.aanname.quotum-per-dag`) geeft 429.
-De controllers antwoorden 202 via `AannameResponse.notificatieAangenomen`; daarvoor genereert
-de `notificaties`-run in de pom met `returnResponse=true`.
+versleutelde payload en een verzendtaak in één transactie, met een quotum per dienstverlener
+per dag. De aanname roept de Profielservice en NotifyNL niet aan.
 
 **Eén geconfigureerde dienstverlener.** `dienstverlener` heeft één rij uit de
 migratie; `DvProvider` levert die `dv_id`, die op elke notificatie en elk event
@@ -152,83 +151,58 @@ eigen sleutel per notificatie, gewrapt met de KEK): bij decentrale regie het
 e-mailadres van de aanroeper, bij centrale regie het identificerend nummer, nooit het
 adres uit de Profielservice.
 
-### Statusmodel
+### Statusmodel en eventlog
 
 `notificatie` draagt de status en een versie, `poging` de uitkomst per verzending,
-`event` het eventlog met één rij per overgang. `Overgangsfunctie` is de enige schrijver
-van de status; een deferred databasetrigger weigert een nieuwe versie zonder event.
+`event` het eventlog met één rij per overgang en het volgnummer gelijk aan de versie. Het
+eventlog is ook het audittrail.
 
-`Overgangsfunctie` vergrendelt de `notificatie`-rij (`PESSIMISTIC_WRITE`), toetst de
-overgang aan `Overgangsregels`, verhoogt de versie met precies één en schrijft het
-event, in de transactie van de aanroeper. De deferred constraint trigger
-`notificatie_overgang` (V5) bewaakt ook schrijvers buiten Hibernate, maar controleert
-minder: een nieuwe rij begint op `AANGENOMEN`, de status verandert alleen met een nieuwe
-versie, een nieuwe versie is precies één hoger, en heeft in dezelfde transactie een event
-met die versie als volgnummer. Welke overgang toegestaan is en de vergrendeling dwingt hij
-niet af.
+`Overgangsfunctie` is de enige schrijver van de status. De deferred constraint trigger
+`notificatie_overgang` (V5) bewaakt ook schrijvers buiten Hibernate, maar controleert minder:
+een nieuwe rij begint op `AANGENOMEN`, de status verandert alleen met een nieuwe versie, die
+precies één hoger is en in dezelfde transactie een event met die versie als volgnummer heeft.
+Welke overgang toegestaan is en de vergrendeling dwingt hij niet af.
 
-`NotificatieStatus` (tien waarden, levenscyclus) en `PogingStatus` (zeven waarden,
-uitkomst per verzending) staan als `CHECK`-constraint in V4. In de API en het CloudEvent
-gaan statussen en redenen als kebab-case (`toApiValue`).
-
-Het eventlog `event` is ook het audittrail: één rij per overgang, met het volgnummer gelijk
-aan de versie van de notificatie.
+`NotificatieStatus` (levenscyclus) en `PogingStatus` (uitkomst per verzending) staan als
+`CHECK`-constraint in V4. In de API en het CloudEvent gaan statussen en redenen als
+kebab-case (`toApiValue`).
 
 ### Takentabel en worker-lus
 
-`taak` (per soort gepartitioneerd) draagt de bijwerkingen met `due` als timer;
-`TaakClaimer` claimt per ronde met `PESSIMISTIC_WRITE` en de skip-locked-hint
-(`FOR NO KEY UPDATE SKIP LOCKED`), verdeeld over de dienstverleners met werk en voor het
-verzenden en de navraag binnen het `verzendbudget` per minuut.
-`TaakWorker` draait per soort een `@Scheduled`-ronde en geeft elke taak aan de
-`TaakHandler` van die soort. Handlers: `VerzendTaakHandler`, `ReceiptTaakHandler`,
-`NotifyNLNavraagTaakHandler`, `BezorgingVaststellenTaakHandler`, `ControleTaakHandler`,
-`TerugkoppelTaakHandler`, `WisTaakHandler` en `OnderhoudTaakHandler`; voor
-`ONGELDIG_MELDEN` is er nog geen handler.
+Elke bijwerking is een rij in `taak` (per soort gepartitioneerd) met `due` als timer.
+`TaakWorker` draait per soort een ronde, `TaakClaimer` claimt de taken en verdeelt ze over de
+dienstverleners en het verzendbudget, en de `TaakHandler` van die soort voert ze uit:
 
-`ControleTaakHandler` plant zichzelf opnieuw, geeft een notificatie zonder taak de taak
-die bij haar status hoort en plant een terugkoppeltaak voor elke dienstverlener met een
-webhook die er nog geen heeft.
+| Taaksoort | Handler | Wat hij doet |
+|-----------|---------|--------------|
+| `VERZENDEN` | `VerzendTaakHandler` | verzending en herverzending |
+| `RECEIPT_VERWERKEN` | `ReceiptTaakHandler` | een opgeslagen afleverstatus verwerken |
+| `RECONCILIEREN` | `NotifyNLNavraagTaakHandler` | de afleverstatus navragen als de receipt uitblijft |
+| `BEZORGING_VASTSTELLEN` | `BezorgingVaststellenTaakHandler` | `bezorgd` na de vaststellingstermijn definitief maken |
+| `TERUGKOPPELEN` | `TerugkoppelTaakHandler` | events aan de webhook leveren |
+| `WISSEN` | `WisTaakHandler` | de sleutel wissen na een eindstatus |
+| `CONTROLE` | `ControleTaakHandler` | vangnet voor notificaties en webhooks zonder taak |
+| `ONDERHOUD` | `OnderhoudTaakHandler` | partities, KEK-rotatie en bewaartermijn |
+| `ONGELDIG_MELDEN` | nog geen | zie hieronder |
 
-### Verzenden
+### Verzenden en herverzenden
 
-`VerzendTaakHandler` doet in een eerste transactie `aangenomen` naar `in-verzending` met
-een geplande poging, roept daarbuiten de Profielservice (bij centrale regie) en NotifyNL
-aan met het poging-id als `reference`, en doet in een tweede transactie `in-verzending`
-naar `verzonden` met een navraagtaak. Een herclaim zoekt eerst op `reference`.
-
-Foutafhandeling:
-
-- Een `ValidationError` van NotifyNL op `email_address` en een partij zonder adres leiden
-  tot een eindstatus (`niet-bezorgbaar`).
-- Een andere 4xx, behalve 401, 403 en 429, ligt aan het verzoek van het NMC en kost een
-  poging.
-- 401, 403, 429, 5xx, een verbindingsfout, een ongeldige NotifyNL-configuratie en een
-  ontbrekende KEK-versie stellen de taak uit zonder poging, begrensd door `geldig_tot`.
+`VerzendTaakHandler` zet een notificatie in een eerste transactie op `in-verzending` met een
+geplande poging, roept daarbuiten de Profielservice (bij centrale regie) en NotifyNL aan met het
+poging-id als `reference`, en zet haar in een tweede transactie op `verzonden` met een
+navraagtaak. Een fout over het adres of de partij geeft een eindstatus; een fout in het verzoek
+van de NMC kost een poging; een storing stelt uit zonder poging. Welke fout waar valt, staat in
+de javadoc van `VerzendTaakHandler`; welk adres uit de Profielservice gekozen wordt in die van
+`ProfielServiceAdapter`.
 
 De verzendtaak schrijft nog geen LDV-registratie: de `@Logboek`-interceptor werkt alleen
 binnen een REST-aanroep.
 
-**Adresselectie in de Profielservice-respons** (`ProfielServiceAdapter`): eerst
-een e-mailadres met exact de scope Dienstverlener + dienst, dan een met alleen
-de Dienstverlener als scope, dan het default-adres, dan een adres zonder scopes.
-
-NotifyNL krijgt per aanroep een vers JWT: `NotifyNLVerzendAdapter` bouwt het met
-`NotifyNLJwtFactory` en zet het in `NotifyNLAuthorizationHolder`, waarna
-`NotifyNLCredentialsProvider` (een `@Alternative` op de standaard
-credentialsprovider van de extensie) het als bearer token meegeeft.
-
-### Herverzending en `geldig_tot`
-
-Een notificatie krijgt `Verzendbeleid.maxHerverzendingen` herverzendingen (standaard
-één): een `temporary-failure` of `technical-failure` op een poging daarbinnen plant een
-verzendtaak na `Verzendbeleid.herverzendWachttijd`, en de claim daarvan maakt de volgende
-poging aan (`verzonden` naar `verzonden`, met event). Op de laatste toegestane poging leidt
-een fout tot een eindstatus.
-
-`geldig_tot` (aanname plus `Verzendbeleid.geldigheid` van het berichttype) begrenst het
-starten van een poging: daarna eindigt de notificatie in `verlopen`, ook na een uitstel;
-een poging die al bij NotifyNL ligt loopt door.
+Een notificatie krijgt `Verzendbeleid.maxHerverzendingen` herverzendingen: een tijdelijke of
+technische fout plant zolang er nog een over is een nieuwe verzendtaak, en op de laatste
+toegestane poging leidt een fout tot een eindstatus. `geldig_tot` (aanname plus
+`Verzendbeleid.geldigheid` van het berichttype) begrenst het starten van een poging: daarna
+eindigt de notificatie in `verlopen`; een poging die al bij NotifyNL ligt loopt door.
 
 `ONGELDIG_MELDEN` is de taaksoort waarmee de NMC bij centrale regie een e-mailadres bij de
 Profielservice ongeldig laat verklaren (fase 3). Dat volgt op een `permanent-failure`: het
@@ -241,132 +215,55 @@ de Profielservice heeft daar nog geen operatie voor.
 ### Receipts, navraag en vaststellen
 
 Afleverstatussen komen at-least-once en ongeordend binnen. NotifyNL biedt een callback
-opnieuw aan bij elke niet-2xx; de NMC antwoordt 2xx zodra de receipt is opgeslagen, en een
-fout in de verwerking laat de taak staan.
-
-`ReceiptVerwerker` zoekt de poging op de `reference` uit de receipt (het poging-id) en
-anders op het NotifyNL-id. Heeft de poging nog geen NotifyNL-id, dan is de receipt er eerder
-dan de verzend-commit: de poging neemt het id over en de verwerker doet de overgang naar
-`verzonden` namens de worker, ook bij een tussenstatus. Een ander NotifyNL-id dan dat op de
-poging komt van een tweede verzending na een herclaim en wordt als duplicaat op dezelfde
-poging vastgelegd.
-
-De verwerker ordent per poging op het tijdstip in de receipt (`completed_at`, met `sent_at`
-en `created_at` als terugval; zonder tijdstip geldt het moment van ontvangst en gaat de
-receipt nooit vóór een al vastgelegde uitkomst); een herhaalde of oudere receipt verandert
-niets. De poging wordt pas na het vergrendelen van de notificatie opnieuw gelezen, zodat een
-receipt die op de vergrendeling wachtte de uitkomst van de eerste ziet. Een faalreceipt voor
-een poging die niet meer de laatste is, geeft geen overgang. Een tussenstatus verandert
-niets; een onbekende status komt op `poging.laatste_notify_status`, wordt op ERROR gelogd en
-verandert verder niets.
+opnieuw aan bij elke niet-2xx; de NMC antwoordt 2xx zodra `ReceiptOpslag` de receipt als taak
+heeft opgeslagen, en een fout in de verwerking laat de taak staan. `ReceiptVerwerker` legt de
+uitkomst op de poging vast en ordent op het tijdstip in de receipt, zodat een herhaalde of
+oudere receipt niets verandert.
 
 **Receipttijd en registratietijd zijn gescheiden.** Het tijdstip uit de receipt staat op
 `poging.receipt_tijdstip` en is het tijdstip voor het afleverbewijs; `event.geregistreerd`
 en `notificatie.eindstatus_op` staan op de eigen klok.
 
-**Navraag.** De verzend-commit plant per poging een navraagtaak volgens
-`NotifyNLNavraagmomenten` (`nmc.navraag.*`); `NotifyNLNavraagTaakHandler` vraagt de status
-op bij NotifyNL en geeft een uitkomst aan `ReceiptVerwerker`. Een 404 of het einde van de
-bewaartermijn van NotifyNL zet de poging op `ONBEKEND` en de notificatie op
-`bezorgstatus-onbekend`. Een verwerkte receipt rondt de navraag af.
+**Navraag.** Blijft de receipt uit, dan vraagt `NotifyNLNavraagTaakHandler` de status op
+volgens `NotifyNLNavraagmomenten`. Kent NotifyNL de verzending niet meer, dan wordt de
+notificatie `bezorgstatus-onbekend`.
 
-**Vaststellen.** `delivered` plant een vaststeltaak op het tijdstip uit de receipt plus
-`Vaststellingstermijn` (`nmc.vaststelling.*`); een faalreceipt binnen de termijn rondt die
-af, een faalreceipt met een tijdstip daarna wordt alleen op de poging vastgelegd. De termijn
-loopt vanaf `poging.bezorgd_op`, dat een latere faalreceipt niet overschrijft.
+**Vaststellen.** Een `delivered` kan binnen de `Vaststellingstermijn` nog door een faalreceipt
+herroepen worden; daarna maakt `BezorgingVaststellenTaakHandler` de notificatie
+`definitief-bezorgd`.
 
-### Eventfeed
+### Eventfeed en webhook
 
-`GET /api/nmc/v1/notificaties/events` leest het eventlog van de dienstverlener op
-(transactie-id, event-id) onder het watermerk `pg_snapshot_xmin(pg_current_snapshot())`,
-zodat een cursor nooit een event overslaat dat later committet dan een event met een hogere
-transactie-id. De cursor is base64url van `epoch:transactieId:eventId`; een ander epoch
-(`nmc.feed.cluster-epoch`), een positie onder het oudste event of boven de jongste
-transactie (`pg_snapshot_xmax`) geeft 410. `PUT .../events/bevestiging` schrijft
-`bevestiging`, alleen vooruit.
+De Dienstverlener hoort de uitkomst via twee wegen die allebei het eventlog lezen; er is geen
+push per overgang.
 
-Het opruimen van het eventlog spaart alleen partities waar een bevestiging of leverpositie in
-wijst; een nog niet bevestigde cursor kan dus vervallen en krijgt bij de volgende aanroep
-410. Dat is bewust niet afgedekt. De aanroeplimiet (`Aanroeplimiet`) telt per pod en geeft
-bij 429 een `Retry-After`.
+- **Eventfeed** (`Eventfeed`): de Dienstverlener haalt de events op met een cursor en schrijft
+  die terug als bevestiging. De feed leest onder een watermerk, zodat een cursor nooit een
+  event overslaat dat later committet. Een vervallen cursor geeft 410. De aanroeplimiet
+  (`Aanroeplimiet`) telt per pod.
+- **Webhook** (`TerugkoppelTaakHandler`, `WebhookDispatcher`): heeft een dienstverlener een
+  `webhook_url`, dan levert één terugkoppeltaak per dienstverlener de events na zijn
+  leverpositie als CloudEvents-batch aan die URL, met een ondertekende JWT. Een `2xx` is geen
+  bevestiging; die blijft de feedcursor. Een mislukte levering wacht steeds langer en pauzeert
+  de webhook uiteindelijk.
 
-### Webhook
-
-Heeft een dienstverlener een `webhook_url` in het register, dan levert één
-`TERUGKOPPELEN`-taak per dienstverlener (`TerugkoppelTaakHandler`) de events na
-`webhookpositie` onder het watermerk van de feed als CloudEvents-batch aan die URL
-(`WebhookDispatcher`, `WebhookAdapter`), met de header `Nmc-Cursor` en een
-RS256-bearer-JWT met `body_sha256` (`WebhookSleutel`). Er is geen push per overgang: de
-webhook leest het eventlog.
-
-De taak (`notificatie_id` leeg) plant zichzelf steeds opnieuw. De eerste plant
-`ControleTaakHandler`, dus een nieuwe `webhook_url` gaat binnen `nmc.controle.interval`
-leveren; een unieke index houdt het op één taak per dienstverlener, zodat met de claim nooit
-twee pods tegelijk aan dezelfde dienstverlener leveren.
-
-Per ronde:
-
-1. Lees in een transactie register, positie en events (`Eventfeed.leesVoorWebhook`,
-   `webhook_bundel` of anders `nmc.webhook.bundel` per aanroep, ten hoogste
-   `nmc.feed.max-pagina`). Een positie uit een ander epoch begint bij het oudste event;
-   zonder positie legt de ronde eerst de kop van het log vast (`Eventfeed.kopVanHetLog`),
-   zodat alleen events van na de registratie gaan.
-2. Verleng de lease en POST buiten de transactie.
-3. Zet in één transactie met `TaakClaimer.stelUit` (epoch-getoetst) de positie vooruit of de
-   mislukking vast.
-
-Een mislukte levering is een externe fout en kost de taak geen poging. Wachttijd:
-`nmc.webhook.herpoging-wachttijd` verdubbeld per mislukking; vanaf
-`webhook_max_mislukkingen` (default `nmc.webhook.max-mislukkingen`) is de webhook
-gepauzeerd met `nmc.webhook.pauze-wachttijd` verdubbeld per verdere mislukking, tot ten
-hoogste een dag. Een ongeldige URL (`WebhookUrlValidator`) pauzeert direct, zonder aanroep,
-met een ERROR. Een `2xx` is geen bevestiging; die blijft de feedcursor. Zonder `webhook_url`
-rondt de taak af en gaat de leverpositie weg.
-
-**Webhook en feed leveren hetzelfde CloudEvent.** `NotificatieStatusEvent.van` bouwt beide;
+**Webhook en feed leveren hetzelfde CloudEvent.** `NotificatieStatusEvent` bouwt beide;
 `id` is `event.cloudevent_id`, zodat een Dienstverlener een event uit de webhook in de feed herkent.
 De identity-id is daar ongeschikt voor: die reeks loopt na een herstel uit back-up terug.
 
-### Wissen en onderhoud
+### Wissen, onderhoud en partities
 
 Wissen is een wistaak, verwijderen een onderhoudstaak.
 
-`Notificatie.pasOvergangToe` zet `eindstatus_op` bij een eindstatus en maakt het leeg
-daarbuiten. `Overgangsfunctie` plant bij elke overgang naar een eindstatus de `WISSEN`-taak
-op `eindstatus_op` plus `nmc.wissen.termijn` (een upsert op de unieke index voor open taken,
-dus een latere overgang naar een eindstatus verzet hem) en verwijdert hem bij een overgang
-terug naar een status zonder eindstatus (`bezorgstatus-onbekend` naar `bezorgd`).
-`WisTaakHandler` vergrendelt de notificatie, toetst status en `eindstatus_op` opnieuw en wist
-de gewrapte sleutel met native SQL in `NotificatieRepository`, zonder versie en event.
-
-`OnderhoudTaakHandler` is een taak per systeem (eerste rij uit V16) die zichzelf opnieuw
-plant. Hij maakt eventpartities aan en ruimt ze op, herwrapt sleutels na een KEK-rotatie en
-verwijdert notificaties na `nmc.afleverbewijs.bewaartermijn`. Elke stap loopt in batches van
-`nmc.onderhoud.batch` met een eigen transactie, en een stap die faalt houdt de andere niet op.
-
-### Partities van het eventlog
-
-Het eventlog heeft bereikpartities op `transactie_id`. V16 maakte van de oude
-default-partitie `event_0` (tot de eerstvolgende transactie-id plus de Flyway-placeholder
-`event_marge`) en een nieuwe, lege `event_standaard`.
-
-`EventlogPartitiebeheer` maakt `event_<van>` aan zodra de lopende partitie voor 80% gevuld
-is, als losse tabel die met `ATTACH PARTITION` wordt aangehangen: dat houdt het eventlog niet
-tegen terwijl PostgreSQL de default-partitie doorleest, en krijgt daarvoor in zijn eigen
-transactie vijf minuten in plaats van de timeouts van de rol. Een nieuw bereik begint altijd
-boven de al uitgedeelde transactie-ids: PostgreSQL weigert een bereik waarvoor al rijen in
-de default-partitie staan. Liep het onderhoud achter, dan begint het nieuwe bereik
-`nmc.onderhoud.partitie-marge` boven de volgende transactie-id en komen de events ertussen
-in de default-partitie; dat wordt als ERROR gelogd, en die events worden per rij opgeruimd,
-maar pas als er geen oudere bereikpartitie meer staat.
-
-Een partitie gaat weg als ze onder het watermerk ligt, haar jongste event (op
-transactie-id) ouder is dan de bewaartermijn en geen bevestiging of leverpositie uit het
-huidige epoch, jonger dan de maximale cursorleeftijd, erin of eronder wijst. De leeftijd van
-een leverpositie is `webhookpositie.geleverd_op`, niet `bijgewerkt_op`, dat ook bij een
-mislukte levering verschuift. Het verwijderen toetst opnieuw onder
-`LOCK TABLE event IN ACCESS EXCLUSIVE MODE` met `nmc.onderhoud.lock-timeout`. De
-partitienaam komt in DDL; `EventPartitie` laat alleen `event_<getal>` toe.
+- Elke overgang naar een eindstatus plant via `Overgangsfunctie` een `WISSEN`-taak op
+  `eindstatus_op` plus `nmc.wissen.termijn`. `WisTaakHandler` wist dan de gewrapte sleutel met
+  native SQL, zonder versie en event; daarna is de rij pseudoniem.
+- `OnderhoudTaakHandler` is een taak per systeem (eerste rij uit V16) die partities van het
+  eventlog aanmaakt en opruimt, sleutels herwrapt na een KEK-rotatie en notificaties verwijdert
+  na `nmc.afleverbewijs.bewaartermijn`.
+- Het eventlog heeft bereikpartities op `transactie_id` (`EventlogPartitiebeheer`). Een
+  partitie gaat pas weg als geen geldige bevestiging of leverpositie erin wijst; een nog niet
+  bevestigde cursor kan daardoor vervallen.
 
 ### Nog niet gebouwd
 
