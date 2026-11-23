@@ -62,6 +62,7 @@ public class Taak {
 
     // Telt alleen mislukkingen in het NMC zelf; een uitstel na een fout bij een externe dienst niet.
     @Column(nullable = false)
+    @JdbcTypeCode(SqlTypes.SMALLINT)
     private int pogingen;
 
     @Column(name = "trace_id", length = 64)
