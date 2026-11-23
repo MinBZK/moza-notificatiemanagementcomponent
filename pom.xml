@@ -300,8 +300,9 @@
             <!-- Testdekking. prepare-agent zet de jacoco-agent in de surefire-argLine (@{argLine}
                  hieronder), waardoor álle tests worden geïnstrumenteerd — zowel de plain-unittests
                  als de @QuarkusTests (die laatste via de quarkus-jacoco-extensie, gedeelde execdata).
-                 report bouwt target/site/jacoco (HTML + jacoco.xml voor CI). Gegenereerde
-                 OpenAPI-code valt buiten de cijfers. -->
+                 report bouwt target/site/jacoco (HTML + jacoco.xml voor CI). Gegenereerde code
+                 valt buiten de cijfers: de OpenAPI-interfaces en -modellen en de JPA-metamodellen
+                 (Notificatie_ en verwanten). -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -310,6 +311,7 @@
                     <excludes>
                         <exclude>**/api/**</exclude>
                         <exclude>**/generated/**</exclude>
+                        <exclude>**/domain/*_.class</exclude>
                     </excludes>
                 </configuration>
                 <executions>
