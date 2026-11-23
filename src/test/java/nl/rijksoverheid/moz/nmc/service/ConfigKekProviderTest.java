@@ -57,6 +57,16 @@ class ConfigKekProviderTest {
         assertArrayEquals(Base64.getDecoder().decode(KEK_2), provider.kek(2).orElseThrow().getEncoded());
     }
 
+    // Een lege env-var voor een oudere versie telt als niet geconfigureerd, niet als ongeldige KEK.
+    @Test
+    void constructor_kekVanAndereVersieAlleenWitruimte_slaatDieVersieOver() {
+        ConfigKekProvider provider = provider(Map.of(
+                "nmc.kek.huidige-versie", "2", "nmc.kek.versie.1", "   ", "nmc.kek.versie.2", KEK_2));
+
+        assertTrue(provider.kek(1).isEmpty());
+        assertArrayEquals(Base64.getDecoder().decode(KEK_2), provider.kek(2).orElseThrow().getEncoded());
+    }
+
     @Test
     void constructor_ongeldigeKekBovenHuidigeVersie_gooitIllegalStateException() {
         assertThrows(IllegalStateException.class, () -> provider(Map.of(

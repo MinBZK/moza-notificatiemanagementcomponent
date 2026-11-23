@@ -1,5 +1,7 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.smallrye.config.PropertiesConfigSource;
 import io.smallrye.config.SmallRyeConfigBuilder;
@@ -12,11 +14,15 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.security.InvalidKeyException;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -24,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -348,6 +355,77 @@ class SleutelbeheerTest {
 
         assertThrows(OntsleutelenMisluktException.class,
                 () -> sleutelbeheer.ontsleutelOntvanger(ID, metOntvanger(gegevens, gegevens.sleutelGewrapt())));
+    }
+
+    // ConfigKekProvider weigert een KEK van de verkeerde lengte bij het opstarten; een andere KekProvider
+    // kan hem leveren, en dan faalt de cipher zelf.
+    @Test
+    void versleutel_kekVanVerkeerdeLengte_gooitIllegalStateException() {
+        Sleutelbeheer ongeldig = new Sleutelbeheer(kekProviderMetOngeldigeVersie2(2), new ObjectMapper());
+
+        IllegalStateException fout = assertThrows(IllegalStateException.class,
+                () -> ongeldig.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of()));
+        assertEquals("Versleutelen van notificatiegegevens mislukt", fout.getMessage());
+        assertInstanceOf(InvalidKeyException.class, fout.getCause());
+    }
+
+    @Test
+    void herwrap_huidigeKekVanVerkeerdeLengte_gooitIllegalStateException() {
+        VersleuteldeGegevens oud = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
+        Sleutelbeheer ongeldig = new Sleutelbeheer(kekProviderMetOngeldigeVersie2(2), new ObjectMapper());
+
+        IllegalStateException fout = assertThrows(IllegalStateException.class,
+                () -> ongeldig.herwrap(ID, oud.sleutelGewrapt(), 1));
+        assertEquals("Herwrappen van de sleutel mislukt", fout.getMessage());
+        assertInstanceOf(InvalidKeyException.class, fout.getCause());
+    }
+
+    // Geen OntsleutelenMisluktException: de gegevens zijn in orde, de configuratie niet.
+    @Test
+    void ontsleutelOntvanger_kekVanVerkeerdeLengte_gooitIllegalStateException() {
+        Sleutelbeheer tweeVersies = sleutelbeheer(2, Map.of(1, KEK_1, 2, KEK_2));
+        VersleuteldeGegevens gegevens = tweeVersies.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
+        Sleutelbeheer ongeldig = new Sleutelbeheer(kekProviderMetOngeldigeVersie2(1), new ObjectMapper());
+
+        IllegalStateException fout = assertThrows(IllegalStateException.class,
+                () -> ongeldig.ontsleutelOntvanger(ID, gegevens));
+        assertEquals(IllegalStateException.class, fout.getClass());
+        assertEquals("Ontsleutelen mislukt", fout.getMessage());
+        assertInstanceOf(InvalidKeyException.class, fout.getCause());
+    }
+
+    @Test
+    void versleutel_ontvangerNietNaarJson_gooitZonderDeWaardeTeNoemen() {
+        Sleutelbeheer kapotSerialiserend = new Sleutelbeheer(kekProvider(), new ObjectMapper() {
+            @Override
+            public byte[] writeValueAsBytes(Object value) throws JsonProcessingException {
+                throw new JsonMappingException(null, "kan " + value + " niet schrijven");
+            }
+        });
+
+        IllegalStateException fout = assertThrows(IllegalStateException.class,
+                () -> kapotSerialiserend.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of()));
+        assertNull(fout.getCause());
+        assertFalse(fout.getMessage().contains("burger@example.nl"));
+    }
+
+    // Versie 1 is KEK_1, versie 2 een AES-sleutel van 5 bytes.
+    private static KekProvider kekProviderMetOngeldigeVersie2(int huidigeVersie) {
+        Map<Integer, SecretKey> keks = Map.of(
+                1, new SecretKeySpec(Base64.getDecoder().decode(KEK_1), "AES"),
+                2, new SecretKeySpec(new byte[5], "AES"));
+
+        return new KekProvider() {
+            @Override
+            public int huidigeVersie() {
+                return huidigeVersie;
+            }
+
+            @Override
+            public Optional<SecretKey> kek(int versie) {
+                return Optional.ofNullable(keks.get(versie));
+            }
+        };
     }
 
     private static KekProvider kekProvider() {

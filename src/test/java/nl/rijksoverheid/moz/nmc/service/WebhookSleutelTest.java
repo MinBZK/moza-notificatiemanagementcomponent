@@ -10,7 +10,11 @@ import java.math.BigInteger;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.PrivateKey;
+import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.RSAKeyGenParameterSpec;
+import java.security.spec.RSAPrivateKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 import java.time.Clock;
 import java.time.Duration;
@@ -66,6 +70,29 @@ class WebhookSleutelTest {
         IllegalStateException kort = assertThrows(IllegalStateException.class,
                 () -> WebhookSleutel.leesSleutel(pem(rsa(1024))));
         assertTrue(kort.getMessage().contains("2048"));
+    }
+
+    // Een PKCS#8-sleutel zonder CRT-componenten levert de JDK als gewone RSAPrivateKey op.
+    @Test
+    void leesSleutel_rsaSleutelZonderCrtComponenten_weigert() throws Exception {
+        RSAPrivateCrtKey volledig = (RSAPrivateCrtKey) rsa(2048).getPrivate();
+        PrivateKey zonderCrt = KeyFactory.getInstance("RSA").generatePrivate(
+                new RSAPrivateKeySpec(volledig.getModulus(), volledig.getPrivateExponent()));
+        String pem = Base64.getEncoder().encodeToString(zonderCrt.getEncoded());
+
+        IllegalStateException fout = assertThrows(IllegalStateException.class, () -> WebhookSleutel.leesSleutel(pem));
+        assertTrue(fout.getMessage().contains("geen volledige RSA-sleutel"));
+    }
+
+    // Een exponent van één byte heeft geen voorloopnul die eraf moet.
+    @Test
+    void publiekeExponent_exponentVanEenByte_blijftOngewijzigd() throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(new RSAKeyGenParameterSpec(2048, BigInteger.valueOf(3)));
+        WebhookSleutel sleutel = sleutel(pem(generator.generateKeyPair()), "sleutel-1");
+
+        assertEquals("Aw", sleutel.publiekeExponent());
+        assertEquals(BigInteger.valueOf(3), getal(sleutel.publiekeExponent()));
     }
 
     private static WebhookSleutel sleutel(String pem, String keyId) {

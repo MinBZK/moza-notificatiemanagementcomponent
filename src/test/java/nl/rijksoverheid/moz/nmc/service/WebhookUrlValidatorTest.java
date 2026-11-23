@@ -123,6 +123,17 @@ class WebhookUrlValidatorTest {
     }
 
     @Test
+    void poortNul_wordtGeweigerd() {
+        assertGeweigerd("https://consument.example.nl:0/status", "poort");
+    }
+
+    @Test
+    void poortOpDeGrenzen_wordtGeaccepteerd() {
+        assertGeaccepteerd("https://consument.example.nl:1/status");
+        assertGeaccepteerd("https://consument.example.nl:65535/status");
+    }
+
+    @Test
     void urlPreciesOpDeMaximumlengte_wordtGeaccepteerd() {
         String prefix = "https://consument.example.nl/";
         String url = prefix + "a".repeat(2048 - prefix.length());
