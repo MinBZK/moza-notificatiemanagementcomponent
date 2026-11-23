@@ -25,6 +25,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -56,6 +57,13 @@ class EventfeedControllerTest {
                 .then().statusCode(200).body("events", hasSize(2)).extract().path("cursor");
         given().queryParam("cursor", cursor).when().get(FEED)
                 .then().statusCode(200).body("events", hasSize(1));
+    }
+
+    // Zonder events en zonder cursor is er nog geen positie om terug te geven.
+    @Test
+    void events_leegLogZonderCursor_geeftGeenCursor() {
+        given().when().get(FEED)
+                .then().statusCode(200).body("events", hasSize(0)).body("cursor", nullValue());
     }
 
     @Test

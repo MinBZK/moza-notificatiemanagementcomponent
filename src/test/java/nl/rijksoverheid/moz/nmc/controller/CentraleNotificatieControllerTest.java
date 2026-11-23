@@ -4,6 +4,7 @@ import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 import io.restassured.config.HttpClientConfig;
+import io.quarkus.test.junit.mockito.InjectSpy;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
@@ -15,6 +16,11 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.service.sleutel.Sleutelbeheer;
 import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.service.AannameService;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,9 +33,12 @@ import java.util.stream.IntStream;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import static org.hamcrest.Matchers.equalTo;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 /** De intake is een aanname: 202 na de commit, zonder aanroep van de Profielservice of NotifyNL. */
@@ -45,6 +54,10 @@ class CentraleNotificatieControllerTest {
     @InjectMock
     @RestClient
     SendAMessageApi sendAMessageApi;
+
+    // Zonder stubbing de echte service; één test laat hem een onverwachte fout gooien.
+    @InjectSpy
+    AannameService aannameService;
 
     @Inject
     Sleutelbeheer sleutelbeheer;
@@ -224,6 +237,22 @@ class CentraleNotificatieControllerTest {
                   "berichtgegevens": %s
                 }
                 """.formatted(berichtgegevens);
+    }
+
+    // Een onverwachte fout wordt een 500 zonder de interne melding.
+    @Test
+    void notificatieAannemen_onverwachteFout_retourneert500ZonderInterneMelding() {
+        doThrow(new IllegalStateException("interne melding")).when(aannameService).neemAan(any(), any());
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(aanvraag("Stuurgroep Agenda", ""))
+                .when().post(PAD)
+                .then()
+                .statusCode(500)
+                .contentType("application/problem+json")
+                .body("title", equalTo("Aannamefout"))
+                .body("detail", equalTo("Er kan momenteel geen notificatie worden aangenomen"));
     }
 
     private static String aanvraag(String berichtType, String extraVeld) {
