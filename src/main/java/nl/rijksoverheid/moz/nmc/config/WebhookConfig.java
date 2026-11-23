@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import org.hibernate.validator.constraints.time.DurationMin;
 
 import java.time.Duration;
+import java.util.Optional;
 
 /**
  * De instellingen van de terugkoppeltaak onder {@code nmc.webhook}. Een ongeldige waarde laat de
@@ -80,5 +81,23 @@ public interface WebhookConfig {
          */
         @DurationMin(nanos = 1)
         Duration geldigheid();
+
+        /**
+         * Hoe lang een ontvanger de JWKS mag bewaren: de {@code max-age} van het antwoord.
+         */
+        @DurationMin(seconds = 1)
+        Duration jwksMaxAge();
+
+        /**
+         * De publieke RSA-sleutel (X.509-PEM, met of zonder kop- en voetregel) die de JWKS tijdens
+         * een rotatie naast de eigen sleutel publiceert: de volgende sleutel vóór de wissel, de
+         * vorige erna.
+         */
+        Optional<String> extraPublicKey();
+
+        /**
+         * De {@code kid} van de extra sleutel.
+         */
+        Optional<String> extraKeyId();
     }
 }
