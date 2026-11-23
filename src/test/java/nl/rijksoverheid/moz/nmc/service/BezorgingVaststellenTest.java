@@ -28,7 +28,12 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 // %test: vaststellingstermijn 7 dagen, callback-venster 1 dag.
 @QuarkusTest
@@ -162,6 +167,26 @@ class BezorgingVaststellenTest {
         TaakRonde.draai(taakWorker, TaakSoort.BEZORGING_VASTSTELLEN);
 
         assertTrue(taken().isEmpty());
+    }
+
+    // Het verwijderen van een notificatie neemt haar taken mee; zonder notificatie is er niets vast te stellen.
+    // Met mocks, omdat de taak in de database met de notificatie verdwijnt.
+    @Test
+    void voerUit_notificatieBestaatNietMeer_rondtAfZonderOvergang() {
+        Overgangsfunctie overgangsfunctieMock = mock(Overgangsfunctie.class);
+        NotificatieRepository notificatieRepositoryMock = mock(NotificatieRepository.class);
+        TaakClaimer taakClaimer = mock(TaakClaimer.class);
+        BezorgingVaststellenTaakHandler handler = new BezorgingVaststellenTaakHandler(overgangsfunctieMock,
+                notificatieRepositoryMock, taakClaimer);
+        Taak taak = new Taak(TaakSoort.BEZORGING_VASTSTELLEN, NotificatieFixtures.DV_ID, UUID.randomUUID(),
+                OffsetDateTime.now(ZoneOffset.UTC), null, null);
+        when(notificatieRepositoryMock.findById(taak.getNotificatieId())).thenReturn(null);
+
+        assertInstanceOf(TaakUitkomst.AlAfgerond.class, handler.voerUit(taak, () -> {
+        }));
+
+        verifyNoInteractions(overgangsfunctieMock);
+        verify(taakClaimer).rondAf(taak);
     }
 
     private record Bezorgd(UUID notificatieId, UUID pogingId, UUID notifyId) {
