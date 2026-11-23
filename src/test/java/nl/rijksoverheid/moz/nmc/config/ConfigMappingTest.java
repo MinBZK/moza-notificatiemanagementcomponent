@@ -44,9 +44,24 @@ class ConfigMappingTest {
         assertEquals(Duration.ofMinutes(2), taak.lease());
         assertEquals(Duration.ofSeconds(30), webhook.herpogingWachttijd());
         assertEquals("sleutel-1", webhook.jwt().keyId());
+        assertEquals(Duration.ofHours(1), webhook.jwt().jwksMaxAge());
+        assertTrue(webhook.jwt().extraPublicKey().isEmpty(), "leeg buiten een sleutelwissel");
+        assertTrue(webhook.jwt().extraKeyId().isEmpty(), "leeg buiten een sleutelwissel");
         assertEquals(Duration.ofDays(30), config.getConfigMapping(FeedConfig.class).maxCursorleeftijd());
         assertEquals(Duration.ofDays(7), config.getConfigMapping(VaststellingConfig.class).termijn());
         assertEquals(20, config.getConfigMapping(VerzendbudgetConfig.class).tokensPerMinuut());
+    }
+
+    @Test
+    void extraSleutelVanEenSleutelwissel_wordtGelezen() {
+        Map<String, String> waarden = new HashMap<>(SLEUTEL);
+        waarden.put("nmc.webhook.jwt.extra-public-key", "publieke-sleutel");
+        waarden.put("nmc.webhook.jwt.extra-key-id", "sleutel-2");
+
+        WebhookConfig.Jwt jwt = bouw(waarden).getConfigMapping(WebhookConfig.class).jwt();
+
+        assertEquals("publieke-sleutel", jwt.extraPublicKey().orElseThrow());
+        assertEquals("sleutel-2", jwt.extraKeyId().orElseThrow());
     }
 
     @ParameterizedTest
@@ -65,6 +80,8 @@ class ConfigMappingTest {
             "nmc.webhook.pauze-wachttijd, 0s",
             "nmc.webhook.timeout, 0s",
             "nmc.webhook.jwt.geldigheid, 0s",
+            "nmc.webhook.jwt.jwks-max-age, 0s",
+            "nmc.webhook.jwt.jwks-max-age, 999ms",
             "nmc.webhook.jwt.private-key, ''",
             "nmc.webhook.jwt.private-key, ' '",
             "nmc.webhook.jwt.key-id, ' '",
@@ -111,6 +128,7 @@ class ConfigMappingTest {
     @ParameterizedTest
     @CsvSource({
             "nmc.taak.metriek-verversing, 0s",
+            "nmc.webhook.jwt.jwks-max-age, 1s",
             "nmc.feed.cluster-epoch, 0",
             "nmc.vaststelling.callback-venster, 0s"
     })

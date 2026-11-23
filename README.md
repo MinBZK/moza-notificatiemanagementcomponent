@@ -299,7 +299,8 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   4. Uitzetten: `webhook_url` op NULL. De taak vervalt en de leverpositie wordt gewist, zodat
      opnieuw aanzetten weer vanaf dat moment begint.
 - **`GET /.well-known/jwks.json`**: de publieke sleutel waarmee de Dienstverlener de
-  JWT op de webhook controleert, gekozen op `kid`.
+  JWT op de webhook controleert, gekozen op `kid`. Het antwoord zegt met `Cache-Control` hoe
+  lang het bewaard mag worden; rond een sleutelwissel staan er twee sleutels in.
 - **`POST /notifynl-callback`**: webhook waarop NotifyNL de bezorgstatus
   (delivery receipt) van een verzending terugmeldt. Beveiligd met een bearer
   token dat geconfigureerd wordt in NotifyNL's dashboard en via

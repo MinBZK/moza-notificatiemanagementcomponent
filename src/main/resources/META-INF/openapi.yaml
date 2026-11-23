@@ -319,6 +319,11 @@ paths:
       description: |
         De JSON Web Key Set (RFC 7517) met de publieke sleutel waarmee het NMC de JWT op elke
         webhook-aanroep ondertekent. Kies de sleutel op de `kid` uit de JWT-header.
+
+        Rond een sleutelwissel staan er twee sleutels in: de nieuwe sleutel staat er al in voordat
+        het NMC ermee ondertekent, en de oude blijft er daarna nog even in staan. Bewaar het antwoord
+        niet langer dan de `max-age` uit `Cache-Control`, en haal het opnieuw op bij een onbekende
+        `kid`.
       tags:
         - Sleutels
       responses:
@@ -329,6 +334,11 @@ paths:
               schema:
                 type: string
               description: Versie van de API
+            Cache-Control:
+              schema:
+                type: string
+                example: public, max-age=3600
+              description: Hoe lang het antwoord bewaard mag worden
           content:
             application/json:
               schema:

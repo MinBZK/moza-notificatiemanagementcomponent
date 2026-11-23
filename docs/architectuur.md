@@ -132,7 +132,8 @@ ook alleen een identificatie doorgeven en de NMC de regie laten.
   hoort (geteld in `nmc.receipts.afgewezen`). `ReceiptTaakHandler` verwerkt hem.
 - `GET /api/nmc/v1/notificaties/events` en `PUT .../events/bevestiging`: de
   eventfeed, zie hieronder.
-- `GET /api/nmc/v1/.well-known/jwks.json`: de publieke sleutel van de webhook-JWT.
+- `GET /api/nmc/v1/.well-known/jwks.json`: de publieke sleutel van de webhook-JWT, en tijdens
+  een sleutelwissel een tweede.
 
 ### Aanname
 
@@ -328,6 +329,22 @@ hoogste een dag. Een ongeldige URL (`WebhookUrlValidator`) pauzeert direct, zond
 met een ERROR. Een `2xx` is geen bevestiging; die blijft de feedcursor. Zonder `webhook_url`
 rondt de taak af en gaat de leverpositie weg.
 
+**De JWKS en een sleutelwissel.** Het antwoord van de JWKS draagt
+`Cache-Control: public, max-age=` met `nmc.webhook.jwt.jwks-max-age`, zodat een ontvanger weet
+hoe lang hij het mag bewaren. Naast de eigen sleutel publiceert de JWKS de publieke sleutel uit
+`nmc.webhook.jwt.extra-public-key` met de id uit `nmc.webhook.jwt.extra-key-id`; het NMC
+ondertekent daar niet mee. Een wissel gaat daarmee in drie uitrollen:
+
+1. zet de nieuwe publieke sleutel als extra sleutel en wacht, nadat de uitrol klaar is, minstens
+   de `max-age`, zodat elke ontvanger hem kent. Het gaat om de `max-age` die tot dan toe gold: een
+   lagere waarde in dezelfde uitrol verkort het wachten niet;
+2. maak de nieuwe sleutel de eigen sleutel (`private-key` en `key-id`) en zet de oude publieke
+   sleutel als extra sleutel, voor JWT's die nog onderweg zijn;
+3. haal de extra sleutel weg, minstens `jwt.geldigheid` nadat de uitrol van stap 2 klaar is.
+
+Alleen een sleutel of alleen een id, een id gelijk aan die van de eigen sleutel, of dezelfde
+sleutel als de eigen sleutel laat de applicatie niet starten.
+
 **Webhook en feed leveren hetzelfde CloudEvent.** `NotificatieStatusEvent.van` bouwt beide;
 `id` is `event.cloudevent_id`, zodat een Dienstverlener een event uit de webhook in de feed herkent.
 De identity-id is daar ongeschikt voor: die reeks loopt na een herstel uit back-up terug.
@@ -430,7 +447,7 @@ omgeving overschreven als dat nodig is. De verplichte waarden en secrets staan i
 | `nmc.aanname.quotum-per-dag` | quotum voor een dienstverlener zonder eigen quotum in het register; leeg is onbeperkt |
 | `nmc.verzendbudget.*` | tokens per minuut, de reservering van het verzenden en van de navraag |
 | `nmc.feed.*` | grootste pagina, aanroepen per minuut, cluster-epoch, max-cursorleeftijd |
-| `nmc.webhook.*` | interval, bundel, max-mislukkingen, herpoging- en pauzewachttijd, time-out, `jwt.issuer`, `jwt.geldigheid` |
+| `nmc.webhook.*` | interval, bundel, max-mislukkingen, herpoging- en pauzewachttijd, time-out, `jwt.issuer`, `jwt.geldigheid`, `jwt.jwks-max-age`; `jwt.extra-public-key` en `jwt.extra-key-id` zijn leeg buiten een sleutelwissel |
 | `nmc.wissen.termijn` | termijn tot het wissen van de sleutel na een eindstatus |
 | `nmc.afleverbewijs.bewaartermijn` | wettelijk nog niet vastgesteld, dus per omgeving |
 | `nmc.onderhoud.*` | interval, batch, max-batches, partitie-omvang, partitie-marge, lock-timeout |
