@@ -174,8 +174,13 @@ class HerverzendingTest {
     // Een tweede faalreceipt voor de eerste poging, zolang de herverzending wacht: bijvoorbeeld voor een
     // duplicaat-id, of een technical-failure gevolgd door een temporary-failure.
     @ParameterizedTest
-    @CsvSource({"temporary-failure, temporary-failure", "technical-failure, temporary-failure"})
-    void tweedeFaalreceiptVoorDeEerstePoging_plantGeenTweedeHerverzending(String eerste, String tweede) {
+    @CsvSource({
+            "temporary-failure, temporary-failure, TIJDELIJK_MISLUKT",
+            "technical-failure, temporary-failure, TIJDELIJK_MISLUKT",
+            "temporary-failure, technical-failure, TECHNISCH_MISLUKT"
+    })
+    void tweedeFaalreceiptVoorDeEerstePoging_plantGeenTweedeHerverzending(String eerste, String tweede,
+                                                                         PogingStatus pogingStatus) {
         UUID id = verzonden();
         Poging poging = laatstePoging(id);
         OffsetDateTime nu = clock.nu();
@@ -183,7 +188,7 @@ class HerverzendingTest {
 
         receiptVerwerker.verwerk(poging.getNotifyId(), poging.getId().toString(), tweede, nu.minusMinutes(1));
 
-        assertEquals(PogingStatus.TIJDELIJK_MISLUKT, poging(poging.getId()).getStatus());
+        assertEquals(pogingStatus, poging(poging.getId()).getStatus());
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
         assertEquals(TaakSoort.VERZENDEN, enigeTaak().getTaakSoort());
     }
@@ -242,6 +247,98 @@ class HerverzendingTest {
 
         assertEquals(PogingStatus.PERMANENT_MISLUKT, poging(eerste.getId()).getStatus());
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
+    }
+
+    // Op een notificatie die via de tweede poging bezorgd is, geeft een late fout op de eerste, die nooit
+    // bezorgd was, geen overgang.
+    @Test
+    void lateFaalreceiptVoorDeEerstePogingNaBezorgingVanDeTweede_wordtAlleenOpDiePogingVastgelegd() {
+        UUID id = naHerverzending();
+        Poging eerste = pogingen(id).getFirst();
+        Poging tweede = laatstePoging(id);
+        receiptVerwerker.verwerk(tweede.getNotifyId(), tweede.getId().toString(), "delivered", clock.nu());
+
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "permanent-failure", clock.nu());
+
+        assertEquals(PogingStatus.PERMANENT_MISLUKT, poging(eerste.getId()).getStatus());
+        assertEquals(NotificatieStatus.BEZORGD, notificatie(id).getStatus());
+        assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, enigeTaak().getTaakSoort());
+    }
+
+    // Bij een herverzending staat de notificatie al op verzonden. Komt de receipt van de tweede poging vóór
+    // de verzend-commit, dan neemt de poging het id over zonder tweede overgang naar verzonden.
+    @Test
+    void receiptVoorDeVerzendCommitVanDeHerverzending_geeftGeenTweedeOvergangNaarVerzonden() {
+        UUID id = verzonden();
+        Poging eerste = laatstePoging(id);
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure",
+                clock.nu().minusMinutes(1));
+        UUID notifyId = UUID.randomUUID();
+        doAnswer(aanroep -> {
+            receiptVerwerker.verwerk(notifyId, aanroep.<SendEmailRequest>getArgument(0).getReference(), "delivered",
+                    clock.nu());
+
+            return new SendEmailResponse().id(notifyId.toString());
+        }).when(sendAMessageApi).sendEmail(any());
+        maakDue();
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        Poging tweede = laatstePoging(id);
+        assertEquals(2, tweede.getNummer());
+        assertEquals(notifyId, tweede.getNotifyId());
+        assertEquals(PogingStatus.BEZORGD, tweede.getStatus());
+        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
+                NotificatieStatus.VERZONDEN, NotificatieStatus.BEZORGD), overgangen(id));
+    }
+
+    // Na de vaststellingstermijn legt een fout alleen de poging vast; een latere bezorging van diezelfde
+    // poging brengt de al bezorgde notificatie niet opnieuw naar bezorgd.
+    @Test
+    void bezorgingNaEenLateFoutOpEenBezorgdeNotificatie_geeftGeenNieuweOvergang() {
+        UUID id = verzonden();
+        Poging eerste = laatstePoging(id);
+        OffsetDateTime bezorgdOp = clock.nu().minusDays(8);
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "delivered", bezorgdOp);
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure",
+                clock.nu().minusHours(2));
+        Taak vaststeltaak = enigeTaak();
+
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "delivered", clock.nu().minusHours(1));
+
+        assertEquals(PogingStatus.BEZORGD, poging(eerste.getId()).getStatus());
+        assertEquals(NotificatieStatus.BEZORGD, notificatie(id).getStatus());
+        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
+                NotificatieStatus.BEZORGD), overgangen(id));
+        assertEquals(vaststeltaak.getId(), enigeTaak().getId(), "de vaststeltaak van de eerste bezorging blijft");
+    }
+
+    // Een eerdere claim van de herverzending maakte de tweede poging al aan en verloor daarna zijn lease. De
+    // herclaim hergebruikt die poging, zoekt eerst op reference en voert geen tweede overgang uit.
+    @Test
+    void herclaimVanEenHerverzending_hergebruiktDeGeplandePoging() {
+        UUID id = verzonden();
+        Poging eerste = laatstePoging(id);
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure",
+                clock.nu().minusMinutes(1));
+        Poging tweede = QuarkusTransaction.requiringNew().call(() -> {
+            overgangsfunctie.voerUit(id, NotificatieStatus.VERZONDEN, null);
+            Poging poging = new Poging(id, 2);
+            pogingRepository.persist(poging);
+
+            return poging;
+        });
+        when(getMessageDataApi.getMultipleMessagesStatus(any(), any(), any(), any(), any()))
+                .thenReturn(new GetMultipleMessagesResponse().notifications(List.of()));
+        maakDue();
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        verify(getMessageDataApi).getMultipleMessagesStatus(any(), any(), any(), any(), any());
+        assertEquals(List.of(eerste.getId(), tweede.getId()), pogingen(id).stream().map(Poging::getId).toList());
+        assertEquals(PogingStatus.VERZONDEN, poging(tweede.getId()).getStatus());
+        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
+                NotificatieStatus.VERZONDEN), overgangen(id));
     }
 
     @Test
@@ -337,8 +434,10 @@ class HerverzendingTest {
         assertEquals(TaakSoort.VERZENDEN, enigeTaak().getTaakSoort(), "één herverzendtaak; de oude is vervangen");
     }
 
-    @Test
-    void tijdelijkeFoutOpBezorgstatusOnbekend_wordtAlleenOpDePogingVastgelegd() {
+    @ParameterizedTest
+    @CsvSource({"temporary-failure, TIJDELIJK_MISLUKT", "technical-failure, TECHNISCH_MISLUKT"})
+    void tijdelijkeOfTechnischeFoutOpBezorgstatusOnbekend_wordtAlleenOpDePogingVastgelegd(String receipt,
+                                                                                         PogingStatus pogingStatus) {
         UUID id = verzonden();
         Poging eerste = laatstePoging(id);
         QuarkusTransaction.requiringNew().run(() -> {
@@ -346,11 +445,10 @@ class HerverzendingTest {
             overgangsfunctie.voerUit(id, NotificatieStatus.BEZORGSTATUS_ONBEKEND, null);
         });
 
-        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure",
-                clock.nu());
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), receipt, clock.nu());
 
         assertEquals(NotificatieStatus.BEZORGSTATUS_ONBEKEND, notificatie(id).getStatus());
-        assertEquals(PogingStatus.TIJDELIJK_MISLUKT, poging(eerste.getId()).getStatus());
+        assertEquals(pogingStatus, poging(eerste.getId()).getStatus());
         assertTrue(taken().stream().noneMatch(t -> t.getTaakSoort() == TaakSoort.VERZENDEN));
     }
 
