@@ -3,22 +3,71 @@
 # dat faalt. Verifieert HEAD in een tijdelijke worktree, dus precies wat er gepusht wordt, en
 # slaat over als verify op dezelfde commit al slaagde.
 #
-# De herkenning is een benadering: tekst tussen aanhalingstekens (zoals een commitmessage) telt
-# niet mee. Een push die niet herkend wordt, bijvoorbeeld na een cd naar een pad met spaties,
-# gaat zonder verify door; CI draait verify dan alsnog als verplichte check.
+# De herkenning is een benadering: tekst tussen aanhalingstekens en de inhoud van een heredoc
+# (zoals een commitmessage of PR-body) tellen niet mee. Een push die niet herkend wordt,
+# bijvoorbeeld na een cd naar een pad met spaties, gaat zonder verify door; CI draait verify dan
+# alsnog als verplichte check.
 set -uo pipefail
 
+invoer=$(cat)
+
 if ! command -v jq >/dev/null 2>&1; then
-    printf '{"systemMessage": "verify-voor-push: jq ontbreekt, ./mvnw verify is niet gedraaid. CI draait hem wel."}\n'
+    # Zonder jq is het commando niet uit te lezen; meld het alleen als het om een push lijkt te gaan.
+    if printf '%s' "$invoer" | grep -q 'git' && printf '%s' "$invoer" | grep -q 'push'; then
+        printf '{"systemMessage": "verify-voor-push: jq ontbreekt, ./mvnw verify is niet gedraaid. CI draait hem wel."}\n'
+    fi
+
     exit 0
 fi
 
-invoer=$(cat)
 commando=$(printf '%s' "$invoer" | jq -r '.tool_input.command // empty')
 sessiemap=$(printf '%s' "$invoer" | jq -r '.cwd // empty')
 
-# Haal tekst tussen aanhalingstekens weg, zodat een commitmessage met "git push" niet meetelt.
-kaal=$(printf '%s' "$commando" | sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g")
+# Laat de inhoud van heredocs en tekst tussen aanhalingstekens weg, ook als die over meerdere
+# regels loopt, en maak van elke regelovergang buiten aanhalingstekens een ';'. Een regel die op
+# een backslash eindigt, loopt door op de volgende.
+kaal=$(printf '%s\n' "$commando" | awk '
+    BEGIN { q = ""; einde = ""; uit = "" }
+    {
+        regel = $0
+
+        if (einde != "") {
+            r = regel
+            gsub(/^[ \t]+|[ \t]+$/, "", r)
+
+            if (r == einde) einde = ""
+            next
+        }
+
+        if (match(regel, /(^|[^<])<<-?[ \t]*["\047]?[A-Za-z_][A-Za-z0-9_]*/)) {
+            einde = substr(regel, RSTART, RLENGTH)
+            sub(/^[^<]*<<-?[ \t]*["\047]?/, "", einde)
+        }
+
+        n = length(regel)
+        doorloop = 0
+
+        for (i = 1; i <= n; i++) {
+            c = substr(regel, i, 1)
+
+            if (q == "\047") { if (c == "\047") q = ""; continue }
+            if (q == "\"") {
+                if (c == "\\") { i++; continue }
+                if (c == "\"") q = ""
+                continue
+            }
+            if (c == "\\") {
+                if (i == n) doorloop = 1
+                i++
+                continue
+            }
+            if (c == "\047" || c == "\"") { q = c; continue }
+            uit = uit c
+        }
+
+        if (q == "") uit = uit (doorloop ? " " : ";")
+    }
+    END { print uit }')
 
 git_aanroep='(^|[;&|([:space:]])([^;&|[:space:]]*/)?git([[:space:]]+(-[Cc][[:space:]]+[^;&|[:space:]]+|--?[^;&|[:space:]]+))*[[:space:]]+'
 
@@ -52,10 +101,10 @@ esac
 root=$(git -C "$map" rev-parse --show-toplevel 2>/dev/null) || exit 0
 [ -x "$root/mvnw" ] || exit 0
 
-# De hook draait vóór het commando: een commit in hetzelfde commando zou ongeverifieerd mee gaan.
-if printf '%s' "$kaal" | grep -qE "${git_aanroep}(commit|merge|rebase|cherry-pick|am|revert|pull)([[:space:]]|$)" \
-    && [ -n "$(git -C "$root" status --porcelain --untracked-files=no)" ]; then
-    echo "Dit commando maakt een commit én pusht. De hook draait vóór het commando, dus de nieuwe commit zou ongeverifieerd gepusht worden. Commit eerst los, en push dan." >&2
+# De hook draait vóór het commando: commits die hetzelfde commando maakt of binnenhaalt, zouden
+# ongeverifieerd mee gaan. Dat geldt ook bij een schone werkboom, zoals bij een rebase of pull.
+if printf '%s' "$kaal" | grep -qE "${git_aanroep}(commit|merge|rebase|cherry-pick|am|revert|pull)([[:space:]]|;|&|\||\)|$)"; then
+    echo "Dit commando maakt of haalt commits binnen (commit, merge, rebase, pull, ...) én pusht. De hook draait vóór het commando, dus die commits zouden ongeverifieerd gepusht worden. Doe dat eerst los, en push daarna." >&2
     exit 2
 fi
 
@@ -82,7 +131,8 @@ fi
 tijdelijk=$(mktemp -d)
 werkmap="$tijdelijk/wt"
 log="$tijdelijk/verify.log"
-trap 'git -C "$root" worktree remove --force "$werkmap" >/dev/null 2>&1; rm -rf "$tijdelijk"' EXIT
+# Dubbel --force, omdat een worktree vergrendeld kan zijn (sommige tools doen dat bij aanmaken).
+trap 'git -C "$root" worktree remove --force --force "$werkmap" >/dev/null 2>&1; rm -rf "$tijdelijk"' EXIT
 
 git -C "$root" worktree add --detach --quiet "$werkmap" "$head" || exit 0
 
