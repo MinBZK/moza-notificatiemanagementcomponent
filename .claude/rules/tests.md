@@ -32,7 +32,8 @@ Beoordeel bij elke codewijziging of er tests bij of om moeten.
 - **De database**: `EmbeddedPostgresTestResource` start één PostgreSQL 18 (Zonky) per testrun;
   Flyway migreert en `validate` controleert het schema. Elke `@QuarkusTest` deelt die database,
   dus een test ruimt zijn eigen rijen op. Een `@TestProfile` herstart Quarkus en krijgt een eigen
-  database. De `V*MigratieTest`-klassen starten hun eigen embedded PostgreSQL.
+  database. Migratietests die een oudere schemaversie nodig hebben, zoals `V2MigratieTest`,
+  starten hun eigen embedded PostgreSQL.
 - **Toestand die de overgangsfunctie niet maakt**, zet je met SQL uit `NotificatieFixtures`
   (die de trigger voor de eigen transactie uitzet met
   `SET LOCAL session_replication_role = replica`) en `TaakFixtures`. Een test die de trigger of
