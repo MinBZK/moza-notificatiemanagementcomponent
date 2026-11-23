@@ -88,6 +88,16 @@ class VerifyVoorPushHookTest {
     }
 
     @Test
+    void kalePush_naMislukteVerify_verifieertOpnieuw() throws Exception {
+        Uitkomst eerste = draai("git push", Map.of("VERIFY_EXIT", "1"));
+        Uitkomst tweede = draai("git push", Map.of("VERIFY_EXIT", "1"));
+
+        assertEquals(2, eerste.exitcode());
+        assertEquals(2, tweede.exitcode());
+        assertEquals(2, verifyAanroepen());
+    }
+
+    @Test
     void tweedePushOpZelfdeCommit_slaatVerifyOver() throws Exception {
         draai("git push");
         Uitkomst uitkomst = draai("git push origin HEAD");
@@ -390,6 +400,7 @@ class VerifyVoorPushHookTest {
         // Een lege HOME, zodat de hook geen echte SDKMAN-Java laadt.
         omgeving.put("HOME", tijdelijk.toString());
         omgeving.put("VERIFY_TELLER", teller.toString());
+        zonderGitConfigVanBuiten(omgeving);
         omgeving.putAll(extra);
 
         Process proces = builder.start();
@@ -413,12 +424,20 @@ class VerifyVoorPushHookTest {
     private String git(String... argumenten) throws Exception {
         List<String> opdracht = new ArrayList<>(List.of("git", "-C", repo.toString()));
         opdracht.addAll(Arrays.asList(argumenten));
-        Process proces = new ProcessBuilder(opdracht).redirectErrorStream(true).start();
+        ProcessBuilder builder = new ProcessBuilder(opdracht).redirectErrorStream(true);
+        zonderGitConfigVanBuiten(builder.environment());
+        Process proces = builder.start();
         String uitvoer = new String(proces.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
         assertEquals(0, proces.waitFor(), "git " + String.join(" ", argumenten) + ": " + uitvoer);
 
         return uitvoer;
+    }
+
+    // Een globale core.hooksPath of commit.template van de ontwikkelaar mag de testrepo niet raken.
+    private static void zonderGitConfigVanBuiten(Map<String, String> omgeving) {
+        omgeving.put("GIT_CONFIG_GLOBAL", "/dev/null");
+        omgeving.put("GIT_CONFIG_NOSYSTEM", "1");
     }
 
     private static Optional<Path> zoek(String programma) {
