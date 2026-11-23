@@ -271,7 +271,7 @@ paths:
         per Dienstverlener één bevestiging en zet die alleen vooruit: een cursor die ouder is
         dan de bewaarde bevestiging verandert niets en krijgt toch `204`. Een vervallen cursor
         (ander cluster-epoch, onder het oudste beschikbare event of boven de jongste transactie)
-        krijgt `410`.
+        krijgt `410`. Bevestigen telt mee voor dezelfde aanroeplimiet als het lezen van de events.
       tags:
         - Events
       requestBody:
@@ -300,6 +300,17 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/CursorVervallenProblem'
+        '429':
+          description: De aanroeplimiet per Dienstverlener per minuut is bereikt
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Na hoeveel seconden de limiet opnieuw telt
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/AanroeplimietProblem'
 
   /api/nmc/v1/.well-known/jwks.json:
     get:

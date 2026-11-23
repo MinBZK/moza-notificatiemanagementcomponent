@@ -287,8 +287,8 @@ transactie (`pg_snapshot_xmax`) geeft 410. `PUT .../events/bevestiging` schrijft
 
 Het opruimen van het eventlog spaart alleen partities waar een bevestiging of leverpositie in
 wijst; een nog niet bevestigde cursor kan dus vervallen en krijgt bij de volgende aanroep
-410. Dat is bewust niet afgedekt. De aanroeplimiet (`Aanroeplimiet`) telt per pod en geeft
-bij 429 een `Retry-After`.
+410. Dat is bewust niet afgedekt. De aanroeplimiet (`Aanroeplimiet`) telt lezen en bevestigen
+samen in één teller per dienstverlener, telt per pod en geeft bij 429 een `Retry-After`.
 
 ### Webhook
 
