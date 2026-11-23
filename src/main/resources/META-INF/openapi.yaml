@@ -372,10 +372,12 @@ components:
         dienstverlener:
           type: string
           minLength: 1
+          pattern: '^.*\S.*$'
           description: Naam van de dienstverlener namens wie de notificatie wordt verstuurd
         dienst:
           type: string
           minLength: 1
+          pattern: '^.*\S.*$'
           description: Naam van de dienst waarvoor de notificatie wordt verstuurd (optioneel)
         berichtType:
           type: string

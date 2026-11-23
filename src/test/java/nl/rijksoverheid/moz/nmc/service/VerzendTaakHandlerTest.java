@@ -518,17 +518,21 @@ class VerzendTaakHandlerTest {
         assertEquals(List.of(TaakSoort.BEZORGING_VASTSTELLEN), taken().stream().map(Taak::getTaakSoort).toList());
     }
 
+    // Een 400 ligt aan het verzoek van het NMC en zegt niets over de partij: geen eindstatus en geen poging.
     @Test
-    void centraal_profielserviceWeigertHetNummer_eindigtInNietBezorgbaarMetGeenContactgegevens() {
+    void centraal_profielserviceWijstHetVerzoekAf_steltUitZonderPoging() {
         when(profielApi.apiProfielserviceV1PartijPost(any()))
                 .thenThrow(new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build()));
         UUID id = aannameService.neemAan(centraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
-        Notificatie notificatie = notificatie(id);
-        assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie.getStatus());
-        assertEquals(Reden.GEEN_CONTACTGEGEVENS, notificatie.getReden());
+        assertEquals(NotificatieStatus.IN_VERZENDING, notificatie(id).getStatus());
+        assertEquals(PogingStatus.GEPLAND, poging(id).getStatus());
+        Taak taak = taken().getFirst();
+        assertEquals(TaakStatus.OPEN, taak.getStatus());
+        assertEquals(0, taak.getPogingen());
+        verify(sendAMessageApi, never()).sendEmail(any());
     }
 
     // 403 ligt aan de toegang van het NMC, niet aan de poging: de taak wacht zonder poging, begrensd door
