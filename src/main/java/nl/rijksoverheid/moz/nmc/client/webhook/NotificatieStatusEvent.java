@@ -38,7 +38,7 @@ public record NotificatieStatusEvent(
     private static final String DATACONTENTTYPE = "application/json";
 
     public static NotificatieStatusEvent of(Event event, String source) {
-        return of(source, event.getUuid(), event.getNotificatieId(), event.getVolgnummer(), event.getVan(), event.getNaar(),
+        return of(source, event.getCloudEventId(), event.getNotificatieId(), event.getVolgnummer(), event.getVan(), event.getNaar(),
                 event.getReden(), event.getGeregistreerd());
     }
 
