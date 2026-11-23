@@ -56,7 +56,7 @@ public class HashHelper {
             mac.init(pepperKey);
             byte[] hash = mac.doFinal(identifier.getBytes(StandardCharsets.UTF_8));
             return Base64.getEncoder().encodeToString(hash);
-        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+        } catch (NoSuchAlgorithmException | InvalidKeyException e) { // onbereikbaar: elke JVM levert HmacSHA256 en de constructor weigert een lege sleutel
             throw new RuntimeException("HmacSHA256 kon niet worden geïnitialiseerd", e);
         }
     }
