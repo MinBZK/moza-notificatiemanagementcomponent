@@ -201,8 +201,13 @@ Foutafhandeling:
 
 - Een `ValidationError` van NotifyNL op `email_address` en een partij zonder adres leiden
   tot een eindstatus (`niet-bezorgbaar`).
-- Een andere 4xx, behalve 401, 403 en 429, ligt aan het verzoek van het NMC en kost een
-  poging.
+- Bij de Profielservice gaat alleen een 404 of 422 over de partij (`niet-bezorgbaar`). Een 400
+  ligt aan het verzoek van het NMC, maar stelt de taak uit zonder poging, net als 401 en 403:
+  een gewijzigd contract zou anders elke centrale notificatie op een eindstatus zetten. De
+  intake weigert daarom een `dienstverlener` of `dienst` die alleen uit witruimte bestaat of
+  een regeleinde bevat, want die wijst de Profielservice met een 400 af.
+- Een andere 4xx van NotifyNL, behalve 401, 403 en 429, ligt aan het verzoek van het NMC en
+  kost een poging.
 - 401, 403, 429, 5xx, een verbindingsfout, een ongeldige NotifyNL-configuratie en een
   ontbrekende KEK-versie stellen de taak uit zonder poging, begrensd door `geldig_tot`.
 
