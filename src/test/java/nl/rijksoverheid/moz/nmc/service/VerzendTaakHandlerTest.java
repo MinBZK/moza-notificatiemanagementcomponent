@@ -55,6 +55,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -94,6 +95,9 @@ class VerzendTaakHandlerTest {
 
     @Inject
     TaakWorker taakWorker;
+
+    @Inject
+    VerzendTaakHandler verzendTaakHandler;
 
     @Inject
     ReceiptVerwerker receiptVerwerker;
@@ -308,10 +312,11 @@ class VerzendTaakHandlerTest {
 
     // Een 401 of 403 betreft de key of de toegang van het NMC, niet de poging: anders eindigt elke
     // notificatie die tijdens zo'n storing aan de beurt is na het maximum op technisch-mislukt.
-    @Test
-    void notifyWeigertDeKey_steltUitZonderPoging() {
+    @ParameterizedTest
+    @ValueSource(ints = {401, 403})
+    void notifyWeigertDeKey_steltUitZonderPoging(int status) {
         when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.UNAUTHORIZED).build()));
+                .thenThrow(new WebApplicationException(Response.status(status).build()));
         UUID id = aannameService.neemAan(decentraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -531,12 +536,13 @@ class VerzendTaakHandlerTest {
         assertEquals(Reden.GEEN_CONTACTGEGEVENS, notificatie.getReden());
     }
 
-    // 403 ligt aan de toegang van het NMC, niet aan de poging: de taak wacht zonder poging, begrensd door
-    // geldig_tot.
-    @Test
-    void centraal_profielserviceWeigertDeAanroep_steltUitZonderPoging() {
+    // 401 en 403 liggen aan de toegang van het NMC, niet aan de poging: de taak wacht zonder poging,
+    // begrensd door geldig_tot.
+    @ParameterizedTest
+    @ValueSource(ints = {401, 403})
+    void centraal_profielserviceWeigertDeAanroep_steltUitZonderPoging(int status) {
         when(profielApi.apiProfielserviceV1PartijPost(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.FORBIDDEN).build()));
+                .thenThrow(new WebApplicationException(Response.status(status).build()));
         UUID id = aannameService.neemAan(centraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -557,6 +563,135 @@ class VerzendTaakHandlerTest {
         verify(sendAMessageApi, never()).sendEmail(any());
     }
 
+    // Een ongeldige API-key raakt elke notificatie tegelijk en kost daarom geen poging.
+    @Test
+    void notifyConfiguratieOngeldig_steltUitZonderPoging() {
+        when(notifyNLJwtFactory.authorizationHeader(any())).thenThrow(new IllegalArgumentException("geen geldige key"));
+        UUID id = aannameService.neemAan(decentraal());
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        Taak uitgesteld = taken().getFirst();
+        assertEquals(0, uitgesteld.getPogingen());
+        assertEquals(clock.nu().plusMinutes(5).toInstant(), uitgesteld.getDue().toInstant());
+        assertEquals(NotificatieStatus.IN_VERZENDING, notificatie(id).getStatus());
+        verify(sendAMessageApi, never()).sendEmail(any());
+    }
+
+    // In-verzending zonder poging kan alleen door een fout in de data ontstaan; dat kost een poging.
+    @Test
+    void inVerzendingZonderPoging_kostEenPoging() {
+        UUID id = UUID.randomUUID();
+        QuarkusTransaction.requiringNew().run(() -> {
+            NotificatieFixtures.voegNotificatieToe(taakRepository.getEntityManager(), id, NotificatieStatus.IN_VERZENDING, null);
+            taakRepository.persist(new Taak(TaakSoort.VERZENDEN, NotificatieFixtures.DV_ID, id, clock.nu().minusSeconds(1), null, null));
+        });
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        assertEquals(1, taken().getFirst().getPogingen());
+        assertEquals(NotificatieStatus.IN_VERZENDING, notificatie(id).getStatus());
+        verify(sendAMessageApi, never()).sendEmail(any());
+    }
+
+    // Een verzendtaak voor een notificatie die al verzonden is en geen herverzending nodig heeft, bijvoorbeeld
+    // een dubbel geplande, verstuurt niets.
+    @Test
+    void verzendtaakOpVerzondenZonderHerverzending_rondtAfZonderVerzending() {
+        UUID id = verzonden();
+        QuarkusTransaction.requiringNew().run(() -> taakRepository.persist(new Taak(TaakSoort.VERZENDEN,
+                NotificatieFixtures.DV_ID, id, clock.nu().minusSeconds(1), null, null)));
+
+        assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN));
+
+        assertEquals(List.of(), taken(TaakSoort.VERZENDEN));
+        assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
+        assertEquals(1, QuarkusTransaction.requiringNew().call(() -> pogingRepository.count()));
+        verify(sendAMessageApi, times(1)).sendEmail(any());
+    }
+
+    @Test
+    void notificatieZonderRegie_eindigtMeteenInTechnischMislukt() {
+        UUID id = aannameService.neemAan(decentraal());
+        QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.wisRegie(taakRepository.getEntityManager(), id));
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        Notificatie notificatie = notificatie(id);
+        assertEquals(NotificatieStatus.TECHNISCH_MISLUKT, notificatie.getStatus());
+        assertEquals(Reden.TECHNISCH, notificatie.getReden());
+        verify(sendAMessageApi, never()).sendEmail(any());
+    }
+
+    // Een receipt van een eerdere aanbieding (een herclaim die al verstuurd had) komt vóór de verzend-commit;
+    // het id van deze aanbieding komt als duplicaat bij de poging.
+    @Test
+    void receiptMetAnderIdVoorDeVerzendCommit_legtHetNieuweIdVastAlsDuplicaat() {
+        UUID eerder = UUID.randomUUID();
+        UUID nieuw = UUID.randomUUID();
+        when(sendAMessageApi.sendEmail(any())).thenAnswer(aanroep -> {
+            SendEmailRequest verzoek = aanroep.getArgument(0);
+            receiptVerwerker.verwerk(eerder, verzoek.getReference(), "delivered", clock.nu());
+
+            return new SendEmailResponse().id(nieuw.toString());
+        });
+        UUID id = aannameService.neemAan(decentraal());
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        Poging poging = poging(id);
+        assertEquals(eerder, poging.getNotifyId());
+        assertEquals(List.of(nieuw), poging.getDuplicaatIds());
+        assertEquals(PogingStatus.BEZORGD, poging.getStatus());
+        assertEquals(NotificatieStatus.BEZORGD, notificatie(id).getStatus());
+    }
+
+    @Test
+    void handelUitputtingAf_aangenomen_gaatViaInVerzendingNaarTechnischMislukt() {
+        UUID id = aannameService.neemAan(decentraal());
+
+        assertTrue(handelUitputtingAf(id));
+
+        assertEquals(NotificatieStatus.TECHNISCH_MISLUKT, notificatie(id).getStatus());
+        assertEquals(Reden.TECHNISCH, notificatie(id).getReden());
+        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING,
+                NotificatieStatus.TECHNISCH_MISLUKT), overgangen(id));
+    }
+
+    // Verzonden met een lopende poging, of al bezorgd: de uitgeputte taak raakt de status niet meer.
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void handelUitputtingAf_notificatieAlVerder_laatDeStatusStaan(boolean bezorgd) {
+        UUID id = verzonden();
+
+        if (bezorgd) {
+            receiptVerwerker.verwerk(poging(id).getNotifyId(), null, "delivered", clock.nu());
+        }
+
+        NotificatieStatus voor = notificatie(id).getStatus();
+
+        assertTrue(handelUitputtingAf(id));
+
+        assertEquals(voor, notificatie(id).getStatus());
+        assertEquals(bezorgd ? NotificatieStatus.BEZORGD : NotificatieStatus.VERZONDEN, voor);
+    }
+
+    // De herverzending maakte haar poging aan, maar NotifyNL nam haar nooit aan.
+    @Test
+    void handelUitputtingAf_herverzendingMetGeplandePoging_eindigtInTechnischMislukt() {
+        UUID id = verzonden();
+        Poging eerste = poging(id);
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure", clock.nu());
+        QuarkusTransaction.requiringNew().run(() -> {
+            overgangsfunctie.voerUit(id, NotificatieStatus.VERZONDEN, null);
+            pogingRepository.persist(new Poging(id, 2));
+        });
+
+        assertTrue(handelUitputtingAf(id));
+
+        assertEquals(NotificatieStatus.TECHNISCH_MISLUKT, notificatie(id).getStatus());
+    }
+
     @Test
     void geplandeRondeVerzenden_voertDeHandlerUit() {
         when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
@@ -565,6 +700,23 @@ class VerzendTaakHandlerTest {
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
+    }
+
+    // Een decentrale notificatie op verzonden, met een lopende poging en haar navraagtaak.
+    private UUID verzonden() {
+        when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
+        UUID id = aannameService.neemAan(decentraal());
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+        assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
+
+        return id;
+    }
+
+    // Zoals de worker het doet: in de transactie waarin hij de taak daarna afrondt.
+    private boolean handelUitputtingAf(UUID id) {
+        Taak taak = new Taak(TaakSoort.VERZENDEN, NotificatieFixtures.DV_ID, id, clock.nu(), null, null);
+
+        return QuarkusTransaction.requiringNew().call(() -> verzendTaakHandler.handelUitputtingAf(taak));
     }
 
     private static AannameOpdracht decentraal() {
