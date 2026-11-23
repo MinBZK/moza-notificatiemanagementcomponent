@@ -295,6 +295,29 @@ class EventfeedTest {
         });
     }
 
+    // Zonder events is er geen oudste event om de cursor aan te toetsen; alleen epoch en bovengrens gelden.
+    @Test
+    void lees_cursorOpEenLeegLog_geeftEenLegePaginaMetDezelfdeCursor() {
+        Cursor cursor = new Cursor(1, 0, 0);
+
+        EventPagina pagina = eventfeed.lees(NotificatieFixtures.DV_ID, cursor, null);
+
+        assertEquals(List.of(), pagina.events());
+        assertEquals(cursor, pagina.cursor());
+    }
+
+    // Een webhook zonder leverpositie begint bij het oudste beschikbare event.
+    @Test
+    void leesVoorWebhook_zonderPositie_begintBijHetOudsteEvent() {
+        long eerste = schrijfEvent(NotificatieFixtures.DV_ID);
+        long tweede = schrijfEvent(NotificatieFixtures.DV_ID);
+
+        EventPagina pagina = eventfeed.leesVoorWebhook(NotificatieFixtures.DV_ID, null, 10);
+
+        assertEquals(List.of(eerste, tweede), ids(pagina));
+        assertEquals(tweede, pagina.cursor().eventId());
+    }
+
     @Test
     void bevestig_vervallenCursor_weigert() {
         schrijfEvent(NotificatieFixtures.DV_ID);
