@@ -8,6 +8,8 @@ import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.Poging_;
+import nl.rijksoverheid.moz.nmc.domain.Reden;
+import org.hibernate.Session;
 
 import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
@@ -74,15 +76,23 @@ public final class NotificatieFixtures {
     /** Een event met een eigen registratietijd. */
     public static void voegEventToe(EntityManager entityManager, UUID notificatieId, long volgnummer,
                                     NotificatieStatus van, NotificatieStatus naar, OffsetDateTime geregistreerd) {
-        entityManager.createQuery("INSERT INTO Event (" + Event_.GEREGISTREERD + ", " + Event_.DV_ID + ", "
+        voegEventToe(entityManager, notificatieId, volgnummer, van, naar, null, geregistreerd);
+    }
+
+    public static void voegEventToe(EntityManager entityManager, UUID notificatieId, long volgnummer,
+                                    NotificatieStatus van, NotificatieStatus naar, Reden reden,
+                                    OffsetDateTime geregistreerd) {
+        // Hibernate leidt het type van een lege parameter in een insert niet af; vandaar het type van het attribuut.
+        entityManager.unwrap(Session.class).createMutationQuery("INSERT INTO Event (" + Event_.GEREGISTREERD + ", " + Event_.DV_ID + ", "
                         + Event_.NOTIFICATIE_ID + ", " + Event_.VOLGNUMMER + ", " + Event_.VAN + ", " + Event_.NAAR
-                        + ") VALUES (:geregistreerd, :dvId, :notificatieId, :volgnummer, :van, :naar)")
+                        + ", " + Event_.REDEN + ") VALUES (:geregistreerd, :dvId, :notificatieId, :volgnummer, :van, :naar, :reden)")
                 .setParameter("geregistreerd", geregistreerd)
                 .setParameter("dvId", DV_ID)
                 .setParameter("notificatieId", notificatieId)
                 .setParameter("volgnummer", volgnummer)
                 .setParameter("van", van)
                 .setParameter("naar", naar)
+                .setParameter("reden", reden, Event_.reden.getType())
                 .executeUpdate();
     }
 
