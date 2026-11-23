@@ -294,7 +294,7 @@ public class VerzendTaakHandler implements TaakHandler {
     }
 
     private Verzending rondAfZonderVerzending(Taak taak, Notificatie notificatie) {
-        Log.infof("Notificatie %s staat op %s; verzendtaak %d afgerond zonder verzending",
+        Log.infof("Notificatie %s staat op %s; verzendtaak %s afgerond zonder verzending",
                 notificatie.getId(), notificatie.getStatus(), taak.getId());
         taakClaimer.rondAf(taak);
 

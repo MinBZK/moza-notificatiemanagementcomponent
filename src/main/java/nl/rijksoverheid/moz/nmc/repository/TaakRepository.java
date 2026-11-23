@@ -26,7 +26,7 @@ import java.util.UUID;
  * andere worker de taak inmiddels heeft geclaimd.
  */
 @ApplicationScoped
-public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
+public class TaakRepository implements PanacheRepositoryBase<Taak, UUID> {
 
     private static final String AAN_DE_BEURT = Taak_.TAAK_SOORT + " = :taakSoort"
             + " AND " + Taak_.STATUS + " = :open"
@@ -65,8 +65,9 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
         // De unieke index op (dv_id, soort) voor terugkoppeltaken maakt dit veilig bij gelijktijdige pods.
         // Hibernate leidt de parametertypen in een insert niet af uit de kolommen; vandaar de types van
         // de attributen.
-        return getSession().createMutationQuery("INSERT INTO Taak (" + Taak_.TAAK_SOORT + ", " + Taak_.DV_ID + ", "
-                        + Taak_.DUE + ", " + Taak_.STATUS + ") SELECT :taakSoort, d." + Dienstverlener_.ID + ", :due, :open"
+        return getSession().createMutationQuery("INSERT INTO Taak (" + Taak_.ID + ", " + Taak_.TAAK_SOORT + ", " + Taak_.DV_ID + ", "
+                        + Taak_.DUE + ", " + Taak_.STATUS + ") SELECT FUNCTION('gen_random_uuid'), :taakSoort, d."
+                        + Dienstverlener_.ID + ", :due, :open"
                         + " FROM Dienstverlener d WHERE d." + Dienstverlener_.WEBHOOK_URL + " IS NOT NULL"
                         + " AND NOT EXISTS (SELECT 1 FROM Taak t WHERE t." + Taak_.TAAK_SOORT + " = :taakSoort AND t."
                         + Taak_.DV_ID + " = d." + Dienstverlener_.ID + ") ON CONFLICT DO NOTHING")
@@ -127,9 +128,11 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
     public boolean planReceipt(UUID dvId, UUID notificatieId, Map<String, String> payload, OffsetDateTime due) {
         // Hibernate leidt het parametertype in een insert niet af uit de kolom; zonder het type van het
         // attribuut gaat de payload als bytea en weigert PostgreSQL hem voor jsonb.
-        return getSession().createMutationQuery("INSERT INTO Taak (" + Taak_.TAAK_SOORT + ", " + Taak_.DV_ID + ", "
-                        + Taak_.NOTIFICATIE_ID + ", " + Taak_.DUE + ", " + Taak_.STATUS + ", " + Taak_.PAYLOAD
-                        + ") VALUES (:taakSoort, :dvId, :notificatieId, :due, :open, :payload) ON CONFLICT DO NOTHING")
+        return getSession().createMutationQuery("INSERT INTO Taak (" + Taak_.ID + ", " + Taak_.TAAK_SOORT + ", "
+                        + Taak_.DV_ID + ", " + Taak_.NOTIFICATIE_ID + ", " + Taak_.DUE + ", " + Taak_.STATUS + ", "
+                        + Taak_.PAYLOAD
+                        + ") VALUES (:id, :taakSoort, :dvId, :notificatieId, :due, :open, :payload) ON CONFLICT DO NOTHING")
+                .setParameter("id", UUID.randomUUID())
                 .setParameter("taakSoort", TaakSoort.RECEIPT_VERWERKEN)
                 .setParameter("dvId", dvId)
                 .setParameter("notificatieId", notificatieId)
@@ -219,7 +222,7 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, Long> {
         public static final TaakTelling GEEN = new TaakTelling(0, 0);
     }
 
-    public Optional<Taak> zoek(TaakSoort taakSoort, long id) {
+    public Optional<Taak> zoek(TaakSoort taakSoort, UUID id) {
         return find(Taak_.TAAK_SOORT + " = ?1 AND " + Taak_.ID + " = ?2", taakSoort, id).singleResultOptional();
     }
 

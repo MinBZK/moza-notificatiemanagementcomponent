@@ -29,7 +29,7 @@ public final class TaakFixtures {
     }
 
     /** Verhoogt het claim-epoch, zoals een andere worker die de taak intussen claimt. */
-    public static void claimDoorAndereWorker(EntityManager entityManager, TaakSoort taakSoort, long id) {
+    public static void claimDoorAndereWorker(EntityManager entityManager, TaakSoort taakSoort, UUID id) {
         entityManager.createQuery("UPDATE Taak SET " + Taak_.CLAIM_EPOCH + " = " + Taak_.CLAIM_EPOCH + " + 1"
                         + ZELFDE_TAAK)
                 .setParameter("taakSoort", taakSoort)
@@ -37,7 +37,7 @@ public final class TaakFixtures {
                 .executeUpdate();
     }
 
-    public static void zetDue(EntityManager entityManager, TaakSoort taakSoort, long id, OffsetDateTime due) {
+    public static void zetDue(EntityManager entityManager, TaakSoort taakSoort, UUID id, OffsetDateTime due) {
         entityManager.createQuery("UPDATE Taak SET " + Taak_.DUE + " = :due" + ZELFDE_TAAK)
                 .setParameter("due", due)
                 .setParameter("taakSoort", taakSoort)
@@ -53,7 +53,7 @@ public final class TaakFixtures {
                 .executeUpdate();
     }
 
-    public static void zetLeaseTot(EntityManager entityManager, TaakSoort taakSoort, long id, OffsetDateTime tot) {
+    public static void zetLeaseTot(EntityManager entityManager, TaakSoort taakSoort, UUID id, OffsetDateTime tot) {
         entityManager.createQuery("UPDATE Taak SET " + Taak_.LEASE_TOT + " = :tot" + ZELFDE_TAAK)
                 .setParameter("tot", tot)
                 .setParameter("taakSoort", taakSoort)
@@ -61,7 +61,7 @@ public final class TaakFixtures {
                 .executeUpdate();
     }
 
-    public static void zetPogingen(EntityManager entityManager, TaakSoort taakSoort, long id, int pogingen) {
+    public static void zetPogingen(EntityManager entityManager, TaakSoort taakSoort, UUID id, int pogingen) {
         entityManager.createQuery("UPDATE Taak SET " + Taak_.POGINGEN + " = :pogingen" + ZELFDE_TAAK)
                 .setParameter("pogingen", pogingen)
                 .setParameter("taakSoort", taakSoort)
@@ -70,7 +70,7 @@ public final class TaakFixtures {
     }
 
     /** Zet de taak op {@code MISLUKT} zonder de pogingen uit te putten. */
-    public static void markeerMislukt(EntityManager entityManager, TaakSoort taakSoort, long id) {
+    public static void markeerMislukt(EntityManager entityManager, TaakSoort taakSoort, UUID id) {
         entityManager.createQuery("UPDATE Taak SET " + Taak_.STATUS + " = :mislukt" + ZELFDE_TAAK)
                 .setParameter("mislukt", TaakStatus.MISLUKT)
                 .setParameter("taakSoort", taakSoort)
@@ -79,7 +79,7 @@ public final class TaakFixtures {
     }
 
     /** Vergrendelt de taakrij tot het einde van de transactie van de aanroeper. */
-    public static void vergrendel(EntityManager entityManager, TaakSoort taakSoort, long id) {
+    public static void vergrendel(EntityManager entityManager, TaakSoort taakSoort, UUID id) {
         entityManager.createQuery("FROM Taak" + ZELFDE_TAAK, Taak.class)
                 .setParameter("taakSoort", taakSoort)
                 .setParameter("id", id)

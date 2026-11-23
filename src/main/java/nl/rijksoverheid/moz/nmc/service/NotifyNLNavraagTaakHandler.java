@@ -132,7 +132,7 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
         Poging poging = pogingId == null ? null : pogingRepository.findById(UUID.fromString(pogingId));
 
         if (poging == null || poging.getStatus() != PogingStatus.VERZONDEN) {
-            Log.infof("Navraagtaak %d: poging %s bestaat niet meer of heeft een uitkomst; afgerond", taak.getId(), pogingId);
+            Log.infof("Navraagtaak %s: poging %s bestaat niet meer of heeft een uitkomst; afgerond", taak.getId(), pogingId);
             taakClaimer.rondAf(taak);
 
             return null;

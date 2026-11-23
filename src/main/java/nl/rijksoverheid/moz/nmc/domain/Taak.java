@@ -4,8 +4,6 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Version;
 import org.hibernate.annotations.DynamicUpdate;
@@ -35,8 +33,7 @@ import java.util.UUID;
 public class Taak {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private UUID id;
 
     @PartitionKey
     @Enumerated(EnumType.STRING)
@@ -85,6 +82,7 @@ public class Taak {
 
     public Taak(TaakSoort taakSoort, UUID dvId, UUID notificatieId, OffsetDateTime due, String traceId,
                 Map<String, String> payload) {
+        this.id = UUID.randomUUID();
         this.taakSoort = Objects.requireNonNull(taakSoort, "taakSoort is verplicht");
         this.dvId = dvId;
         this.notificatieId = notificatieId;
@@ -100,7 +98,7 @@ public class Taak {
         this.leaseTot = Objects.requireNonNull(leaseTot, "leaseTot is verplicht");
     }
 
-    public Long getId() {
+    public UUID getId() {
         return id;
     }
 
