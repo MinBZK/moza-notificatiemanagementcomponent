@@ -44,7 +44,7 @@ public class ReceiptTaakHandler implements TaakHandler {
         QuarkusTransaction.requiringNew().run(() -> {
             // De notificatie kan inmiddels na de bewaartermijn zijn verwijderd; dan valt er niets te verwerken.
             if (pogingRepository.findById(UUID.fromString(pogingId)) == null) {
-                Log.infof("Receipt voor poging %s die niet meer bestaat; taak %d afgerond", pogingId, taak.getId());
+                Log.infof("Receipt voor poging %s die niet meer bestaat; taak %s afgerond", pogingId, taak.getId());
             } else {
                 receiptVerwerker.verwerk(notifyId, pogingId, payload.get(ReceiptOpslag.PAYLOAD_STATUS),
                         tijdstip == null || tijdstip.isEmpty() ? null : OffsetDateTime.parse(tijdstip));

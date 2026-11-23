@@ -71,7 +71,7 @@ class TaakWorkerTest {
 
     @Test
     void verwerk_periodiekeTaakUitgeput_blijftOpenEnWordtOpnieuwGepland() {
-        long id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         TestTaakHandler.PERIODIEK.set(true);
         TestTaakHandler.GEDRAG.set((taak, lease) -> {
             throw new IllegalStateException("database weg");
@@ -90,7 +90,7 @@ class TaakWorkerTest {
     // handler die zijn eigen mislukking meldt eeuwig herhalen.
     @Test
     void verwerk_uitstelDatAlsPogingTelt_zetNaMaxPogingenOpMislukt() {
-        long id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         TestTaakHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.uitgesteld(nu().minusSeconds(1), true));
 
         taakWorker.verwerk(TaakSoort.ONGELDIG_MELDEN);
@@ -104,7 +104,7 @@ class TaakWorkerTest {
     // rondt de taak af in plaats van hem op mislukt te laten wachten.
     @Test
     void verwerk_uitputtingDoorDeHandlerAfgehandeld_rondtDeTaakAf() {
-        long id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         TestTaakHandler.GEDRAG.set((taak, lease) -> {
             throw new IllegalStateException("gesimuleerde fout");
         });
@@ -119,7 +119,7 @@ class TaakWorkerTest {
 
     @Test
     void verwerk_afgerond_verwijdertDeTaak() {
-        long id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
 
         assertEquals(1, taakWorker.verwerk(TaakSoort.ONGELDIG_MELDEN));
 
@@ -128,7 +128,7 @@ class TaakWorkerTest {
 
     @Test
     void verwerk_uitgesteldZonderPoging_zetDueEnLaatPogingenStaan() {
-        long id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         OffsetDateTime straks = nu().plusHours(1).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         TestTaakHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.uitgesteld(straks, false));
 
@@ -145,7 +145,7 @@ class TaakWorkerTest {
     // de taak op mislukt en telt hij in de metriek.
     @Test
     void verwerk_handlerGooit_steltUitEnZetNaMaxPogingenOpMislukt() {
-        long id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         TestTaakHandler.GEDRAG.set((taak, lease) -> {
             throw new IllegalStateException("gesimuleerde fout");
         });
@@ -169,7 +169,7 @@ class TaakWorkerTest {
 
     @Test
     void verwerk_alAfgerondDoorDeHandler_laatDeRijMetRust() {
-        long id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         TestTaakHandler.GEDRAG.set((taak, lease) -> {
             QuarkusTransaction.requiringNew().run(() -> taakClaimer.rondAf(taak));
 
@@ -183,7 +183,7 @@ class TaakWorkerTest {
 
     @Test
     void verwerk_leaseVerlengen_zetDeLeaseVooruit() {
-        long id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         TestTaakHandler.GEDRAG.set((taak, lease) -> {
             zetLease(id, nu().plusSeconds(1));
             lease.verleng();
@@ -201,7 +201,7 @@ class TaakWorkerTest {
     // blijft zoals de nieuwe eigenaar hem achterliet.
     @Test
     void verwerk_leaseVerloren_laatDeTaakAanDeNieuweEigenaar() {
-        long id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         TestTaakHandler.GEDRAG.set((taak, lease) -> {
             QuarkusTransaction.requiringNew().run(() ->
                     TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.ONGELDIG_MELDEN, id));
@@ -217,8 +217,8 @@ class TaakWorkerTest {
     // Terwijl de worker de eerste taak van de batch uitvoert, claimt een andere worker de tweede.
     @Test
     void verwerk_latereTaakInDeBatchGeclaimdDoorAndereWorker_slaatDieOver() {
-        long eerste = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(2));
-        long tweede = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID eerste = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(2));
+        UUID tweede = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         AtomicInteger uitgevoerd = new AtomicInteger();
         TestTaakHandler.GEDRAG.set((taak, lease) -> {
             uitgevoerd.incrementAndGet();
@@ -237,7 +237,7 @@ class TaakWorkerTest {
 
     @Test
     void verwerk_leaseVerlorenNaEenFout_laatDeTaakAanDeNieuweEigenaar() {
-        long id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         TestTaakHandler.GEDRAG.set((taak, lease) -> {
             QuarkusTransaction.requiringNew().run(() ->
                     TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.ONGELDIG_MELDEN, id));
@@ -254,7 +254,7 @@ class TaakWorkerTest {
     // blijft een taak van een andere soort onaangeroerd.
     @Test
     void geplandeRondes_andereSoort_latenDeTaakStaan() {
-        long id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
 
         taakWorker.receiptVerwerken();
         taakWorker.reconcilieren();
@@ -268,7 +268,7 @@ class TaakWorkerTest {
 
     @Test
     void ongeldigMelden_taakAanDeBeurt_voertDeHandlerUit() {
-        long id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
 
         taakWorker.ongeldigMelden();
 
@@ -305,7 +305,7 @@ class TaakWorkerTest {
     // De handler heeft nog niet gedraaid als het verlengen faalt; dat kost dus geen poging.
     @Test
     void verwerk_verlengenVoorDeHandlerFaalt_slaatDeTaakOverZonderPoging() {
-        long id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         AtomicInteger aanroepen = new AtomicInteger();
         TestTaakHandler.GEDRAG.set((taak, lease) -> {
             aanroepen.incrementAndGet();
@@ -326,7 +326,7 @@ class TaakWorkerTest {
     // zijn lease verloopt en de handler draait dan opnieuw.
     @Test
     void verwerk_afrondenFaalt_kostGeenPoging() {
-        long id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         doThrow(new IllegalStateException("gesimuleerde databasefout")).when(taakClaimer).rondAf(any());
 
         taakWorker.verwerk(TaakSoort.ONGELDIG_MELDEN);
@@ -345,7 +345,7 @@ class TaakWorkerTest {
         assertEquals(0, taakWorker.verwerk(TaakSoort.ONGELDIG_MELDEN));
     }
 
-    private long plan(TaakSoort taakSoort, OffsetDateTime due) {
+    private UUID plan(TaakSoort taakSoort, OffsetDateTime due) {
         return QuarkusTransaction.requiringNew().call(() -> {
             Taak taak = new Taak(taakSoort, NotificatieFixtures.DV_ID, null, due, null, null);
             taakRepository.persist(taak);
@@ -354,15 +354,15 @@ class TaakWorkerTest {
         });
     }
 
-    private java.util.Optional<Taak> zoek(TaakSoort taakSoort, long id) {
+    private java.util.Optional<Taak> zoek(TaakSoort taakSoort, UUID id) {
         return QuarkusTransaction.requiringNew().call(() -> taakRepository.zoek(taakSoort, id));
     }
 
-    private void zetDue(long id, OffsetDateTime due) {
+    private void zetDue(UUID id, OffsetDateTime due) {
         QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetDue(entityManager, TaakSoort.ONGELDIG_MELDEN, id, due));
     }
 
-    private void zetLease(long id, OffsetDateTime tot) {
+    private void zetLease(UUID id, OffsetDateTime tot) {
         QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetLeaseTot(entityManager, TaakSoort.ONGELDIG_MELDEN, id, tot));
     }
 

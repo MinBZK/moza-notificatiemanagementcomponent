@@ -69,9 +69,9 @@ class TaakClaimerTest {
 
     @Test
     void claim_neemtAlleenTakenDieAanDeBeurtZijn_oudsteEerst() {
-        long later = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().plusHours(1));
-        long oud = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusHours(2));
-        long recent = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        UUID later = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().plusHours(1));
+        UUID oud = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusHours(2));
+        UUID recent = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
 
         List<Taak> geclaimd = taakClaimer.claim(TaakSoort.ONDERHOUD, 10);
 
@@ -93,7 +93,7 @@ class TaakClaimerTest {
     // met een hoger epoch zodat de oude worker niets meer kan afronden.
     @Test
     void claim_verlopenLease_leidtTotHerclaimMetHogerEpoch() {
-        long id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         Taak eerste = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
         laatLeaseVerlopen(id);
 
@@ -111,7 +111,7 @@ class TaakClaimerTest {
     // laat die transactie terugrollen.
     @Test
     void rondAf_binnenEenTransactieMetVerlorenLease_rolDeTransactieTerug() {
-        long id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         Taak eerste = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
         laatLeaseVerlopen(id);
         taakClaimer.claim(TaakSoort.ONDERHOUD, 10);
@@ -128,7 +128,7 @@ class TaakClaimerTest {
 
     @Test
     void stelUit_metEnZonderPoging_zetDueLaatDeLeaseLosEnTeltAlleenAlsGevraagd() {
-        long id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         Taak taak = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
         OffsetDateTime straks = nu().plusMinutes(10).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
 
@@ -144,7 +144,7 @@ class TaakClaimerTest {
 
     @Test
     void markeerMislukt_zetStatusEnHoudtDeTaakUitDeClaim() {
-        long id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         Taak taak = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
 
         taakClaimer.markeerMislukt(taak);
@@ -157,7 +157,7 @@ class TaakClaimerTest {
 
     @Test
     void verleng_zetDeLeaseVerderVooruit() {
-        long id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         Taak taak = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
         QuarkusTransaction.requiringNew().run(() ->
                 TaakFixtures.zetLeaseTot(entityManager, TaakSoort.ONDERHOUD, id, nu().plusSeconds(5)));
@@ -169,7 +169,7 @@ class TaakClaimerTest {
 
     @Test
     void eisClaim_naEenClaimDoorEenAndereWorker_gooitTaakVerlorenException() {
-        long id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         Taak taak = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
         QuarkusTransaction.requiringNew().run(() ->
                 TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.ONDERHOUD, id));
@@ -198,7 +198,7 @@ class TaakClaimerTest {
             }
 
             start.countDown();
-            Set<Long> gezien = new HashSet<>();
+            Set<UUID> gezien = new HashSet<>();
             int totaal = 0;
 
             for (Future<List<Taak>> resultaat : resultaten) {
@@ -217,8 +217,8 @@ class TaakClaimerTest {
     // Een rij die een andere transactie vergrendeld houdt, wordt overgeslagen in plaats van afgewacht.
     @Test
     void claim_vergrendeldeTaak_wordtOvergeslagenZonderTeWachten() throws Exception {
-        long vergrendeld = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(2));
-        long vrij = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        UUID vergrendeld = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(2));
+        UUID vrij = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         CountDownLatch vast = new CountDownLatch(1);
         CountDownLatch los = new CountDownLatch(1);
         ExecutorService threads = Executors.newFixedThreadPool(2);
@@ -292,7 +292,7 @@ class TaakClaimerTest {
 
     @Test
     void claim_takenPerSysteem_claimtZonderDienstverlener() {
-        long id = plan(TaakSoort.ONDERHOUD, null, nu().minusMinutes(1));
+        UUID id = plan(TaakSoort.ONDERHOUD, null, nu().minusMinutes(1));
 
         List<Taak> geclaimd = taakClaimer.claim(TaakSoort.ONDERHOUD, 10);
 
@@ -333,7 +333,7 @@ class TaakClaimerTest {
         assertEquals(17, tokens);
     }
 
-    private long plan(TaakSoort taakSoort, UUID dvId, OffsetDateTime due) {
+    private UUID plan(TaakSoort taakSoort, UUID dvId, OffsetDateTime due) {
         return QuarkusTransaction.requiringNew().call(() -> {
             Taak taak = new Taak(taakSoort, dvId, null, due, "trace-" + UUID.randomUUID(), Map.of("k", "v"));
             taakRepository.persist(taak);
@@ -342,11 +342,11 @@ class TaakClaimerTest {
         });
     }
 
-    private Taak zoek(long id) {
+    private Taak zoek(UUID id) {
         return QuarkusTransaction.requiringNew().call(() -> taakRepository.zoek(TaakSoort.ONDERHOUD, id).orElseThrow());
     }
 
-    private void laatLeaseVerlopen(long id) {
+    private void laatLeaseVerlopen(UUID id) {
         QuarkusTransaction.requiringNew().run(() ->
                 TaakFixtures.zetLeaseTot(entityManager, TaakSoort.ONDERHOUD, id, nu().minusSeconds(1)));
     }

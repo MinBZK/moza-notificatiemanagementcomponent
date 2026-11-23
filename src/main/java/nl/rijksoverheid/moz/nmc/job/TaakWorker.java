@@ -187,7 +187,7 @@ public class TaakWorker {
 
             return;
         } catch (RuntimeException e) {
-            Log.warnf(e, "Lease van taak %s/%d kon niet worden verlengd", taak.getTaakSoort(), taak.getId());
+            Log.warnf(e, "Lease van taak %s/%s kon niet worden verlengd", taak.getTaakSoort(), taak.getId());
 
             return;
         }
@@ -222,7 +222,7 @@ public class TaakWorker {
             Log.warn(e.getMessage());
         } catch (RuntimeException e) {
             // De handler draait dan opnieuw; zie het contract van TaakHandler.
-            Log.errorf(e, "Taak %s/%d is uitgevoerd maar kon niet worden bijgewerkt", taak.getTaakSoort(), taak.getId());
+            Log.errorf(e, "Taak %s/%s is uitgevoerd maar kon niet worden bijgewerkt", taak.getTaakSoort(), taak.getId());
         }
     }
 
@@ -237,14 +237,14 @@ public class TaakWorker {
             } else {
                 OffsetDateTime due = OffsetDateTime.now(clock).plus(wachttijd(pogingen));
                 taakClaimer.stelUit(taak, due, true);
-                Log.warnf(fout, "Taak %s/%d mislukt (poging %d van %d), opnieuw op %s",
+                Log.warnf(fout, "Taak %s/%s mislukt (poging %d van %d), opnieuw op %s",
                         taak.getTaakSoort(), taak.getId(), pogingen, maxPogingen, due);
             }
         } catch (TaakVerlorenException e) {
             Log.warn(e.getMessage());
         } catch (RuntimeException e) {
             // De rest van de batch gaat door; deze taak komt terug zodra zijn lease verloopt.
-            Log.errorf(e, "Taak %s/%d kon na een fout niet worden bijgewerkt", taak.getTaakSoort(), taak.getId());
+            Log.errorf(e, "Taak %s/%s kon na een fout niet worden bijgewerkt", taak.getTaakSoort(), taak.getId());
         }
     }
 
@@ -253,7 +253,7 @@ public class TaakWorker {
         if (handler.periodiek()) {
             OffsetDateTime due = OffsetDateTime.now(clock).plus(wachttijd(maxPogingen));
             taakClaimer.stelUit(taak, due, false);
-            Log.errorf(fout, "Periodieke taak %s/%d faalt na %d pogingen; opnieuw op %s",
+            Log.errorf(fout, "Periodieke taak %s/%s faalt na %d pogingen; opnieuw op %s",
                     taak.getTaakSoort(), taak.getId(), maxPogingen, due);
 
             return;
@@ -272,10 +272,10 @@ public class TaakWorker {
         });
 
         if (afgehandeld) {
-            Log.warnf(fout, "Taak %s/%d uitgeput na %d pogingen; door de handler afgehandeld",
+            Log.warnf(fout, "Taak %s/%s uitgeput na %d pogingen; door de handler afgehandeld",
                     taak.getTaakSoort(), taak.getId(), maxPogingen);
         } else {
-            Log.errorf(fout, "Taak %s/%d na %d pogingen op mislukt gezet; wacht op beheer",
+            Log.errorf(fout, "Taak %s/%s na %d pogingen op mislukt gezet; wacht op beheer",
                     taak.getTaakSoort(), taak.getId(), maxPogingen);
         }
     }

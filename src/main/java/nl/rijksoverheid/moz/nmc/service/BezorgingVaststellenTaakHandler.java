@@ -36,7 +36,7 @@ public class BezorgingVaststellenTaakHandler implements TaakHandler {
     public TaakUitkomst voerUit(Taak taak, Lease lease) {
         QuarkusTransaction.requiringNew().run(() -> {
             if (notificatieRepository.findById(taak.getNotificatieId()) == null) {
-                Log.infof("Vaststeltaak %d voor een notificatie die niet meer bestaat; afgerond", taak.getId());
+                Log.infof("Vaststeltaak %s voor een notificatie die niet meer bestaat; afgerond", taak.getId());
             } else {
                 stelVast(taak);
             }
@@ -51,7 +51,7 @@ public class BezorgingVaststellenTaakHandler implements TaakHandler {
         Notificatie notificatie = overgangsfunctie.vergrendel(taak.getNotificatieId());
 
         if (notificatie.getStatus() != NotificatieStatus.BEZORGD) {
-            Log.infof("Notificatie %s staat op %s; vaststeltaak %d afgerond zonder overgang",
+            Log.infof("Notificatie %s staat op %s; vaststeltaak %s afgerond zonder overgang",
                     notificatie.getId(), notificatie.getStatus(), taak.getId());
 
             return;
