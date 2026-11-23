@@ -156,7 +156,7 @@ class OnderhoudTaakHandlerTest {
 
     @Test
     void onderhoud_viaDeWorker_plantZichzelfOpnieuw() {
-        long id = QuarkusTransaction.requiringNew().call(() -> {
+        UUID id = QuarkusTransaction.requiringNew().call(() -> {
             Taak taak = new Taak(TaakSoort.ONDERHOUD, null, null, OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1), null, null);
             taakRepository.persist(taak);
 

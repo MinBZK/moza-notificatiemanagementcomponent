@@ -53,7 +53,7 @@ public class WisTaakHandler implements TaakHandler {
         Notificatie notificatie = overgangsfunctie.vergrendel(taak.getNotificatieId());
 
         if (!notificatie.getStatus().isEindstatus()) {
-            Log.infof("Notificatie %s staat op %s; wistaak %d afgerond zonder te wissen",
+            Log.infof("Notificatie %s staat op %s; wistaak %s afgerond zonder te wissen",
                     notificatie.getId(), notificatie.getStatus(), taak.getId());
             taakClaimer.rondAf(taak);
 

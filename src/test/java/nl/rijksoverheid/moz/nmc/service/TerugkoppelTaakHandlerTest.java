@@ -347,7 +347,7 @@ class TerugkoppelTaakHandlerTest {
         registreerWebhook(ontvanger + "/204", null, null);
         schrijfEvents(2);
         Cursor voor = positie().getPositie();
-        long id = terugkoppeltaak().getId();
+        UUID id = terugkoppeltaak().getId();
         WebhookOntvanger.TIJDENS_AANROEP = () -> QuarkusTransaction.requiringNew().run(() ->
                 TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.TERUGKOPPELEN, id));
 
@@ -454,14 +454,14 @@ class TerugkoppelTaakHandlerTest {
     }
 
     private void zetPogingen(int pogingen) {
-        long id = terugkoppeltaak().getId();
+        UUID id = terugkoppeltaak().getId();
         QuarkusTransaction.requiringNew().run(() ->
                 TaakFixtures.zetPogingen(entityManager, TaakSoort.TERUGKOPPELEN, id, pogingen));
     }
 
     // Laat de wachttijd en een eventuele pauze verstrijken.
     private void maakAanDeBeurt() {
-        long id = terugkoppeltaak().getId();
+        UUID id = terugkoppeltaak().getId();
         OffsetDateTime verstreken = clock.nu().minusSeconds(1);
         QuarkusTransaction.requiringNew().run(() -> {
             TaakFixtures.zetDue(entityManager, TaakSoort.TERUGKOPPELEN, id, verstreken);
