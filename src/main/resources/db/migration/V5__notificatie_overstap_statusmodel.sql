@@ -70,8 +70,8 @@ ALTER TABLE notificatie ALTER COLUMN laatste_status DROP NOT NULL;
 
 -- Een nieuwe notificatie begint op AANGENOMEN, de status verandert alleen met een nieuwe versie, en
 -- een nieuwe versie is precies 1 hoger. Bij een nieuwe rij en een nieuwe versie moet in dezelfde
--- transactie een event met die versie als volgnummer zijn geschreven. Deferred, omdat het event na de
--- rij wordt weggeschreven.
+-- transactie een event met die versie als volgnummer en dezelfde status en reden zijn geschreven.
+-- Deferred, omdat het event na de rij wordt weggeschreven.
 CREATE FUNCTION controleer_notificatie_overgang() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -93,8 +93,10 @@ BEGIN
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM event
-                   WHERE notificatie_id = NEW.id AND volgnummer = NEW.versie AND transactie_id = pg_current_xact_id()) THEN
-        RAISE EXCEPTION 'Versie % van notificatie % heeft geen event in deze transactie', NEW.versie, NEW.id
+                   WHERE notificatie_id = NEW.id AND volgnummer = NEW.versie AND transactie_id = pg_current_xact_id()
+                     AND naar = NEW.status AND reden IS NOT DISTINCT FROM NEW.reden) THEN
+        RAISE EXCEPTION 'Versie % van notificatie % heeft geen event met dezelfde status en reden in deze transactie',
+            NEW.versie, NEW.id
             USING ERRCODE = 'check_violation';
     END IF;
 
