@@ -309,7 +309,7 @@ de logica die kiest tussen herverzending en contactherstel.
   In tests laat `LokaleWebhookUrlValidator` (`@Mock`) de http-URL van `WebhookOntvanger`
   op localhost toe.
 - **Webhook en feed leveren hetzelfde CloudEvent.** `NotificatieStatusEvent.van` bouwt
-  beide; `id` is `event.uuid`, zodat een Dienstverlener een event uit de webhook in de feed
+  beide; `id` is `event.cloudevent_id`, zodat een Dienstverlener een event uit de webhook in de feed
   herkent. De identity-id is daar ongeschikt voor: die reeks loopt na een herstel uit back-up
   terug. `transactieId` staat als `Long` op `Event`, `Bevestiging` en
   `Webhookpositie` via `TransactieIdType`, dat de waarde als tekst zonder type bindt, zodat

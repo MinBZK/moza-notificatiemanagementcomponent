@@ -12,7 +12,7 @@ CREATE TABLE bevestiging (
 
 -- De id van het CloudEvent, gelijk in feed en callback. Een UUID en niet de identity-id: die reeks
 -- loopt na een herstel uit back-up terug en zou een al uitgegeven id opnieuw geven.
-ALTER TABLE event ADD COLUMN uuid uuid NOT NULL DEFAULT gen_random_uuid();
+ALTER TABLE event ADD COLUMN cloudevent_id uuid NOT NULL DEFAULT gen_random_uuid();
 
 -- De feed leest per dienstverlener op (transactie_id, id) vanaf de cursor. Geen CONCURRENTLY: PostgreSQL
 -- ondersteunt dat niet op een gepartitioneerde tabel, en het log is nog klein.

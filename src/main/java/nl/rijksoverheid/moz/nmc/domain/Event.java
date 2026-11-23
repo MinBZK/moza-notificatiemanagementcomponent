@@ -40,8 +40,8 @@ public class Event {
     private UUID notificatieId;
 
     // Het id van het CloudEvent in feed en callback; de identity-id loopt na een herstel uit back-up terug.
-    @Column(nullable = false)
-    private UUID uuid;
+    @Column(name = "cloudevent_id", nullable = false)
+    private UUID cloudEventId;
 
     @Column(nullable = false)
     private long volgnummer;
@@ -77,7 +77,7 @@ public class Event {
                  OffsetDateTime geregistreerd) {
         this.dvId = Objects.requireNonNull(dvId, "dvId is verplicht");
         this.notificatieId = Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
-        this.uuid = UUID.randomUUID();
+        this.cloudEventId = UUID.randomUUID();
         this.volgnummer = volgnummer;
         this.van = van;
         this.naar = Objects.requireNonNull(naar, "naar is verplicht");
@@ -85,8 +85,8 @@ public class Event {
         this.geregistreerd = geregistreerd.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
     }
 
-    public UUID getUuid() {
-        return uuid;
+    public UUID getCloudEventId() {
+        return cloudEventId;
     }
 
     public Long getId() {
