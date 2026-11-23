@@ -27,6 +27,8 @@ public class Aanroeplimiet {
     /** Telt een aanroep en geeft terug of hij nog binnen de limiet van de lopende minuut valt. */
     public boolean registreer(UUID dvId) {
         long minuut = clock.instant().getEpochSecond() / 60;
+        // De teller staat in het geheugen van deze pod: met N pods is de limiet in de praktijk N keer
+        // zo hoog.
         Venster venster = vensters.compute(dvId, (id, huidig) -> huidig == null || huidig.minuut() != minuut
                 ? new Venster(minuut, 1)
                 : new Venster(minuut, huidig.aantal() + 1));
