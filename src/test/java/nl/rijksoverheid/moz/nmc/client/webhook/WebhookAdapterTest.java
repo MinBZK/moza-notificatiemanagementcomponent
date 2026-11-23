@@ -114,6 +114,34 @@ class WebhookAdapterTest {
         assertSame(fout, assertThrows(ProcessingException.class, () -> adapter.lever(URL, "Bearer jwt", "cursor", body())));
     }
 
+    // Een kringvormige oorzakenketen loopt niet eindeloos door; zonder transportoorzaak gaat de fout door.
+    @Test
+    void lever_kringInDeOorzaken_gaatOngewijzigdDoor() {
+        IllegalStateException a = new IllegalStateException("a");
+        IllegalStateException b = new IllegalStateException("b", a);
+        a.initCause(b);
+        ProcessingException fout = new ProcessingException(a);
+        geeftFout(fout);
+
+        assertSame(fout, assertThrows(ProcessingException.class, () -> adapter.lever(URL, "Bearer jwt", "cursor", body())));
+    }
+
+    // Het zoeken stopt na twintig oorzaken; een transportfout daar voorbij telt niet.
+    @Test
+    void lever_transportfoutDieperDanTwintigOorzaken_gaatOngewijzigdDoor() {
+        ProcessingException fout = new ProcessingException(keten(20, new ConnectException("geweigerd")));
+        geeftFout(fout);
+
+        assertSame(fout, assertThrows(ProcessingException.class, () -> adapter.lever(URL, "Bearer jwt", "cursor", body())));
+    }
+
+    @Test
+    void lever_transportfoutOpDeTwintigsteOorzaak_gooitLeveringException() {
+        geeftFout(new ProcessingException(keten(19, new ConnectException("geweigerd"))));
+
+        assertThrows(WebhookLeveringException.class, () -> adapter.lever(URL, "Bearer jwt", "cursor", body()));
+    }
+
     @Test
     void lever_onderbroken_zetDeInterruptVlagEnGooitLeveringException() {
         geeftFout(new ProcessingException(new IOException(new InterruptedException())));
@@ -141,6 +169,17 @@ class WebhookAdapterTest {
     @Test
     void lever_zonderUrl_gooitNullPointerException() {
         assertThrows(NullPointerException.class, () -> adapter.lever(null, "Bearer jwt", "cursor", body()));
+    }
+
+    // Een keten van lengte oorzaken zonder transportfout, met onderaan als laatste.
+    private static Throwable keten(int lengte, Throwable onderaan) {
+        Throwable oorzaak = onderaan;
+
+        for (int i = 0; i < lengte; i++) {
+            oorzaak = new IllegalStateException("laag " + i, oorzaak);
+        }
+
+        return oorzaak;
     }
 
     private void geeftFout(RuntimeException fout) {
