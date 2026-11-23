@@ -47,7 +47,7 @@ een wijziging niet mag breken.
 - **Een tijdstip van buiten** (NotifyNL, Dienstverlener) kan in de toekomst of ver in het
   verleden liggen. Begrens het voordat je er termijnen mee berekent.
 - **Webhook en feed lezen het eventlog**; er is geen push per overgang. `id` van het
-  CloudEvent is `event.uuid`, niet de identity-id.
+  CloudEvent is `event.cloudevent_id`, niet de identity-id.
 - **`transactieId` is een `xid8`.** Bind hem via `TransactieIdType`; in een rijvergelijking of
   insert geef je het type mee met `setParameter(naam, waarde, Event_.transactieId.getType())`.
 

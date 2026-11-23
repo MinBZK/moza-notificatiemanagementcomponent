@@ -130,7 +130,7 @@ ook alleen een identificatie doorgeven en de NMC de regie laten.
   slaat de receipt op als `RECEIPT_VERWERKEN`-taak (uniek op poging, status en
   tijdstip) en de controller antwoordt 204, ook bij een receipt die bij geen poging
   hoort (geteld in `nmc.receipts.afgewezen`). `ReceiptTaakHandler` verwerkt hem.
-- `GET /api/nmc/v1/notificaties/wijzigingen` en `PUT .../wijzigingen/bevestiging`: de
+- `GET /api/nmc/v1/notificaties/events` en `PUT .../events/bevestiging`: de
   eventfeed, zie hieronder.
 - `GET /api/nmc/v1/.well-known/jwks.json`: de publieke sleutel van de webhook-JWT.
 
@@ -179,7 +179,7 @@ aan de versie van de notificatie.
 `taak` (per soort gepartitioneerd) draagt de bijwerkingen met `due` als timer;
 `TaakClaimer` claimt per ronde met `PESSIMISTIC_WRITE` en de skip-locked-hint
 (`FOR NO KEY UPDATE SKIP LOCKED`), verdeeld over de dienstverleners met werk en voor het
-verzenden en de navraag binnen het `verzendbudget` per Notify-service per minuut.
+verzenden en de navraag binnen het `verzendbudget` per minuut.
 `TaakWorker` draait per soort een `@Scheduled`-ronde en geeft elke taak aan de
 `TaakHandler` van die soort. Handlers: `VerzendTaakHandler`, `ReceiptTaakHandler`,
 `NotifyNLNavraagTaakHandler`, `BezorgingVaststellenTaakHandler`, `ControleTaakHandler`,
@@ -277,12 +277,12 @@ loopt vanaf `poging.bezorgd_op`, dat een latere faalreceipt niet overschrijft.
 
 ### Eventfeed
 
-`GET /api/nmc/v1/notificaties/wijzigingen` leest het eventlog van de dienstverlener op
+`GET /api/nmc/v1/notificaties/events` leest het eventlog van de dienstverlener op
 (transactie-id, event-id) onder het watermerk `pg_snapshot_xmin(pg_current_snapshot())`,
 zodat een cursor nooit een event overslaat dat later committet dan een event met een hogere
 transactie-id. De cursor is base64url van `epoch:transactieId:eventId`; een ander epoch
 (`nmc.feed.cluster-epoch`), een positie onder het oudste event of boven de jongste
-transactie (`pg_snapshot_xmax`) geeft 410. `PUT .../wijzigingen/bevestiging` schrijft
+transactie (`pg_snapshot_xmax`) geeft 410. `PUT .../events/bevestiging` schrijft
 `bevestiging`, alleen vooruit.
 
 Het opruimen van het eventlog spaart alleen partities waar een bevestiging of leverpositie in
@@ -324,7 +324,7 @@ met een ERROR. Een `2xx` is geen bevestiging; die blijft de feedcursor. Zonder `
 rondt de taak af en gaat de leverpositie weg.
 
 **Webhook en feed leveren hetzelfde CloudEvent.** `NotificatieStatusEvent.van` bouwt beide;
-`id` is `event.uuid`, zodat een Dienstverlener een event uit de webhook in de feed herkent.
+`id` is `event.cloudevent_id`, zodat een Dienstverlener een event uit de webhook in de feed herkent.
 De identity-id is daar ongeschikt voor: die reeks loopt na een herstel uit back-up terug.
 
 ### Wissen en onderhoud
@@ -423,7 +423,7 @@ omgeving overschreven als dat nodig is. De verplichte waarden en secrets staan i
 | `nmc.beleid.*` | geldigheid, herverzend-wachttijd en max-herverzendingen; per berichttype te overschrijven als `nmc.beleid.<berichttype>.<sleutel>` |
 | `nmc.controle.*` | interval en maximum per ronde van de controletaak |
 | `nmc.aanname.quotum-per-dag` | quotum voor een dienstverlener zonder eigen quotum in het register; leeg is onbeperkt |
-| `nmc.verzendbudget.*` | Notify-service, tokens per minuut, de reservering van het verzenden en van de navraag |
+| `nmc.verzendbudget.*` | tokens per minuut, de reservering van het verzenden en van de navraag |
 | `nmc.feed.*` | grootste pagina, aanroepen per minuut, cluster-epoch, max-cursorleeftijd |
 | `nmc.webhook.*` | interval, bundel, max-mislukkingen, herpoging- en pauzewachttijd, time-out, `jwt.issuer`, `jwt.geldigheid` |
 | `nmc.wissen.termijn` | termijn tot het wissen van de sleutel na een eindstatus |

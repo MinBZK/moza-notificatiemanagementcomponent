@@ -127,8 +127,9 @@ Haal die override pas weg als de Quarkus-BOM zelf een veilige versie levert.
 ## Codestijl
 
 - **Packages zijn technisch ingedeeld**: `controller/`, `service/`, `domain/`, `repository/`,
-  `client/<systeem>/`, `job/`, `helper/`, `validation/`. Uitzondering: `notifynlcallback/` heeft
-  een eigen `controller/` en `filter/`, omdat het uit een eigen contract komt.
+  `client/<systeem>/`, `job/`, `helper/`, `validation/`, `config/` (`@ConfigMapping`-interfaces).
+  Uitzondering: `notifynlcallback/` heeft een eigen `controller/` en `filter/`, omdat het uit een
+  eigen contract komt.
 - **Constructor-injectie, geen field-injectie.** Dit wijkt bewust af van andere repo's.
 - **Repositories implementeren `PanacheRepositoryBase<T, Id>`**, niet `PanacheRepository<T>`:
   die legt het id-type vast op `Long`, en methodes als `deleteById` gaan dan stil verkeerd.
@@ -157,6 +158,15 @@ Haal die override pas weg als de Quarkus-BOM zelf een veilige versie levert.
 - **Geen issuenummers in javadoc of commentaar.** Beschrijf het probleem zelf. Een kaal `#732`
   wijst in deze repo naar een PR, niet naar het issue. Herschrijf bestaande `TODO #nnn` als je
   die code toch aanraakt.
+- **Eén declaratie, één soort commentaar.** Staat er javadoc boven een klasse, record of methode,
+  dan hoort alles daarover in die javadoc, niet in een `//`-regel eronder. Inline commentaar is
+  voor regels binnen een methode en voor velden.
+- **Javadoc is volledig of laat de tags weg**: met `@param` beschrijf je elke parameter (bij een
+  record elke component). `@throws` staat op de methode die de exception zelf gooit, niet op een
+  interfacemethode waarvan de implementaties hem alleen doorlaten. De eerste zin van de javadoc
+  op een klasse zegt wat de klasse ís en noemt haar bij naam of rol.
+- **Schrijf gewoon Nederlands.** Geen verzonnen of letterlijk vertaalde woorden zoals
+  "beleveren", en niet "gooit" zonder te zeggen wat: "gooit een exception".
 - **Verwijs in commentaar niet naar dit bestand**; beschrijf de regel zelf.
 - **Houd documentatie bij in dezelfde PR.** Verander je het gedrag van een klasse, werk dan de
   javadoc bij en, als het mechanisme daar beschreven staat, `docs/architectuur.md`. Verandert een

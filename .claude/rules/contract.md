@@ -27,7 +27,7 @@ Er zijn twee servercontracten, elk met een eigen execution van de
 - **Validatie die de generator niet kan uitdrukken** gaat via `x-field-extra-annotation`. Let
   op bij `format: uri`: dat wordt een `java.net.URI`, waar Hibernate Validator geen `@Size` voor
   heeft (HV000030).
-- **De webhook staat als callback bij `GET .../wijzigingen`**, met als sleutel `{webhookUrl}`:
+- **De webhook staat als callback bij `GET .../events`**, met als sleutel `{webhookUrl}`:
   OpenAPI 3.0 kent geen losse webhooks, en de URL komt uit het register.
 - **`IdentificatieType` en `NotificatieStatusEvent`** zijn via `importMappings` gekoppeld aan de
   bestaande klassen, zodat er geen tweede klasse ontstaat.
