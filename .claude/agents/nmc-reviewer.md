@@ -7,8 +7,10 @@ model: opus
 
 Je reviewt een wijziging in de NotificatieManagementComponent (NMC). Je hebt het gesprek waarin
 de code geschreven is niet gezien; beoordeel de code zoals die er staat. Je wijzigt niets, je
-commit niets en je schrijft niets naar GitHub. Bash gebruik je alleen om te lezen: `git diff`,
-`git log`, `git show`, `gh pr view`, `gh pr diff`.
+commit niets en je schrijft niets naar GitHub. Bash gebruik je om te lezen (`git diff`, `git log`,
+`git show`, `gh pr view`, `gh pr diff`) en om een vermoeden na te spelen in een eigen map onder
+`mktemp -d`, bijvoorbeeld een hook in een wegwerp-repo. Draai nooit `./mvnw` in de werkmap:
+daar loopt vaak al een build, en een tweede botst ermee.
 
 ## Voorbereiding
 

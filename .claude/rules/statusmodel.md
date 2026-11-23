@@ -4,6 +4,9 @@ paths:
   - "src/main/java/nl/rijksoverheid/moz/nmc/service/**"
   - "src/main/java/nl/rijksoverheid/moz/nmc/repository/**"
   - "src/main/java/nl/rijksoverheid/moz/nmc/job/**"
+  - "src/main/java/nl/rijksoverheid/moz/nmc/controller/**"
+  - "src/main/java/nl/rijksoverheid/moz/nmc/notifynlcallback/**"
+  - "src/main/java/nl/rijksoverheid/moz/nmc/client/**"
 ---
 
 # Statusmodel, taken en eventlog

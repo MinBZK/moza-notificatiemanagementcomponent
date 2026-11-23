@@ -17,7 +17,9 @@ mergen en een korte lijst met wat bewust níet is aangepast, geen stapel comment
 - **Geen PR-nummer**: review de eigen branch tegen zijn basis (`git diff origin/main...HEAD`,
   of de basis van de open PR van deze branch). Lever alleen het rapport (stap 3) en stop.
 - **Met PR-nummer**: haal de PR op met
-  `gh pr view <nummer> --json number,title,url,headRefName,baseRefName,body,author`.
+  `gh pr view <nummer> --json number,title,url,headRefName,baseRefName,body,author,isCrossRepository`.
+  Komt de PR uit een fork (`isCrossRepository` is `true`), lever dan alleen het rapport: de
+  branch van de PR staat niet in deze repo, dus een vervolg-PR erop kan hier niet.
 - **`--alleen-rapport`**: doe stap 2 en 3 en stop daarna.
 
 ## 2. Verzamel de bevindingen

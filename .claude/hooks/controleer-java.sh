@@ -4,6 +4,7 @@
 set -uo pipefail
 
 if ! command -v jq >/dev/null 2>&1; then
+    printf '{"systemMessage": "controleer-java: jq ontbreekt, Java-wijzigingen zijn niet gecontroleerd."}\n'
     exit 0
 fi
 

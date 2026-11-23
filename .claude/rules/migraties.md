@@ -43,7 +43,7 @@ paths:
   zo'n update `SET CONSTRAINTS notificatie_overgang IMMEDIATE`, zoals V16 doet.
 - **Een tweede schrijver van `notificatie` buiten Hibernate** (script, migratie, backfill) moet
   de rij vergrendelen en per nieuwe versie een event schrijven. De trigger controleert de versie
-  en het bestaan van het event, maar niet of de overgang is toegestaan of past bij het event.
+  en of er een event met dezelfde status en reden is, maar niet of de overgang is toegestaan.
 - **In prod draait Flyway niet bij het starten** (`%prod.quarkus.flyway.migrate-at-start=false`).
   Op ZAD staat `QUARKUS_FLYWAY_MIGRATE_AT_START=true` in de deploymentconfig.
 - **Queries gebruiken het JPA-metamodel** (`Poging_.NOTIFY_ID`) in plaats van losse strings.
