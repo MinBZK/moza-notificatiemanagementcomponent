@@ -29,7 +29,7 @@ import java.util.Optional;
 @ApplicationScoped
 public class EventlogPartitiebeheer {
 
-    // Het aanhangen leest de default-partitie door; met de timeouts van de databaserol (V16) zou dat bij een
+    // Het aanhangen leest de default-partitie door; met de timeouts van de databaserol (V15) zou dat bij een
     // volle default-partitie elke ronde mislukken en er nooit meer een partitie bij komen. Zolang het duurt,
     // staat de feed stil op het watermerk van deze transactie.
     private static final Duration AANHANG_TIMEOUT = Duration.ofMinutes(5);

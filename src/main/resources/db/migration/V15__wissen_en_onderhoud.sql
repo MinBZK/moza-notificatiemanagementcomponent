@@ -1,4 +1,4 @@
--- V16: wistaak en onderhoudstaak uit ADR 0024 vervangen de retentiejob. Wistermijn en bewaartermijn
+-- V15: wistaak en onderhoudstaak uit ADR 0024 vervangen de retentiejob. Wistermijn en bewaartermijn
 -- lopen vanaf de eindstatus (eindstatus_op) in plaats van vanaf de laatste overgang, en het
 -- eventlog krijgt bereikpartities die de onderhoudstaak aanmaakt en opruimt.
 

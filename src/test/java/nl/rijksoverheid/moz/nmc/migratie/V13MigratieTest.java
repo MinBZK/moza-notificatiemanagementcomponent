@@ -19,10 +19,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * Draait V14 over een database waarin de controletaak vaststeltaken plande voordat de termijn bestond.
- * Eigen embedded PostgreSQL, omdat de database op V13 stilgezet moet worden.
+ * Draait V13 over een database waarin de controletaak vaststeltaken plande voordat de termijn bestond.
+ * Eigen embedded PostgreSQL, omdat de database op V12 stilgezet moet worden.
  */
-class V14MigratieTest {
+class V13MigratieTest {
 
     private static final String DB_USER = "postgres";
     private static final String DB_PASSWORD = "postgres";
@@ -44,9 +44,9 @@ class V14MigratieTest {
     }
 
     @Test
-    void v14_vultBezorgdOpEnVerwijdertOpenVaststeltaken() throws SQLException {
+    void v13_vultBezorgdOpEnVerwijdertOpenVaststeltaken() throws SQLException {
         String jdbcUrl = nieuweDatabase();
-        migreerTot(jdbcUrl, "13");
+        migreerTot(jdbcUrl, "12");
 
         UUID bezorgd = UUID.randomUUID();
         UUID verzonden = UUID.randomUUID();
@@ -63,7 +63,7 @@ class V14MigratieTest {
             verbinding.commit();
         }
 
-        migreerTot(jdbcUrl, "14");
+        migreerTot(jdbcUrl, "13");
 
         try (Connection verbinding = DriverManager.getConnection(jdbcUrl, DB_USER, DB_PASSWORD)) {
             assertEquals(BEZORGD_OP.toInstant(), bezorgdOp(verbinding, bezorgd).toInstant());
@@ -74,7 +74,7 @@ class V14MigratieTest {
     }
 
     private static String nieuweDatabase() throws SQLException {
-        String database = "v14migratie_" + UUID.randomUUID().toString().replace("-", "");
+        String database = "v13migratie_" + UUID.randomUUID().toString().replace("-", "");
 
         try (Connection beheer = DriverManager.getConnection(
                 "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres", DB_USER, DB_PASSWORD);
