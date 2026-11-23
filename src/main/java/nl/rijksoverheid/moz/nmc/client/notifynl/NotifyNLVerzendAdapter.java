@@ -25,6 +25,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * De adapter naar NotifyNL: verstuurt een e-mail, zoekt een eerdere verzending op de eigen referentie
+ * en vraagt een afleverstatus op. Elke aanroep krijgt een vers JWT: de adapter bouwt het met
+ * {@link NotifyNLJwtFactory} en zet het in {@link NotifyNLAuthorizationHolder}, waarna
+ * {@link NotifyNLCredentialsProvider} het als bearer token meegeeft.
+ */
 @ApplicationScoped
 public class NotifyNLVerzendAdapter {
 

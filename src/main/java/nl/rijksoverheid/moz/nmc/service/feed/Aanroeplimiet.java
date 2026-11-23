@@ -10,7 +10,8 @@ import java.util.concurrent.ConcurrentMap;
 
 /**
  * Telt de feedaanroepen per dienstverlener per minuut, in het geheugen van deze pod. Met meerdere
- * pods geldt de limiet dus per pod.
+ * pods geldt de limiet dus per pod. Lezen en bevestigen tellen samen; boven de limiet antwoordt de
+ * feed 429 met een {@code Retry-After} tot het volgende venster.
  */
 @ApplicationScoped
 public class Aanroeplimiet {

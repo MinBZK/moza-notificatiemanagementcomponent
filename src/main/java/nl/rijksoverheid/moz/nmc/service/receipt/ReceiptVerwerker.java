@@ -33,10 +33,26 @@ import java.util.UUID;
  * Verwerkt een delivery receipt van NotifyNL: legt de uitkomst op de poging vast en voert de
  * bijbehorende overgang van de notificatie uit. Receipts komen at-least-once en ongeordend binnen;
  * een herhaalde of oudere receipt verandert niets. De volgorde komt uit het tijdstip van NotifyNL;
- * een tijdstip dat verder dan {@code nmc.receipt.klokmarge} vooruit ligt op de eigen klok of vóór het
- * verzenden van de poging wordt het moment van ontvangst. Dat tijdstip is het afleverbewijs: ver in de
+ * een tijdstip dat meer dan {@code nmc.receipt.klokmarge} na de eigen klok of vóór het verzenden van
+ * de poging ligt, wordt het moment van ontvangst. Dat tijdstip is het afleverbewijs: ver in de
  * toekomst zou het elke latere receipt op de poging blokkeren, en vóór het verzenden zou het de
  * vaststellingstermijn laten verstrijken voordat hij begon.
+ * <p>
+ * De poging wordt gezocht op de {@code reference} (het poging-id) en anders op het NotifyNL-id. Heeft
+ * de poging nog geen NotifyNL-id, dan is de receipt er eerder dan de verzend-commit: de poging neemt het
+ * id over en de verwerker doet de overgang naar {@code verzonden} namens de worker, ook bij een
+ * tussenstatus. Een ander NotifyNL-id dan dat op de poging komt van een tweede verzending na een
+ * herclaim en wordt als duplicaat op dezelfde poging vastgelegd. De poging wordt pas na het vergrendelen
+ * van de notificatie opnieuw gelezen, zodat een receipt die op de vergrendeling wachtte de uitkomst van
+ * de eerste ziet.
+ * <p>
+ * Alleen op de poging vastgelegd, zonder overgang: een faalreceipt voor een poging die niet meer de
+ * laatste is; op een bezorgde notificatie een technische fout, een faalreceipt na de
+ * vaststellingstermijn of voor een poging die niet bezorgd is, en elke faalreceipt zolang een andere
+ * poging bezorgd is; en een tijdelijke of technische fout op {@code bezorgstatus-onbekend}. Een
+ * tussenstatus verandert niets; een onbekende status komt op de poging en wordt als ERROR gelogd. Is
+ * de sleutel van de notificatie gewist, dan plant een faalreceipt geen herverzending en geeft hij de
+ * eindstatus van een laatste poging.
  */
 @ApplicationScoped
 public class ReceiptVerwerker {

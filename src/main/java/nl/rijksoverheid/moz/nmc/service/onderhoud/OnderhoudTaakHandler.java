@@ -27,12 +27,13 @@ import java.util.function.IntSupplier;
 /**
  * Het onderhoud per systeem: maakt de volgende partitie van het eventlog aan, herwrapt sleutels onder
  * een oudere KEK-versie, verwijdert notificaties (met hun pogingen) na de bewaartermijn van het
- * afleverbewijs en ruimt het eventlog op. Alles in kleine batches met een eigen, korte transactie,
- * omdat elke lopende schrijftransactie het watermerk van de feed vasthoudt.
+ * afleverbewijs en ruimt het eventlog op. Alles in batches van {@code nmc.onderhoud.batch} met een
+ * eigen, korte transactie, omdat elke lopende schrijftransactie het watermerk van de feed vasthoudt.
  * <p>
  * De taak plant zichzelf na elke ronde opnieuw; migratie V15 zet de eerste rij. Een stap die faalt
  * wordt gelogd en de volgende stappen lopen door, zodat bijvoorbeeld een bezet eventlog het wissen van
- * rijen niet ophoudt.
+ * rijen niet ophoudt. {@code TaakClaimer} geeft deze taak een lease van minstens zes minuten, ook als
+ * {@code nmc.taak.lease} korter is, omdat het aanhangen van een eventpartitie vijf minuten mag duren.
  */
 @ApplicationScoped
 public class OnderhoudTaakHandler implements TaakHandler {

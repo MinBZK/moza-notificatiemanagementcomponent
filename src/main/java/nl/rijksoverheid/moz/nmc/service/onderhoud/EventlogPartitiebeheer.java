@@ -21,11 +21,21 @@ import java.util.Optional;
  * Houdt de bereikpartities van het eventlog bij. Een nieuwe partitie begint boven de transactie-ids die
  * al zijn uitgedeeld, zodat de default-partitie nooit rijen in het nieuwe bereik heeft; wat toch buiten
  * de bereiken valt (de onderhoudstaak liep achter) blijft in de default-partitie en wordt daar per rij
- * opgeruimd.
+ * opgeruimd, maar alleen onder de oudste bereikpartitie die er nog staat.
+ * <p>
+ * De volgende partitie komt er zodra de lopende voor 80% gevuld is. Liep het onderhoud achter, dan
+ * begint het nieuwe bereik {@code nmc.onderhoud.partitie-marge} boven de volgende transactie-id en
+ * landen de events ertussen in de default-partitie; dat wordt als ERROR gelogd. Het aanhangen krijgt in
+ * een eigen transactie vijf minuten in plaats van de timeouts van de databaserol, omdat PostgreSQL
+ * daarbij de default-partitie doorleest.
  * <p>
  * Een partitie gaat pas weg als ze helemaal onder het watermerk ligt, haar jongste event ouder is dan de
  * bewaartermijn van het afleverbewijs, geen geldige bevestiging of leverpositie erin of eronder wijst en
  * de default-partitie geen oudere events meer heeft: anders leest een vervallen cursor over het gat heen.
+ * Geldig is een bevestiging of leverpositie uit het huidige epoch die jonger is dan de maximale
+ * cursorleeftijd; voor een leverpositie telt de laatste geslaagde levering ({@code geleverd_op}), niet
+ * een mislukte. Het verwijderen toetst opnieuw onder een {@code ACCESS EXCLUSIVE}-lock op het eventlog,
+ * begrensd door {@code nmc.onderhoud.lock-timeout}.
  */
 @Startup
 @ApplicationScoped
