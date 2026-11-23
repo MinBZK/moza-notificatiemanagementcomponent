@@ -77,7 +77,7 @@ class NotificatieOvergangTriggerTest {
             schrijfEvent(id, 1, NotificatieStatus.AANGENOMEN, NotificatieStatus.VERZONDEN);
         }));
 
-        assertTrue(bevat(fout, "heeft geen event met dezelfde status en reden"), fout.toString());
+        assertTrue(bevat(fout, "heeft een andere status of reden dan de rij"), fout.toString());
     }
 
     @Test
@@ -89,7 +89,18 @@ class NotificatieOvergangTriggerTest {
             schrijfEvent(id, 1, NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING);
         }));
 
-        assertTrue(bevat(fout, "heeft geen event met dezelfde status en reden"), fout.toString());
+        assertTrue(bevat(fout, "heeft een andere status of reden dan de rij"), fout.toString());
+    }
+
+    @Test
+    void eventMetDezelfdeRedenAlsDeRij_wordtGeaccepteerd() {
+        UUID id = aangenomenNotificatie();
+
+        assertDoesNotThrow(() -> QuarkusTransaction.requiringNew().run(() -> {
+            sql("UPDATE notificatie SET versie = 1, status = 'IN_VERZENDING', reden = 'TECHNISCH' WHERE id = ?1", id);
+            NotificatieFixtures.voegEventToe(entityManager, id, 1, NotificatieStatus.AANGENOMEN,
+                    NotificatieStatus.IN_VERZENDING, Reden.TECHNISCH, OffsetDateTime.now(ZoneOffset.UTC));
+        }));
     }
 
     // Elke versie heeft precies een event; een sprong zou een gat in de volgnummers geven.

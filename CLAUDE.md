@@ -245,9 +245,9 @@ de logica die kiest tussen herverzending en contactherstel.
   schrijvers buiten Hibernate, maar controleert minder: een nieuwe rij begint op
   `AANGENOMEN`, de status verandert alleen met een nieuwe versie, een nieuwe versie is
   precies één hoger, en heeft in dezelfde transactie een event met die versie als
-  volgnummer. Welke overgang toegestaan is en de vergrendeling dwingt hij niet af. Let
-  op: elke update van een `notificatie`-rij via Hibernate verhoogt `@Version` en
-  vraagt dus een event. Een schrijver die geen overgang doet (bijvoorbeeld het wissen
+  volgnummer en dezelfde status en reden. Welke overgang toegestaan is en de
+  vergrendeling dwingt hij niet af. Let op: elke update van een `notificatie`-rij via
+  Hibernate verhoogt `@Version` en vraagt dus een event. Een schrijver die geen overgang doet (bijvoorbeeld het wissen
   van een sleutel) moet de versie buiten beschouwing laten. In tests zet je de trigger uit met
   `SET LOCAL session_replication_role = replica`; de databasefout van een deferred
   trigger zit bij de commit als suppressed exception onder de `RollbackException`.
