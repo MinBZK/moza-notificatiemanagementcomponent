@@ -36,7 +36,7 @@ De repo bevat een gedeelde Claude Code-setup in `.claude/`. Eenmalig per machine
 3. Installeer de hulpprogramma's en de plugins. Op macOS:
 
    ```bash
-   brew install jq jdtls jbang
+   brew install jq bash jdtls jbang
 
    for plugin in \
        standaarden@overheid-plugins \
@@ -54,8 +54,21 @@ De repo bevat een gedeelde Claude Code-setup in `.claude/`. Eenmalig per machine
    `--scope local` schrijft naar je eigen `.claude/settings.local.json`. Met `--scope project`
    herschrijft Claude Code de ingecheckte `.claude/settings.json`.
 
-   Java 25 komt uit [SDKMAN](https://sdkman.io/): `sdk install java 25.0.5.0+8-tem`, of een
-   nieuwere 25-versie uit `sdk list java`. Herstart Claude Code daarna.
+   SDKMAN heeft minstens bash 4 nodig en de hooks zijn getest met bash 5; macOS levert bash 3.2.
+   Open na `brew install bash` een nieuwe terminal en controleer met `which bash` dat de bash van
+   Homebrew voorop staat (`/opt/homebrew/bin/bash`, op een Intel-Mac `/usr/local/bin/bash`).
+
+   Java 25 komt uit [SDKMAN](https://sdkman.io/). Installeer SDKMAN in die nieuwe terminal en kies
+   de hoogste `25.x-tem` uit `sdk list java`:
+
+   ```bash
+   curl -s "https://get.sdkman.io" | bash
+   source "$HOME/.sdkman/bin/sdkman-init.sh"
+   sdk list java | grep -- '-tem'
+   sdk install java <identifier>
+   ```
+
+   Herstart Claude Code daarna.
 
 | Plugin | Wat het doet | Nodig |
 |--------|--------------|-------|
@@ -74,8 +87,8 @@ Wat je daarna krijgt:
 
 - **Hooks** die een wijziging aan gegenereerde code of een toegepaste migratie tegenhouden,
   waarschuwen bij `now()` zonder `Clock`, en `./mvnw verify` draaien vóór een `git push`. Ze
-  gebruiken `jq`, dat verplicht is; Java komt uit SDKMAN
-  (`source "$HOME/.sdkman/bin/sdkman-init.sh"`). Ontbreekt een van beide toch, dan slaat de hook
+  zijn getest met bash 5 en gebruiken `jq`, dat verplicht is; Java komt uit SDKMAN
+  (`source "$HOME/.sdkman/bin/sdkman-init.sh"`). Ontbreekt `jq` of Java toch, dan slaat de hook
   over met een melding en vangt CI het af.
 - **`/nmc-review <PR-nummer>`**: review met de projectchecklist, en de fixes als PR bovenop die
   PR in plaats van losse comments.
