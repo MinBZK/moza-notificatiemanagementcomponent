@@ -50,11 +50,7 @@ public class EventfeedController implements EventsApi {
         logboekContext.setDataSubjectId(BETROKKENE_ONBEKEND);
         logboekContext.setDataSubjectType(BETROKKENE_TYPE_ONBEKEND);
 
-        if (!aanroeplimiet.registreer(dvId)) {
-            throw Problems.tooManyRequests(Problems.TYPE_AANROEPLIMIET_OVERSCHREDEN, "Aanroeplimiet bereikt",
-                    "Het maximum aantal feedaanroepen per minuut is bereikt; probeer het in de volgende minuut opnieuw",
-                    aanroeplimiet.secondenTotVolgendVenster());
-        }
+        eisBinnenAanroeplimiet(dvId);
 
         EventPagina pagina;
         try {
@@ -74,6 +70,9 @@ public class EventfeedController implements EventsApi {
 
     @Override
     public Response eventsBevestigen(BevestigingRequest bevestigingRequest) {
+        UUID dvId = dvProvider.huidigeDvId();
+        eisBinnenAanroeplimiet(dvId);
+
         Cursor cursor = ontleed(bevestigingRequest.getCursor());
 
         if (cursor == null) {
@@ -81,12 +80,21 @@ public class EventfeedController implements EventsApi {
         }
 
         try {
-            eventfeed.bevestig(dvProvider.huidigeDvId(), cursor);
+            eventfeed.bevestig(dvId, cursor);
         } catch (CursorVervallenException e) {
             throw Problems.gone(Problems.TYPE_CURSOR_VERVALLEN, "Cursor vervallen", e.getMessage());
         }
 
         return Response.noContent().build();
+    }
+
+    // Lezen en bevestigen tellen samen voor dezelfde limiet per dienstverlener.
+    private void eisBinnenAanroeplimiet(UUID dvId) {
+        if (!aanroeplimiet.registreer(dvId)) {
+            throw Problems.tooManyRequests(Problems.TYPE_AANROEPLIMIET_OVERSCHREDEN, "Aanroeplimiet bereikt",
+                    "Het maximum aantal feedaanroepen per minuut is bereikt; probeer het in de volgende minuut opnieuw",
+                    aanroeplimiet.secondenTotVolgendVenster());
+        }
     }
 
     // Een lege cursor betekent: vanaf het oudste beschikbare event.
