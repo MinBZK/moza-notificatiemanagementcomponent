@@ -9,7 +9,7 @@ paths:
 - **Migraties zijn onveranderlijk na toepassing.** Wijzig een bestaande `V*.sql` nooit; voeg
   een nieuwe toe in `src/main/resources/db/migration/`. Flyway bewaart een checksum per script:
   een gewijzigd script laat de migratie falen op elke database waar het al gedraaid heeft, ook
-  op een previewcluster. De volgende is **V17**; V11 ontbreekt en blijft leeg.
+  op een previewcluster. De volgende is **V16**.
 - **Houd de migratie en de entity gelijk.** In elk profiel staat
   `schema-management.strategy=validate`: wijkt een entity af van het schema, dan start de
   applicatie niet, en de testsuite dus ook niet.
@@ -31,16 +31,16 @@ paths:
   `CONCURRENTLY` kan niet in een transactie, dus zo'n statement krijgt een eigen migratie met
   `-- flyway:executeInTransaction=false`. Faalt de bouw halverwege, dan blijft er een `INVALID`
   index achter die handmatig gedropt moet worden. V3 en V9 doen het bewust zonder, omdat die
-  indexen er vóór de eerste productiedata waren; V16 omdat de retentiejob het register tot dan
+  indexen er vóór de eerste productiedata waren; V15 omdat de retentiejob het register tot dan
   op zeven dagen hield.
-- **De databaserol heeft timeouts** (V16): `statement_timeout` 30s, `transaction_timeout` 1min,
+- **De databaserol heeft timeouts** (V15): `statement_timeout` 30s, `transaction_timeout` 1min,
   `idle_in_transaction_session_timeout` 30s. Ze gelden ook voor Flyway. Een migratie die langer
   kan duren zet ze uit met `SET LOCAL statement_timeout = 0` en `SET LOCAL transaction_timeout = 0`.
   Zonder transactie (`executeInTransaction=false`) doet `SET LOCAL` niets; gebruik daar
   `SET statement_timeout = 0`, anders breekt het statement na 30 seconden af.
 - **Een `UPDATE` op `notificatie` in een migratie zet deferred triggercontroles klaar**, en
   zolang die openstaan weigert PostgreSQL DDL op die tabel ("pending trigger events"). Zet na
-  zo'n update `SET CONSTRAINTS notificatie_overgang IMMEDIATE`, zoals V16 doet.
+  zo'n update `SET CONSTRAINTS notificatie_overgang IMMEDIATE`, zoals V15 doet.
 - **Een tweede schrijver van `notificatie` buiten Hibernate** (script, migratie, backfill) moet
   de rij vergrendelen en per nieuwe versie een event schrijven. De trigger controleert de versie
   en of er een event met dezelfde status en reden is, maar niet of de overgang is toegestaan.

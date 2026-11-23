@@ -57,9 +57,7 @@ Elk van deze regels voorkomt een fout die de build niet altijd vangt.
    `getEntityManager()` verlaat de repository niet.
 6. **Afleverstatussen komen at-least-once en ongeordend binnen.** Elke verwerking moet een
    herhaling en een oudere status verdragen zonder iets te veranderen.
-7. **Migraties zijn onveranderlijk.** Voeg een nieuwe toe; de volgende is **V17**. V11
-   ontbreekt in de reeks; vul dat gat niet, want Flyway weigert een versie onder een al
-   toegepaste.
+7. **Migraties zijn onveranderlijk.** Voeg een nieuwe toe; de volgende is **V16**.
 8. **Schrijf geen DTO met de hand en bewerk niets onder `target/generated-sources`.** Pas het
    contract aan en bouw opnieuw.
 9. **Zet geen JAX-RS-annotatie op een controllermethode.** Dan vervallen alle annotaties van

@@ -339,14 +339,14 @@ terug naar een status zonder eindstatus (`bezorgstatus-onbekend` naar `bezorgd`)
 `WisTaakHandler` vergrendelt de notificatie, toetst status en `eindstatus_op` opnieuw en wist
 de gewrapte sleutel met native SQL in `NotificatieRepository`, zonder versie en event.
 
-`OnderhoudTaakHandler` is een taak per systeem (eerste rij uit V16) die zichzelf opnieuw
+`OnderhoudTaakHandler` is een taak per systeem (eerste rij uit V15) die zichzelf opnieuw
 plant. Hij maakt eventpartities aan en ruimt ze op, herwrapt sleutels na een KEK-rotatie en
 verwijdert notificaties na `nmc.afleverbewijs.bewaartermijn`. Elke stap loopt in batches van
 `nmc.onderhoud.batch` met een eigen transactie, en een stap die faalt houdt de andere niet op.
 
 ### Partities van het eventlog
 
-Het eventlog heeft bereikpartities op `transactie_id`. V16 maakte van de oude
+Het eventlog heeft bereikpartities op `transactie_id`. V15 maakte van de oude
 default-partitie `event_0` (tot de eerstvolgende transactie-id plus de Flyway-placeholder
 `event_marge`) en een nieuwe, lege `event_standaard`.
 
