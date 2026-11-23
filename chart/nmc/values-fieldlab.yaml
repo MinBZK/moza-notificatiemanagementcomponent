@@ -1,8 +1,9 @@
 # Gedeelde Fundament-omgeving van het fieldlab (fundament-poc.nl, cluster-c, project notificatiedienst).
 # Fundament zet het project voor de namespace: tnt-notificatiedienst--<namespace>.
 image:
-  # ghcr.io/minbzk/moza-notificatiemanagementcomponent:pr-66 op 19 november 2026 (#66, 8dab766)
-  digest: sha256:95445e8014ce5def6a52d31f80436340e736c11cb43cd5b3659bc739f121635c
+  # ghcr.io/minbzk/moza-notificatiemanagementcomponent:pr-109 op 23 november 2026 (#109, eabd479): #66 plus
+  # instelbare NotifyNL-template-ID's (nmc.beleid.<berichttype>.template-id).
+  digest: sha256:d7618dc0ecf2549ae6350919166a238c7085a1315748a25c7e3e7048e61ecee9
 
 profielservice:
   url: http://moza-mock.tnt-notificatiedienst--mock-profielservice.svc:8080

@@ -413,6 +413,21 @@ unset K
   door zelf na te vragen.
 - Terug naar de mock: `notify.url` op `http://moza-mock.tnt-notificatiedienst--mock-notifynl.svc:8080/notifynl/lokaal`.
 
+### Een nieuw image en Flyway
+
+Het image `pr-<n>` bouwt GitHub uit de merge van de PR met zijn base. Zolang #66 niet gemerged is, kan
+die base bestaande migraties nog aanpassen. Een nieuw image start dan niet: `Migration checksum
+mismatch for migration version …`, terwijl de oude pod blijft draaien. Zolang er alleen testgegevens
+in staan: database opnieuw aanmaken, niet `flyway repair` (het schema verschilt dan echt).
+
+```bash
+kubectl -n tnt-notificatiedienst--nmc delete cluster nmc-db
+helm -n tnt-notificatiedienst--nmc upgrade nmc chart/nmc -f chart/nmc/values-fieldlab.yaml
+kubectl -n tnt-notificatiedienst--nmc rollout restart deploy/nmc
+```
+
+Zo op 23 november 2026 bij de overstap van `pr-66` (19 november) naar `pr-109`.
+
 ### Aanroepen vanuit het FBS
 
 Binnen het cluster, zonder FSC: `http://nmc.tnt-notificatiedienst--nmc.svc:8080/api/nmc/v1/…`. De
