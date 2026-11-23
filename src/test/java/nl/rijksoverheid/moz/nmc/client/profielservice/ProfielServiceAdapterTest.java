@@ -8,6 +8,7 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.Contactgeg
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
 import nl.rijksoverheid.moz.nmc.controller.IdentificatieType;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -19,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 
+@Tag("unit")
 class ProfielServiceAdapterTest {
 
     private ProfielApi profielApi;

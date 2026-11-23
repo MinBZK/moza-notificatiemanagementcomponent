@@ -4,6 +4,7 @@ import io.smallrye.config.PropertiesConfigSource;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -17,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("unit")
 class VerzendbeleidTest {
 
     private final Verzendbeleid beleid = beleid(1, Map.of(

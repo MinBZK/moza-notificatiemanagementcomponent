@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.repository;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
@@ -7,6 +8,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+@Tag("unit")
 class EventPartitieTest {
 
     private static final EventPartitie LOPEND = EventPartitie.vanaf(1000, 2000);

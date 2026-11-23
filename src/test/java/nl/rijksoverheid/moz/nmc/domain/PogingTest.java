@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
@@ -11,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("unit")
 class PogingTest {
 
     private static final OffsetDateTime T0 = OffsetDateTime.parse("2026-09-01T10:00:00Z");

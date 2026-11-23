@@ -7,6 +7,7 @@ import nl.rijksoverheid.moz.nmc.api.model.JsonWebKeySet;
 import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
 import nl.rijksoverheid.moz.nmc.service.webhook.WebhookSleutel;
 import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.security.KeyPair;
@@ -22,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * Toetst de JWKS tijdens een sleutelwissel zonder Quarkus: de extra sleutel staat alleen in de
  * configuratie, en een andere configuratie vraagt in een {@code @QuarkusTest} een herstart.
  */
+@Tag("unit")
 class SleutelsControllerUnitTest {
 
     @Test

@@ -18,6 +18,8 @@
         <surefire-plugin.version>3.6.1</surefire-plugin.version>
         <openapi-generator.version>7.27.0</openapi-generator.version>
         <jacoco-plugin.version>0.8.16</jacoco-plugin.version>
+        <pitest-plugin.version>1.30.2</pitest-plugin.version>
+        <pitest-junit5-plugin.version>1.2.3</pitest-junit5-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -396,6 +398,49 @@
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         <maven.home>${maven.home}</maven.home>
                     </systemPropertyVariables>
+                </configuration>
+            </plugin>
+            <!-- Mutation testing: verandert de code en kijkt of een test faalt. Niet gekoppeld aan een
+                 fase, dus geen onderdeel van verify; draai het met
+                 ./mvnw test-compile org.pitest:pitest-maven:mutationCoverage
+                 Alleen tests met @Tag("unit"): een @QuarkusTest start per mutant opnieuw en kost
+                 per testklasse bijna een minuut. Rapport in target/pit-reports. -->
+            <plugin>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-maven</artifactId>
+                <version>${pitest-plugin.version}</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.pitest</groupId>
+                        <artifactId>pitest-junit5-plugin</artifactId>
+                        <version>${pitest-junit5-plugin.version}</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <!-- De pakketten met unittests. Controllers, filters en repositories hebben alleen
+                         @QuarkusTests, dus PIT zou daar elke mutant als ongedekt melden. -->
+                    <targetClasses>
+                        <param>nl.rijksoverheid.moz.nmc.client.*</param>
+                        <param>nl.rijksoverheid.moz.nmc.domain.*</param>
+                        <param>nl.rijksoverheid.moz.nmc.helper.*</param>
+                        <param>nl.rijksoverheid.moz.nmc.service.*</param>
+                        <param>nl.rijksoverheid.moz.nmc.validation.*</param>
+                    </targetClasses>
+                    <excludedClasses>
+                        <param>nl.rijksoverheid.moz.nmc.client.*.generated.*</param>
+                    </excludedClasses>
+                    <targetTests>
+                        <param>nl.rijksoverheid.moz.nmc.*</param>
+                    </targetTests>
+                    <includedGroups>
+                        <includedGroup>unit</includedGroup>
+                    </includedGroups>
+                    <threads>4</threads>
+                    <timestampedReports>false</timestampedReports>
+                    <outputFormats>
+                        <outputFormat>HTML</outputFormat>
+                        <outputFormat>XML</outputFormat>
+                    </outputFormats>
                 </configuration>
             </plugin>
         </plugins>

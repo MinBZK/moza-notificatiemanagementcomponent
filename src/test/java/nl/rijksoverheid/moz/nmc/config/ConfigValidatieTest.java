@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.config;
 
 import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -9,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("unit")
 class ConfigValidatieTest {
 
     private static final Duration TIMEOUT = Duration.ofSeconds(10);

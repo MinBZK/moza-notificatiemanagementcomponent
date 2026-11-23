@@ -4,6 +4,7 @@ import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import org.jose4j.jwk.RsaJsonWebKey;
 import org.jose4j.jwt.JwtClaims;
 import org.jose4j.jwt.consumer.JwtConsumerBuilder;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
@@ -25,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("unit")
 class WebhookSleutelTest {
 
     private static final String URL = "https://dv.example.nl/webhook";
