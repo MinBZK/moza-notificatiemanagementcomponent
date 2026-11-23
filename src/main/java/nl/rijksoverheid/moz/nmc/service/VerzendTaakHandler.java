@@ -397,7 +397,7 @@ public class VerzendTaakHandler implements TaakHandler {
     }
 
     private static boolean isFoutVanHetNmc(int status) {
-        return status >= 400 && status < 500 && status != 401 && status != 403 && status != 429;
+        return status / 100 == 4 && status != 401 && status != 403 && status != 429;
     }
 
     private record Verzending(UUID notificatieId, UUID dvId, UUID pogingId, boolean herclaim, boolean verlopen,
