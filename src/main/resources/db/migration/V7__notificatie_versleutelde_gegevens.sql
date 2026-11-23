@@ -8,3 +8,7 @@ ALTER TABLE notificatie
     ADD COLUMN personalisation_versleuteld bytea,
     ADD COLUMN sleutel_gewrapt bytea,
     ADD COLUMN kek_versie integer;
+
+-- De onderhoudstaak zoekt elk uur sleutels onder een oudere KEK-versie; zonder index loopt die de hele
+-- tabel door. Partieel, zodat alleen rijen met een sleutel erin staan.
+CREATE INDEX notificatie_kek_versie_idx ON notificatie (kek_versie, id) WHERE sleutel_gewrapt IS NOT NULL;
