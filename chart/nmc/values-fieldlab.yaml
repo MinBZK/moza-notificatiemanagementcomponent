@@ -1,0 +1,24 @@
+# Gedeelde Fundament-omgeving van het fieldlab (fundament-poc.nl, cluster-c, project notificatiedienst).
+# Fundament zet het project voor de namespace: tnt-notificatiedienst--<namespace>.
+image:
+  # ghcr.io/minbzk/moza-notificatiemanagementcomponent:pr-66 op 19 november 2026 (#66, 8dab766)
+  digest: sha256:95445e8014ce5def6a52d31f80436340e736c11cb43cd5b3659bc739f121635c
+
+profielservice:
+  url: http://moza-mock.tnt-notificatiedienst--mock-profielservice.svc:8080
+notify:
+  url: http://moza-mock.tnt-notificatiedienst--mock-notifynl.svc:8080/notifynl/lokaal
+
+webhook:
+  jwtKeyId: fieldlab-1
+
+feed:
+  # Placeholder-OIN, net als de geconfigureerde dienstverlener uit migratie V8.
+  source: urn:nld:oin:00000000000000000000:systeem:nmc
+
+postgres:
+  # De CloudNativePG-operator op dit cluster komt van Haven+, met deze catalogus (PG 15 tot en met 18).
+  imageCatalog: postgresql-standard-trixie
+  storage:
+    size: 2Gi
+    # Leeg: de default storageClass van het cluster (ceph-incluster).

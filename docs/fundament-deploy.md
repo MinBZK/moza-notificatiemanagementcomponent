@@ -203,7 +203,13 @@ kubectl -n moza-mock port-forward svc/fsc-open-fsc-controller 8084:80 &
    van de NMC hem kent. De verbinding staat dan op "Voorgesteld".
 3. **moza-mock (8084):** Binnenkomende verbindingen → de aanvraag van `nmc` tekenen.
 4. **nmc (8083):** In- & Outways → `default` → grant link: pad `profielservice` → de grant van de
-   verbinding. Dat is de hash die begint met **`$1$3$`**; die met `$1$2$` is de publicatie en geeft
+   verbinding.
+
+**Geldigheid:** het formulier van een contract staat standaard op twee dagen. Daarna weigert de
+outway met `UNKNOWN_GRANT_HASH_IN_HEADER`, ook via een grant link, en toont hij in de foutmelding een
+lege lijst `services`/`grant_links`. Zet de geldigheid bij publicatie én verbinding zelf ruim (lokaal
+een jaar). Een verlopen contract verleng je niet: maak een nieuwe publicatie en verbinding, en zet de
+grant link op de nieuwe `$1$3$`-hash. Dat is de hash die begint met **`$1$3$`**; die met `$1$2$` is de publicatie en geeft
    `UNKNOWN_GRANT_HASH_IN_HEADER`.
 
 Door de grant link stuurt de outway alles onder `/profielservice/` met die grant door, en hoeft de NMC
@@ -245,6 +251,24 @@ van `fsc-demo` de dienstverlener.
    NMC naar de Profielservice.
 
 De receipt-callback van de NotifyNL-mock en de webhooks naar dienstverleners blijven direct.
+
+## Lokaal stoppen en weer starten
+
+In `~/dev/fundament`, in WSL:
+
+```bash
+mise exec -- k3d cluster stop fundament fundament-plugin                 # stoppen (niet met docker stop)
+docker start registry.localhost plugin-registry.localhost
+mise exec -- k3d cluster start fundament fundament-plugin                # weer starten
+```
+
+- Faalt het starten met `error waiting for log line … status=restarting`, dan herstartte de node één
+  keer; start daarna `fundament-plugin` apart. Geeft `kubectl --context k3d-fundament` daarna
+  `x509: certificate signed by unknown authority`, dan wijst de load balancer nog naar het oude IP van
+  de node: `docker restart k3d-fundament-serverlb`.
+- Port-forwards stoppen bij het stoppen; start ze opnieuw.
+- Controleer daarna één notificatie via FSC. Een 400 `UNKNOWN_GRANT_HASH_IN_HEADER` betekent meestal
+  een verlopen contract (zie "Geldigheid" onder FSC).
 
 ## Wat de chart verwacht
 

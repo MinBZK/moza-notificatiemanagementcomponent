@@ -86,6 +86,12 @@ Op 20 november 2026 lokaal uitgevoerd.
 - De grant link en een `Fsc-Grant-Hash` horen bij de **verbinding** (`$1$3$…`), niet bij de
   publicatie (`$1$2$…`). Met de publicatie geeft de outway `UNKNOWN_GRANT_HASH_IN_HEADER`.
 
+- Een contract is in de Controller standaard twee dagen geldig. Op 23 november waren publicatie en
+  verbinding voor de service `nmc` verlopen: de outway van `fsc-demo` gaf 400
+  `UNKNOWN_GRANT_HASH_IN_HEADER`, met een lege lijst `grant_links`, terwijl de grant link nog in de
+  database stond. Een herstart van de outway hielp niet. Opgelost met nieuwe contracten (een jaar
+  geldig) en de grant link op de nieuwe hash. De contracten voor `profielservice` stonden al op een jaar.
+
 ### Waarneming voor moza-mock
 
 Bij de 500 blijft de poging op `GEPLAND` zonder `notify_id`. Na vijf minuten vraagt de reconciliatie
