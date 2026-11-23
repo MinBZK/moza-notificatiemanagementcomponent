@@ -38,10 +38,6 @@ public class Bevestiging {
         // Voor JPA
     }
 
-    public UUID getDvId() {
-        return dvId;
-    }
-
     public Cursor getCursor() {
         return new Cursor(epoch, transactieId, eventId);
     }
