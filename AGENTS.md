@@ -193,8 +193,9 @@ Haal die override pas weg als de Quarkus-BOM zelf een veilige versie levert.
   je eigen PR.
 - **Hooks in `.claude/settings.json`** blokkeren een wijziging aan een bestaande migratie of aan
   gegenereerde code, waarschuwen bij `now()` zonder klok of een JAX-RS-annotatie op een
-  controller, en draaien `./mvnw verify` vóór een `git push`. Een push in hetzelfde commando als
-  een commit, merge, rebase of pull wordt geweigerd: doe die los en push daarna. De bestandshooks
+  controller, en draaien `./mvnw verify` vóór een `git push`, op de commit die gepusht wordt. Een
+  push in hetzelfde commando als een commit, merge, rebase, pull, checkout of reset wordt
+  geweigerd: doe die los en push daarna. De bestandshooks
   zien alleen de Edit- en Write-tools; een wijziging via de shell (`sed -i`) gaat erlangs.
 
 ## Referentierepo's (naast deze repo)

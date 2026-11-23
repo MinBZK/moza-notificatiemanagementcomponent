@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
  * Test van de Claude Code-hook {@code .claude/hooks/verify-voor-push.sh}, die vóór een git push
@@ -182,6 +183,138 @@ class VerifyVoorPushHookTest {
     }
 
     @Test
+    void heredocBuitenAanhalingstekensDieGitPushNoemt_wordtNietAlsPushGezien() throws Exception {
+        Uitkomst uitkomst = draai("""
+                gh pr create --title x --body-file - <<'EOF'
+                Draai verify voor git push
+                EOF
+                """);
+
+        assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertEquals(0, verifyAanroepen());
+    }
+
+    @Test
+    void checkoutEnPush_blokkeert() throws Exception {
+        maakKapotteBranch();
+
+        Uitkomst uitkomst = draai("git checkout kapot && git push -u origin kapot");
+
+        assertEquals(2, uitkomst.exitcode());
+        assertTrue(uitkomst.stderr().contains("én pusht"), uitkomst.stderr());
+        assertEquals(0, verifyAanroepen());
+    }
+
+    @Test
+    void resetEnPush_blokkeert() throws Exception {
+        maakKapotteBranch();
+
+        Uitkomst uitkomst = draai("git reset --hard kapot && git push -f");
+
+        assertEquals(2, uitkomst.exitcode());
+        assertEquals(0, verifyAanroepen());
+    }
+
+    @Test
+    void pushVanAndereBranch_verifieertDieBranch() throws Exception {
+        String kapot = maakKapotteBranch();
+
+        Uitkomst uitkomst = draai("git push origin kapot");
+
+        assertEquals(2, uitkomst.exitcode());
+        assertTrue(uitkomst.stderr().contains(kapot), uitkomst.stderr());
+    }
+
+    @Test
+    void pushMetBronEnDoel_verifieertDeBron() throws Exception {
+        maakKapotteBranch();
+
+        Uitkomst uitkomst = draai("git push --force-with-lease origin +kapot:main");
+
+        assertEquals(2, uitkomst.exitcode());
+    }
+
+    @Test
+    void pushVanHeadNaarAnderDoel_verifieertHead() throws Exception {
+        maakKapotteBranch();
+
+        Uitkomst uitkomst = draai("git push -o ci.skip origin HEAD:kapot");
+
+        assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertEquals(1, verifyAanroepen());
+    }
+
+    @Test
+    void pushAll_verifieertHeadEnMeldtDat() throws Exception {
+        Uitkomst uitkomst = draai("git push --all origin");
+
+        assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertTrue(uitkomst.stdout().contains("alleen HEAD"), uitkomst.stdout());
+        assertEquals(1, verifyAanroepen());
+    }
+
+    @Test
+    void verwijderenVanRemoteBranch_draaitGeenVerify() throws Exception {
+        assertEquals(0, draai("git push origin :oud").exitcode());
+        assertEquals(0, draai("git push origin --delete oud").exitcode());
+        assertEquals(0, verifyAanroepen());
+    }
+
+    @Test
+    void cdNaarRepoVanuitAndereMap_verifieertDieRepo() throws Exception {
+        Uitkomst uitkomst = draaiVanuit(tijdelijk, "cd " + repo + " && git push");
+
+        assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertEquals(1, verifyAanroepen());
+    }
+
+    @Test
+    void gitMinCNaarRepoVanuitAndereMap_verifieertDieRepo() throws Exception {
+        Uitkomst uitkomst = draaiVanuit(tijdelijk, "git -C " + repo + " push");
+
+        assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertEquals(1, verifyAanroepen());
+    }
+
+    @Test
+    void pushBuitenEenRepo_laatDoorZonderVerify() throws Exception {
+        Uitkomst uitkomst = draaiVanuit(tijdelijk, "git push");
+
+        assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertEquals(0, verifyAanroepen());
+    }
+
+    @Test
+    void zonderJava_meldtDatVerifyNietDraait() throws Exception {
+        Path pad = beperktPad("zonder-java", "cat", "jq", "awk", "grep", "sed", "tail", "git", "sort");
+
+        Uitkomst uitkomst = start("git push", repo, pad.toString(), Map.of());
+
+        assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertTrue(uitkomst.stdout().contains("geen Java"), uitkomst.stdout());
+        assertEquals(0, verifyAanroepen());
+    }
+
+    @Test
+    void worktreeAanmakenFaalt_meldtDatVerifyNietDraait() throws Exception {
+        Path worktrees = Files.createDirectories(repo.resolve(".git/worktrees"));
+        Files.setPosixFilePermissions(worktrees, PosixFilePermissions.fromString("r-xr-xr-x"));
+
+        try {
+            // Als root negeert het bestandssysteem de rechten; dan valt er niets te testen.
+            assumeFalse(Files.isWritable(worktrees), "rechten worden niet afgedwongen");
+
+            Uitkomst uitkomst = draai("git push");
+
+            assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+            assertTrue(uitkomst.stdout().contains("tijdelijke worktree"), uitkomst.stdout());
+            assertEquals(0, verifyAanroepen());
+        } finally {
+            Files.setPosixFilePermissions(worktrees, PosixFilePermissions.fromString("rwxr-xr-x"));
+        }
+    }
+
+    @Test
     void zonderJq_geenPush_zegtNiets() throws Exception {
         Uitkomst uitkomst = draaiZonderJq("ls -la");
 
@@ -203,29 +336,55 @@ class VerifyVoorPushHookTest {
     }
 
     private Uitkomst draai(String commando, Map<String, String> extra) throws Exception {
-        String pad = nepBin + File.pathSeparator + System.getenv("PATH");
-
-        return start(commando, pad, extra);
+        return start(commando, repo, volledigPad(), extra);
     }
 
-    // Een PATH met alleen de programma's die de hook zonder jq nodig heeft.
-    private Uitkomst draaiZonderJq(String commando) throws Exception {
-        Path beperkt = Files.createDirectory(tijdelijk.resolve("zonder-jq"));
+    private Uitkomst draaiVanuit(Path cwd, String commando) throws Exception {
+        return start(commando, cwd, volledigPad(), Map.of());
+    }
 
-        for (String programma : List.of("cat", "grep", "printf")) {
-            zoek(programma).ifPresent(bron -> maakLink(beperkt.resolve(programma), bron));
+    private String volledigPad() {
+        return nepBin + File.pathSeparator + System.getenv("PATH");
+    }
+
+    private Uitkomst draaiZonderJq(String commando) throws Exception {
+        return start(commando, repo, beperktPad("zonder-jq", "cat", "grep").toString(), Map.of());
+    }
+
+    // Een PATH met alleen de genoemde programma's, om een ontbrekend programma na te bootsen.
+    private Path beperktPad(String naam, String... programmas) throws IOException {
+        Path map = Files.createDirectory(tijdelijk.resolve(naam));
+
+        for (String programma : programmas) {
+            maakLink(map.resolve(programma), zoek(programma).orElseThrow(
+                    () -> new IllegalStateException(programma + " staat niet op PATH")));
         }
 
-        return start(commando, beperkt.toString(), Map.of());
+        return map;
     }
 
-    private Uitkomst start(String commando, String pad, Map<String, String> extra) throws Exception {
+    // Een branch waarop verify faalt; geeft de korte hash van zijn commit terug.
+    private String maakKapotteBranch() throws Exception {
+        git("checkout", "-q", "-b", "kapot");
+        uitvoerbaar(repo.resolve("mvnw"), """
+                #!/bin/sh
+                echo verify >> "$VERIFY_TELLER"
+                exit 1
+                """);
+        git("commit", "-q", "-am", "kapot");
+        String hash = git("rev-parse", "--short", "HEAD").strip();
+        git("checkout", "-q", "-");
+
+        return hash;
+    }
+
+    private Uitkomst start(String commando, Path cwd, String pad, Map<String, String> extra) throws Exception {
         String invoer = JSON.writeValueAsString(Map.of(
                 "tool_input", Map.of("command", commando),
-                "cwd", repo.toString()));
+                "cwd", cwd.toString()));
 
         ProcessBuilder builder = new ProcessBuilder(zoek("bash").orElseThrow().toString(), HOOK.toString())
-                .directory(repo.toFile());
+                .directory(cwd.toFile());
         Map<String, String> omgeving = builder.environment();
         omgeving.put("PATH", pad);
         // Een lege HOME, zodat de hook geen echte SDKMAN-Java laadt.
@@ -251,13 +410,15 @@ class VerifyVoorPushHookTest {
         return Files.exists(teller) ? Files.readAllLines(teller).size() : 0;
     }
 
-    private void git(String... argumenten) throws Exception {
+    private String git(String... argumenten) throws Exception {
         List<String> opdracht = new ArrayList<>(List.of("git", "-C", repo.toString()));
         opdracht.addAll(Arrays.asList(argumenten));
         Process proces = new ProcessBuilder(opdracht).redirectErrorStream(true).start();
         String uitvoer = new String(proces.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
 
         assertEquals(0, proces.waitFor(), "git " + String.join(" ", argumenten) + ": " + uitvoer);
+
+        return uitvoer;
     }
 
     private static Optional<Path> zoek(String programma) {
