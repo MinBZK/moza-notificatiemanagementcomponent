@@ -67,6 +67,42 @@ class NotificatieOvergangTriggerTest {
         }));
     }
 
+    // Feed en webhook lezen het event; een event dat iets anders zegt dan de rij spreekt haar tegen.
+    @Test
+    void eventMetEenAndereStatusDanDeRij_wordtGeweigerd() {
+        UUID id = aangenomenNotificatie();
+
+        Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
+            sql("UPDATE notificatie SET versie = 1, status = 'IN_VERZENDING' WHERE id = ?1", id);
+            schrijfEvent(id, 1, NotificatieStatus.AANGENOMEN, NotificatieStatus.VERZONDEN);
+        }));
+
+        assertTrue(bevat(fout, "heeft een andere status of reden dan de rij"), fout.toString());
+    }
+
+    @Test
+    void eventMetEenAndereRedenDanDeRij_wordtGeweigerd() {
+        UUID id = aangenomenNotificatie();
+
+        Throwable fout = assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
+            sql("UPDATE notificatie SET versie = 1, status = 'IN_VERZENDING', reden = 'TECHNISCH' WHERE id = ?1", id);
+            schrijfEvent(id, 1, NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING);
+        }));
+
+        assertTrue(bevat(fout, "heeft een andere status of reden dan de rij"), fout.toString());
+    }
+
+    @Test
+    void eventMetDezelfdeRedenAlsDeRij_wordtGeaccepteerd() {
+        UUID id = aangenomenNotificatie();
+
+        assertDoesNotThrow(() -> QuarkusTransaction.requiringNew().run(() -> {
+            sql("UPDATE notificatie SET versie = 1, status = 'IN_VERZENDING', reden = 'TECHNISCH' WHERE id = ?1", id);
+            NotificatieFixtures.voegEventToe(entityManager, id, 1, NotificatieStatus.AANGENOMEN,
+                    NotificatieStatus.IN_VERZENDING, Reden.TECHNISCH, OffsetDateTime.now(ZoneOffset.UTC));
+        }));
+    }
+
     // Elke versie heeft precies een event; een sprong zou een gat in de volgnummers geven.
     @Test
     void versieMeerDanEenOmhoog_wordtGeweigerd() {

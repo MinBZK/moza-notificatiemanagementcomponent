@@ -31,6 +31,7 @@ public class Poging {
     private UUID notificatieId;
 
     @Column(nullable = false)
+    @JdbcTypeCode(SqlTypes.SMALLINT)
     private int nummer;
 
     @Enumerated(EnumType.STRING)

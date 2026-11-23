@@ -164,8 +164,8 @@ event, in de transactie van de aanroeper. De deferred constraint trigger
 `notificatie_overgang` (V5) bewaakt ook schrijvers buiten Hibernate, maar controleert
 minder: een nieuwe rij begint op `AANGENOMEN`, de status verandert alleen met een nieuwe
 versie, een nieuwe versie is precies één hoger, en heeft in dezelfde transactie een event
-met die versie als volgnummer. Welke overgang toegestaan is en de vergrendeling dwingt hij
-niet af.
+met die versie als volgnummer en dezelfde status en reden. Welke overgang toegestaan is en de
+vergrendeling dwingt hij niet af.
 
 `NotificatieStatus` (tien waarden, levenscyclus) en `PogingStatus` (zeven waarden,
 uitkomst per verzending) staan als `CHECK`-constraint in V4. In de API en het CloudEvent
