@@ -80,7 +80,8 @@ invoer mee en `VerifyVoorPushHookTest` faalt zonder.
 source "$HOME/.sdkman/bin/sdkman-init.sh"
 podman compose up -d                    # PostgreSQL voor dev-mode (docker compose werkt ook)
 ./mvnw quarkus:dev                      # live reload op http://localhost:8080
-./mvnw verify                           # volledige suite + coverage-gate
+./mvnw verify                           # volledige suite + coverage-gate + opmaakcontrole
+./mvnw spotless:apply                   # zet de opmaak van de Java-code recht
 ./mvnw test -Dtest=NaamVanDeTest        # één testklasse, zonder coverage-gate
 ```
 
@@ -90,6 +91,9 @@ podman compose up -d                    # PostgreSQL voor dev-mode (docker compo
 - **De coverage-gate hangt aan `verify`, niet aan `package` of `test`.** Draai lokaal
   `./mvnw verify` voor je een PR opent. CI-job `Maven verify` is een verplichte check op `main`;
   hernoem hem niet zonder de branch protection mee aan te passen.
+- **De opmaak van de Java-code ligt vast**: Spotless met palantir-java-format (4 spaties,
+  120 tekens), gecontroleerd in `verify`. Draai `./mvnw spotless:apply` in plaats van opmaak met
+  de hand te corrigeren.
 - **JaCoCo-drempels en excludes staan in `pom.xml`.** De excludes staan ook als
   `%test.quarkus.jacoco.excludes` in `application.properties`; `ConfiguratiePariteitTest`
   bewaakt dat ze gelijk blijven.
@@ -126,6 +130,9 @@ Jackson is in `pom.xml` bewust boven de Quarkus-BOM getild vanwege twee databind
 Haal die override pas weg als de Quarkus-BOM zelf een veilige versie levert.
 
 ## Codestijl
+
+De formatter regelt inspringing, regellengte, witruimte en de volgorde van imports. De regels
+hieronder kan hij niet afdwingen.
 
 - **Packages zijn technisch ingedeeld**: `controller/`, `service/`, `domain/`, `repository/`,
   `client/<systeem>/`, `job/`, `helper/`, `validation/`, `config/` (`@ConfigMapping`-interfaces).
