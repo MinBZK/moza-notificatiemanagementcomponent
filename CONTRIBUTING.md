@@ -11,7 +11,8 @@ Gebruik de [issue templates](.github/ISSUE_TEMPLATE/) voor het melden van bugs o
 ### Pull requests
 
 1. Fork de repository en maak een feature branch aan vanaf `main`.
-2. Zorg dat de code compileert en alle tests slagen: `./mvnw verify`.
+2. Zorg dat de code compileert en alle tests slagen: `./mvnw verify`. Daarvoor heb je Java 25 en
+   [`jq`](https://jqlang.org) nodig (`brew install jq`, `dnf install jq` of `apt install jq`).
 3. Maak een pull request aan met een duidelijke beschrijving van de wijziging en de motivatie.
 4. Gebruik de [pull request template](.github/PULL_REQUEST_TEMPLATE.md).
 
@@ -73,8 +74,9 @@ Wat je daarna krijgt:
 
 - **Hooks** die een wijziging aan gegenereerde code of een toegepaste migratie tegenhouden,
   waarschuwen bij `now()` zonder `Clock`, en `./mvnw verify` draaien vóór een `git push`. Ze
-  gebruiken `jq`; Java komt uit SDKMAN (`source "$HOME/.sdkman/bin/sdkman-init.sh"`). Ontbreekt
-  een van beide, dan slaat de hook over met een melding en vangt CI het af.
+  gebruiken `jq`, dat verplicht is; Java komt uit SDKMAN
+  (`source "$HOME/.sdkman/bin/sdkman-init.sh"`). Ontbreekt een van beide toch, dan slaat de hook
+  over met een melding en vangt CI het af.
 - **`/nmc-review <PR-nummer>`**: review met de projectchecklist, en de fixes als PR bovenop die
   PR in plaats van losse comments.
 - **De agent `nmc-reviewer`** voor een onafhankelijke review van je eigen branch.

@@ -73,7 +73,8 @@ Elk van deze regels voorkomt een fout die de build niet altijd vangt.
 
 ## Build en test
 
-Java en Maven komen uit SDKMAN en staan niet op `PATH`:
+Java en Maven komen uit SDKMAN en staan niet op `PATH`. `jq` is verplicht: de hooks lezen er hun
+invoer mee en `VerifyVoorPushHookTest` faalt zonder.
 
 ```bash
 source "$HOME/.sdkman/bin/sdkman-init.sh"

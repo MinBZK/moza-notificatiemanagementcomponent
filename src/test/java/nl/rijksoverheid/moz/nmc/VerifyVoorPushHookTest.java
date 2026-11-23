@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -40,6 +41,13 @@ class VerifyVoorPushHookTest {
     private Path repo;
     private Path teller;
     private Path nepBin;
+
+    // Zonder jq slaat de hook alles over en falen de tests met een onduidelijke melding.
+    @BeforeAll
+    static void jqIsGeinstalleerd() {
+        assertTrue(zoek("jq").isPresent(),
+                "jq is verplicht voor de build; installeer het met brew, dnf of apt install jq");
+    }
 
     @BeforeEach
     void maakRepo() throws Exception {
