@@ -70,7 +70,8 @@ public class WebhookSleutel {
      * extra sleutel.
      */
     public List<PubliekeSleutel> publiekeSleutels() {
-        PubliekeSleutel eigen = new PubliekeSleutel(keyId, modulus(), publiekeExponent());
+        PubliekeSleutel eigen = new PubliekeSleutel(keyId, base64url(privateSleutel.getModulus()),
+                base64url(privateSleutel.getPublicExponent()));
 
         return extraSleutel.map(extra -> List.of(eigen, extra)).orElseGet(() -> List.of(eigen));
     }
@@ -91,19 +92,6 @@ public class WebhookSleutel {
                 .keyId(keyId)
                 .algorithm(SignatureAlgorithm.RS256)
                 .sign(privateSleutel);
-    }
-
-    public String keyId() {
-        return keyId;
-    }
-
-    /** De modulus van de publieke sleutel, base64url zonder voorloopnul zoals JWK die vraagt. */
-    public String modulus() {
-        return base64url(privateSleutel.getModulus());
-    }
-
-    public String publiekeExponent() {
-        return base64url(privateSleutel.getPublicExponent());
     }
 
     // PKCS#8 als PEM, met of zonder kop- en voetregel en regelafbrekingen; een env-var kan de PEM
