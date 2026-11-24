@@ -55,6 +55,8 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -112,6 +114,12 @@ class VerzendTaakHandlerTest {
 
     @Inject
     TaakRepository taakRepository;
+
+    @Inject
+    TaakClaimer taakClaimer;
+
+    @Inject
+    VerzendTaakHandler verzendTaakHandler;
 
     @BeforeEach
     void setUp() {
@@ -569,6 +577,65 @@ class VerzendTaakHandlerTest {
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
+    }
+
+    // Een andere worker claimt de taak terwijl de e-mail bij NotifyNL ligt. De tweede transactie mag dan
+    // niets vastleggen: de andere worker vindt de e-mail terug op de reference en rondt zelf af.
+    @Test
+    void claimVerlorenTijdensHetVersturen_legtGeenVerzendingVast() {
+        UUID id = aannameService.neemAan(decentraal());
+        UUID taakId = taken(TaakSoort.VERZENDEN).getFirst().getId();
+        when(sendAMessageApi.sendEmail(any())).thenAnswer(aanroep -> {
+            claimDoorAndereWorker(taakId);
+
+            return new SendEmailResponse().id(UUID.randomUUID().toString());
+        });
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        verify(sendAMessageApi, times(1)).sendEmail(any());
+        assertEquals(NotificatieStatus.IN_VERZENDING, notificatie(id).getStatus());
+        Poging poging = poging(id);
+        assertEquals(PogingStatus.GEPLAND, poging.getStatus());
+        assertNull(poging.getNotifyId());
+        assertTrue(taken(TaakSoort.RECONCILIEREN).isEmpty(), "geen navraagtaak van de worker die zijn claim kwijt is");
+        assertEquals(List.of(taakId), taken(TaakSoort.VERZENDEN).stream().map(Taak::getId).toList());
+    }
+
+    // Hetzelfde voor een uitkomst zonder verzending: de eindstatus is aan de worker die de taak nu heeft.
+    @Test
+    void claimVerlorenTijdensDeProfielserviceLookup_geeftGeenEindstatus() {
+        UUID id = aannameService.neemAan(centraal());
+        UUID taakId = taken(TaakSoort.VERZENDEN).getFirst().getId();
+        when(profielApi.apiProfielserviceV1PartijPost(any())).thenAnswer(aanroep -> {
+            claimDoorAndereWorker(taakId);
+
+            throw new WebApplicationException(Response.status(Response.Status.NOT_FOUND).build());
+        });
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        assertEquals(NotificatieStatus.IN_VERZENDING, notificatie(id).getStatus());
+        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING), overgangen(id));
+        verify(sendAMessageApi, never()).sendEmail(any());
+    }
+
+    // De claim is al weg voordat de handler begint: geen poging en geen overgang.
+    @Test
+    void claimVerlorenVoorDeEersteTransactie_startGeenPoging() {
+        UUID id = aannameService.neemAan(decentraal());
+        Taak taak = TaakFixtures.geclaimdEnVerloren(taakClaimer, taakRepository.getEntityManager(), TaakSoort.VERZENDEN);
+
+        assertThrows(TaakVerlorenException.class, () -> verzendTaakHandler.voerUit(taak, () -> { }));
+
+        assertEquals(NotificatieStatus.AANGENOMEN, notificatie(id).getStatus());
+        assertTrue(QuarkusTransaction.requiringNew().call(() -> pogingRepository.findLaatsteVan(id)).isEmpty());
+        verify(sendAMessageApi, never()).sendEmail(any());
+    }
+
+    private void claimDoorAndereWorker(UUID taakId) {
+        QuarkusTransaction.requiringNew().run(() ->
+                TaakFixtures.claimDoorAndereWorker(taakRepository.getEntityManager(), TaakSoort.VERZENDEN, taakId));
     }
 
     private static AannameOpdracht decentraal() {
