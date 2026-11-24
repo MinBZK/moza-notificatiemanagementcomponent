@@ -1,0 +1,54 @@
+# Ruimt dagelijks achtergebleven PR-previews op in ZAD-project nd-j7s.
+#
+# De job cleanup-preview in deploy.yml ruimt een preview op zodra de PR sluit, maar alleen
+# als die run ook start en slaagt. Deze workflow is het vangnet: hij loopt de GitHub
+# environments `pr-<n>` langs en ruimt op voor elke PR die niet meer open is: de
+# ZAD-deployment, de GitHub-deployments, het image `pr-<n>` in GHCR en het environment zelf.
+#
+# Het environment verwijderen vraagt "Administration: write" op de repo. GITHUB_TOKEN kan
+# dat recht niet krijgen, dus daarvoor is het secret GITHUB_ADMIN_TOKEN nodig. Ontbreekt
+# dat, dan slaat de action alleen die stap over. Omdat de action achtergebleven previews
+# vindt via de environments, scant hij die environments dan bij elke run opnieuw.
+#
+# Vereiste repo-secrets: ZAD_API_KEY, GITHUB_ADMIN_TOKEN (zie hierboven).
+
+name: ZAD Scheduled Cleanup
+
+permissions: read-all
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Alleen tonen wat opgeruimd zou worden'
+        type: boolean
+        default: true
+
+concurrency:
+  group: zad-scheduled-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write # GitHub-deployments verwijderen
+      packages: write # image pr-<n> uit GHCR verwijderen
+      pull-requests: read # PR-status opvragen
+    steps:
+      - name: Achtergebleven PR-previews opruimen
+        uses: RijksICTGilde/zad-actions/scheduled-cleanup@0b604742a137d43f6fe8fceb06bdffeb0a1665db # v4.4.1
+        with:
+          api-key: ${{ secrets.ZAD_API_KEY }}
+          project-id: nd-j7s
+          environment-pattern: '^pr-[0-9]+$'
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run && 'true' || 'false' }}
+          delete-github-env: 'true'
+          delete-github-deployments: 'true'
+          delete-container: 'true'
+          # Hetzelfde package als IMAGE_NAME in deploy.yml.
+          container-org: minbzk
+          container-name: moza-notificatiemanagementcomponent
+          github-admin-token: ${{ secrets.GITHUB_ADMIN_TOKEN }}

@@ -8,7 +8,8 @@
 # Vereiste repo-secrets:
 #   ZAD_API_KEY         — ZAD Operations Manager API key voor nd-j7s
 #   ZAD_API_KEY_TST     — idem voor nt-8bl
-#   GITHUB_ADMIN_TOKEN  — PAT met repo-admin (voor opruimen GitHub environment)
+#   GITHUB_ADMIN_TOKEN  — token met "Administration: write" op deze repo, om het GitHub
+#                         environment pr-<n> te verwijderen; GITHUB_TOKEN kan dat niet
 #
 # De applicatieconfiguratie (DB-url/credentials, notify.api-key, hash.pepper,
 # QUARKUS_FLYWAY_MIGRATE_AT_START=true, ...) komt NIET uit deze workflow maar uit
@@ -149,10 +150,10 @@ jobs:
           api-key: ${{ secrets.ZAD_API_KEY }}
           project-id: ${{ env.ZAD_PROJECT_ID }}
           deployment-name: pr-${{ github.event.pull_request.number }}
-          # GitHub-environment verwijderen vereist GITHUB_ADMIN_TOKEN (repo-admin PAT).
-          # Zet beide op 'true' zodra dat secret bestaat; nu uit om hard falen te voorkomen.
-          delete-github-env: 'false'
-          delete-github-deployments: 'false'
+          # Het environment verwijderen vraagt GITHUB_ADMIN_TOKEN ("Administration: write");
+          # zonder dat secret slaat de action die stap over. Deployments gaan met GITHUB_TOKEN.
+          delete-github-env: 'true'
+          delete-github-deployments: 'true'
           delete-container: 'true'
           container-org: minbzk # lowercase; moet matchen met push-tag
           container-name: ${{ github.event.repository.name }}
