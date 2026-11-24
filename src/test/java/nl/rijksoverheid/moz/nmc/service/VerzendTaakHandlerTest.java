@@ -305,10 +305,11 @@ class VerzendTaakHandlerTest {
 
     // Een 401 of 403 betreft de key of de toegang van het NMC, niet de poging: anders eindigt elke
     // notificatie die tijdens zo'n storing aan de beurt is na het maximum op technisch-mislukt.
-    @Test
-    void notifyWeigertDeKey_steltUitZonderPoging() {
+    @ParameterizedTest
+    @ValueSource(ints = {401, 403})
+    void notifyWeigertDeKey_steltUitZonderPoging(int status) {
         when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.UNAUTHORIZED).build()));
+                .thenThrow(new WebApplicationException(Response.status(status).build()));
         UUID id = aannameService.neemAan(decentraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
