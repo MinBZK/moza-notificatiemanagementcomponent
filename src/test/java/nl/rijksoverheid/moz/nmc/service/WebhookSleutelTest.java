@@ -30,8 +30,9 @@ class WebhookSleutelTest {
         KeyPair paar = rsa(2048);
         WebhookSleutel sleutel = sleutel(pem(paar), "sleutel-1");
 
+        WebhookSleutel.PubliekeSleutel gepubliceerd = sleutel.publiekeSleutels().getFirst();
         RSAPublicKey publiek = (RSAPublicKey) KeyFactory.getInstance("RSA").generatePublic(
-                new RSAPublicKeySpec(getal(sleutel.modulus()), getal(sleutel.publiekeExponent())));
+                new RSAPublicKeySpec(getal(gepubliceerd.modulus()), getal(gepubliceerd.exponent())));
         assertEquals(paar.getPublic(), publiek);
 
         RsaJsonWebKey jwk = new RsaJsonWebKey(publiek);
@@ -43,7 +44,7 @@ class WebhookSleutelTest {
                 .processToClaims(sleutel.onderteken(URL, "hash-van-de-body"));
         assertEquals(120, claims.getExpirationTime().getValue() - claims.getIssuedAt().getValue());
         assertEquals("hash-van-de-body", claims.getStringClaimValue(WebhookSleutel.BODY_HASH_CLAIM));
-        assertEquals("sleutel-1", sleutel.keyId());
+        assertEquals("sleutel-1", gepubliceerd.keyId());
     }
 
     // Een env-var draagt de PEM vaak op één regel, zonder kop en voet.
@@ -71,10 +72,15 @@ class WebhookSleutelTest {
 
     @Test
     void publiekeSleutels_zonderExtraSleutel_bevatAlleenDeEigenSleutel() throws Exception {
-        WebhookSleutel sleutel = sleutel(pem(rsa(2048)), "sleutel-1");
+        KeyPair paar = rsa(2048);
+        WebhookSleutel sleutel = sleutel(pem(paar), "sleutel-1");
 
-        assertEquals(List.of(new WebhookSleutel.PubliekeSleutel("sleutel-1", sleutel.modulus(), sleutel.publiekeExponent())),
-                sleutel.publiekeSleutels());
+        List<WebhookSleutel.PubliekeSleutel> sleutels = sleutel.publiekeSleutels();
+
+        assertEquals(1, sleutels.size());
+        assertEquals("sleutel-1", sleutels.getFirst().keyId());
+        assertEquals(((RSAPublicKey) paar.getPublic()).getModulus(), getal(sleutels.getFirst().modulus()));
+        assertEquals(((RSAPublicKey) paar.getPublic()).getPublicExponent(), getal(sleutels.getFirst().exponent()));
     }
 
     // Lege waarden uit een env-var tellen als afwezig.
@@ -87,13 +93,14 @@ class WebhookSleutelTest {
 
     @Test
     void publiekeSleutels_metExtraSleutel_bevatBeideMetHunEigenKid() throws Exception {
+        KeyPair eigen = rsa(2048);
         KeyPair extra = rsa(2048);
-        WebhookSleutel sleutel = metExtraSleutel(pem(rsa(2048)), "sleutel-1", publiekePem(extra), " sleutel-2 ");
+        WebhookSleutel sleutel = metExtraSleutel(pem(eigen), "sleutel-1", publiekePem(extra), " sleutel-2 ");
 
         List<WebhookSleutel.PubliekeSleutel> sleutels = sleutel.publiekeSleutels();
 
         assertEquals(List.of("sleutel-1", "sleutel-2"), sleutels.stream().map(WebhookSleutel.PubliekeSleutel::keyId).toList());
-        assertEquals(sleutel.modulus(), sleutels.get(0).modulus());
+        assertEquals(((RSAPublicKey) eigen.getPublic()).getModulus(), getal(sleutels.get(0).modulus()));
         assertEquals(((RSAPublicKey) extra.getPublic()).getModulus(), getal(sleutels.get(1).modulus()));
         assertEquals(((RSAPublicKey) extra.getPublic()).getPublicExponent(), getal(sleutels.get(1).exponent()));
     }

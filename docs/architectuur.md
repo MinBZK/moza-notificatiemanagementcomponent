@@ -149,6 +149,12 @@ dienstverlener per dag (`dienstverlener.quotum_per_dag`, zonder waarde daar
 De controllers antwoorden 202 via `AannameResponse.notificatieAangenomen`; daarvoor genereert
 de `notificaties`-run in de pom met `returnResponse=true`.
 
+**Grenzen op de aanvraag.** Het identificerend nummer is 8 of 9 cijfers; `dienstverlener` en
+`dienst` bevatten een leesbaar teken en geen regeleinde. De berichtgegevens zijn ten hoogste 50
+variabelen, met namen tot 100 en waarden tot 2000 tekens (`BerichtgegevensConstraintValidator`).
+Een body boven `quarkus.http.limits.max-body-size` (1 MB) krijgt 413 voordat hij is ingelezen;
+die grens geldt voor elk endpoint.
+
 **Eén geconfigureerde dienstverlener.** `dienstverlener` heeft één rij uit de
 migratie; `DvProvider` levert die `dv_id`, die op elke notificatie en elk event
 staat. Tokenvalidatie per dienstverlener vervangt later alleen de provider.
