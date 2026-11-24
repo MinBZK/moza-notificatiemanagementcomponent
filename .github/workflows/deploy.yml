@@ -154,11 +154,11 @@ jobs:
           container-tag: pr-${{ github.event.number }}
           github-admin-token: ${{ secrets.GITHUB_ADMIN_TOKEN }}
 
-  # Push/merge naar main → de persistente 'stable'-deployment (de baseline-omgeving).
+  # Push/merge naar main → de persistente 'stable'-deployment in het dev-project (nd-j7s).
   # Config (DB-url/creds, notify.api-key, hash.pepper, flyway-flag, ...) staat éénmalig op de
   # 'stable'-deployment in Operations Manager — deze workflow draagt geen env, dus géén
   # clone-from (in tegenstelling tot de PR-preview, die van 'feature' erft).
-  deploy-stable:
+  deploy-stable-dev:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
@@ -169,7 +169,7 @@ jobs:
       name: stable
       url: ${{ steps.deploy.outputs.url }}
     steps:
-      - name: Deploy to ZAD (stable)
+      - name: Deploy to ZAD (dev stable)
         id: deploy
         uses: RijksICTGilde/zad-actions/deploy@0b604742a137d43f6fe8fceb06bdffeb0a1665db # v4.4.1
         with:
