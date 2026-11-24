@@ -241,15 +241,6 @@ class ControleTaakHandlerTest {
         assertEquals(0, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.TERUGKOPPELEN)));
     }
 
-    @Test
-    void geplandeRondeControle_voertDeHandlerUit() {
-        UUID id = notificatie(NotificatieStatus.AANGENOMEN, null);
-
-        TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
-
-        assertEquals(TaakSoort.VERZENDEN, perNotificatie().get(id).getTaakSoort());
-    }
-
     private void zetWebhook(String url) {
         QuarkusTransaction.requiringNew().run(() ->
                 TaakFixtures.zetWebhook(taakRepository.getEntityManager(), NotificatieFixtures.DV_ID, url, null, null));

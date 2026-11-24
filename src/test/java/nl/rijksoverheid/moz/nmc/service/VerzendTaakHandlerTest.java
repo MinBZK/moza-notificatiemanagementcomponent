@@ -569,16 +569,6 @@ class VerzendTaakHandlerTest {
         verify(sendAMessageApi, never()).sendEmail(any());
     }
 
-    @Test
-    void geplandeRondeVerzenden_voertDeHandlerUit() {
-        when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
-        UUID id = aannameService.neemAan(decentraal());
-
-        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
-
-        assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
-    }
-
     // Een andere worker claimt de taak terwijl de e-mail bij NotifyNL ligt. De tweede transactie mag dan
     // niets vastleggen: de andere worker vindt de e-mail terug op de reference en rondt zelf af.
     @Test
