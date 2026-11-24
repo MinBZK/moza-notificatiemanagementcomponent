@@ -60,6 +60,13 @@ Benodigde env-vars op die deployment:
 | `LOGBOEKDATAVERWERKING_ENABLED` | Verwerkingenlogging (LDV). `%prod` laat 'm leeg, dus verplicht per deployomgeving. **Voorlopig `false`**; op `true` zetten zodra de ClickHouse-config hieronder werkt |
 | `LOGBOEKDATAVERWERKING_CLICKHOUSE_ENDPOINT`, `_USERNAME`, `_PASSWORD`, `_DATABASE`, `_TABLE` | ClickHouse-sink voor LDV. Alleen nodig zodra `LOGBOEKDATAVERWERKING_ENABLED=true`; nu leeg te laten |
 
+> De drie `QUARKUS_DATASOURCE_*` zijn geen env-vars maar **aliassen** op component `nmcapi`
+> (`zadctl alias list nmcapi`). Ze vertalen de variabelen die de `postgresql-database`-service
+> injecteert: `QUARKUS_DATASOURCE_USERNAME=$APP_DATABASE_USER`,
+> `QUARKUS_DATASOURCE_PASSWORD=$APP_DATABASE_PASSWORD` en
+> `QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://$APP_DATABASE_SERVER_HOST:$APP_DATABASE_PORT/$APP_DATABASE_DB`.
+> Ontbreken ze, dan probeert de app `localhost:5432` en faalt Flyway bij het starten.
+
 > Quarkus mapt env-vars naar properties via name-mangling (uppercase, niet-alfanumeriek
 > → `_`): `QUARKUS_DATASOURCE_USERNAME`/`_PASSWORD`/`_JDBC_URL` vullen de datasource-config,
 > `QUARKUS_FLYWAY_MIGRATE_AT_START` overschrijft `%prod.quarkus.flyway.migrate-at-start`.
@@ -81,9 +88,10 @@ URL-patroon: `https://nmcapi-pr-<n>-nd-j7s.rig.prd1.gn2.quattro.rijksapps.nl`
 ## Tst-project (`nt-8bl`)
 
 Naast `nd-j7s` (NMC - dev) bestaat het ZAD-project `nt-8bl` (NMC - tst), met dezelfde opbouw:
-component `nmcapi`, `postgresql-database`, `publish-on-web` en dezelfde env-vars en
-`notify-cert`-bijlage als `nd-j7s`. De NotifyNL-waarden zijn die van dev-`stable`, en ze staan
-component-breed. Er zijn twee deployments:
+component `nmcapi`, `postgresql-database`, `publish-on-web` en de datasource-aliassen. De
+env-vars zijn de component-brede van `nd-j7s`, dus dezelfde als de PR-deploys krijgen, niet
+de `stable`-overrides. De `notify-cert`-bijlage ontbreekt bewust: de NMC praat hier met een
+WireMock en `QUARKUS_TLS_NOTIFY_TRUST_ALL` staat aan. Er zijn twee deployments:
 
 | Deployment | Wordt bijgewerkt door |
 | --- | --- |
