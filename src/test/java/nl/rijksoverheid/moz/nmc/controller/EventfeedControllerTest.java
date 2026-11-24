@@ -19,10 +19,13 @@ import org.junit.jupiter.params.provider.CsvSource;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.domain.Bevestiging;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -58,6 +61,27 @@ class EventfeedControllerTest {
     @Test
     void events_ongeldigeCursor_geeft400() {
         given().queryParam("cursor", "geen cursor !").when().get(FEED).then().statusCode(400);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, -1})
+    void events_limietOnderEen_geeft400(int limiet) {
+        given().queryParam("limiet", limiet).when().get(FEED)
+                .then()
+                .statusCode(400);
+    }
+
+    // %test: nmc.feed.max-pagina=10. Vier verzonden notificaties geven twaalf events.
+    @Test
+    void events_limietBovenHetMaximum_geeftHetMaximum() {
+        for (int i = 0; i < 4; i++) {
+            verzondenNotificatie();
+        }
+
+        given().queryParam("limiet", 999).when().get(FEED)
+                .then()
+                .statusCode(200)
+                .body("events", hasSize(10));
     }
 
     @Test
@@ -99,8 +123,9 @@ class EventfeedControllerTest {
         given().contentType(ContentType.JSON).body("{\"cursor\": \"" + cursor + "\"}")
                 .when().put(BEVESTIGING).then().statusCode(204);
 
-        assertTrue(QuarkusTransaction.requiringNew()
-                .call(() -> bevestigingRepository.findByIdOptional(NotificatieFixtures.DV_ID).isPresent()));
+        Bevestiging bevestiging = QuarkusTransaction.requiringNew()
+                .call(() -> bevestigingRepository.findByIdOptional(NotificatieFixtures.DV_ID)).orElseThrow();
+        assertEquals(cursor, bevestiging.getCursor().codeer());
     }
 
     @Test

@@ -16,6 +16,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
+import org.jose4j.jws.JsonWebSignature;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -45,6 +46,18 @@ class WebhookSleutelTest {
         assertEquals(120, claims.getExpirationTime().getValue() - claims.getIssuedAt().getValue());
         assertEquals("hash-van-de-body", claims.getStringClaimValue(WebhookSleutel.BODY_HASH_CLAIM));
         assertEquals("sleutel-1", gepubliceerd.keyId());
+    }
+
+    // Een ontvanger kiest de sleutel uit de JWKS op de kid in de header van de JWT.
+    @Test
+    void onderteken_zetDeKidEnHetAlgoritmeInDeHeader() throws Exception {
+        WebhookSleutel sleutel = sleutel(pem(rsa(2048)), "sleutel-1");
+        JsonWebSignature jws = new JsonWebSignature();
+
+        jws.setCompactSerialization(sleutel.onderteken(URL, "hash-van-de-body"));
+
+        assertEquals("sleutel-1", jws.getKeyIdHeaderValue());
+        assertEquals("RS256", jws.getAlgorithmHeaderValue());
     }
 
     // Een env-var draagt de PEM vaak op één regel, zonder kop en voet.

@@ -28,6 +28,10 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
+import nl.rijksoverheid.moz.nmc.service.Sleutelbeheer;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
@@ -51,6 +55,9 @@ class CentraleNotificatieControllerTest {
 
     @Inject
     NotificatieRepository notificatieRepository;
+
+    @Inject
+    Sleutelbeheer sleutelbeheer;
 
     @Inject
     TaakRepository taakRepository;
@@ -84,6 +91,37 @@ class CentraleNotificatieControllerTest {
             assertEquals(TaakSoort.VERZENDEN, taakRepository.listAll().getFirst().getTaakSoort());
         });
         verifyNoInteractions(profielApi, sendAMessageApi);
+    }
+
+    // De controller vertaalt het type uit de aanvraag naar de soort ontvanger die versleuteld op de rij komt.
+    @ParameterizedTest
+    @CsvSource({"BSN, 123456782", "KVK, 12345678", "RSIN, 123456789"})
+    void notificatieAannemen_elkIdentificatieType_bewaartDeOntvangerMetDieSoort(String type, String nummer) {
+        String id = given()
+                .contentType(ContentType.JSON)
+                .body(aanvraagMetIdentificatie(type, nummer))
+                .when().post(PAD)
+                .then()
+                .statusCode(202)
+                .extract().path("notificatieId");
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            Notificatie notificatie = notificatieRepository.findById(UUID.fromString(id));
+            assertEquals(new Ontvanger(Ontvanger.Soort.valueOf(type), nummer),
+                    sleutelbeheer.ontsleutelOntvanger(notificatie.getId(), notificatie.getVersleuteldeGegevens()));
+        });
+    }
+
+    @Test
+    void notificatieAannemen_onbekendIdentificatieType_retourneert400() {
+        given()
+                .contentType(ContentType.JSON)
+                .body(aanvraagMetIdentificatie("PASPOORT", "12345678"))
+                .when().post(PAD)
+                .then()
+                .statusCode(400);
+
+        assertEquals(0, LeesHelper.aantalNotificaties());
     }
 
     @Test
@@ -309,14 +347,18 @@ class CentraleNotificatieControllerTest {
     }
 
     private static String aanvraagMetNummer(String identificatieNummer) {
+        return aanvraagMetIdentificatie("KVK", identificatieNummer);
+    }
+
+    private static String aanvraagMetIdentificatie(String identificatieType, String identificatieNummer) {
         return """
                 {
-                  "identificatieType": "KVK",
+                  "identificatieType": "%s",
                   "identificatieNummer": "%s",
                   "dienstverlener": "Gemeente Voorbeeld",
                   "berichtType": "Stuurgroep Agenda"
                 }
-                """.formatted(identificatieNummer);
+                """.formatted(identificatieType, identificatieNummer);
     }
 
     private void zetQuotum(Integer quotum) {

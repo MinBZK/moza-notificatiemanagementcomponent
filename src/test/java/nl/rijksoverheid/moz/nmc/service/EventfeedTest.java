@@ -146,6 +146,24 @@ class EventfeedTest {
         assertThrows(IllegalArgumentException.class, () -> eventfeed.lees(NotificatieFixtures.DV_ID, null, 0));
     }
 
+    // Events uit één transactie delen hun transactie-id. Eindigt een pagina er middenin, dan moet de
+    // volgende lezing met de rest van die transactie verdergaan; op transactie-id alleen valt die weg.
+    @Test
+    void lees_paginagrensMiddenInEenTransactie_geeftElkEventPreciesEenKeer() {
+        List<Long> geschreven = QuarkusTransaction.requiringNew().call(() -> List.of(
+                voegEventToe(NotificatieFixtures.DV_ID),
+                voegEventToe(NotificatieFixtures.DV_ID),
+                voegEventToe(NotificatieFixtures.DV_ID)));
+
+        EventPagina eerste = eventfeed.lees(NotificatieFixtures.DV_ID, null, 2);
+        EventPagina tweede = eventfeed.lees(NotificatieFixtures.DV_ID, eerste.cursor(), 2);
+        EventPagina derde = eventfeed.lees(NotificatieFixtures.DV_ID, tweede.cursor(), 2);
+
+        assertEquals(geschreven.subList(0, 2), ids(eerste));
+        assertEquals(geschreven.subList(2, 3), ids(tweede));
+        assertTrue(derde.events().isEmpty());
+    }
+
     @Test
     void lees_cursorUitEenAnderEpoch_isVervallen() {
         schrijfEvent(NotificatieFixtures.DV_ID);

@@ -238,6 +238,30 @@ class NotifyNLCallbackControllerTest {
         assertEquals(OffsetDateTime.parse(COMPLETED_AT), poging.getReceiptTijdstip());
     }
 
+    // Zonder completed_at geldt sent_at, en zonder die created_at: een andere volgorde zou receipts
+    // verkeerd ten opzichte van elkaar ordenen.
+    @Test
+    void verwerkAfleverstatus_zonderCompletedAt_legtSentAtVast() {
+        UUID notifyNlId = verstuurNotificatie();
+
+        stuurDeliveryReceipt("""
+                {"id": "%s", "status": "delivered", "created_at": "2025-01-01T12:00:00Z", "sent_at": "2025-01-01T12:00:01Z"}
+                """.formatted(notifyNlId));
+
+        assertEquals(OffsetDateTime.parse("2025-01-01T12:00:01Z"), poging(notifyNlId).getReceiptTijdstip());
+    }
+
+    @Test
+    void verwerkAfleverstatus_alleenCreatedAt_legtCreatedAtVast() {
+        UUID notifyNlId = verstuurNotificatie();
+
+        stuurDeliveryReceipt("""
+                {"id": "%s", "status": "delivered", "created_at": "2025-01-01T12:00:00Z"}
+                """.formatted(notifyNlId));
+
+        assertEquals(OffsetDateTime.parse("2025-01-01T12:00:00Z"), poging(notifyNlId).getReceiptTijdstip());
+    }
+
     // Geen van de tijdstipvelden is verplicht; een 400 zou de receipt na vijf herhalingen kosten.
     @Test
     void verwerkAfleverstatus_receiptZonderTijdstippen_wordtVerwerktOpDeEigenKlok() {

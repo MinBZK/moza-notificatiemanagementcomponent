@@ -158,22 +158,22 @@ class SleutelbeheerTest {
     }
 
     @Test
-    void ontsleutel_onbekendeKekVersie_gooitOntsleutelenMisluktException() {
+    void ontsleutel_onbekendeKekVersie_gooitKekOntbreektException() {
         VersleuteldeGegevens gegevens = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
         VersleuteldeGegevens versie7 = new VersleuteldeGegevens(gegevens.ontvangerVersleuteld(),
                 gegevens.personalisationVersleuteld(), gegevens.sleutelGewrapt(), 7);
 
-        OntsleutelenMisluktException fout = assertThrows(OntsleutelenMisluktException.class,
+        KekOntbreektException fout = assertThrows(KekOntbreektException.class,
                 () -> sleutelbeheer.ontsleutelOntvanger(ID, versie7));
         assertTrue(fout.getMessage().contains("7"));
     }
 
     @Test
-    void ontsleutel_oudeKekVersieNietMeerGeconfigureerd_gooitOntsleutelenMisluktException() {
+    void ontsleutel_oudeKekVersieNietMeerGeconfigureerd_gooitKekOntbreektException() {
         VersleuteldeGegevens gegevens = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
         Sleutelbeheer alleenVersie2 = sleutelbeheer(2, Map.of(2, KEK_2));
 
-        assertThrows(OntsleutelenMisluktException.class, () -> alleenVersie2.ontsleutelOntvanger(ID, gegevens));
+        assertThrows(KekOntbreektException.class, () -> alleenVersie2.ontsleutelOntvanger(ID, gegevens));
     }
 
     @Test
@@ -184,6 +184,7 @@ class SleutelbeheerTest {
         OntsleutelenMisluktException fout = assertThrows(OntsleutelenMisluktException.class,
                 () -> andereKek.ontsleutelOntvanger(ID, gegevens));
         assertNotNull(fout.getCause());
+        assertFalse(fout instanceof KekOntbreektException, "de KEK is er wel, hij past alleen niet");
     }
 
     @Test
@@ -225,7 +226,7 @@ class SleutelbeheerTest {
         VersleuteldeGegevens oud = sleutelbeheer.versleutel(ID, Ontvanger.email("burger@example.nl"), Map.of());
         Sleutelbeheer zonderOudeKek = sleutelbeheer(2, Map.of(2, KEK_2));
 
-        assertThrows(OntsleutelenMisluktException.class, () -> zonderOudeKek.herwrap(ID, oud.sleutelGewrapt(), 1));
+        assertThrows(KekOntbreektException.class, () -> zonderOudeKek.herwrap(ID, oud.sleutelGewrapt(), 1));
     }
 
     @Test

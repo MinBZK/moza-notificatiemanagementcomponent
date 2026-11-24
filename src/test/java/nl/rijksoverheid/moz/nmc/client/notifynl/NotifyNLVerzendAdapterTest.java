@@ -13,9 +13,11 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.GetMultipleMessagesResponse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,10 +25,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 
 class NotifyNLVerzendAdapterTest {
 
     private static final String TEST_TEMPLATE_ID = "00000000-0000-0000-0000-000000000001";
+    // Het poging-id, dat het NMC als reference aan NotifyNL meegeeft.
+    private static final String REFERENCE = "3f1a2b4c-0000-4000-8000-00000000000a";
 
     private SendAMessageApi sendAMessageApi;
     private NotifyNLJwtFactory notifyNLJwtFactory;
@@ -189,5 +195,70 @@ class NotifyNLVerzendAdapterTest {
         assertThrows(NotifyNLVerzendException.class, () -> adapter.vraagStatusOp(fout));
         assertThrows(NotifyNLVerzendException.class, () -> adapter.vraagStatusOp(onbereikbaar));
         assertThrows(NotifyNLVerzendException.class, () -> adapter.vraagStatusOp(leeg));
+    }
+
+    @Test
+    void zoekOpReference_verzendingMetDieReference_geeftHaarId() throws Exception {
+        UUID notifyNlId = UUID.randomUUID();
+        zoekresultaat(new GetOneMessageResponse().id(notifyNlId.toString()).reference(REFERENCE));
+
+        assertEquals(Optional.of(notifyNlId), adapter.zoekOpReference(REFERENCE));
+    }
+
+    // Het id van een andere verzending overnemen zou betekenen dat de eigen e-mail nooit verstuurd wordt
+    // en de status van een vreemde verzending aan de notificatie komt te hangen.
+    @Test
+    void zoekOpReference_alleenEenVerzendingMetEenAndereReference_isLeeg() throws Exception {
+        zoekresultaat(new GetOneMessageResponse().id(UUID.randomUUID().toString()).reference("een-andere-reference"));
+
+        assertTrue(adapter.zoekOpReference(REFERENCE).isEmpty());
+    }
+
+    @Test
+    void zoekOpReference_tussenAndereVerzendingen_kiestDieMetDeEigenReference() throws Exception {
+        UUID notifyNlId = UUID.randomUUID();
+        zoekresultaat(
+                new GetOneMessageResponse().id(UUID.randomUUID().toString()).reference("een-andere-reference"),
+                new GetOneMessageResponse().id(UUID.randomUUID().toString()),
+                new GetOneMessageResponse().id(notifyNlId.toString()).reference(REFERENCE));
+
+        assertEquals(Optional.of(notifyNlId), adapter.zoekOpReference(REFERENCE));
+    }
+
+    @Test
+    void zoekOpReference_geenAntwoordGeenLijstOfGeenId_isLeeg() throws Exception {
+        Mockito.when(getMessageDataApi.getMultipleMessagesStatus(isNull(), isNull(), eq(REFERENCE), isNull(), isNull()))
+                .thenReturn(null)
+                .thenReturn(new GetMultipleMessagesResponse().notifications(null))
+                .thenReturn(new GetMultipleMessagesResponse().notifications(List.of(
+                        new GetOneMessageResponse().reference(REFERENCE))));
+
+        assertTrue(adapter.zoekOpReference(REFERENCE).isEmpty(), "geen antwoord");
+        assertTrue(adapter.zoekOpReference(REFERENCE).isEmpty(), "antwoord zonder lijst");
+        assertTrue(adapter.zoekOpReference(REFERENCE).isEmpty(), "verzending zonder id");
+    }
+
+    @Test
+    void zoekOpReference_ongeldigId_gooitOnbruikbaarAntwoord() {
+        zoekresultaat(new GetOneMessageResponse().id("geen-uuid").reference(REFERENCE));
+
+        NotifyNLVerzendException fout = assertThrows(NotifyNLVerzendException.class, () -> adapter.zoekOpReference(REFERENCE));
+
+        assertTrue(fout.isOnbruikbaarAntwoord());
+    }
+
+    @Test
+    void zoekOpReference_storingBijNotifyNL_gooitVerzendException() {
+        Mockito.when(getMessageDataApi.getMultipleMessagesStatus(isNull(), isNull(), eq(REFERENCE), isNull(), isNull()))
+                .thenThrow(new WebApplicationException(Response.status(500).build()))
+                .thenThrow(new ProcessingException("time-out"));
+
+        assertThrows(NotifyNLVerzendException.class, () -> adapter.zoekOpReference(REFERENCE), "een 500");
+        assertThrows(NotifyNLVerzendException.class, () -> adapter.zoekOpReference(REFERENCE), "niet bereikbaar");
+    }
+
+    private void zoekresultaat(GetOneMessageResponse... verzendingen) {
+        Mockito.when(getMessageDataApi.getMultipleMessagesStatus(isNull(), isNull(), eq(REFERENCE), isNull(), isNull()))
+                .thenReturn(new GetMultipleMessagesResponse().notifications(List.of(verzendingen)));
     }
 }
