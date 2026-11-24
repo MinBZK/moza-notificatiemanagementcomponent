@@ -30,6 +30,7 @@ anders start de app zonder DB en gaat de deploy rood (`/q/health/ready` faalt).
 | Secret | Waarvoor |
 | --- | --- |
 | `ZAD_API_KEY` | ZAD Operations Manager API key (deploy + cleanup) |
+| `ZAD_API_KEY_TST` | Idem voor het tst-project `nt-8bl` (alleen de `stable`-deploy) |
 | `GITHUB_ADMIN_TOKEN` | PAT met repo-admin; nodig om het GitHub-environment te verwijderen bij cleanup |
 
 `GITHUB_TOKEN` is automatisch beschikbaar (image push naar GHCR).
@@ -76,6 +77,20 @@ Benodigde env-vars op die deployment:
 
 URL-patroon: `https://nmcapi-pr-<n>-nd-j7s.rig.prd1.gn2.quattro.rijksapps.nl`
 → `/q/swagger-ui`, `/q/openapi`, `/q/health/ready`.
+
+## Tst-project (`nt-8bl`)
+
+Naast `nd-j7s` (NMC - dev) bestaat het ZAD-project `nt-8bl` (NMC - tst), met dezelfde opbouw:
+component `nmcapi`, `postgresql-database`, `publish-on-web` en dezelfde env-vars en
+`notify-cert`-bijlage als `nd-j7s`. De NotifyNL-waarden zijn die van dev-`stable`, en ze staan
+component-breed. Er zijn twee deployments:
+
+| Deployment | Wordt bijgewerkt door |
+| --- | --- |
+| `stable` | `deploy-stable-tst` in `deploy.yml`, bij elke push naar `main` (secret `ZAD_API_KEY_TST`) |
+| `pentest` | Niemand automatisch. Eenmalig gezet op de main-build van `82da2a9`; een nieuwe versie zet je bewust met `zadctl deployment update-image pentest --component nmcapi --image <image@digest>` |
+
+URL-patroon: `https://nmcapi-<deployment>-nt-8bl.rig.prd1.gn2.quattro.rijksapps.nl`.
 
 ## Gotchas (al opgelost in de workflow)
 

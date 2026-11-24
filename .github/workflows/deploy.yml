@@ -2,10 +2,12 @@
 #
 #   - Elke Pull Request → een ephemeral 'pr-<n>'-omgeving, zodat de PR daar getest
 #     kan worden. Bij sluiten van de PR wordt die omgeving opgeruimd.
-#   - Elke push/merge naar main → de persistente 'stable'-deployment.
+#   - Elke push/merge naar main → de persistente 'stable'-deployment, in het dev-project
+#     (nd-j7s) én in het tst-project (nt-8bl).
 #
 # Vereiste repo-secrets:
-#   ZAD_API_KEY         — ZAD Operations Manager API key
+#   ZAD_API_KEY         — ZAD Operations Manager API key voor nd-j7s
+#   ZAD_API_KEY_TST     — idem voor nt-8bl
 #   GITHUB_ADMIN_TOKEN  — PAT met repo-admin (voor opruimen GitHub environment)
 #
 # De applicatieconfiguratie (DB-url/credentials, notify.api-key, hash.pepper,
@@ -42,6 +44,8 @@ env:
   # GHCR vereist lowercase; github.repository is MinBZK/... (hoofdletters) → hardcode lowercase.
   IMAGE_NAME: minbzk/moza-notificatiemanagementcomponent
   ZAD_PROJECT_ID: nd-j7s
+  # Tst-project 'NMC - tst': alleen 'stable' volgt main, 'pentest' wordt met de hand gezet.
+  ZAD_TST_PROJECT_ID: nt-8bl
 
 jobs:
   build:
@@ -177,5 +181,31 @@ jobs:
           # gebouwde image pullt i.p.v. een gecachete oude versie van dezelfde tag.
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.digest }}
           # Wacht tot de app daadwerkelijk up is; readiness bevat de datasource-check.
+          wait-for-ready: 'true'
+          health-endpoint: /q/health/ready
+
+  # Push/merge naar main → ook de 'stable'-deployment in het tst-project (NMC - tst). Dat
+  # project heeft ook een 'pentest'-deployment; die wordt bewust niet automatisch bijgewerkt.
+  deploy-stable-tst:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write # GitHub environment/deployment aanmaken
+    environment:
+      name: tst-stable
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Deploy to ZAD (tst stable)
+        id: deploy
+        uses: RijksICTGilde/zad-actions/deploy@0b604742a137d43f6fe8fceb06bdffeb0a1665db # v4.4.1
+        with:
+          # Een ZAD-token hoort bij één project, dus het tst-project heeft een eigen key.
+          api-key: ${{ secrets.ZAD_API_KEY_TST }}
+          project-id: ${{ env.ZAD_TST_PROJECT_ID }}
+          deployment-name: stable
+          component: nmcapi
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build.outputs.digest }}
           wait-for-ready: 'true'
           health-endpoint: /q/health/ready
