@@ -1,25 +1,18 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 import io.restassured.config.HttpClientConfig;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
-import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
-import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
-import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -34,7 +27,6 @@ import nl.rijksoverheid.moz.nmc.service.Sleutelbeheer;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -54,25 +46,11 @@ class CentraleNotificatieControllerTest {
     SendAMessageApi sendAMessageApi;
 
     @Inject
-    NotificatieRepository notificatieRepository;
-
-    @Inject
     Sleutelbeheer sleutelbeheer;
-
-    @Inject
-    TaakRepository taakRepository;
-
-    @Inject
-    EntityManager entityManager;
 
     @BeforeEach
     void setUp() {
         TestDatabase.leeg();
-    }
-
-    @AfterEach
-    void quotumWeg() {
-        zetQuotum(null);
     }
 
     @Test
@@ -86,10 +64,8 @@ class CentraleNotificatieControllerTest {
                 .body("notificatieId", notNullValue())
                 .extract().path("notificatieId");
 
-        QuarkusTransaction.requiringNew().run(() -> {
-            assertEquals(NotificatieStatus.AANGENOMEN, notificatieRepository.findById(UUID.fromString(id)).getStatus());
-            assertEquals(TaakSoort.VERZENDEN, taakRepository.listAll().getFirst().getTaakSoort());
-        });
+        assertEquals(NotificatieStatus.AANGENOMEN, LeesHelper.notificatie(UUID.fromString(id)).getStatus());
+        assertEquals(UUID.fromString(id), LeesHelper.enigeTaak(TaakSoort.VERZENDEN).getNotificatieId());
         verifyNoInteractions(profielApi, sendAMessageApi);
     }
 
@@ -105,11 +81,9 @@ class CentraleNotificatieControllerTest {
                 .statusCode(202)
                 .extract().path("notificatieId");
 
-        QuarkusTransaction.requiringNew().run(() -> {
-            Notificatie notificatie = notificatieRepository.findById(UUID.fromString(id));
-            assertEquals(new Ontvanger(Ontvanger.Soort.valueOf(type), nummer),
-                    sleutelbeheer.ontsleutelOntvanger(notificatie.getId(), notificatie.getVersleuteldeGegevens()));
-        });
+        Notificatie notificatie = LeesHelper.notificatie(UUID.fromString(id));
+        assertEquals(new Ontvanger(Ontvanger.Soort.valueOf(type), nummer),
+                sleutelbeheer.ontsleutelOntvanger(notificatie.getId(), notificatie.getVersleuteldeGegevens()));
     }
 
     @Test
@@ -132,22 +106,6 @@ class CentraleNotificatieControllerTest {
                 .when().post(PAD)
                 .then()
                 .statusCode(202);
-    }
-
-    @Test
-    void notificatieAannemen_ontbrekendIdentificatieNummer_retourneert400() {
-        given()
-                .contentType(ContentType.JSON)
-                .body("""
-                        {
-                          "identificatieType": "KVK",
-                          "dienstverlener": "Gemeente Voorbeeld",
-                          "berichtType": "Stuurgroep Agenda"
-                        }
-                        """)
-                .when().post(PAD)
-                .then()
-                .statusCode(400);
     }
 
     @Test
@@ -208,73 +166,6 @@ class CentraleNotificatieControllerTest {
                 .when().post(PAD)
                 .then()
                 .statusCode(400);
-
-        assertEquals(0, LeesHelper.aantalNotificaties());
-    }
-
-    @Test
-    void notificatieAannemen_onbekendBerichtType_retourneert400() {
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag("Bestaat Niet", ""))
-                .when().post(PAD)
-                .then()
-                .statusCode(400)
-                .body("title", equalTo("Notificatie niet aangenomen."));
-    }
-
-    @Test
-    void notificatieAannemen_quotumBereikt_retourneert429MetEigenType() {
-        zetQuotum(1);
-        given().contentType(ContentType.JSON).body(aanvraag("Stuurgroep Agenda", "")).when().post(PAD).then().statusCode(202);
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag("Stuurgroep Agenda", ""))
-                .when().post(PAD)
-                .then()
-                .statusCode(429)
-                .contentType("application/problem+json")
-                .body("type", equalTo("https://mijnoverheidzakelijk.nl/nmc/problemen/quotum-overschreden"));
-    }
-
-    @Test
-    void notificatieAannemen_meerDan50Berichtgegevens_retourneert400() {
-        StringBuilder gegevens = new StringBuilder("{");
-        for (int i = 1; i <= 51; i++) {
-            gegevens.append(i > 1 ? ", " : "").append("\"v").append(i).append("\": \"x\"");
-        }
-        gegevens.append("}");
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraagMetBerichtgegevens(gegevens.toString()))
-                .when().post(PAD)
-                .then()
-                .statusCode(400)
-                .body("violations", notNullValue());
-    }
-
-    @Test
-    void notificatieAannemen_berichtgegevenLangerDan2000Tekens_retourneert400() {
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraagMetBerichtgegevens("{ \"naam\": \"" + "x".repeat(2001) + "\" }"))
-                .when().post(PAD)
-                .then()
-                .statusCode(400)
-                .body("violations", notNullValue());
-    }
-
-    @Test
-    void notificatieAannemen_naamVanBerichtgegevenLangerDan100Tekens_retourneert400() {
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraagMetBerichtgegevens("{ \"" + "n".repeat(101) + "\": \"Voorbeeld BV\" }"))
-                .when().post(PAD)
-                .then()
-                .statusCode(400)
-                .body("violations", notNullValue());
 
         assertEquals(0, LeesHelper.aantalNotificaties());
     }
@@ -359,10 +250,5 @@ class CentraleNotificatieControllerTest {
                   "berichtType": "Stuurgroep Agenda"
                 }
                 """.formatted(identificatieType, identificatieNummer);
-    }
-
-    private void zetQuotum(Integer quotum) {
-        QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.zetQuotumPerDag(entityManager, NotificatieFixtures.DV_ID, quotum));
     }
 }

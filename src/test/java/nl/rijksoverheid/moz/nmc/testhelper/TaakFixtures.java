@@ -157,6 +157,15 @@ public final class TaakFixtures {
                 zetWebhook(entityManager, NotificatieFixtures.DV_ID, url, maxMislukkingen, bundel));
     }
 
+    /**
+     * Zet het quotum per dag van de dienstverlener uit de migratie, in een eigen transactie; alleen in
+     * een {@code @QuarkusTest}. {@code null} betekent geen quotum.
+     */
+    public static void zetQuotumPerDag(Integer quotum) {
+        EntityManager entityManager = Arc.container().instance(EntityManager.class).get();
+        QuarkusTransaction.requiringNew().run(() -> zetQuotumPerDag(entityManager, NotificatieFixtures.DV_ID, quotum));
+    }
+
     /** Zet het quotum per dag; {@code null} betekent geen quotum. */
     public static void zetQuotumPerDag(EntityManager entityManager, UUID dvId, Integer quotum) {
         entityManager.createQuery("UPDATE Dienstverlener SET " + Dienstverlener_.QUOTUM_PER_DAG + " = :quotum WHERE "

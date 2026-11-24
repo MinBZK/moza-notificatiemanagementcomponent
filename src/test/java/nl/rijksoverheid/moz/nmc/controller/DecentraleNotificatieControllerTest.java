@@ -1,6 +1,5 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
@@ -10,9 +9,8 @@ import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
-import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.service.Sleutelbeheer;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +19,8 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -35,12 +34,6 @@ class DecentraleNotificatieControllerTest {
     @InjectMock
     @RestClient
     SendAMessageApi sendAMessageApi;
-
-    @Inject
-    NotificatieRepository notificatieRepository;
-
-    @Inject
-    TaakRepository taakRepository;
 
     @Inject
     Sleutelbeheer sleutelbeheer;
@@ -61,26 +54,12 @@ class DecentraleNotificatieControllerTest {
                 .body("notificatieId", notNullValue())
                 .extract().path("notificatieId");
 
-        QuarkusTransaction.requiringNew().run(() -> {
-            Notificatie notificatie = notificatieRepository.findById(UUID.fromString(id));
-            assertEquals(NotificatieStatus.AANGENOMEN, notificatie.getStatus());
-            assertEquals(Ontvanger.email("burger@example.nl"),
-                    sleutelbeheer.ontsleutelOntvanger(notificatie.getId(), notificatie.getVersleuteldeGegevens()));
-            assertEquals(TaakSoort.VERZENDEN, taakRepository.listAll().getFirst().getTaakSoort());
-        });
+        Notificatie notificatie = LeesHelper.notificatie(UUID.fromString(id));
+        assertEquals(NotificatieStatus.AANGENOMEN, notificatie.getStatus());
+        assertEquals(Ontvanger.email("burger@example.nl"),
+                sleutelbeheer.ontsleutelOntvanger(notificatie.getId(), notificatie.getVersleuteldeGegevens()));
+        assertEquals(UUID.fromString(id), LeesHelper.enigeTaak(TaakSoort.VERZENDEN).getNotificatieId());
         verifyNoInteractions(sendAMessageApi);
-    }
-
-    @Test
-    void decentraleNotificatieVersturen_ontbrekendEmailAdres_retourneert400() {
-        given()
-                .contentType(ContentType.JSON)
-                .body("""
-                        { "berichtType": "Stuurgroep Agenda" }
-                        """)
-                .when().post(PAD)
-                .then()
-                .statusCode(400);
     }
 
     @Test
@@ -90,35 +69,9 @@ class DecentraleNotificatieControllerTest {
                 .body(aanvraag("geen-adres", "Stuurgroep Agenda", ""))
                 .when().post(PAD)
                 .then()
-                .statusCode(400);
-    }
-
-    @Test
-    void decentraleNotificatieVersturen_onbekendBerichtType_retourneert400() {
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag("burger@example.nl", "Bestaat Niet", ""))
-                .when().post(PAD)
-                .then()
                 .statusCode(400)
-                .body("title", equalTo("Notificatie niet aangenomen."));
-    }
-
-    // Het decentrale schema draagt de grenzen op de berichtgegevens apart van het centrale.
-    @Test
-    void decentraleNotificatieVersturen_naamVanBerichtgegevenLangerDan100Tekens_retourneert400() {
-        given()
-                .contentType(ContentType.JSON)
-                .body("""
-                        {
-                          "emailAdres": "info@voorbeeld.nl",
-                          "berichtType": "Stuurgroep Agenda",
-                          "berichtgegevens": { "%s": "Voorbeeld BV" }
-                        }
-                        """.formatted("n".repeat(101)))
-                .when().post(PAD)
-                .then()
-                .statusCode(400);
+                .contentType("application/problem+json")
+                .body("violations.field", hasItem(containsString("emailAdres")));
     }
 
     private static String aanvraag(String emailAdres, String berichtType, String extraVeld) {

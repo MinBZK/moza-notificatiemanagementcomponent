@@ -5,7 +5,6 @@ import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.domain.Event;
@@ -70,9 +69,6 @@ class AannameServiceTest {
     @Inject
     Sleutelbeheer sleutelbeheer;
 
-    @Inject
-    EntityManager entityManager;
-
     @BeforeEach
     void setUp() {
         QuarkusMock.installMockForType(clock, Clock.class);
@@ -81,7 +77,7 @@ class AannameServiceTest {
 
     @AfterEach
     void quotumWeg() {
-        zetQuotum(null);
+        TaakFixtures.zetQuotumPerDag(null);
     }
 
     @Test
@@ -138,7 +134,7 @@ class AannameServiceTest {
     // Het quotum telt per dienstverlener per dag; zonder quotum in het register is er geen grens.
     @Test
     void neemAan_quotumBereikt_weigertEnLegtNietsVast() {
-        zetQuotum(1);
+        TaakFixtures.zetQuotumPerDag(1);
         aannameService.neemAan(centraal());
 
         assertThrows(QuotumOverschredenException.class, () -> aannameService.neemAan(centraal()));
@@ -151,7 +147,7 @@ class AannameServiceTest {
     // wat op middernacht is aangenomen wel.
     @Test
     void neemAan_quotumBereikt_teltDeVorigeDagNietMee() {
-        zetQuotum(1);
+        TaakFixtures.zetQuotumPerDag(1);
         clock.zet(Instant.parse("2030-01-01T23:59:59Z"));
         aannameService.neemAan(centraal());
 
@@ -180,10 +176,5 @@ class AannameServiceTest {
     private static AannameOpdracht centraal() {
         return new AannameOpdracht(Regie.CENTRAAL, new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
                 "Gemeente Voorbeeld", "Parkeervergunning", BerichtType.DEMO_TEMPLATE, Map.of("naam", "Voorbeeld BV"));
-    }
-
-    private void zetQuotum(Integer quotum) {
-        QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.zetQuotumPerDag(entityManager, NotificatieFixtures.DV_ID, quotum));
     }
 }
