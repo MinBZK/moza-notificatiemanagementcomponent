@@ -111,7 +111,7 @@ public class EndpointFuzzTest {
         body.put("identificatieNummer", data.consumeString(20));
         body.put("dienstverlener", data.consumeString(50));
         body.put("dienst", data.consumeString(50));
-        body.put("berichtType", data.pickValue(new String[]{"Stuurgroep Agenda", "Demo template", "onbekend"}));
+        body.put("berichtType", data.pickValue(new String[]{"Stuurgroep Agenda", "Demo template", "Herinnering-Fieldlab", "Magazijn-Fieldlab", "onbekend"}));
 
         post("/api/nmc/v1/centraal/notificaties", body.toString(), null);
     }
@@ -120,7 +120,7 @@ public class EndpointFuzzTest {
     public void fuzzDecentraleNotificatie(FuzzedDataProvider data) {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("emailAdres", data.consumeString(60));
-        body.put("berichtType", data.pickValue(new String[]{"Stuurgroep Agenda", "Demo template", "onbekend"}));
+        body.put("berichtType", data.pickValue(new String[]{"Stuurgroep Agenda", "Demo template", "Herinnering-Fieldlab", "Magazijn-Fieldlab", "onbekend"}));
 
         post("/api/nmc/v1/decentraal/notificaties", body.toString(), null);
     }

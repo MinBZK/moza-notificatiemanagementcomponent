@@ -369,7 +369,7 @@ components:
         berichtType:
           type: string
           minLength: 1
-          description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template"
+          description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template\n- Herinnering-Fieldlab\n- Magazijn-Fieldlab"
         berichtgegevens:
           type: object
           description: Templatevariabelen voor het bericht, ten hoogste 50 met waarden tot 2000 tekens
@@ -399,7 +399,7 @@ components:
         berichtType:
           type: string
           minLength: 1
-          description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template"
+          description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template\n- Herinnering-Fieldlab\n- Magazijn-Fieldlab"
         berichtgegevens:
           type: object
           description: Templatevariabelen voor het bericht, ten hoogste 50 met waarden tot 2000 tekens

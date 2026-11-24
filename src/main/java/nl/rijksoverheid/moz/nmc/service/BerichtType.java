@@ -7,7 +7,9 @@ package nl.rijksoverheid.moz.nmc.service;
 public enum BerichtType {
 
     STUURGROEP_AGENDA("Stuurgroep Agenda", "fee3eaf3-53ab-44ce-ac09-1ef7070b28a1"),
-    DEMO_TEMPLATE("Demo template", "09d9343b-0a55-43cc-887b-c36cb6c9123d");
+    DEMO_TEMPLATE("Demo template", "09d9343b-0a55-43cc-887b-c36cb6c9123d"),
+    HERINNERING_FIELDLAB("Herinnering-Fieldlab", "d394a420-3a01-420e-89f5-85742e593691"),
+    MAGAZIJN_FIELDLAB("Magazijn-Fieldlab", "d312d2b1-1b92-48ee-8aa3-5165454ac491");
 
     private final String naam;
     private final String templateId;

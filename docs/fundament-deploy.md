@@ -468,7 +468,8 @@ unset K
   CA`. Daarom `notify.trustCertsFile: certs/certsign-web-ca.pem`: voor NotifyNL vertrouwt de NMC dan
   alleen die CA, in plaats van de trust-all uit `application.properties`. De intermediate is geldig tot
   6 februari 2027 (daarna een nieuwe uit de AIA van het servercertificaat halen en controleren).
-- **Templates:** die in `BerichtType` zijn van deze NotifyNL. Het Demo template vraagt
+- **Templates:** die in `BerichtType` zijn van deze NotifyNL, waaronder `Herinnering-Fieldlab` en
+  `Magazijn-Fieldlab` (op 24 november 2026 aangemaakt, nog zonder variabelen). Het Demo template vraagt
   `berichtgegevens.voornaam`; zonder weigert NotifyNL met `400 Missing personalisation: voornaam` en wordt
   de verzendtaak uitgesteld. Een ander template-ID per berichttype: `NMC_BELEID_<BERICHTTYPE>_TEMPLATE_ID`
   via `extraEnv`. Het template-ID komt bij de aanname op de notificatie, dus een wijziging geldt alleen

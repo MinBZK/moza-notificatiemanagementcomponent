@@ -20,6 +20,18 @@ class BerichtTypeTest {
     }
 
     @Test
+    void vanNaam_herinneringFieldlab_retourneertBerichtType() {
+        assertEquals(BerichtType.HERINNERING_FIELDLAB, BerichtType.vanNaam("Herinnering-Fieldlab"));
+        assertEquals("d394a420-3a01-420e-89f5-85742e593691", BerichtType.HERINNERING_FIELDLAB.getTemplateId());
+    }
+
+    @Test
+    void vanNaam_magazijnFieldlab_retourneertBerichtType() {
+        assertEquals(BerichtType.MAGAZIJN_FIELDLAB, BerichtType.vanNaam("Magazijn-Fieldlab"));
+        assertEquals("d312d2b1-1b92-48ee-8aa3-5165454ac491", BerichtType.MAGAZIJN_FIELDLAB.getTemplateId());
+    }
+
+    @Test
     void vanNaam_onbekendType_gooitOnbekendBerichtTypeException() {
         assertThrows(OnbekendBerichtTypeException.class, () -> BerichtType.vanNaam("Onbekend Type XYZ"));
     }
