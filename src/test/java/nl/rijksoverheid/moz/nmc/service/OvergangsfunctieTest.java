@@ -206,7 +206,7 @@ class OvergangsfunctieTest {
             Future<OvergangUitkomst> eerste = pool.submit(() -> QuarkusTransaction.requiringNew().call(() -> {
                 OvergangUitkomst uitkomst = overgangsfunctie.voerUit(id, NotificatieStatus.BEZORGD, null);
                 eersteHeeftVergrendeld.countDown();
-                wachtTotEenTransactieOpDeLockWacht();
+                NotificatieFixtures.wachtTotEenTransactieOpDeLockWacht(notificatieRepository.getEntityManager());
 
                 return uitkomst;
             }));
@@ -231,20 +231,6 @@ class OvergangsfunctieTest {
             assertEquals(List.of(0L, 1L, 2L), volgnummers);
             assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatieRepository.findById(id).getStatus());
         });
-    }
-
-    // Pas loslaten als de tweede transactie aantoonbaar op de rijvergrendeling wacht; anders kunnen de
-    // transacties na elkaar lopen en slaagt de test ook zonder vergrendeling.
-    private void wachtTotEenTransactieOpDeLockWacht() throws InterruptedException {
-        long einde = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-
-        while (NotificatieFixtures.telTransactiesWachtendOpLock(notificatieRepository.getEntityManager()) == 0) {
-            if (System.nanoTime() > einde) {
-                throw new IllegalStateException("de tweede transactie is niet op de rijvergrendeling gaan wachten");
-            }
-
-            Thread.sleep(20);
-        }
     }
 
     // De reden die bij de status hoort; de overgangsfunctie weigert een andere.

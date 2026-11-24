@@ -7,7 +7,8 @@ import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-// De configuratiecontroles; het partitieplan staat in EventPartitieTest, de DDL in OnderhoudTaakHandlerTest.
+// De configuratiecontroles; het partitieplan staat in EventPartitieTest, de DDL in
+// EventlogPartitiebeheerIntegratieTest.
 class EventlogPartitiebeheerTest {
 
     @Test

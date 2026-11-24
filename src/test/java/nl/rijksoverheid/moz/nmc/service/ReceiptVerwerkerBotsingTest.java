@@ -1,6 +1,5 @@
-package nl.rijksoverheid.moz.nmc.notifynlcallback.controller;
+package nl.rijksoverheid.moz.nmc.service;
 
-import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
@@ -12,8 +11,6 @@ import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
-import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
-import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,11 +32,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 
 /**
- * Twee receipts voor dezelfde notificatie die echt tegelijk lopen. De eerste houdt de rijvergrendeling
- * vast terwijl de tweede binnenkomt; de tweede wacht en ziet daarna de uitkomst van de eerste.
+ * Toetst {@link ReceiptVerwerker} met twee receipts voor dezelfde notificatie die echt tegelijk lopen.
+ * De eerste houdt de rijvergrendeling vast terwijl de tweede binnenkomt; de tweede wacht en ziet daarna
+ * de uitkomst van de eerste.
  */
 @QuarkusTest
-class NotifyNLCallbackBotsingTest {
+class ReceiptVerwerkerBotsingTest {
 
     @InjectSpy
     Overgangsfunctie overgangsfunctie;
@@ -117,7 +115,7 @@ class NotifyNLCallbackBotsingTest {
 
             if (eersteAanroep.compareAndSet(true, false)) {
                 eersteHeeftVergrendeld.countDown();
-                wachtTotEenTransactieOpDeLockWacht();
+                NotificatieFixtures.wachtTotEenTransactieOpDeLockWacht(notificatieRepository.getEntityManager());
             }
 
             return resultaat;
@@ -128,18 +126,6 @@ class NotifyNLCallbackBotsingTest {
         verwerkReceipt(notifyId, tweedeStatus, tweedeTijdstip);
 
         eerste.get(10, TimeUnit.SECONDS);
-    }
-
-    private void wachtTotEenTransactieOpDeLockWacht() throws InterruptedException {
-        long einde = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-
-        while (NotificatieFixtures.telTransactiesWachtendOpLock(notificatieRepository.getEntityManager()) == 0) {
-            if (System.nanoTime() > einde) {
-                throw new IllegalStateException("de tweede receipt is niet op de rijvergrendeling gaan wachten");
-            }
-
-            Thread.sleep(20);
-        }
     }
 
     private UUID verzondenNotificatie() {

@@ -100,6 +100,18 @@ public final class TaakFixtures {
                 .getSingleResult();
     }
 
+    /** Een rij van het verzendbudget voor dit tijdvak, zonder genomen tokens. */
+    public static void voegBudgetrijToe(EntityManager entityManager, OffsetDateTime tijdvak, int tokens) {
+        // Hibernate leidt het parametertype in een insert niet af; vandaar de types van de attributen.
+        entityManager.unwrap(Session.class).createMutationQuery("INSERT INTO VerzendbudgetTijdvak ("
+                        + VerzendbudgetTijdvak_.TIJDVAK + ", " + VerzendbudgetTijdvak_.TOKENS + ", "
+                        + VerzendbudgetTijdvak_.VERZEND_TOKENS + ", " + VerzendbudgetTijdvak_.NAVRAAG_TOKENS
+                        + ") VALUES (:tijdvak, :tokens, 0, 0)")
+                .setParameter("tijdvak", tijdvak, VerzendbudgetTijdvak_.tijdvak.getType())
+                .setParameter("tokens", tokens, VerzendbudgetTijdvak_.tokens.getType())
+                .executeUpdate();
+    }
+
     public static void leegVerzendbudget(EntityManager entityManager) {
         entityManager.createQuery("DELETE FROM VerzendbudgetTijdvak").executeUpdate();
     }

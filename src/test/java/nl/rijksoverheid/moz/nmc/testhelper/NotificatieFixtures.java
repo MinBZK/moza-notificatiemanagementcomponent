@@ -23,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Schrijft rijen buiten de overgangsfunctie om, voor tests die een toestand willen die de applicatie
@@ -146,6 +147,25 @@ public final class NotificatieFixtures {
 
         return ((Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM pg_stat_activity "
                 + "WHERE datname = current_database() AND wait_event_type = 'Lock'").getSingleResult()).longValue();
+    }
+
+    /**
+     * Wacht tot een andere transactie aantoonbaar op een vergrendeling staat te wachten. Een test met twee
+     * gelijktijdige transacties laat de eerste pas daarna los; anders kunnen ze na elkaar lopen en slaagt de
+     * test ook zonder vergrendeling.
+     *
+     * @throws IllegalStateException als er na tien seconden nog niemand wacht
+     */
+    public static void wachtTotEenTransactieOpDeLockWacht(EntityManager entityManager) throws InterruptedException {
+        long einde = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+
+        while (telTransactiesWachtendOpLock(entityManager) == 0) {
+            if (System.nanoTime() > einde) {
+                throw new IllegalStateException("geen tweede transactie is op de rijvergrendeling gaan wachten");
+            }
+
+            Thread.sleep(20);
+        }
     }
 
     /** Zet de status rechtstreeks, zonder overgang en zonder versieverhoging; de trigger staat daarvoor uit. */
