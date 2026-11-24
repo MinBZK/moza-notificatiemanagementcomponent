@@ -2,9 +2,10 @@
 
 `deploy.yml` bouwt per Pull Request een container-image en deployt die naar een
 ephemeral ZAD-omgeving (`pr-<nummer>`). Bij sluiten van de PR ruimt
-`cleanup-preview` de omgeving, het image en het GitHub-environment op.
+`cleanup-preview` die weer op; zie [Opruimen](#opruimen).
 
-> **Scope:** ZAD is uitsluitend de **PR-preview**-omgeving. Echte releases draaien
+> **Scope:** ZAD is de **PR-preview**- en ontwikkelomgeving: PR-previews en `stable` in
+> `nd-j7s`, en `stable` en `pentest` in het tst-project `nt-8bl`. Echte releases draaien
 > op een ander cluster. De env-vars uit dit document (datasource, notify, pepper)
 > zijn nodig op elke deployomgeving; op ZAD staan ze op de `feature`-deployment,
 > op het release-cluster op de eigen deploymentconfig.
@@ -31,15 +32,10 @@ anders start de app zonder DB en gaat de deploy rood (`/q/health/ready` faalt).
 | --- | --- |
 | `ZAD_API_KEY` | ZAD Operations Manager API key (deploy + cleanup) |
 | `ZAD_API_KEY_TST` | Idem voor het tst-project `nt-8bl` (alleen de `stable`-deploy) |
-| `GITHUB_ADMIN_TOKEN` | PAT met repo-admin; nodig om het GitHub-environment te verwijderen bij cleanup |
 
-`GITHUB_TOKEN` is automatisch beschikbaar (image push naar GHCR).
+`GITHUB_TOKEN` is automatisch beschikbaar (image push naar GHCR, PR-comment).
 
-### 2. `project-id` invullen
-
-In `deploy.yml` staat `ZAD_PROJECT_ID`. Vul de echte ZAD project-id in (`nd-j7s`).
-
-### 3. Applicatieconfiguratie in ZAD (managed DB + secrets)
+### 2. Applicatieconfiguratie in ZAD (managed DB + secrets)
 
 De `zad-actions/deploy` action zet **geen** env-vars of DB-config; de app krijgt
 die uit de ZAD-deploymentconfig. Dit is geregeld via de **`feature`-deployment**
@@ -53,7 +49,8 @@ Benodigde env-vars op die deployment:
 | `QUARKUS_DATASOURCE_USERNAME`, `QUARKUS_DATASOURCE_PASSWORD` | Datasource-credentials (managed Postgres) |
 | `QUARKUS_DATASOURCE_JDBC_URL` | JDBC-url naar de managed Postgres |
 | `QUARKUS_FLYWAY_MIGRATE_AT_START` = `true` | Container draait prod-profiel waar dit `false` is; zonder migraties faalt boot op `schema-management=validate` |
-| `NOTIFY_API_KEY`, `NOTIFY_TEMPLATE_ID` | NotifyNL-integratie |
+| `NOTIFY_API_KEY` | NotifyNL-integratie. De template-ID's staan in de code (`BerichtType`), niet in de config |
+| `NOTIFY_CALLBACK_BEARER_TOKEN` | Bearer token waarmee NotifyNL de callback aanroept; leeg laat de app niet starten |
 | `QUARKUS_REST_CLIENT_NOTIFY_URL` | NotifyNL-endpoint; `application.properties` heeft geen default (leeg buiten `%test`), dus verplicht per deployomgeving |
 | `QUARKUS_REST_CLIENT_PROFIELSERVICE_URL` | Profielservice-endpoint; idem, geen default, verplicht per deployomgeving |
 | `HASH_PEPPER` | Keyed HMAC pepper (mag niet leeg in prod) |
@@ -103,6 +100,21 @@ WireMock en `QUARKUS_TLS_NOTIFY_TRUST_ALL` staat aan. Er zijn twee deployments:
 
 URL-patroon: `https://nmcapi-<deployment>-nt-8bl.rig.prd1.gn2.quattro.rijksapps.nl`.
 
+## Opruimen
+
+Twee workflows ruimen een preview op. Beide verwijderen de ZAD-deployment `pr-<n>` en het
+image `pr-<n>` in GHCR.
+
+| Workflow | Wanneer |
+| --- | --- |
+| `cleanup-preview` in `deploy.yml` | Bij sluiten van de PR. De deploy-comment blijft staan: de action haalt die alleen weg bij een `pull_request`-event, en deze job draait op `pull_request_target` |
+| `zad-scheduled-cleanup.yml` | Dagelijks om 03:17 UTC, en met de hand via *Run workflow* (standaard als dry-run). Vraagt de deployments `pr-<n>` op bij ZAD en ruimt die van gesloten PR's op. Vangnet voor als `cleanup-preview` niet startte of faalde |
+
+Een PR-preview krijgt **geen GitHub-environment**. Een environment verwijderen vraagt
+"Administration: write" op de repo, en dat recht kan `GITHUB_TOKEN` in een workflow niet
+krijgen. Elke PR liet er dus een achter. De preview-URL staat in de PR-comment
+"🚀 Preview Deployment" die de deploy-action plaatst en bij elke deploy bijwerkt.
+
 ## Gotchas (al opgelost in de workflow)
 
 - **JDBC-URL** moet volledig zijn: `jdbc:postgresql://host:5432/<db>` (env op
@@ -114,6 +126,5 @@ URL-patroon: `https://nmcapi-<deployment>-nt-8bl.rig.prd1.gn2.quattro.rijksapps.
 
 ## Restpunten
 
-- [ ] `GITHUB_ADMIN_TOKEN` (repo-admin PAT) als repo-secret toevoegen, daarna in
-  `deploy.yml` `delete-github-env` + `delete-github-deployments` weer op `'true'`
-  zetten (nu `'false'` om hard falen van cleanup te voorkomen).
+- [ ] De environments `pr-<n>` van vóór deze wijziging met de hand verwijderen. Dat kan
+  alleen een repo-admin: `gh api -X DELETE repos/MinBZK/moza-notificatiemanagementcomponent/environments/pr-<n>`.

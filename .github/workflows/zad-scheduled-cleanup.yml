@@ -1,0 +1,92 @@
+# Ruimt dagelijks achtergebleven PR-previews op in ZAD-project nd-j7s.
+#
+# De job cleanup-preview in deploy.yml ruimt een preview op zodra de PR sluit, maar alleen
+# als die run ook start en slaagt. Deze workflow is het vangnet: hij vraagt bij ZAD de
+# deployments `pr-<n>` op en ruimt voor elke gesloten PR de deployment en het image
+# `pr-<n>` op, met dezelfde cleanup-action als deploy.yml.
+#
+# Bewust niet zad-actions/scheduled-cleanup: die vindt previews via de GitHub-environments,
+# en die maakt deploy.yml niet meer aan.
+#
+# Vereist repo-secret ZAD_API_KEY.
+
+name: ZAD Scheduled Cleanup
+
+permissions: read-all
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Alleen tonen wat opgeruimd zou worden'
+        type: boolean
+        default: true
+
+concurrency:
+  group: zad-scheduled-cleanup
+  cancel-in-progress: false
+
+env:
+  ZAD_PROJECT_ID: nd-j7s
+  ZAD_API_URL: https://operations-manager.rig.prd1.gn2.quattro.rijksapps.nl/api
+
+jobs:
+  zoek:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read # PR-status opvragen
+    outputs:
+      deployments: ${{ steps.zoek.outputs.deployments }}
+    steps:
+      - name: Previews van gesloten PR's zoeken
+        id: zoek
+        env:
+          ZAD_API_KEY: ${{ secrets.ZAD_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # De key via stdin, zodat hij niet in de argv van curl staat.
+          NAMEN=$(curl -fsS --retry 3 -H @- \
+            "$ZAD_API_URL/v2/projects/$ZAD_PROJECT_ID/deployments" <<< "X-API-Key: $ZAD_API_KEY" \
+            | jq -r '.deployments[].name | select(test("^pr-[0-9]+$"))')
+
+          GESLOTEN=()
+          for NAAM in $NAMEN; do
+            # Alleen 'closed' telt: een mislukte opvraging mag nooit tot verwijderen leiden.
+            STATE=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${NAAM#pr-}" --jq .state)
+            echo "$NAAM: PR is $STATE"
+
+            if [ "$STATE" = "closed" ]; then
+              GESLOTEN+=("$NAAM")
+            fi
+          done
+
+          JSON=$(printf '%s\n' "${GESLOTEN[@]}" | jq -R . | jq -cs 'map(select(. != ""))')
+          echo "Op te ruimen: $JSON"
+          echo "deployments=$JSON" >> "$GITHUB_OUTPUT"
+
+  opruimen:
+    needs: zoek
+    if: needs.zoek.outputs.deployments != '[]' && !(github.event_name == 'workflow_dispatch' && inputs.dry-run)
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write # image pr-<n> uit GHCR verwijderen
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        deployment: ${{ fromJSON(needs.zoek.outputs.deployments) }}
+    steps:
+      - name: Preview opruimen
+        uses: RijksICTGilde/zad-actions/cleanup@0b604742a137d43f6fe8fceb06bdffeb0a1665db # v4.4.1
+        with:
+          api-key: ${{ secrets.ZAD_API_KEY }}
+          project-id: ${{ env.ZAD_PROJECT_ID }}
+          deployment-name: ${{ matrix.deployment }}
+          delete-container: 'true'
+          # Hetzelfde package als IMAGE_NAME in deploy.yml.
+          container-org: minbzk
+          container-name: moza-notificatiemanagementcomponent
+          container-tag: ${{ matrix.deployment }}
