@@ -15,9 +15,9 @@ import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
@@ -47,9 +47,6 @@ class ControleTaakHandlerTest {
 
     @Inject
     Overgangsfunctie overgangsfunctie;
-
-    @Inject
-    NotificatieRepository notificatieRepository;
 
     @Inject
     PogingRepository pogingRepository;
@@ -106,7 +103,7 @@ class ControleTaakHandlerTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
-        Notificatie notificatie = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findById(id));
+        Notificatie notificatie = LeesHelper.notificatie(id);
         assertEquals(NotificatieStatus.TECHNISCH_MISLUKT, notificatie.getStatus());
         assertEquals(Reden.TECHNISCH, notificatie.getReden());
         assertFalse(perNotificatie().containsKey(id), "geen andere taak dan de wistaak");
@@ -123,7 +120,7 @@ class ControleTaakHandlerTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
-        Notificatie notificatie = QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findById(id));
+        Notificatie notificatie = LeesHelper.notificatie(id);
         assertEquals(NotificatieStatus.BEZORGSTATUS_ONBEKEND, notificatie.getStatus());
         assertEquals(0, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(
                 Taak_.TAAK_SOORT + " = ?1 AND " + Taak_.NOTIFICATIE_ID + " = ?2", TaakSoort.RECONCILIEREN, id)));
@@ -161,7 +158,7 @@ class ControleTaakHandlerTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
-        Taak controle = QuarkusTransaction.requiringNew().call(() -> taakRepository.find(Taak_.TAAK_SOORT, TaakSoort.CONTROLE).singleResult());
+        Taak controle = LeesHelper.enigeTaak(TaakSoort.CONTROLE);
         assertEquals(0, controle.getPogingen());
         assertEquals(TaakStatus.OPEN, controle.getStatus());
     }
@@ -182,7 +179,7 @@ class ControleTaakHandlerTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
-        assertEquals(3, QuarkusTransaction.requiringNew().call(() -> taakRepository.count()),
+        assertEquals(3, LeesHelper.aantalTaken(),
                 "controletaak plus de twee bestaande taken, geen nieuwe");
     }
 
@@ -233,7 +230,7 @@ class ControleTaakHandlerTest {
     void controle_zonderWebhook_plantGeenTerugkoppeltaak() {
         TaakRonde.draai(taakWorker, TaakSoort.CONTROLE);
 
-        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.TERUGKOPPELEN)));
+        assertEquals(0, LeesHelper.aantalTaken(TaakSoort.TERUGKOPPELEN));
     }
 
     private void zetWebhook(String url) {
@@ -271,7 +268,7 @@ class ControleTaakHandlerTest {
 
     // Zonder de wistaak die de overgangsfunctie bij elke eindstatus plant.
     private Map<UUID, Taak> perNotificatie() {
-        List<Taak> taken = QuarkusTransaction.requiringNew().call(() -> taakRepository.list(Taak_.TAAK_SOORT + " != ?1", TaakSoort.WISSEN));
+        List<Taak> taken = LeesHelper.taken();
         Map<UUID, Taak> map = new HashMap<>();
 
         for (Taak taak : taken) {

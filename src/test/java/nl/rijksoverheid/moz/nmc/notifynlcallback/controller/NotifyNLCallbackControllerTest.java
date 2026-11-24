@@ -24,9 +24,9 @@ import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.NotifyNLFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
@@ -124,7 +124,7 @@ class NotifyNLCallbackControllerTest {
         stuurDeliveryReceiptZonderVerwerking(deliveryReceipt(UUID.randomUUID(), "delivered"));
 
         assertEquals(voor + 1, meterRegistry.get("nmc.receipts.afgewezen").counter().count());
-        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN)));
+        assertEquals(0L, LeesHelper.aantalTaken(TaakSoort.RECEIPT_VERWERKEN));
     }
 
     // De receipt ligt vast voordat hij verwerkt wordt, zonder het e-mailadres uit het veld `to`.
@@ -134,7 +134,7 @@ class NotifyNLCallbackControllerTest {
 
         stuurDeliveryReceiptZonderVerwerking(deliveryReceipt(notifyNlId, "delivered"));
 
-        Taak taak = QuarkusTransaction.requiringNew().call(() -> taakRepository.find(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN).singleResult());
+        Taak taak = LeesHelper.enigeTaak(TaakSoort.RECEIPT_VERWERKEN);
         assertEquals("delivered", taak.getPayload().get("status"));
         assertTrue(taak.getPayload().values().stream().noneMatch(waarde -> waarde.contains("@")),
                 "het e-mailadres staat niet in de payload: " + taak.getPayload());
@@ -150,7 +150,7 @@ class NotifyNLCallbackControllerTest {
         stuurDeliveryReceiptZonderVerwerking(receipt);
         stuurDeliveryReceiptZonderVerwerking(receipt);
 
-        assertEquals(1L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN)));
+        assertEquals(1L, LeesHelper.aantalTaken(TaakSoort.RECEIPT_VERWERKEN));
     }
 
     // Na verwerking is de taakrij weg, dus een herhaling van NotifyNL levert een nieuwe taak op. De
@@ -167,7 +167,7 @@ class NotifyNLCallbackControllerTest {
 
         assertEquals(NotificatieStatus.BEZORGD, status(notifyNlId));
         assertEquals(events, aantalEvents(notificatieId), "een herhaalde receipt schrijft geen tweede event");
-        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN)),
+        assertEquals(0L, LeesHelper.aantalTaken(TaakSoort.RECEIPT_VERWERKEN),
                 "de tweede receipttaak is verwerkt en opgeruimd");
     }
 
@@ -181,14 +181,14 @@ class NotifyNLCallbackControllerTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
         assertEquals(NotificatieStatus.VERZONDEN, status(notifyNlId));
-        Taak taak = QuarkusTransaction.requiringNew().call(() -> taakRepository.find(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN).singleResult());
+        Taak taak = LeesHelper.enigeTaak(TaakSoort.RECEIPT_VERWERKEN);
         QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetDue(taakRepository.getEntityManager(),
                 TaakSoort.RECEIPT_VERWERKEN, taak.getId(), OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1)));
 
         TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
 
         assertEquals(NotificatieStatus.BEZORGD, status(notifyNlId));
-        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN)));
+        assertEquals(0L, LeesHelper.aantalTaken(TaakSoort.RECEIPT_VERWERKEN));
     }
 
     @Test
@@ -284,7 +284,7 @@ class NotifyNLCallbackControllerTest {
     }
 
     private Poging poging(UUID notifyNlId) {
-        return QuarkusTransaction.requiringNew().call(() -> pogingRepository.findByNotifyId(notifyNlId).orElseThrow());
+        return LeesHelper.pogingVanNotifyId(notifyNlId);
     }
 
     private int aantalEvents(UUID notificatieId) {

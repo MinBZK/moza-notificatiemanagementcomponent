@@ -17,6 +17,7 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
@@ -142,8 +143,8 @@ class AannameServiceTest {
 
         assertThrows(QuotumOverschredenException.class, () -> aannameService.neemAan(centraal()));
 
-        assertEquals(1, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
-        assertEquals(1, QuarkusTransaction.requiringNew().call(() -> taakRepository.count()));
+        assertEquals(1, LeesHelper.aantalNotificaties());
+        assertEquals(1, LeesHelper.aantalTaken());
     }
 
     // Het quotum telt per kalenderdag in UTC: wat voor middernacht is aangenomen telt de dag erna niet mee,
@@ -158,7 +159,7 @@ class AannameServiceTest {
         aannameService.neemAan(centraal());
 
         assertThrows(QuotumOverschredenException.class, () -> aannameService.neemAan(centraal()));
-        assertEquals(2, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
+        assertEquals(2, LeesHelper.aantalNotificaties());
     }
 
     @Test
@@ -167,7 +168,7 @@ class AannameServiceTest {
             aannameService.neemAan(centraal());
         }
 
-        assertEquals(3, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
+        assertEquals(3, LeesHelper.aantalNotificaties());
     }
 
     @Test

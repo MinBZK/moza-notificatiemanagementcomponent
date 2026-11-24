@@ -14,6 +14,7 @@ import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
@@ -245,7 +246,7 @@ class ReceiptVerwerkerTest {
     }
 
     private Poging poging(UUID notifyId) {
-        return QuarkusTransaction.requiringNew().call(() -> pogingRepository.findByNotifyId(notifyId).orElseThrow());
+        return LeesHelper.pogingVanNotifyId(notifyId);
     }
 
     private Notificatie notificatie(UUID notifyId) {

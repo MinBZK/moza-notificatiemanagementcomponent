@@ -31,6 +31,7 @@ import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.NotifyNLFixtures;
@@ -445,7 +446,7 @@ class VerzendTaakHandlerTest {
 
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
         assertEquals(notifyId, poging(id).getNotifyId());
-        assertEquals(1, QuarkusTransaction.requiringNew().call(() -> pogingRepository.count()), "dezelfde poging");
+        assertEquals(1, LeesHelper.aantalPogingen(), "dezelfde poging");
         verify(sendAMessageApi, times(1)).sendEmail(any());
     }
 
@@ -464,7 +465,7 @@ class VerzendTaakHandlerTest {
 
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
         assertEquals(1, poging(id).getNummer());
-        assertEquals(1, QuarkusTransaction.requiringNew().call(() -> pogingRepository.count()));
+        assertEquals(1, LeesHelper.aantalPogingen());
         verify(sendAMessageApi, times(2)).sendEmail(any());
     }
 

@@ -12,10 +12,9 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
-import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,9 +54,6 @@ class ReceiptReferentieTest {
 
     @Inject
     TaakWorker taakWorker;
-
-    @Inject
-    TaakRepository taakRepository;
 
     @BeforeEach
     void setUp() {
@@ -132,7 +128,7 @@ class ReceiptReferentieTest {
         assertEquals(PogingStatus.BEZORGD, poging.getStatus());
         assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
                 NotificatieStatus.BEZORGD), overgangen(poging.getNotificatieId()));
-        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN)));
+        assertEquals(0L, LeesHelper.aantalTaken(TaakSoort.RECEIPT_VERWERKEN));
     }
 
     // Is de notificatie inmiddels verwijderd, dan rondt de receipttaak af zonder iets te doen.
@@ -147,7 +143,7 @@ class ReceiptReferentieTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
 
-        assertEquals(0L, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.RECEIPT_VERWERKEN)));
+        assertEquals(0L, LeesHelper.aantalTaken(TaakSoort.RECEIPT_VERWERKEN));
     }
 
     private UUID geplandePoging() {

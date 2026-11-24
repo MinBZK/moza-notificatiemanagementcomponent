@@ -14,6 +14,7 @@ import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
@@ -139,7 +140,7 @@ class CentraleNotificatieControllerTest {
                 .then()
                 .statusCode(400);
 
-        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
+        assertEquals(0, LeesHelper.aantalNotificaties());
     }
 
     @ParameterizedTest
@@ -170,7 +171,7 @@ class CentraleNotificatieControllerTest {
                 .then()
                 .statusCode(400);
 
-        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
+        assertEquals(0, LeesHelper.aantalNotificaties());
     }
 
     @Test
@@ -237,7 +238,7 @@ class CentraleNotificatieControllerTest {
                 .statusCode(400)
                 .body("violations", notNullValue());
 
-        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
+        assertEquals(0, LeesHelper.aantalNotificaties());
     }
 
     // Boven de grens van quarkus.http.limits.max-body-size leest de server de body niet in. Met
@@ -254,7 +255,7 @@ class CentraleNotificatieControllerTest {
                 .then()
                 .statusCode(413);
 
-        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
+        assertEquals(0, LeesHelper.aantalNotificaties());
     }
 
     // De grootste geldige aanvraag blijft ruim onder de grens op de body.

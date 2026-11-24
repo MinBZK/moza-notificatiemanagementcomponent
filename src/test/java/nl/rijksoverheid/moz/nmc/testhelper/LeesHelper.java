@@ -15,6 +15,7 @@ import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -57,6 +58,40 @@ public final class LeesHelper {
     /** De taken van deze soort. */
     public static List<Taak> taken(TaakSoort taakSoort) {
         return QuarkusTransaction.requiringNew().call(() -> bean(TaakRepository.class).list(Taak_.TAAK_SOORT, taakSoort));
+    }
+
+    /** De taak met dit id binnen zijn soort, of leeg als hij er niet (meer) is. */
+    public static Optional<Taak> taak(TaakSoort taakSoort, UUID id) {
+        return QuarkusTransaction.requiringNew().call(() -> bean(TaakRepository.class).zoek(taakSoort, id));
+    }
+
+    /** De ene taak van deze soort; faalt als er geen of meer dan één is. */
+    public static Taak enigeTaak(TaakSoort taakSoort) {
+        return QuarkusTransaction.requiringNew()
+                .call(() -> bean(TaakRepository.class).find(Taak_.TAAK_SOORT, taakSoort).singleResult());
+    }
+
+    /** De poging die NotifyNL onder dit id kent. */
+    public static Poging pogingVanNotifyId(UUID notifyId) {
+        return QuarkusTransaction.requiringNew()
+                .call(() -> bean(PogingRepository.class).findByNotifyId(notifyId).orElseThrow());
+    }
+
+    public static long aantalNotificaties() {
+        return QuarkusTransaction.requiringNew().call(() -> bean(NotificatieRepository.class).count());
+    }
+
+    public static long aantalPogingen() {
+        return QuarkusTransaction.requiringNew().call(() -> bean(PogingRepository.class).count());
+    }
+
+    /** Het aantal taken van alle soorten, ook de wistaken. */
+    public static long aantalTaken() {
+        return QuarkusTransaction.requiringNew().call(() -> bean(TaakRepository.class).count());
+    }
+
+    public static long aantalTaken(TaakSoort taakSoort) {
+        return QuarkusTransaction.requiringNew().call(() -> bean(TaakRepository.class).count(Taak_.TAAK_SOORT, taakSoort));
     }
 
     private static <T> T bean(Class<T> type) {

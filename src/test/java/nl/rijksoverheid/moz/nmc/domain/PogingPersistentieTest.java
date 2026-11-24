@@ -9,6 +9,7 @@ import java.time.OffsetDateTime;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -94,7 +95,7 @@ class PogingPersistentieTest {
 
         QuarkusTransaction.requiringNew().run(() -> notificatieRepository.deleteById(notificatieId));
 
-        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> pogingRepository.count()));
+        assertEquals(0, LeesHelper.aantalPogingen());
     }
 
     private UUID nieuweNotificatie() {

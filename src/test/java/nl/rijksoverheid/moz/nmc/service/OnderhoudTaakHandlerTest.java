@@ -16,6 +16,7 @@ import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.SleutelFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
@@ -36,6 +37,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -109,8 +111,8 @@ class OnderhoudTaakHandlerTest {
 
         assertEquals(2, aantal(notificatieRepository::count));
         assertEquals(1, aantal(pogingRepository::count));
-        assertTrue(QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findByIdOptional(recent)).isPresent());
-        assertTrue(QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findByIdOptional(lopend)).isPresent());
+        assertNotNull(LeesHelper.notificatie(recent));
+        assertNotNull(LeesHelper.notificatie(lopend));
     }
 
     // Een KEK-rotatie wrapt alleen de sleutel opnieuw: de versleutelde gegevens blijven byte voor byte
@@ -150,7 +152,7 @@ class OnderhoudTaakHandlerTest {
 
         assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.ONDERHOUD));
 
-        Taak taak = QuarkusTransaction.requiringNew().call(() -> taakRepository.zoek(TaakSoort.ONDERHOUD, id)).orElseThrow();
+        Taak taak = LeesHelper.taak(TaakSoort.ONDERHOUD, id).orElseThrow();
         assertTrue(taak.getDue().isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(59)));
         assertEquals(0, taak.getPogingen());
     }

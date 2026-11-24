@@ -16,6 +16,7 @@ import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.service.TaakClaimer;
 import nl.rijksoverheid.moz.nmc.service.TaakHandler;
 import nl.rijksoverheid.moz.nmc.service.TaakUitkomst;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
@@ -384,7 +385,7 @@ class TaakWorkerTest {
     }
 
     private java.util.Optional<Taak> zoek(TaakSoort taakSoort, UUID id) {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.zoek(taakSoort, id));
+        return LeesHelper.taak(taakSoort, id);
     }
 
     private void zetDue(UUID id, OffsetDateTime due) {

@@ -11,6 +11,7 @@ import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.domain.Taak_;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
@@ -375,7 +376,7 @@ class TaakClaimerTest {
     }
 
     private Taak zoek(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.zoek(TaakSoort.ONDERHOUD, id).orElseThrow());
+        return LeesHelper.taak(TaakSoort.ONDERHOUD, id).orElseThrow();
     }
 
     private void laatLeaseVerlopen(UUID id) {

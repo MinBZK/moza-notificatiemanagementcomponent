@@ -14,7 +14,6 @@ import jakarta.persistence.PersistenceException;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
-import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
@@ -23,6 +22,7 @@ import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.repository.WebhookpositieRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
@@ -312,7 +312,7 @@ class TerugkoppelTaakHandlerTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
-        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> taakRepository.count(Taak_.TAAK_SOORT, TaakSoort.TERUGKOPPELEN)));
+        assertEquals(0, LeesHelper.aantalTaken(TaakSoort.TERUGKOPPELEN));
         assertTrue(QuarkusTransaction.requiringNew().call(() -> webhookpositieRepository.findByIdOptional(NotificatieFixtures.DV_ID).isEmpty()));
     }
 
@@ -466,7 +466,7 @@ class TerugkoppelTaakHandlerTest {
     }
 
     private Taak terugkoppeltaak() {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.find(Taak_.TAAK_SOORT, TaakSoort.TERUGKOPPELEN).singleResult());
+        return LeesHelper.enigeTaak(TaakSoort.TERUGKOPPELEN);
     }
 
     private Webhookpositie positie() {
