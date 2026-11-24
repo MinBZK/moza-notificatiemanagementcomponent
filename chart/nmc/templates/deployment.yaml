@@ -13,6 +13,10 @@ spec:
     metadata:
       labels:
         {{- include "nmc.labels" . | nindent 8 }}
+      {{- with .Values.notify.trustCertsFile }}
+      annotations:
+        checksum/notify-trust: {{ $.Files.Get . | sha256sum }}
+      {{- end }}
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -48,6 +52,12 @@ spec:
               value: {{ required "profielservice.url is verplicht" .Values.profielservice.url | quote }}
             - name: QUARKUS_REST_CLIENT_NOTIFY_URL
               value: {{ required "notify.url is verplicht" .Values.notify.url | quote }}
+            {{- if .Values.notify.trustCertsFile }}
+            - name: QUARKUS_TLS_NOTIFY_TRUST_ALL
+              value: "false"
+            - name: QUARKUS_TLS_NOTIFY_TRUST_STORE_PEM_CERTS
+              value: /etc/nmc/notify-trust/ca.pem
+            {{- end }}
             - name: NMC_KEK_HUIDIGE_VERSIE
               value: {{ .Values.kek.huidigeVersie | quote }}
             - name: NMC_WEBHOOK_JWT_KEY_ID
@@ -96,7 +106,17 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.notify.trustCertsFile }}
+            - name: notify-trust
+              mountPath: /etc/nmc/notify-trust
+              readOnly: true
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir:
             sizeLimit: 256Mi
+        {{- if .Values.notify.trustCertsFile }}
+        - name: notify-trust
+          configMap:
+            name: {{ .Release.Name }}-notify-trust
+        {{- end }}

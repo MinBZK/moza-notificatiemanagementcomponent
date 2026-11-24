@@ -1,0 +1,12 @@
+{{- with .Values.notify.trustCertsFile }}
+{{- $pem := required (printf "notify.trustCertsFile %s staat niet in de chart" .) ($.Files.Get .) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $.Release.Name }}-notify-trust
+  labels:
+    {{- include "nmc.labels" $ | nindent 4 }}
+data:
+  ca.pem: |
+    {{- $pem | nindent 4 }}
+{{- end }}

@@ -21,6 +21,9 @@ profielservice:
 notify:
   # Bij moza-mock: <mock>/notifynl/<target>; het target bepaalt waar de receipt-callback heen gaat.
   url: ""
+  # PEM-bestand in de chart met de CA('s) die de NMC voor NotifyNL vertrouwt. Leeg: trust-all uit
+  # application.properties. Gezet: alleen deze CA's, bijvoorbeeld een intermediate die de server niet meestuurt.
+  trustCertsFile: ""
 
 kek:
   # Versie waarmee nieuwe sleutels gewrapt worden; moet in `versies` staan.
