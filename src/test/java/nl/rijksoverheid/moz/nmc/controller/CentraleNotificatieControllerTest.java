@@ -3,6 +3,8 @@ package nl.rijksoverheid.moz.nmc.controller;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
+import io.restassured.RestAssured;
+import io.restassured.config.HttpClientConfig;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -22,6 +24,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
@@ -236,6 +240,38 @@ class CentraleNotificatieControllerTest {
                 .body("violations", notNullValue());
 
         assertEquals(0, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
+    }
+
+    // Boven de grens van quarkus.http.limits.max-body-size leest de server de body niet in. Met
+    // Expect: 100-continue wacht de client op het antwoord voordat hij de body stuurt; zonder dat
+    // verbreekt de server de verbinding terwijl de client nog aan het sturen is.
+    @Test
+    void notificatieAannemen_bodyGroterDan1MB_retourneert413() {
+        given()
+                .config(RestAssured.config().httpClient(
+                        HttpClientConfig.httpClientConfig().setParam("http.protocol.expect-continue", true)))
+                .contentType(ContentType.JSON)
+                .body(aanvraagMetBerichtgegevens("{ \"naam\": \"" + "x".repeat(1024 * 1024) + "\" }"))
+                .when().post(PAD)
+                .then()
+                .statusCode(413);
+
+        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
+    }
+
+    // De grootste geldige aanvraag blijft ruim onder de grens op de body.
+    @Test
+    void notificatieAannemen_grootsteGeldigeBerichtgegevens_retourneert202() {
+        String berichtgegevens = IntStream.range(0, 50)
+                .mapToObj(i -> "\"" + "n".repeat(98) + "%02d".formatted(i) + "\": \"" + "x".repeat(2000) + "\"")
+                .collect(Collectors.joining(", ", "{ ", " }"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(aanvraagMetBerichtgegevens(berichtgegevens))
+                .when().post(PAD)
+                .then()
+                .statusCode(202);
     }
 
     @Test
