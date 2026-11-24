@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.testhelper;
 
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import nl.rijksoverheid.moz.nmc.domain.Bevestiging_;
@@ -10,6 +11,7 @@ import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.domain.VerzendbudgetTijdvak_;
 import nl.rijksoverheid.moz.nmc.domain.Webhookpositie_;
+import nl.rijksoverheid.moz.nmc.service.TaakClaimer;
 import org.hibernate.Session;
 
 import java.time.Duration;
@@ -35,6 +37,17 @@ public final class TaakFixtures {
                 .setParameter("taakSoort", taakSoort)
                 .setParameter("id", id)
                 .executeUpdate();
+    }
+
+    /**
+     * Claimt de eerstvolgende taak van deze soort en laat een andere worker hem daarna claimen: de taak
+     * zoals een worker hem nog vasthoudt nadat zijn lease verliep.
+     */
+    public static Taak geclaimdEnVerloren(TaakClaimer taakClaimer, EntityManager entityManager, TaakSoort taakSoort) {
+        Taak taak = taakClaimer.claim(taakSoort, 1).getFirst();
+        QuarkusTransaction.requiringNew().run(() -> claimDoorAndereWorker(entityManager, taakSoort, taak.getId()));
+
+        return taak;
     }
 
     public static void zetDue(EntityManager entityManager, TaakSoort taakSoort, UUID id, OffsetDateTime due) {
