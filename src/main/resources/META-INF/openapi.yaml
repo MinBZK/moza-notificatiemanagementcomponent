@@ -398,7 +398,7 @@ components:
           description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template"
         berichtgegevens:
           type: object
-          description: Templatevariabelen voor het bericht, ten hoogste 50 met waarden tot 2000 tekens
+          description: Templatevariabelen voor het bericht, ten hoogste 50, met namen tot 100 tekens en waarden tot 2000 tekens
           maxProperties: 50
           additionalProperties:
             type: string
@@ -428,7 +428,7 @@ components:
           description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template"
         berichtgegevens:
           type: object
-          description: Templatevariabelen voor het bericht, ten hoogste 50 met waarden tot 2000 tekens
+          description: Templatevariabelen voor het bericht, ten hoogste 50, met namen tot 100 tekens en waarden tot 2000 tekens
           maxProperties: 50
           additionalProperties:
             type: string

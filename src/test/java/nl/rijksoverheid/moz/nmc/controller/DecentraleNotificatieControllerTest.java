@@ -106,6 +106,23 @@ class DecentraleNotificatieControllerTest {
                 .body("title", equalTo("Notificatie niet aangenomen."));
     }
 
+    // Het decentrale schema draagt de grenzen op de berichtgegevens apart van het centrale.
+    @Test
+    void decentraleNotificatieVersturen_naamVanBerichtgegevenLangerDan100Tekens_retourneert400() {
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "emailAdres": "info@voorbeeld.nl",
+                          "berichtType": "Stuurgroep Agenda",
+                          "berichtgegevens": { "%s": "Voorbeeld BV" }
+                        }
+                        """.formatted("n".repeat(101)))
+                .when().post(PAD)
+                .then()
+                .statusCode(400);
+    }
+
     private static String aanvraag(String emailAdres, String berichtType, String extraVeld) {
         return """
                 {
