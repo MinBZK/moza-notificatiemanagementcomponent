@@ -1,0 +1,7 @@
+# Peer profielservice-mock (OIN 00000000000000000060) in tnt-notificatiedienst--mock-profielservice: alleen
+# een inway, naar moza-mock. Certificaten: deploy/fsc-testnet/.
+prefix: ps
+inway:
+  enabled: true
+gateway:
+  address: 194.135.48.139

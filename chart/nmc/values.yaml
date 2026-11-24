@@ -93,6 +93,9 @@ gateway:
       value: /q/openapi
     - type: PathPrefix
       value: /q/swagger-ui
+  # Extra listeners met TLS-passthrough voor FSC-peers (chart fsc-peer), elk {name, hostname, namespace}.
+  # name is gelijk aan de sectionName in de TLSRoute van die peer: <prefix>-fscmgr of <prefix>-fscinway.
+  passthrough: []
 
 fsc:
   # Een eigen FSC-peer (FSCInstallation) in deze namespace; vraagt de openfsc-operator op het cluster.

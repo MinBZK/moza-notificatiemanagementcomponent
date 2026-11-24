@@ -1,0 +1,32 @@
+{{- $p := include "fsc-peer.prefix" . }}
+# CNPG maakt hierbij het Secret <prefix>-fscpg-app aan, waar de componenten het wachtwoord uit lezen.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $p }}-fscpg
+  labels:
+    {{- include "fsc-peer.labels" . | nindent 4 }}
+  annotations:
+    # helm uninstall laat de database staan: daarin staan de contracten van de peer.
+    helm.sh/resource-policy: keep
+spec:
+  instances: 1
+  enablePDB: false
+  imageCatalogRef:
+    apiGroup: postgresql.cnpg.io
+    kind: ClusterImageCatalog
+    name: {{ .Values.postgres.imageCatalog }}
+    major: {{ .Values.postgres.majorVersion }}
+  bootstrap:
+    initdb:
+      database: fsc
+      owner: fsc
+      # Manager en txlog draaien elk in een eigen schema; de controller maakt het zijne zelf.
+      postInitApplicationSQL:
+        - CREATE SCHEMA IF NOT EXISTS manager AUTHORIZATION fsc
+        - CREATE SCHEMA IF NOT EXISTS txlog AUTHORIZATION fsc
+  storage:
+    size: {{ .Values.postgres.storage.size }}
+    {{- with .Values.postgres.storage.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}

@@ -1,0 +1,9 @@
+# Peer nmc (OIN 00000000000000000050) in tnt-notificatiedienst--nmc: inway voor het FBS, outway naar de
+# Profielservice-mock. Certificaten: deploy/fsc-testnet/.
+prefix: nmc
+inway:
+  enabled: true
+outway:
+  enabled: true
+gateway:
+  address: 194.135.48.139

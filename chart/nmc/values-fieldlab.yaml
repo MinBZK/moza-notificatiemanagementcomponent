@@ -6,7 +6,9 @@ image:
   digest: sha256:d7618dc0ecf2549ae6350919166a238c7085a1315748a25c7e3e7048e61ecee9
 
 profielservice:
-  url: http://moza-mock.tnt-notificatiedienst--mock-profielservice.svc:8080
+  # Via FSC (#1661): de eigen outway, grant link `profielservice` naar de peer profielservice-mock op het
+  # MOZa FSC-testnet. Zonder FSC: http://moza-mock.tnt-notificatiedienst--mock-profielservice.svc:8080
+  url: http://nmc-fscoutway:8080/profielservice
 notify:
   # De echte NotifyNL (Worth), met een team-key: die bezorgt alleen bij de adressen van het team. De
   # receipt-callback staat in het dashboard op de NMC van ZAD, dus deze NMC vraagt de status zelf na.
@@ -37,6 +39,20 @@ gateway:
   paths:
     - type: PathPrefix
       value: /
+  # FSC-peers op het MOZa FSC-testnet (chart fsc-peer, #1661): manager en inway van de NMC en de mock.
+  passthrough:
+    - name: nmc-fscmgr
+      hostname: nmc-fscmgr.cluster-c.fieldlab2026.nl
+      namespace: tnt-notificatiedienst--nmc
+    - name: nmc-fscinway
+      hostname: nmc-fscinway.cluster-c.fieldlab2026.nl
+      namespace: tnt-notificatiedienst--nmc
+    - name: ps-fscmgr
+      hostname: ps-fscmgr.cluster-c.fieldlab2026.nl
+      namespace: tnt-notificatiedienst--mock-profielservice
+    - name: ps-fscinway
+      hostname: ps-fscinway.cluster-c.fieldlab2026.nl
+      namespace: tnt-notificatiedienst--mock-profielservice
 
 postgres:
   # De CloudNativePG-operator op dit cluster komt van Haven+, met deze catalogus (PG 15 tot en met 18).

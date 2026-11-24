@@ -31,6 +31,23 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
+    {{- range $g.passthrough }}
+    # FSC-peer (chart fsc-peer): TLS gaat ongeopend door naar de manager of inway, die de mTLS zelf doet.
+    - name: {{ .name }}
+      hostname: {{ .hostname }}
+      port: 443
+      protocol: TLS
+      tls:
+        mode: Passthrough
+      allowedRoutes:
+        kinds:
+          - kind: TLSRoute
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .namespace }}
+    {{- end }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Issuer

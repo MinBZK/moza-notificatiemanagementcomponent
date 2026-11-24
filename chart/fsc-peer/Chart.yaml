@@ -1,0 +1,6 @@
+apiVersion: v2
+name: fsc-peer
+description: Een OpenFSC-peer (manager, controller, txlog, inway en/of outway) met een eigen CloudNativePG-database, aangesloten op een bestaande FSC-groep zoals het MOZa FSC-testnet
+type: application
+version: 0.1.0
+appVersion: "v2.9.0"
