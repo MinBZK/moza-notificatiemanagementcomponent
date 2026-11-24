@@ -23,5 +23,8 @@ for dir in "$PKI/out/$PEER"/*/; do
   args+=(--from-file="group-$e-cert.pem=$dir/cert.pem" --from-file="group-$e-key.pem=$dir/key.pem")
 done
 
-kubectl -n "$NS" create secret generic fsc-pki "${args[@]}" --dry-run=client -o yaml | kubectl -n "$NS" apply -f -
+# Server-side apply: client-side zou het hele Secret, met de sleutels, in de annotatie
+# last-applied-configuration zetten, en die toont `kubectl describe`.
+kubectl -n "$NS" create secret generic fsc-pki "${args[@]}" --dry-run=client -o yaml \
+  | kubectl -n "$NS" apply --server-side --force-conflicts -f -
 kubectl -n "$NS" get secret fsc-pki -o go-template='{{range $k, $v := .data}}{{$k}}{{"\n"}}{{end}}'
