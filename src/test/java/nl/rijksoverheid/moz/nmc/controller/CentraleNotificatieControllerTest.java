@@ -225,6 +225,29 @@ class CentraleNotificatieControllerTest {
                 .body("violations", notNullValue());
     }
 
+    @Test
+    void notificatieAannemen_naamVanBerichtgegevenLangerDan100Tekens_retourneert400() {
+        given()
+                .contentType(ContentType.JSON)
+                .body(aanvraagMetBerichtgegevens("{ \"" + "n".repeat(101) + "\": \"Voorbeeld BV\" }"))
+                .when().post(PAD)
+                .then()
+                .statusCode(400)
+                .body("violations", notNullValue());
+
+        assertEquals(0, QuarkusTransaction.requiringNew().call(() -> notificatieRepository.count()));
+    }
+
+    @Test
+    void notificatieAannemen_naamEnWaardeVanBerichtgegevenOpDeGrens_retourneert202() {
+        given()
+                .contentType(ContentType.JSON)
+                .body(aanvraagMetBerichtgegevens("{ \"" + "n".repeat(100) + "\": \"" + "x".repeat(2000) + "\" }"))
+                .when().post(PAD)
+                .then()
+                .statusCode(202);
+    }
+
     private static String aanvraagMetBerichtgegevens(String berichtgegevens) {
         return """
                 {
