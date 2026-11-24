@@ -96,7 +96,7 @@ WireMock en `QUARKUS_TLS_NOTIFY_TRUST_ALL` staat aan. Er zijn twee deployments:
 | Deployment | Wordt bijgewerkt door |
 | --- | --- |
 | `stable` | `deploy-stable-tst` in `deploy.yml`, bij elke push naar `main` (secret `ZAD_API_KEY_TST`) |
-| `pentest` | Niemand automatisch. Eenmalig gezet op de main-build van `82da2a9`; een nieuwe versie zet je bewust met `zadctl deployment update-image pentest --component nmcapi --image <image@digest>` |
+| `pentest` | Alleen met de hand: Actions → **ZAD Deploy pentest** (`deploy-pentest.yml`) → *Run workflow*, met de branch die je kiest (standaard `main`). De workflow bouwt die commit als `pentest-<sha7>` en deployt op digest |
 
 URL-patroon: `https://nmcapi-<deployment>-nt-8bl.rig.prd1.gn2.quattro.rijksapps.nl`.
 
