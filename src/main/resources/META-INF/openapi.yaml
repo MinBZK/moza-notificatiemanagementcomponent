@@ -376,9 +376,12 @@ components:
           $ref: '#/components/schemas/IdentificatieType'
         identificatieNummer:
           type: string
-          minLength: 1
-          pattern: '^.*\S.*$'
-          description: BSN-, KVK- of RSIN-nummer van de ontvanger
+          minLength: 8
+          maxLength: 9
+          pattern: '^[0-9]{8,9}$'
+          description: >-
+            BSN-, KVK- of RSIN-nummer van de ontvanger, alleen cijfers: een KVK-nummer heeft er 8,
+            een BSN 8 of 9 en een RSIN 9
         dienstverlener:
           type: string
           minLength: 1
