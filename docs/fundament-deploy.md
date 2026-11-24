@@ -449,10 +449,11 @@ nog een `helm upgrade`.
 
 ### NotifyNL
 
-Op het fieldlab de echte NotifyNL van Worth (`https://api.notifynl.nl`), met een team-key: die bezorgt
-alleen bij de adressen van het team, dus een centrale notificatie naar het adres van de
-Profielservice-mock wordt geweigerd. De key zet je zelf in het Secret, zonder dat hij in een bestand of
-de shellhistorie komt:
+Op het fieldlab de demo-NotifyNL van het LPC (`https://api.notify.demo.test-basisdienst.nl`), met
+dezelfde key als ZAD (op ZAD in de variabelen met `ONGEBRUIKT_LOGIUS_`). Op 24 november 2026 kwam een
+decentrale notificatie zo aan. Pas op: deze key bezorgt echt, dus test met een eigen adres en niet met de
+fictieve adressen van de Profielservice-mock (zoals `donald@testbv.nl`). De key zet je zelf in het Secret,
+zonder dat hij in een bestand of de shellhistorie komt:
 
 ```bash
 read -rs K
@@ -461,13 +462,23 @@ jq -n --arg k "$K" '{stringData:{NOTIFY_API_KEY:$k}}' \
 unset K
 ```
 
-- De templates in `BerichtType` zijn die van de NotifyNL van het LPC. Worth heeft andere: zet ze met
-  `NMC_BELEID_<BERICHTTYPE>_TEMPLATE_ID` (in `values-fieldlab.yaml` via `extraEnv`). Anders weigert
-  NotifyNL met `400 Template not found`. Het template-ID komt bij de aanname op de notificatie, dus een
-  wijziging geldt alleen voor nieuwe notificaties.
-- De receipt-callback staat in het dashboard van Worth op de NMC van ZAD; deze NMC krijgt de afleverstatus
-  door zelf na te vragen.
-- Terug naar de mock: `notify.url` op `http://moza-mock.tnt-notificatiedienst--mock-notifynl.svc:8080/notifynl/lokaal`.
+- **IP-whitelist:** Logius laat alleen het egress-IP van `cluster-c` door, `86.105.162.194` (niet het
+  Gateway-IP `194.135.48.139`). Een ander IP krijgt `403 RBAC: access denied` van hun Istio.
+- **Certificaat:** de server stuurt alleen zijn eigen certificaat, zonder de intermediate `certSIGN Web
+  CA`. Daarom `notify.trustCertsFile: certs/certsign-web-ca.pem`: voor NotifyNL vertrouwt de NMC dan
+  alleen die CA, in plaats van de trust-all uit `application.properties`. De intermediate is geldig tot
+  6 februari 2027 (daarna een nieuwe uit de AIA van het servercertificaat halen en controleren).
+- **Templates:** die in `BerichtType` zijn van deze NotifyNL. Het Demo template vraagt
+  `berichtgegevens.voornaam`; zonder weigert NotifyNL met `400 Missing personalisation: voornaam` en wordt
+  de verzendtaak uitgesteld. Een ander template-ID per berichttype: `NMC_BELEID_<BERICHTTYPE>_TEMPLATE_ID`
+  via `extraEnv`. Het template-ID komt bij de aanname op de notificatie, dus een wijziging geldt alleen
+  voor nieuwe notificaties.
+- **Receipt-callback:** die staat in het dashboard van het LPC op de NMC van ZAD (dezelfde key en
+  service); deze NMC krijgt de afleverstatus door zelf na te vragen. Receipts van berichten van
+  Fundament komen dus bij ZAD aan, dat ze niet kent.
+- Terug naar Worth: `notify.url` op `https://api.notifynl.nl`, `trustCertsFile` leeg, Worths team-key in
+  het Secret en `NMC_BELEID_DEMO_TEMPLATE_TEMPLATE_ID=a1f49022-846c-420d-b7f7-dd7b328f1474` in `extraEnv`.
+  Terug naar de mock: `notify.url` op `http://moza-mock.tnt-notificatiedienst--mock-notifynl.svc:8080/notifynl/lokaal`.
 
 ### Een nieuw image en Flyway
 

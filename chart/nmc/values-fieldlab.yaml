@@ -10,16 +10,15 @@ profielservice:
   # MOZa FSC-testnet. Zonder FSC: http://moza-mock.tnt-notificatiedienst--mock-profielservice.svc:8080
   url: http://nmc-fscoutway:8080/profielservice
 notify:
-  # De echte NotifyNL (Worth), met een team-key: die bezorgt alleen bij de adressen van het team. De
-  # receipt-callback staat in het dashboard op de NMC van ZAD, dus deze NMC vraagt de status zelf na.
-  # Terug naar de mock: http://moza-mock.tnt-notificatiedienst--mock-notifynl.svc:8080/notifynl/lokaal
-  url: https://api.notifynl.nl
-
-# De templates van de NotifyNL van Worth; de standaard in BerichtType is die van het LPC.
-# Stuurgroep Agenda staat hier niet in: dat template is bij Worth nog niet bevestigd.
-extraEnv:
-  - name: NMC_BELEID_DEMO_TEMPLATE_TEMPLATE_ID
-    value: a1f49022-846c-420d-b7f7-dd7b328f1474
+  # De demo-NotifyNL van het LPC (Logius), met dezelfde key als ZAD; Logius laat alleen het egress-IP van
+  # cluster-c door. De templates in BerichtType zijn van deze NotifyNL. De receipt-callback staat in het
+  # dashboard op de NMC van ZAD, dus deze NMC vraagt de status zelf na.
+  # Worth: https://api.notifynl.nl, met NMC_BELEID_DEMO_TEMPLATE_TEMPLATE_ID=a1f49022-846c-420d-b7f7-dd7b328f1474
+  # in extraEnv en zonder trustCertsFile. De mock: http://moza-mock.tnt-notificatiedienst--mock-notifynl.svc:8080/notifynl/lokaal
+  url: https://api.notify.demo.test-basisdienst.nl
+  # De server stuurt alleen zijn eigen certificaat, zonder de intermediate certSIGN Web CA (geldig tot
+  # 6 februari 2027). Die uit de AIA van het servercert, gecontroleerd tegen certSIGN ROOT CA G2.
+  trustCertsFile: certs/certsign-web-ca.pem
 
 webhook:
   jwtKeyId: fieldlab-1
