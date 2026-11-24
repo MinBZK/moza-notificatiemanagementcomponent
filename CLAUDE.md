@@ -580,7 +580,8 @@ ontwikkelomgeving**. Elke PR krijgt een `pr-<nummer>`-deployment die zijn
 configuratie via `clone-from` erft van de `feature`-deployment; push naar `main`
 gaat naar de persistente `stable`-deployment. Dezelfde push deployt ook `stable` in
 het tst-project `nt-8bl` (NMC - tst); de `pentest`-deployment daar wordt nooit
-automatisch bijgewerkt. Echte releases draaien op een ander cluster.
+automatisch bijgewerkt, alleen met de hand via `deploy-pentest.yml`. Echte
+releases draaien op een ander cluster.
 
 De workflow bepaalt alleen wélk container-image draait, en deployt op digest.
 Applicatieconfiguratie (datasource, NotifyNL-keys, pepper) staat in de deployment
