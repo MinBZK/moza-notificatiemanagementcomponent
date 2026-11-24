@@ -1,39 +1,44 @@
 package nl.rijksoverheid.moz.nmc.job;
 
-import jakarta.enterprise.context.ApplicationScoped;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.service.TaakHandler;
 import nl.rijksoverheid.moz.nmc.service.TaakUitkomst;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
+import java.util.function.Predicate;
 
 /**
- * Handler voor de soort ONGELDIG_MELDEN in de testsuite; er is nog geen echte, en de worker staat
- * maar één handler per soort toe. Het gedrag is per test in te
- * stellen. De worker-lus staat in tests uit, dus deze handler draait alleen als een test een ronde
- * aanroept.
+ * Handler waarvan een test het gedrag instelt. Geen bean: de test geeft hem via de constructor aan
+ * zijn eigen {@link TaakWorker}, zodat hij niet botst met de handler die de applicatie voor dezelfde
+ * taaksoort heeft of krijgt.
  */
-@ApplicationScoped
-public class TestTaakHandler implements TaakHandler {
+class TestTaakHandler implements TaakHandler {
 
-    static final AtomicReference<BiFunction<Taak, Lease, TaakUitkomst>> GEDRAG =
-            new AtomicReference<>((taak, lease) -> TaakUitkomst.afgerond());
+    private BiFunction<Taak, Lease, TaakUitkomst> gedrag = (taak, lease) -> TaakUitkomst.afgerond();
+    private Predicate<Taak> bijUitputting = taak -> false;
+    private boolean periodiek;
 
-    static final AtomicReference<java.util.function.Predicate<Taak>> BIJ_UITPUTTING = new AtomicReference<>(taak -> false);
+    void zetGedrag(BiFunction<Taak, Lease, TaakUitkomst> gedrag) {
+        this.gedrag = gedrag;
+    }
 
-    static final AtomicBoolean PERIODIEK = new AtomicBoolean();
+    void zetBijUitputting(Predicate<Taak> bijUitputting) {
+        this.bijUitputting = bijUitputting;
+    }
+
+    void zetPeriodiek(boolean periodiek) {
+        this.periodiek = periodiek;
+    }
 
     @Override
     public boolean periodiek() {
-        return PERIODIEK.get();
+        return periodiek;
     }
 
     @Override
     public boolean handelUitputtingAf(Taak taak) {
-        return BIJ_UITPUTTING.get().test(taak);
+        return bijUitputting.test(taak);
     }
 
     @Override
@@ -43,6 +48,6 @@ public class TestTaakHandler implements TaakHandler {
 
     @Override
     public TaakUitkomst voerUit(Taak taak, Lease lease) {
-        return GEDRAG.get().apply(taak, lease);
+        return gedrag.apply(taak, lease);
     }
 }

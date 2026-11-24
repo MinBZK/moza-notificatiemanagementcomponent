@@ -8,6 +8,7 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.service.TaakClaimer;
 import nl.rijksoverheid.moz.nmc.service.TaakHandler;
+import nl.rijksoverheid.moz.nmc.service.TaakUitkomst;
 import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import io.quarkus.scheduler.Scheduled;
 import org.junit.jupiter.api.Test;
@@ -34,8 +35,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -112,6 +115,41 @@ class TaakWorkerUnitTest {
         verify(taakClaimer).stelUit(taak, NU.plusSeconds(240), false);
     }
 
+    // Een taak die faalt mag de rest van de batch niet tegenhouden.
+    @Test
+    void verwerk_eersteTaakFaalt_voertDeTweedeNogUit() {
+        TaakHandler handler = handler(TaakSoort.WISSEN);
+        Taak eerste = taak(TaakSoort.WISSEN);
+        Taak tweede = taak(TaakSoort.WISSEN);
+        when(taakClaimer.claim(eq(TaakSoort.WISSEN), anyInt())).thenReturn(List.of(eerste, tweede));
+        when(handler.voerUit(eq(eerste), any())).thenThrow(new IllegalStateException("gesimuleerde fout"));
+        when(handler.voerUit(eq(tweede), any())).thenReturn(TaakUitkomst.afgerond());
+        TaakWorker worker = worker(VASTE_KLOK, TestConfig.taak(), handler);
+
+        assertEquals(2, worker.verwerk(TaakSoort.WISSEN));
+
+        verify(taakClaimer).stelUit(eerste, NU.plusSeconds(30), true);
+        verify(taakClaimer).rondAf(tweede);
+    }
+
+    // Ook niet als het bijwerken van de mislukte taak zelf faalt, zoals bij een databasestoring.
+    @Test
+    void verwerk_uitstelVanDeEersteTaakFaalt_voertDeTweedeNogUit() {
+        TaakHandler handler = handler(TaakSoort.WISSEN);
+        Taak eerste = taak(TaakSoort.WISSEN);
+        Taak tweede = taak(TaakSoort.WISSEN);
+        when(taakClaimer.claim(eq(TaakSoort.WISSEN), anyInt())).thenReturn(List.of(eerste, tweede));
+        when(handler.voerUit(eq(eerste), any())).thenThrow(new IllegalStateException("gesimuleerde fout"));
+        when(handler.voerUit(eq(tweede), any())).thenReturn(TaakUitkomst.afgerond());
+        doThrow(new IllegalStateException("database weg")).when(taakClaimer).stelUit(eq(eerste), any(), anyBoolean());
+        TaakWorker worker = worker(VASTE_KLOK, TestConfig.taak(), handler);
+
+        assertEquals(2, worker.verwerk(TaakSoort.WISSEN));
+
+        verify(handler).voerUit(eq(tweede), any());
+        verify(taakClaimer).rondAf(tweede);
+    }
+
     static Stream<Arguments> geplandeMethodes() {
         return Stream.of(
                 arguments(TaakSoort.VERZENDEN, (Consumer<TaakWorker>) TaakWorker::verzenden),
@@ -162,11 +200,17 @@ class TaakWorkerUnitTest {
 
     // De claim levert deze ene taak, die al een aantal keer mislukt is.
     private Taak taakMetPogingen(TaakSoort soort, int pogingen) {
+        Taak taak = taak(soort);
+        when(taak.getPogingen()).thenReturn(pogingen);
+        when(taakClaimer.claim(eq(soort), anyInt())).thenReturn(List.of(taak));
+
+        return taak;
+    }
+
+    private static Taak taak(TaakSoort soort) {
         Taak taak = mock(Taak.class);
         when(taak.getTaakSoort()).thenReturn(soort);
         when(taak.getId()).thenReturn(UUID.randomUUID());
-        when(taak.getPogingen()).thenReturn(pogingen);
-        when(taakClaimer.claim(eq(soort), anyInt())).thenReturn(List.of(taak));
 
         return taak;
     }
