@@ -32,9 +32,8 @@ anders start de app zonder DB en gaat de deploy rood (`/q/health/ready` faalt).
 | --- | --- |
 | `ZAD_API_KEY` | ZAD Operations Manager API key (deploy + cleanup) |
 | `ZAD_API_KEY_TST` | Idem voor het tst-project `nt-8bl` (alleen de `stable`-deploy) |
-| `GITHUB_ADMIN_TOKEN` | Token met "Administration: write" op deze repo, om GitHub-environments `pr-<n>` te verwijderen. **Bestaat nog niet**; zie [Opruimen](#opruimen) |
 
-`GITHUB_TOKEN` is automatisch beschikbaar (image push naar GHCR, GitHub-deployments).
+`GITHUB_TOKEN` is automatisch beschikbaar (image push naar GHCR, PR-comment).
 
 ### 2. Applicatieconfiguratie in ZAD (managed DB + secrets)
 
@@ -103,23 +102,18 @@ URL-patroon: `https://nmcapi-<deployment>-nt-8bl.rig.prd1.gn2.quattro.rijksapps.
 
 ## Opruimen
 
-Twee workflows ruimen een preview op. Beide verwijderen de ZAD-deployment, de
-GitHub-deployments, het image `pr-<n>` in GHCR en het GitHub-environment `pr-<n>`.
+Twee workflows ruimen een preview op. Beide verwijderen de ZAD-deployment `pr-<n>` en het
+image `pr-<n>` in GHCR.
 
 | Workflow | Wanneer |
 | --- | --- |
-| `cleanup-preview` in `deploy.yml` | Bij sluiten van de PR |
-| `zad-scheduled-cleanup.yml` | Dagelijks om 03:17 UTC, en met de hand via *Run workflow* (standaard als dry-run). Vangnet voor elk environment `pr-<n>` waarvan de PR niet meer open is, bijvoorbeeld omdat `cleanup-preview` niet startte of faalde |
+| `cleanup-preview` in `deploy.yml` | Bij sluiten van de PR. De deploy-comment blijft staan: de action haalt die alleen weg bij een `pull_request`-event, en deze job draait op `pull_request_target` |
+| `zad-scheduled-cleanup.yml` | Dagelijks om 03:17 UTC, en met de hand via *Run workflow* (standaard als dry-run). Vraagt de deployments `pr-<n>` op bij ZAD en ruimt die van gesloten PR's op. Vangnet voor als `cleanup-preview` niet startte of faalde |
 
-Het GitHub-environment verwijderen vraagt "Administration: write" op de repo. Dat recht
-kan `GITHUB_TOKEN` in een workflow niet krijgen, dus beide workflows gebruiken daarvoor
-het secret `GITHUB_ADMIN_TOKEN`. Zolang dat ontbreekt, slaan ze alleen die stap over en
-blijven de environments staan. De geplande workflow vindt achtergebleven previews via die
-environments en loopt ze dan bij elke run opnieuw langs.
-
-`GITHUB_ADMIN_TOKEN` moet een repo-admin aanmaken: bij voorkeur een token van een GitHub
-App met alleen "Administration: write" op deze repo, anders een fine-grained PAT met
-hetzelfde recht, beperkt tot deze repo.
+Een PR-preview krijgt **geen GitHub-environment**. Een environment verwijderen vraagt
+"Administration: write" op de repo, en dat recht kan `GITHUB_TOKEN` in een workflow niet
+krijgen. Elke PR liet er dus een achter. De preview-URL staat in de PR-comment
+"🚀 Preview Deployment" die de deploy-action plaatst en bij elke deploy bijwerkt.
 
 ## Gotchas (al opgelost in de workflow)
 
@@ -132,6 +126,5 @@ hetzelfde recht, beperkt tot deze repo.
 
 ## Restpunten
 
-- [ ] `GITHUB_ADMIN_TOKEN` als repo-secret toevoegen (zie [Opruimen](#opruimen)). Daarna
-  ruimt de eerste run van `zad-scheduled-cleanup.yml` de bestaande environments van
-  gesloten PR's op.
+- [ ] De environments `pr-<n>` van vóór deze wijziging met de hand verwijderen. Dat kan
+  alleen een repo-admin: `gh api -X DELETE repos/MinBZK/moza-notificatiemanagementcomponent/environments/pr-<n>`.
