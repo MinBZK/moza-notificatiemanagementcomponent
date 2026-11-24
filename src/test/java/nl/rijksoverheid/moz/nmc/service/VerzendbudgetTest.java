@@ -8,6 +8,7 @@ import nl.rijksoverheid.moz.nmc.repository.VerzendbudgetRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -41,7 +42,7 @@ class VerzendbudgetTest {
     void setUp() {
         when(clock.instant()).thenReturn(TIJDVAK_A);
         when(clock.getZone()).thenReturn(ZoneOffset.UTC);
-        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.leegVerzendbudget(entityManager));
+        TestDatabase.leeg();
     }
 
     @Test

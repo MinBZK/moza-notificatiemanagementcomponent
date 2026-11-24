@@ -37,6 +37,7 @@ import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
@@ -124,12 +125,7 @@ class VerzendTaakHandlerTest {
     @BeforeEach
     void setUp() {
         QuarkusMock.installMockForType(clock, Clock.class);
-        QuarkusTransaction.requiringNew().run(() -> {
-            taakRepository.deleteAll();
-            TaakFixtures.leegVerzendbudget(taakRepository.getEntityManager());
-            eventRepository.deleteAll();
-            notificatieRepository.deleteAll();
-        });
+        TestDatabase.leeg();
         when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
     }
 

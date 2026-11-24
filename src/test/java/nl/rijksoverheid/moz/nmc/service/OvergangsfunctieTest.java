@@ -16,6 +16,7 @@ import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -52,10 +53,7 @@ class OvergangsfunctieTest {
 
     @BeforeEach
     void setUp() {
-        QuarkusTransaction.requiringNew().run(() -> {
-            eventRepository.deleteAll();
-            notificatieRepository.deleteAll();
-        });
+        TestDatabase.leeg();
     }
 
     @Test

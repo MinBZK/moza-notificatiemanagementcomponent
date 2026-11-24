@@ -20,6 +20,7 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -71,11 +72,7 @@ class WisTaakHandlerTest {
 
     @BeforeEach
     void setUp() {
-        QuarkusTransaction.requiringNew().run(() -> {
-            taakRepository.deleteAll();
-            eventRepository.deleteAll();
-            notificatieRepository.deleteAll();
-        });
+        TestDatabase.leeg();
     }
 
     @Test

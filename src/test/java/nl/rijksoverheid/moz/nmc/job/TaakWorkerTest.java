@@ -18,6 +18,7 @@ import nl.rijksoverheid.moz.nmc.service.TaakHandler;
 import nl.rijksoverheid.moz.nmc.service.TaakUitkomst;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -73,10 +74,7 @@ class TaakWorkerTest {
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
-        QuarkusTransaction.requiringNew().run(() -> {
-            taakRepository.deleteAll();
-            TaakFixtures.leegVerzendbudget(entityManager);
-        });
+        TestDatabase.leeg();
         Instance<TaakHandler> handlers = mock(Instance.class);
         when(handlers.iterator()).thenReturn(List.<TaakHandler>of(handler).iterator());
         taakWorker = new TaakWorker(taakClaimer, taakRepository, handlers, meterRegistry, clock, taakConfig);

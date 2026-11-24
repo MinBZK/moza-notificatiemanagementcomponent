@@ -11,12 +11,11 @@ import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
 import nl.rijksoverheid.moz.nmc.repository.BevestigingRepository;
-import nl.rijksoverheid.moz.nmc.repository.EventRepository;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.service.Aanroeplimiet;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -29,7 +28,6 @@ import java.util.UUID;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -47,13 +45,7 @@ class EventfeedControllerTest {
     Overgangsfunctie overgangsfunctie;
 
     @Inject
-    NotificatieRepository notificatieRepository;
-
-    @Inject
     PogingRepository pogingRepository;
-
-    @Inject
-    EventRepository eventRepository;
 
     @Inject
     BevestigingRepository bevestigingRepository;
@@ -61,11 +53,7 @@ class EventfeedControllerTest {
     @BeforeEach
     void setUp() {
         when(aanroeplimiet.registreer(any())).thenReturn(true);
-        QuarkusTransaction.requiringNew().run(() -> {
-            eventRepository.deleteAll();
-            notificatieRepository.deleteAll();
-            bevestigingRepository.deleteAll();
-        });
+        TestDatabase.leeg();
     }
 
     @Test

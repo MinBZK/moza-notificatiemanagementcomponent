@@ -16,10 +16,9 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
-import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -67,13 +66,7 @@ public class EndpointFuzzTest {
     SendAMessageApi sendAMessageApi;
 
     @Inject
-    NotificatieRepository notificatieRepository;
-
-    @Inject
     PogingRepository pogingRepository;
-
-    @Inject
-    EventRepository eventRepository;
 
     @Inject
     Overgangsfunctie overgangsfunctie;
@@ -82,9 +75,8 @@ public class EndpointFuzzTest {
     void setUp() {
         // Wipes what earlier invocations committed, then seeds the notificaties the
         // afleverstatus-corpus refers to.
+        TestDatabase.leeg();
         QuarkusTransaction.requiringNew().run(() -> {
-            eventRepository.deleteAll();
-            notificatieRepository.deleteAll();
             for (UUID referentie : BEKENDE_NOTIFY_REFERENTIES) {
                 Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
                 overgangsfunctie.neemAan(notificatie);

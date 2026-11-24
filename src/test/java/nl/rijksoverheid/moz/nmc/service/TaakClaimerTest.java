@@ -12,6 +12,7 @@ import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -66,9 +67,8 @@ class TaakClaimerTest {
     void setUp() {
         when(clock.instant()).thenReturn(Instant.parse("2030-01-01T10:00:30Z"));
         when(clock.getZone()).thenReturn(ZoneOffset.UTC);
+        TestDatabase.leeg();
         QuarkusTransaction.requiringNew().run(() -> {
-            taakRepository.deleteAll();
-            TaakFixtures.leegVerzendbudget(entityManager);
             TaakFixtures.voegDienstverlenerToe(entityManager, TWEEDE_DV, "00000000000000000002", "Tweede");
         });
     }

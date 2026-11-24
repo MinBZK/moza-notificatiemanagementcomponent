@@ -7,11 +7,9 @@ import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.repository.EventPartitie;
 import nl.rijksoverheid.moz.nmc.repository.EventPartitieRepository;
-import nl.rijksoverheid.moz.nmc.repository.EventRepository;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
-import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,26 +40,11 @@ class EventlogPartitiebeheerIntegratieTest {
     EventPartitieRepository eventPartitieRepository;
 
     @Inject
-    NotificatieRepository notificatieRepository;
-
-    @Inject
-    EventRepository eventRepository;
-
-    @Inject
-    TaakRepository taakRepository;
-
-    @Inject
     EntityManager entityManager;
 
     @BeforeEach
     void setUp() {
-        QuarkusTransaction.requiringNew().run(() -> {
-            taakRepository.deleteAll();
-            eventRepository.deleteAll();
-            notificatieRepository.deleteAll();
-            TaakFixtures.verwijderBevestigingen(entityManager);
-            TaakFixtures.verwijderWebhookposities(entityManager);
-        });
+        TestDatabase.leeg();
     }
 
     @AfterEach

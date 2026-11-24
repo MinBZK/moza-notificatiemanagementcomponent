@@ -6,10 +6,10 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 
 import java.time.OffsetDateTime;
-import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -31,17 +31,11 @@ class PogingPersistentieTest {
     PogingRepository pogingRepository;
 
     @Inject
-    EventRepository eventRepository;
-
-    @Inject
     Overgangsfunctie overgangsfunctie;
 
     @BeforeEach
     void setUp() {
-        QuarkusTransaction.requiringNew().run(() -> {
-            eventRepository.deleteAll();
-            notificatieRepository.deleteAll();
-        });
+        TestDatabase.leeg();
     }
 
     @Test

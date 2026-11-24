@@ -15,12 +15,12 @@ import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
-import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,18 +55,13 @@ class ControleTaakHandlerTest {
     PogingRepository pogingRepository;
 
     @Inject
-    EventRepository eventRepository;
-
-    @Inject
     TaakRepository taakRepository;
 
     @BeforeEach
     void setUp() {
         QuarkusMock.installMockForType(clock, Clock.class);
+        TestDatabase.leeg();
         QuarkusTransaction.requiringNew().run(() -> {
-            taakRepository.deleteAll();
-            eventRepository.deleteAll();
-            notificatieRepository.deleteAll();
             taakRepository.persist(new Taak(TaakSoort.CONTROLE, null, null, clock.nu(), null, null));
         });
     }

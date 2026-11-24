@@ -13,6 +13,7 @@ import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -57,9 +58,8 @@ class EventfeedTest {
 
     @BeforeEach
     void setUp() {
+        TestDatabase.leeg();
         QuarkusTransaction.requiringNew().run(() -> {
-            eventRepository.deleteAll();
-            bevestigingRepository.deleteAll();
             TaakFixtures.voegDienstverlenerToe(entityManager, TWEEDE_DV, "00000000000000000002", "Tweede");
         });
     }

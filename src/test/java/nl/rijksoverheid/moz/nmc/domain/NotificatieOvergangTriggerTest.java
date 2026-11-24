@@ -5,10 +5,9 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
-import nl.rijksoverheid.moz.nmc.repository.EventRepository;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -33,18 +32,9 @@ class NotificatieOvergangTriggerTest {
     @Inject
     Overgangsfunctie overgangsfunctie;
 
-    @Inject
-    NotificatieRepository notificatieRepository;
-
-    @Inject
-    EventRepository eventRepository;
-
     @BeforeEach
     void setUp() {
-        QuarkusTransaction.requiringNew().run(() -> {
-            eventRepository.deleteAll();
-            notificatieRepository.deleteAll();
-        });
+        TestDatabase.leeg();
     }
 
     @Test

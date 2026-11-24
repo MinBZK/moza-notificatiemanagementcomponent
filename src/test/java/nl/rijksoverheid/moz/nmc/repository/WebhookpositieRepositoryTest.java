@@ -8,6 +8,7 @@ import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.domain.Webhookpositie;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -31,7 +32,7 @@ class WebhookpositieRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.verwijderWebhookposities(entityManager));
+        TestDatabase.leeg();
     }
 
     @Test

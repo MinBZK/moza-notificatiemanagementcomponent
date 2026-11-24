@@ -28,6 +28,7 @@ import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -98,12 +99,7 @@ class NotifyNLCallbackControllerTest {
 
     @BeforeEach
     void setUp() {
-        QuarkusTransaction.requiringNew().run(() -> {
-            taakRepository.deleteAll();
-            eventRepository.deleteAll();
-            notificatieRepository.deleteAll();
-            TaakFixtures.leegVerzendbudget(notificatieRepository.getEntityManager());
-        });
+        TestDatabase.leeg();
 
         Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail("test@example.nl"));

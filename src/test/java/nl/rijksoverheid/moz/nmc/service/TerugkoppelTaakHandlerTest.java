@@ -21,11 +21,11 @@ import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.domain.Webhookpositie;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
-import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.repository.WebhookpositieRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import nl.rijksoverheid.moz.nmc.testhelper.WebhookOntvanger;
 import org.jose4j.jwk.JsonWebKeySet;
@@ -87,9 +87,6 @@ class TerugkoppelTaakHandlerTest {
     TaakRepository taakRepository;
 
     @Inject
-    EventRepository eventRepository;
-
-    @Inject
     WebhookpositieRepository webhookpositieRepository;
 
     @Inject
@@ -104,17 +101,17 @@ class TerugkoppelTaakHandlerTest {
         when(aanroeplimiet.registreer(any())).thenReturn(true);
         WebhookOntvanger.AANROEPEN.clear();
         WebhookOntvanger.TIJDENS_AANROEP = () -> { };
+        TestDatabase.leeg();
         QuarkusTransaction.requiringNew().run(() -> {
-            taakRepository.deleteAll();
-            eventRepository.deleteAll();
-            webhookpositieRepository.deleteAll();
             taakRepository.persist(new Taak(TaakSoort.TERUGKOPPELEN, NotificatieFixtures.DV_ID, null,
                     clock.nu(), null, null));
         });
     }
 
+    // Ook na een falende assert: de hook is statisch en zou anders in een andere testklasse afgaan.
     @AfterEach
     void tearDown() {
+        WebhookOntvanger.TIJDENS_AANROEP = () -> { };
         zetWebhook(null, null);
     }
 

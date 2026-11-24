@@ -13,12 +13,12 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.VersleuteldeGegevens;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
-import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -64,9 +64,6 @@ class OnderhoudTaakHandlerTest {
     NotificatieRepository notificatieRepository;
 
     @Inject
-    EventRepository eventRepository;
-
-    @Inject
     TaakRepository taakRepository;
 
     @Inject
@@ -77,14 +74,7 @@ class OnderhoudTaakHandlerTest {
 
     @BeforeEach
     void setUp() {
-        QuarkusTransaction.requiringNew().run(() -> {
-            taakRepository.deleteAll();
-            eventRepository.deleteAll();
-            notificatieRepository.deleteAll();
-            TaakFixtures.verwijderBevestigingen(entityManager);
-            TaakFixtures.verwijderWebhookposities(entityManager);
-            TaakFixtures.leegVerzendbudget(entityManager);
-        });
+        TestDatabase.leeg();
     }
 
     @AfterEach
