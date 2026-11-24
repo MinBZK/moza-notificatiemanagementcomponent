@@ -1,16 +1,20 @@
 package nl.rijksoverheid.moz.nmc.job;
 
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import nl.rijksoverheid.moz.nmc.config.TaakConfig;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.service.TaakClaimer;
+import nl.rijksoverheid.moz.nmc.service.TaakHandler;
 import nl.rijksoverheid.moz.nmc.service.TaakUitkomst;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
@@ -19,26 +23,30 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
-// %test: nmc.taak.max-pogingen=2, de lus zelf staat uit.
+/**
+ * Toetst de worker tegen de echte claimer en database, met een eigen worker die alleen de handler van
+ * de test kent. Zo hangt de test niet af van welke handlers de applicatie zelf registreert.
+ * {@code %test}: {@code nmc.taak.max-pogingen=2}.
+ */
 @QuarkusTest
 class TaakWorkerTest {
-
-    @Inject
-    TaakWorker taakWorker;
 
     // @InjectSpy: zonder stubbing de echte claimer; de storingstests laten één methode gooien.
     @InjectSpy
@@ -51,29 +59,39 @@ class TaakWorkerTest {
     EntityManager entityManager;
 
     @Inject
-    MeterRegistry meterRegistry;
+    Clock clock;
+
+    @Inject
+    TaakConfig taakConfig;
+
+    // JUnit maakt per test een nieuwe instantie van deze klasse, dus elke test begint met een verse
+    // handler en een leeg register.
+    private final TestTaakHandler handler = new TestTaakHandler();
+    private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    private TaakWorker taakWorker;
 
     @BeforeEach
+    @SuppressWarnings("unchecked")
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
             taakRepository.deleteAll();
             TaakFixtures.leegVerzendbudget(entityManager);
         });
+        Instance<TaakHandler> handlers = mock(Instance.class);
+        when(handlers.iterator()).thenReturn(List.<TaakHandler>of(handler).iterator());
+        taakWorker = new TaakWorker(taakClaimer, taakRepository, handlers, meterRegistry, clock, taakConfig);
     }
 
     @AfterEach
-    void resetHandler() {
+    void resetClaimer() {
         Mockito.reset(taakClaimer);
-        TestTaakHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.afgerond());
-        TestTaakHandler.BIJ_UITPUTTING.set(taak -> false);
-        TestTaakHandler.PERIODIEK.set(false);
     }
 
     @Test
     void verwerk_periodiekeTaakUitgeput_blijftOpenEnWordtOpnieuwGepland() {
         UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
-        TestTaakHandler.PERIODIEK.set(true);
-        TestTaakHandler.GEDRAG.set((taak, lease) -> {
+        handler.zetPeriodiek(true);
+        handler.zetGedrag((taak, lease) -> {
             throw new IllegalStateException("database weg");
         });
 
@@ -91,7 +109,7 @@ class TaakWorkerTest {
     @Test
     void verwerk_uitstelDatAlsPogingTelt_zetNaMaxPogingenOpMislukt() {
         UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
-        TestTaakHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.uitgesteld(nu().minusSeconds(1), true));
+        handler.zetGedrag((taak, lease) -> TaakUitkomst.uitgesteld(nu().minusSeconds(1), true));
 
         taakWorker.verwerk(TaakSoort.ONGELDIG_MELDEN);
         assertEquals(1, zoek(TaakSoort.ONGELDIG_MELDEN, id).orElseThrow().getPogingen());
@@ -105,16 +123,45 @@ class TaakWorkerTest {
     @Test
     void verwerk_uitputtingDoorDeHandlerAfgehandeld_rondtDeTaakAf() {
         UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
-        TestTaakHandler.GEDRAG.set((taak, lease) -> {
+        handler.zetGedrag((taak, lease) -> {
             throw new IllegalStateException("gesimuleerde fout");
         });
-        TestTaakHandler.BIJ_UITPUTTING.set(taak -> true);
+        handler.zetBijUitputting(taak -> true);
 
         taakWorker.verwerk(TaakSoort.ONGELDIG_MELDEN);
         zetDue(id, nu().minusSeconds(1));
         taakWorker.verwerk(TaakSoort.ONGELDIG_MELDEN);
 
         assertTrue(zoek(TaakSoort.ONGELDIG_MELDEN, id).isEmpty());
+    }
+
+    // Gooit de handler bij het afhandelen van de uitputting, dan rolt die transactie terug: de taak is
+    // niet afgerond en niet op mislukt gezet, en komt terug zodra zijn lease verloopt. De rest van de
+    // batch gaat door.
+    @Test
+    void verwerk_afhandelenVanDeUitputtingFaalt_laatDeTaakStaanEnGaatDoorMetDeBatch() {
+        UUID uitgeput = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(2));
+        UUID volgende = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        QuarkusTransaction.requiringNew().run(() ->
+                TaakFixtures.zetPogingen(entityManager, TaakSoort.ONGELDIG_MELDEN, uitgeput, 1));
+        handler.zetGedrag((taak, lease) -> {
+            if (taak.getId().equals(uitgeput)) {
+                throw new IllegalStateException("gesimuleerde fout");
+            }
+
+            return TaakUitkomst.afgerond();
+        });
+        handler.zetBijUitputting(taak -> {
+            throw new IllegalStateException("afhandelen mislukt");
+        });
+
+        assertEquals(2, taakWorker.verwerk(TaakSoort.ONGELDIG_MELDEN));
+
+        Taak taak = zoek(TaakSoort.ONGELDIG_MELDEN, uitgeput).orElseThrow();
+        assertEquals(TaakStatus.OPEN, taak.getStatus());
+        assertEquals(1, taak.getPogingen(), "de mislukte afhandeling telt niet als poging");
+        assertNotNull(taak.getLeaseTot(), "de lease blijft staan tot hij verloopt");
+        assertTrue(zoek(TaakSoort.ONGELDIG_MELDEN, volgende).isEmpty(), "de volgende taak is uitgevoerd");
     }
 
     @Test
@@ -130,7 +177,7 @@ class TaakWorkerTest {
     void verwerk_uitgesteldZonderPoging_zetDueEnLaatPogingenStaan() {
         UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         OffsetDateTime straks = nu().plusHours(1).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
-        TestTaakHandler.GEDRAG.set((taak, lease) -> TaakUitkomst.uitgesteld(straks, false));
+        handler.zetGedrag((taak, lease) -> TaakUitkomst.uitgesteld(straks, false));
 
         taakWorker.verwerk(TaakSoort.ONGELDIG_MELDEN);
 
@@ -146,7 +193,7 @@ class TaakWorkerTest {
     @Test
     void verwerk_handlerGooit_steltUitEnZetNaMaxPogingenOpMislukt() {
         UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
-        TestTaakHandler.GEDRAG.set((taak, lease) -> {
+        handler.zetGedrag((taak, lease) -> {
             throw new IllegalStateException("gesimuleerde fout");
         });
 
@@ -170,7 +217,7 @@ class TaakWorkerTest {
     @Test
     void verwerk_alAfgerondDoorDeHandler_laatDeRijMetRust() {
         UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
-        TestTaakHandler.GEDRAG.set((taak, lease) -> {
+        handler.zetGedrag((taak, lease) -> {
             QuarkusTransaction.requiringNew().run(() -> taakClaimer.rondAf(taak));
 
             return TaakUitkomst.alAfgerond();
@@ -184,7 +231,7 @@ class TaakWorkerTest {
     @Test
     void verwerk_leaseVerlengen_zetDeLeaseVooruit() {
         UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
-        TestTaakHandler.GEDRAG.set((taak, lease) -> {
+        handler.zetGedrag((taak, lease) -> {
             zetLease(id, nu().plusSeconds(1));
             lease.verleng();
             assertTrue(zoek(TaakSoort.ONGELDIG_MELDEN, id).orElseThrow().getLeaseTot().isAfter(nu().plusMinutes(1)));
@@ -202,7 +249,7 @@ class TaakWorkerTest {
     @Test
     void verwerk_leaseVerloren_laatDeTaakAanDeNieuweEigenaar() {
         UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
-        TestTaakHandler.GEDRAG.set((taak, lease) -> {
+        handler.zetGedrag((taak, lease) -> {
             QuarkusTransaction.requiringNew().run(() ->
                     TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.ONGELDIG_MELDEN, id));
 
@@ -220,7 +267,7 @@ class TaakWorkerTest {
         UUID eerste = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(2));
         UUID tweede = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         AtomicInteger uitgevoerd = new AtomicInteger();
-        TestTaakHandler.GEDRAG.set((taak, lease) -> {
+        handler.zetGedrag((taak, lease) -> {
             uitgevoerd.incrementAndGet();
             QuarkusTransaction.requiringNew().run(() ->
                     TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.ONGELDIG_MELDEN, tweede));
@@ -238,7 +285,7 @@ class TaakWorkerTest {
     @Test
     void verwerk_leaseVerlorenNaEenFout_laatDeTaakAanDeNieuweEigenaar() {
         UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
-        TestTaakHandler.GEDRAG.set((taak, lease) -> {
+        handler.zetGedrag((taak, lease) -> {
             QuarkusTransaction.requiringNew().run(() ->
                     TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.ONGELDIG_MELDEN, id));
 
@@ -275,7 +322,7 @@ class TaakWorkerTest {
             plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         }
         AtomicInteger aanroepen = new AtomicInteger();
-        TestTaakHandler.GEDRAG.set((taak, lease) -> {
+        handler.zetGedrag((taak, lease) -> {
             aanroepen.incrementAndGet();
 
             return TaakUitkomst.afgerond();
@@ -291,7 +338,7 @@ class TaakWorkerTest {
     void verwerk_verlengenVoorDeHandlerFaalt_slaatDeTaakOverZonderPoging() {
         UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
         AtomicInteger aanroepen = new AtomicInteger();
-        TestTaakHandler.GEDRAG.set((taak, lease) -> {
+        handler.zetGedrag((taak, lease) -> {
             aanroepen.incrementAndGet();
 
             return TaakUitkomst.afgerond();

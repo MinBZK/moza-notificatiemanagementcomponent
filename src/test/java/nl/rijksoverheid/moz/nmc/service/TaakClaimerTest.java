@@ -14,6 +14,9 @@ import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -25,6 +28,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiConsumer;
+import java.util.stream.Stream;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -32,6 +37,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -167,14 +173,40 @@ class TaakClaimerTest {
         assertTrue(zoek(id).getLeaseTot().isAfter(nu().plusMinutes(1)));
     }
 
-    @Test
-    void eisClaim_naEenClaimDoorEenAndereWorker_gooitTaakVerlorenException() {
+    static Stream<Arguments> schrijfacties() {
+        OffsetDateTime straks = OffsetDateTime.parse("2030-01-01T11:00:00Z");
+
+        return Stream.of(
+                arguments("verleng", (BiConsumer<TaakClaimer, Taak>) TaakClaimer::verleng),
+                arguments("eisClaim", (BiConsumer<TaakClaimer, Taak>) TaakClaimer::eisClaim),
+                arguments("rondAf", (BiConsumer<TaakClaimer, Taak>) TaakClaimer::rondAf),
+                arguments("stelUit", (BiConsumer<TaakClaimer, Taak>) (claimer, taak) -> claimer.stelUit(taak, straks, true)),
+                arguments("herplanNaSucces",
+                        (BiConsumer<TaakClaimer, Taak>) (claimer, taak) -> claimer.herplanNaSucces(taak, straks)),
+                arguments("markeerMislukt", (BiConsumer<TaakClaimer, Taak>) TaakClaimer::markeerMislukt));
+    }
+
+    // Elke schrijfactie op een geclaimde taak toetst het claim-epoch: een worker die zijn claim kwijt
+    // is, verandert niets aan de rij van de nieuwe eigenaar.
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("schrijfacties")
+    void schrijfactie_naEenClaimDoorEenAndereWorker_gooitTaakVerlorenExceptionEnVerandertNiets(
+            String naam, BiConsumer<TaakClaimer, Taak> schrijfactie) {
         UUID id = plan(TaakSoort.ONDERHOUD, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
         Taak taak = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
         QuarkusTransaction.requiringNew().run(() ->
                 TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.ONDERHOUD, id));
+        Taak voor = zoek(id);
 
-        assertThrows(TaakVerlorenException.class, () -> QuarkusTransaction.requiringNew().run(() -> taakClaimer.eisClaim(taak)));
+        assertThrows(TaakVerlorenException.class,
+                () -> QuarkusTransaction.requiringNew().run(() -> schrijfactie.accept(taakClaimer, taak)));
+
+        Taak na = zoek(id);
+        assertEquals(TaakStatus.OPEN, na.getStatus());
+        assertEquals(voor.getDue().toInstant(), na.getDue().toInstant());
+        assertEquals(voor.getLeaseTot().toInstant(), na.getLeaseTot().toInstant());
+        assertEquals(0, na.getPogingen());
+        assertEquals(voor.getClaimEpoch(), na.getClaimEpoch());
     }
 
     // Twee workers op dezelfde achterstand krijgen elk een deel en nooit dezelfde taak.
