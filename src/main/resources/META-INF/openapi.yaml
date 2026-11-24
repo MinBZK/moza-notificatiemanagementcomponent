@@ -74,6 +74,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '413':
+          description: De aanvraag is groter dan 1 MB
         '429':
           description: >-
             Het quotum van de Dienstverlener voor vandaag is bereikt
@@ -128,6 +130,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '413':
+          description: De aanvraag is groter dan 1 MB
         '429':
           description: >-
             Het quotum van de Dienstverlener voor vandaag is bereikt
