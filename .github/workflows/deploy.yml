@@ -154,8 +154,6 @@ jobs:
           container-name: ${{ github.event.repository.name }}
           container-tag: pr-${{ github.event.number }}
           github-admin-token: ${{ secrets.GITHUB_ADMIN_TOKEN }}
-          # deploy-preview deployt ook Dependabot-PR's; de standaard 'true' liet die staan.
-          skip-bot-prs: 'false'
 
   # Push/merge naar main → de persistente 'stable'-deployment (de baseline-omgeving).
   # Config (DB-url/creds, notify.api-key, hash.pepper, flyway-flag, ...) staat éénmalig op de
