@@ -28,7 +28,12 @@ permissions: read-all
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, closed]
+    types: [opened, synchronize, reopened]
+  # Opruimen via pull_request_target: GitHub start geen pull_request-run voor een PR met
+  # een mergeconflict, ook niet bij 'closed', en dan bleef de preview staan. Deze job checkt
+  # geen PR-code uit, dus de base-context met secrets is hier veilig.
+  pull_request_target:
+    types: [closed]
   push:
     branches: [main]
 
@@ -50,7 +55,7 @@ env:
 jobs:
   build:
     # Bouwen op push naar main en op elke PR-actie behalve 'closed' (dan enkel opruimen).
-    if: github.event_name == 'push' || github.event.action != 'closed'
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -99,7 +104,7 @@ jobs:
           echo "digest=$(cat target/jib-image.digest)" >> "$GITHUB_OUTPUT"
 
   deploy-preview:
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    if: github.event_name == 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -131,7 +136,7 @@ jobs:
 
   cleanup-preview:
     # Alleen bij sluiten van de PR: omgeving + image + GitHub environment opruimen.
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     permissions:
       deployments: write

@@ -80,7 +80,10 @@ Benodigde env-vars op die deployment:
 
 - PR open/synchronize/reopen → `build` (image `pr-<n>` naar GHCR) → `deploy-preview`
   (deploy + wacht op `/q/health/ready` + plaatst deploy-URL als PR-comment).
-- PR closed → `cleanup-preview`.
+- PR closed (gemerged of niet) → `cleanup-preview`, via `pull_request_target`: een
+  `pull_request`-run start niet voor een PR met een mergeconflict. Die run gebruikt de
+  workflow van de base-branch, dus een gestapelde PR ruimt pas goed op als zijn base
+  deze versie van `deploy.yml` heeft.
 
 URL-patroon: `https://nmcapi-pr-<n>-nd-j7s.rig.prd1.gn2.quattro.rijksapps.nl`
 → `/q/swagger-ui`, `/q/openapi`, `/q/health/ready`.
