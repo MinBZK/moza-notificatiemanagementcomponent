@@ -55,6 +55,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -382,9 +383,11 @@ public class NotificatieVerwerkingFuzzer {
     }
 
     /**
-     * De overgangsfunctie in het geheugen: past Overgangsregels toe zonder database, lock of trigger,
-     * en nummert de events per notificatie. Event-ids komen uit een teller, zoals de identity van de
-     * database ze uitdeelt; het CloudEvent gebruikt het id als id.
+     * De overgangsfunctie in het geheugen, voor een fuzz target dat zonder database draait. Hij past
+     * dezelfde {@link Overgangsregels} toe als de echte, ook de toets op de reden, en nummert de events
+     * per notificatie. Wat hij niet heeft: de rijvergrendeling, de databasetrigger en het plannen van
+     * de wistaak. De invarianten van dit target gelden dus voor de regels, niet voor die drie;
+     * {@code EndpointFuzzTest} en de tests op {@code Overgangsfunctie} dekken het echte pad.
      */
     private static final class GeheugenOvergangsfunctie extends Overgangsfunctie {
 
@@ -417,6 +420,12 @@ public class NotificatieVerwerkingFuzzer {
 
         @Override
         public OvergangUitkomst voerUit(UUID notificatieId, NotificatieStatus naar, Reden reden) {
+            Objects.requireNonNull(naar, "naar is verplicht");
+
+            if (!Overgangsregels.isRedenToegestaan(naar, reden)) {
+                throw new IllegalArgumentException("Reden " + reden + " hoort niet bij status " + naar);
+            }
+
             Notificatie notificatie = vergrendel(notificatieId);
             NotificatieStatus van = notificatie.getStatus();
 

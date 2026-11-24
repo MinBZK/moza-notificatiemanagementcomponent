@@ -12,10 +12,7 @@ import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
-import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
-import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
-import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
@@ -24,6 +21,7 @@ import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.mockito.Mockito;
 
@@ -33,7 +31,6 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.lessThan;
-import static org.mockito.ArgumentMatchers.any;
 
 /**
  * HTTP counterpart of {@link NotificatieVerwerkingFuzzer} through a @QuarkusTest, which adds the
@@ -44,7 +41,8 @@ import static org.mockito.ArgumentMatchers.any;
  * {@link NotificatieVerwerkingFuzzer}'s input encoding and belong in
  * `.clusterfuzzlite/seed-corpus/NotificatieVerwerkingFuzzer/`.
  *
- * <p>The Profielservice and NotifyNL clients are mocked.
+ * <p>The Profielservice and NotifyNL clients are mocked, so no test can reach an external service;
+ * each test verifies they were not called.
  */
 @QuarkusTest
 public class EndpointFuzzTest {
@@ -97,11 +95,13 @@ public class EndpointFuzzTest {
                 overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
             }
         });
+    }
 
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmailadres());
-        // One id per invocation: poging.notify_id is unique and each fuzz method sends exactly once.
-        Mockito.when(sendAMessageApi.sendEmail(any()))
-                .thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
+    // The intake only stores the notificatie and the worker loop is off in tests, so nothing here
+    // looks up an address or sends.
+    @AfterEach
+    void geenExterneAanroep() {
+        Mockito.verifyNoInteractions(profielApi, sendAMessageApi);
     }
 
     @FuzzTest
@@ -160,14 +160,5 @@ public class EndpointFuzzTest {
         }
 
         request.when().post(path).then().statusCode(lessThan(500));
-    }
-
-    private PartijResponse partijMetEmailadres() {
-        return new PartijResponse()
-                .partijId(UUID.randomUUID())
-                .contactgegevens(List.of(new ContactgegevenResponse()
-                        .type(ContactgegevenResponse.TypeEnum.EMAIL)
-                        .waarde("fuzz@example.invalid")
-                        .isDefault(true)));
     }
 }
