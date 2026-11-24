@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
+import io.quarkus.logging.Log;
 import jakarta.ws.rs.core.Response;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.Logboek;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
@@ -27,6 +28,9 @@ public class EventfeedController implements EventsApi {
     // TODO vervang door een registratie per event met de ontvanger van de notificatie als betrokkene.
     private static final String BETROKKENE_ONBEKEND = "onbekend";
     private static final String BETROKKENE_TYPE_ONBEKEND = "ONBEKEND";
+
+    // Package-private, zodat de test dezelfde tekst toetst die het antwoord draagt.
+    static final String CURSOR_VERVALLEN_DETAIL = "De cursor is vervallen; lees de feed opnieuw zonder cursor";
 
     private final Eventfeed eventfeed;
     private final Aanroeplimiet aanroeplimiet;
@@ -56,7 +60,7 @@ public class EventfeedController implements EventsApi {
         try {
             pagina = eventfeed.lees(dvId, ontleed(cursor), limiet);
         } catch (CursorVervallenException e) {
-            throw Problems.gone(Problems.TYPE_CURSOR_VERVALLEN, "Cursor vervallen", e.getMessage());
+            throw cursorVervallen(dvId, e);
         }
 
         List<NotificatieStatusEvent> events = pagina.events().stream()
@@ -82,10 +86,18 @@ public class EventfeedController implements EventsApi {
         try {
             eventfeed.bevestig(dvId, cursor);
         } catch (CursorVervallenException e) {
-            throw Problems.gone(Problems.TYPE_CURSOR_VERVALLEN, "Cursor vervallen", e.getMessage());
+            throw cursorVervallen(dvId, e);
         }
 
         return Response.noContent().build();
+    }
+
+    // Het antwoord zegt niet waarom de cursor vervallen is: de reden noemt het cluster-epoch en de
+    // grenzen van het log. Voor beheer staat hij in de log.
+    private static RuntimeException cursorVervallen(UUID dvId, CursorVervallenException e) {
+        Log.infof("Cursor van dienstverlener %s is vervallen: %s", dvId, e.getMessage());
+
+        return Problems.gone(Problems.TYPE_CURSOR_VERVALLEN, "Cursor vervallen", CURSOR_VERVALLEN_DETAIL);
     }
 
     // Lezen en bevestigen tellen samen voor dezelfde limiet per dienstverlener.

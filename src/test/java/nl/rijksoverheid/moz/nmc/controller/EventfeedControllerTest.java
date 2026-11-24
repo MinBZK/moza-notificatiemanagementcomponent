@@ -19,6 +19,8 @@ import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -89,6 +91,17 @@ class EventfeedControllerTest {
                 .body("type", equalTo(Problems.TYPE_CURSOR_VERVALLEN.toString()));
     }
 
+    // Een ander epoch en een positie boven de jongste transactie geven hetzelfde antwoord, zonder het
+    // epoch of de grens van het log te noemen.
+    @ParameterizedTest
+    @CsvSource({"2, 1", "1, 9223372036854775806"})
+    void events_vervallenCursor_noemtDeRedenNiet(int epoch, long transactieId) {
+        given().queryParam("cursor", new Cursor(epoch, transactieId, 1).codeer()).when().get(FEED)
+                .then()
+                .statusCode(410)
+                .body("detail", equalTo(EventfeedController.CURSOR_VERVALLEN_DETAIL));
+    }
+
     @Test
     void events_aanroeplimietBereikt_geeft429MetEigenTypeEnRetryAfter() {
         when(aanroeplimiet.registreer(any())).thenReturn(false);
@@ -139,7 +152,8 @@ class EventfeedControllerTest {
                 .when().put(BEVESTIGING)
                 .then()
                 .statusCode(410)
-                .body("type", equalTo(Problems.TYPE_CURSOR_VERVALLEN.toString()));
+                .body("type", equalTo(Problems.TYPE_CURSOR_VERVALLEN.toString()))
+                .body("detail", equalTo(EventfeedController.CURSOR_VERVALLEN_DETAIL));
     }
 
     private UUID verzondenNotificatie() {
