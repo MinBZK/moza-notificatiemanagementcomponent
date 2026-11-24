@@ -3,7 +3,6 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
@@ -26,6 +25,9 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.overgangen;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.poging;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -158,18 +160,5 @@ class ReceiptReferentieTest {
 
             return poging.getId();
         });
-    }
-
-    private Poging poging(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() -> pogingRepository.findById(id));
-    }
-
-    private Notificatie notificatie(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findById(id));
-    }
-
-    private List<NotificatieStatus> overgangen(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() ->
-                eventRepository.findByNotificatie(id).stream().map(Event::getNaar).toList());
     }
 }

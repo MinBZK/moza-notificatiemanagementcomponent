@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.testhelper;
 
+import io.quarkus.arc.Arc;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -144,6 +145,16 @@ public final class TaakFixtures {
                 .setParameter("oin", oin)
                 .setParameter("naam", naam)
                 .executeUpdate();
+    }
+
+    /**
+     * Zet de webhook van de dienstverlener uit de migratie, in een eigen transactie; alleen in een
+     * {@code @QuarkusTest}. Een lege url haalt de webhook weg.
+     */
+    public static void zetWebhook(String url, Integer maxMislukkingen, Integer bundel) {
+        EntityManager entityManager = Arc.container().instance(EntityManager.class).get();
+        QuarkusTransaction.requiringNew().run(() ->
+                zetWebhook(entityManager, NotificatieFixtures.DV_ID, url, maxMislukkingen, bundel));
     }
 
     /** Zet het quotum per dag; {@code null} betekent geen quotum. */

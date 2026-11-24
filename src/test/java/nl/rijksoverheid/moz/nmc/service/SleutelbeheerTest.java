@@ -1,10 +1,9 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.smallrye.config.PropertiesConfigSource;
-import io.smallrye.config.SmallRyeConfigBuilder;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.domain.VersleuteldeGegevens;
+import nl.rijksoverheid.moz.nmc.testhelper.SleutelFixtures;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -15,11 +14,13 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import static nl.rijksoverheid.moz.nmc.testhelper.SleutelFixtures.KEK_1;
+import static nl.rijksoverheid.moz.nmc.testhelper.SleutelFixtures.KEK_2;
+import static nl.rijksoverheid.moz.nmc.testhelper.SleutelFixtures.sleutelbeheer;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -32,25 +33,9 @@ class SleutelbeheerTest {
 
     private static final UUID ID = UUID.fromString("3f1a2b4c-0000-4000-8000-000000000001");
 
-    static final String KEK_1 = "I8JrSCkAfhntSWtJadWGZeT4SxH4Ld1x3N+aTWU4PGQ=";
-    static final String KEK_2 = "PAQwq3xsGw0w/Tbk4r61A2Yz+Cr049JCHzU8in/aWWg=";
     private static final String ANDERE_KEK = "Hgud2BX0iUHDJV+H61LDJbcumEimJdYPbi4haW/3JFQ=";
 
     private final Sleutelbeheer sleutelbeheer = sleutelbeheer(1, Map.of(1, KEK_1));
-
-    static Sleutelbeheer sleutelbeheer(int huidigeVersie, Map<Integer, String> keks) {
-        Map<String, String> config = new HashMap<>();
-        config.put("nmc.kek.huidige-versie", String.valueOf(huidigeVersie));
-        keks.forEach((versie, kek) -> config.put("nmc.kek.versie." + versie, kek));
-
-        return new Sleutelbeheer(kekProvider(config), new ObjectMapper());
-    }
-
-    static ConfigKekProvider kekProvider(Map<String, String> config) {
-        return new ConfigKekProvider(new SmallRyeConfigBuilder()
-                .withSources(new PropertiesConfigSource(config, "test", 100))
-                .build());
-    }
 
     @Test
     void ontsleutelOntvanger_naVersleutelen_levertOorspronkelijkAdresOp() {
@@ -351,7 +336,7 @@ class SleutelbeheerTest {
     }
 
     private static KekProvider kekProvider() {
-        return kekProvider(Map.of("nmc.kek.huidige-versie", "1", "nmc.kek.versie.1", KEK_1));
+        return SleutelFixtures.kekProvider(Map.of("nmc.kek.huidige-versie", "1", "nmc.kek.versie.1", KEK_1));
     }
 
     private static byte[] iv(byte[] ciphertext) {

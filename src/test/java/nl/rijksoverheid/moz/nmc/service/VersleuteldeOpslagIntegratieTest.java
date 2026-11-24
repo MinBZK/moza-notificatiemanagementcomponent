@@ -16,6 +16,7 @@ import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.domain.VersleuteldeGegevens;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.NotifyNLFixtures;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -72,7 +73,7 @@ class VersleuteldeOpslagIntegratieTest {
     @BeforeEach
     void setUp() {
         QuarkusTransaction.requiringNew().run(notificatieRepository::deleteAll);
-        Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
+        NotifyNLFixtures.stubJwt(notifyNLJwtFactory);
         Mockito.when(sendAMessageApi.sendEmail(any()))
                 .thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
     }

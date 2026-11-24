@@ -1,16 +1,10 @@
 package nl.rijksoverheid.moz.nmc.migratie;
 
-import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
-import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -18,7 +12,6 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,40 +25,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code laatste_status}, een {@code external_reference} en de geschiedenis in
  * {@code notificatie_status}. Eigen embedded PostgreSQL, omdat de database op V4 stilgezet moet worden.
  */
-class V5MigratieTest {
+class V5MigratieTest extends MigratieTestBasis {
 
-    private static final String DB_USER = "postgres";
-    private static final String DB_PASSWORD = "postgres";
     private static final OffsetDateTime AANGEMAAKT = OffsetDateTime.parse("2026-01-15T10:00:00Z");
-
-    private static EmbeddedPostgres postgres;
 
     private String jdbcUrl;
     private Connection verbinding;
 
-    @BeforeAll
-    static void startPostgres() throws IOException {
-        postgres = EmbeddedPostgres.start();
-    }
-
-    @AfterAll
-    static void stopPostgres() throws IOException {
-        if (postgres != null) {
-            postgres.close();
-        }
-    }
-
     @BeforeEach
     void setUp() throws SQLException {
-        String database = "v5migratie_" + UUID.randomUUID().toString().replace("-", "");
-        try (Connection beheer = DriverManager.getConnection(
-                "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres", DB_USER, DB_PASSWORD);
-             var statement = beheer.createStatement()) {
-            statement.execute("CREATE DATABASE " + database);
-        }
-
-        jdbcUrl = "jdbc:postgresql://localhost:" + postgres.getPort() + "/" + database;
-        verbinding = DriverManager.getConnection(jdbcUrl, DB_USER, DB_PASSWORD);
+        jdbcUrl = nieuweDatabase();
+        verbinding = verbind(jdbcUrl);
     }
 
     @AfterEach
@@ -187,13 +157,7 @@ class V5MigratieTest {
     }
 
     private void migreerTot(String versie) {
-        Flyway.configure()
-                .dataSource(jdbcUrl, DB_USER, DB_PASSWORD)
-                .locations("classpath:db/migration")
-                .placeholders(Map.of("event_marge", "0"))
-                .target(versie)
-                .load()
-                .migrate();
+        migreerTot(jdbcUrl, versie);
     }
 
     // Een rij zoals het oude schrijfpad hem achterliet, met één geschiedenisrecord per status.

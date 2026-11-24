@@ -17,6 +17,7 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.SleutelFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
@@ -34,6 +35,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -116,9 +118,9 @@ class OnderhoudTaakHandlerTest {
     // blijft staan zonder de andere tegen te houden.
     @Test
     void onderhoud_sleutelsOnderOudereKekVersie_herwraptZeZonderHerversleuteling() {
-        Sleutelbeheer versie1 = SleutelbeheerTest.sleutelbeheer(1, Map.of(1, TEST_KEK_1));
+        Sleutelbeheer versie1 = SleutelFixtures.sleutelbeheer(1, Map.of(1, TEST_KEK_1));
         List<UUID> ids = List.of(opgeslagen(versie1), opgeslagen(versie1), opgeslagen(versie1));
-        UUID kapot = opgeslagen(SleutelbeheerTest.sleutelbeheer(1, Map.of(1, SleutelbeheerTest.KEK_1)));
+        UUID kapot = opgeslagen(SleutelFixtures.sleutelbeheer(1, Map.of(1, SleutelFixtures.KEK_1)));
         Map<UUID, VersleuteldeGegevens> voor = ids.stream()
                 .collect(Collectors.toMap(id -> id, id -> notificatie(id).getVersleuteldeGegevens()));
 
@@ -201,10 +203,6 @@ class OnderhoudTaakHandlerTest {
 
             return notificatie.getId();
         });
-    }
-
-    private Notificatie notificatie(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findById(id));
     }
 
     private static long aantal(Supplier<Long> teller) {

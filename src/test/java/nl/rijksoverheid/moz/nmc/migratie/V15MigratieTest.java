@@ -1,21 +1,14 @@
 package nl.rijksoverheid.moz.nmc.migratie;
 
-import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
-import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,37 +19,23 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * default-partitie en een webhookpositie. Eigen embedded PostgreSQL, omdat de database op V14
  * stilgezet moet worden.
  */
-class V15MigratieTest {
+class V15MigratieTest extends MigratieTestBasis {
 
-    private static final String DB_USER = "postgres";
-    private static final String DB_PASSWORD = "postgres";
     private static final UUID DV_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
     private static final OffsetDateTime LAATSTE_OVERGANG = OffsetDateTime.parse("2026-09-01T10:00:00Z");
-
-    private static EmbeddedPostgres postgres;
-
-    @BeforeAll
-    static void startPostgres() throws IOException {
-        postgres = EmbeddedPostgres.start();
-    }
-
-    @AfterAll
-    static void stopPostgres() throws IOException {
-        if (postgres != null) {
-            postgres.close();
-        }
-    }
+    // V15 legt het eerste bereik van het eventlog vast op de lopende transactie-id plus deze marge.
+    private static final int EVENT_MARGE = 1000;
 
     @Test
     void v15_vultEindstatusOpPlantWistakenEnVerplaatstHetEventlogNaarEenBereikpartitie() throws SQLException {
         String jdbcUrl = nieuweDatabase();
-        migreerTot(jdbcUrl, "14");
+        migreerTot(jdbcUrl, "14", EVENT_MARGE);
 
         UUID eindstatus = UUID.randomUUID();
         UUID eindstatusGewist = UUID.randomUUID();
         UUID lopend = UUID.randomUUID();
 
-        try (Connection verbinding = DriverManager.getConnection(jdbcUrl, DB_USER, DB_PASSWORD)) {
+        try (Connection verbinding = verbind(jdbcUrl)) {
             verbinding.setAutoCommit(false);
             voerUit(verbinding, "SET LOCAL session_replication_role = replica");
             notificatie(verbinding, eindstatus, "NIET_BEZORGBAAR", new byte[]{1, 2, 3});
@@ -69,9 +48,9 @@ class V15MigratieTest {
             verbinding.commit();
         }
 
-        migreerTot(jdbcUrl, "15");
+        migreerTot(jdbcUrl, "15", EVENT_MARGE);
 
-        try (Connection verbinding = DriverManager.getConnection(jdbcUrl, DB_USER, DB_PASSWORD)) {
+        try (Connection verbinding = verbind(jdbcUrl)) {
             assertEquals(LAATSTE_OVERGANG.toInstant(), eindstatusOp(verbinding, eindstatus).toInstant());
             assertEquals(LAATSTE_OVERGANG.toInstant(), eindstatusOp(verbinding, eindstatusGewist).toInstant());
             assertNull(eindstatusOp(verbinding, lopend));
@@ -97,33 +76,11 @@ class V15MigratieTest {
         }
 
         // De rolinstellingen gelden voor een nieuwe sessie.
-        try (Connection verbinding = DriverManager.getConnection(jdbcUrl, DB_USER, DB_PASSWORD)) {
+        try (Connection verbinding = verbind(jdbcUrl)) {
             assertEquals(List.of("30s"), tekst(verbinding, "SHOW statement_timeout"));
             assertEquals(List.of("1min"), tekst(verbinding, "SHOW transaction_timeout"));
             assertEquals(List.of("30s"), tekst(verbinding, "SHOW idle_in_transaction_session_timeout"));
         }
-    }
-
-    private static String nieuweDatabase() throws SQLException {
-        String database = "v15migratie_" + UUID.randomUUID().toString().replace("-", "");
-
-        try (Connection beheer = DriverManager.getConnection(
-                "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres", DB_USER, DB_PASSWORD);
-             var statement = beheer.createStatement()) {
-            statement.execute("CREATE DATABASE " + database);
-        }
-
-        return "jdbc:postgresql://localhost:" + postgres.getPort() + "/" + database;
-    }
-
-    private static void migreerTot(String jdbcUrl, String versie) {
-        Flyway.configure()
-                .dataSource(jdbcUrl, DB_USER, DB_PASSWORD)
-                .locations("classpath:db/migration")
-                .target(versie)
-                .placeholders(Map.of("event_marge", "1000"))
-                .load()
-                .migrate();
     }
 
     private static void notificatie(Connection verbinding, UUID id, String status, byte[] sleutel) throws SQLException {

@@ -10,21 +10,18 @@ import jakarta.ws.rs.core.Response;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.GetMessageDataApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.GetOneMessageResponse;
-import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
-import nl.rijksoverheid.moz.nmc.repository.EventRepository;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.NotifyNLFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
@@ -40,6 +37,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.overgangen;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.poging;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.taken;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -71,13 +72,7 @@ class NotifyNLNavraagTaakHandlerTest {
     Overgangsfunctie overgangsfunctie;
 
     @Inject
-    NotificatieRepository notificatieRepository;
-
-    @Inject
     PogingRepository pogingRepository;
-
-    @Inject
-    EventRepository eventRepository;
 
     @Inject
     TaakRepository taakRepository;
@@ -86,7 +81,7 @@ class NotifyNLNavraagTaakHandlerTest {
     void setUp() {
         QuarkusMock.installMockForType(clock, Clock.class);
         TestDatabase.leeg();
-        when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
+        NotifyNLFixtures.stubJwt(notifyNLJwtFactory);
     }
 
     @Test
@@ -261,23 +256,5 @@ class NotifyNLNavraagTaakHandlerTest {
 
             return new Verzonden(notificatie.getId(), poging.getId(), notifyId);
         });
-    }
-
-    private Notificatie notificatie(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findById(id));
-    }
-
-    private Poging poging(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() -> pogingRepository.findById(id));
-    }
-
-    // Zonder de wistaak die elke eindstatus krijgt; die staat in WisTaakHandlerTest.
-    private List<Taak> taken() {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.list(Taak_.TAAK_SOORT + " != ?1", TaakSoort.WISSEN));
-    }
-
-    private List<NotificatieStatus> overgangen(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() ->
-                eventRepository.findByNotificatie(id).stream().map(Event::getNaar).toList());
     }
 }

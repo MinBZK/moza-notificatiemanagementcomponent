@@ -44,9 +44,6 @@ class ReceiptVerwerkerTest {
     ReceiptVerwerker receiptVerwerker;
 
     @Inject
-    Overgangsfunctie overgangsfunctie;
-
-    @Inject
     NotificatieRepository notificatieRepository;
 
     @Inject
@@ -244,18 +241,7 @@ class ReceiptVerwerkerTest {
     }
 
     private UUID verzondenNotificatie() {
-        UUID notifyId = UUID.randomUUID();
-        QuarkusTransaction.requiringNew().run(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
-            overgangsfunctie.neemAan(notificatie);
-            Poging poging = new Poging(notificatie.getId(), 1);
-            pogingRepository.persist(poging);
-            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
-            poging.markeerVerzonden(notifyId, T1.minusMinutes(1));
-            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
-        });
-
-        return notifyId;
+        return NotificatieFixtures.verzondenNotificatie(UUID.randomUUID(), T1.minusMinutes(1)).notifyId();
     }
 
     private Poging poging(UUID notifyId) {

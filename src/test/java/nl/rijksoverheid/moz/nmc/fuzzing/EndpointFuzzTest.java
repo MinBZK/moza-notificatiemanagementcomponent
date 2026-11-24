@@ -5,19 +5,12 @@ import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
-import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
-import nl.rijksoverheid.moz.nmc.domain.Notificatie;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
-import nl.rijksoverheid.moz.nmc.domain.Poging;
-import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
-import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.AfterEach;
@@ -65,28 +58,15 @@ public class EndpointFuzzTest {
     @RestClient
     SendAMessageApi sendAMessageApi;
 
-    @Inject
-    PogingRepository pogingRepository;
-
-    @Inject
-    Overgangsfunctie overgangsfunctie;
-
     @BeforeEach
     void setUp() {
         // Wipes what earlier invocations committed, then seeds the notificaties the
         // afleverstatus-corpus refers to.
         TestDatabase.leeg();
-        QuarkusTransaction.requiringNew().run(() -> {
-            for (UUID referentie : BEKENDE_NOTIFY_REFERENTIES) {
-                Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
-                overgangsfunctie.neemAan(notificatie);
-                Poging poging = new Poging(notificatie.getId(), 1);
-                pogingRepository.persist(poging);
-                overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
-                poging.markeerVerzonden(referentie, OffsetDateTime.now(ZoneOffset.UTC));
-                overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
-            }
-        });
+
+        for (UUID referentie : BEKENDE_NOTIFY_REFERENTIES) {
+            NotificatieFixtures.verzondenNotificatie(referentie, OffsetDateTime.now(ZoneOffset.UTC));
+        }
     }
 
     // The intake only stores the notificatie and the worker loop is off in tests, so nothing here

@@ -14,7 +14,6 @@ import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.GetMultipleMessagesResponse;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailRequest;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
-import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
@@ -25,11 +24,10 @@ import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
-import nl.rijksoverheid.moz.nmc.repository.EventRepository;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.NotifyNLFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
@@ -48,6 +46,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.laatstePoging;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.overgangen;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.poging;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -90,13 +92,7 @@ class HerverzendingTest {
     Overgangsfunctie overgangsfunctie;
 
     @Inject
-    NotificatieRepository notificatieRepository;
-
-    @Inject
     PogingRepository pogingRepository;
-
-    @Inject
-    EventRepository eventRepository;
 
     @Inject
     TaakRepository taakRepository;
@@ -111,7 +107,7 @@ class HerverzendingTest {
     void setUp() {
         QuarkusMock.installMockForType(clock, Clock.class);
         TestDatabase.leeg();
-        when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
+        NotifyNLFixtures.stubJwt(notifyNLJwtFactory);
         // Elke poging krijgt een eigen NotifyNL-id, afgeleid van haar reference: notify_id is uniek.
         when(sendAMessageApi.sendEmail(any())).thenAnswer(a -> new SendEmailResponse().id(UUID.nameUUIDFromBytes(
                 a.<SendEmailRequest>getArgument(0).getReference().getBytes(StandardCharsets.UTF_8)).toString()));
@@ -158,7 +154,7 @@ class HerverzendingTest {
         doAnswer(a -> {
             receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "delivered", fout.plusMinutes(1));
 
-            throw new WebApplicationException(Response.status(400).entity("{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}]}").build());
+            throw new WebApplicationException(Response.status(400).entity(NotifyNLFixtures.ADRES_AFGEWEZEN).build());
         }).when(sendAMessageApi).sendEmail(any());
         maakDue();
 
@@ -454,18 +450,6 @@ class HerverzendingTest {
                 TaakSoort.VERZENDEN, clock.nu().minusSeconds(1)));
     }
 
-    private Notificatie notificatie(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findById(id));
-    }
-
-    private Poging poging(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() -> pogingRepository.findById(id));
-    }
-
-    private Poging laatstePoging(UUID notificatieId) {
-        return QuarkusTransaction.requiringNew().call(() -> pogingRepository.findLaatsteVan(notificatieId).orElseThrow());
-    }
-
     private List<Poging> pogingen(UUID notificatieId) {
         return QuarkusTransaction.requiringNew().call(() -> NotificatieFixtures.pogingen(pogingRepository.getEntityManager(),
                 notificatieId));
@@ -480,10 +464,5 @@ class HerverzendingTest {
         assertEquals(1, taken.size(), taken.stream().map(Taak::getTaakSoort).toList().toString());
 
         return taken.getFirst();
-    }
-
-    private List<NotificatieStatus> overgangen(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() ->
-                eventRepository.findByNotificatie(id).stream().map(Event::getNaar).toList());
     }
 }

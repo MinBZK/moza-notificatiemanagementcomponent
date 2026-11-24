@@ -7,6 +7,7 @@ import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.GetMessageDataApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.GetOneMessageResponse;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
+import nl.rijksoverheid.moz.nmc.testhelper.NotifyNLFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -42,7 +43,7 @@ class NotifyNLVerzendAdapterTest {
         adapter = new NotifyNLVerzendAdapter(sendAMessageApi, getMessageDataApi, notifyNLJwtFactory, authorizationHolder,
                 Optional.of("test-key"));
 
-        Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
+        NotifyNLFixtures.stubJwt(notifyNLJwtFactory);
     }
 
     @Test
@@ -93,7 +94,7 @@ class NotifyNLVerzendAdapterTest {
 
     @Test
     void verstuurEmail_validationErrorOpHetAdres_isAdresafwijzing() {
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenThrow(new WebApplicationException(fout(400, "{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}],\"status_code\":400}")));
+        Mockito.when(sendAMessageApi.sendEmail(any())).thenThrow(new WebApplicationException(fout(400, NotifyNLFixtures.ADRES_AFGEWEZEN)));
 
         NotifyNLVerzendException e = assertThrows(NotifyNLVerzendException.class,
                 () -> adapter.verstuurEmail("geen-adres", TEST_TEMPLATE_ID, Map.of()));
@@ -104,7 +105,7 @@ class NotifyNLVerzendAdapterTest {
     // Een team-key weigert elke ontvanger buiten de whitelist met een 400; dat ligt niet aan het adres.
     @Test
     void verstuurEmail_andere400_isGeenAdresafwijzing() {
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenThrow(new WebApplicationException(fout(400, "{\"errors\":[{\"error\":\"BadRequestError\",\"message\":\"Can't send to this recipient using a team-only API key\"}],\"status_code\":400}")));
+        Mockito.when(sendAMessageApi.sendEmail(any())).thenThrow(new WebApplicationException(fout(400, NotifyNLFixtures.TEAM_KEY_FOUT)));
 
         NotifyNLVerzendException e = assertThrows(NotifyNLVerzendException.class,
                 () -> adapter.verstuurEmail("burger@example.nl", TEST_TEMPLATE_ID, Map.of()));
@@ -117,7 +118,7 @@ class NotifyNLVerzendAdapterTest {
     void isAdresAfwijzing_zonderBodyOngeldigeBodyOfAndereStatus_isGeenAdresafwijzing() {
         assertFalse(NotifyNLVerzendAdapter.isAdresAfwijzing(Response.status(400).build()));
         assertFalse(NotifyNLVerzendAdapter.isAdresAfwijzing(fout(400, "geen json")));
-        assertFalse(NotifyNLVerzendAdapter.isAdresAfwijzing(fout(403, "{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}],\"status_code\":400}")));
+        assertFalse(NotifyNLVerzendAdapter.isAdresAfwijzing(fout(403, NotifyNLFixtures.ADRES_AFGEWEZEN)));
     }
 
     private static Response fout(int status, String body) {

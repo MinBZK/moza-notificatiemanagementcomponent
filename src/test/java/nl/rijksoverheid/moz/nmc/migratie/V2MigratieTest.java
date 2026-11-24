@@ -1,16 +1,11 @@
 package nl.rijksoverheid.moz.nmc.migratie;
 
-import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -27,42 +22,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * database moet hier op V1 stilgezet worden, en de gedeelde testdatabase staat al op de laatste
  * versie. Daarom een eigen embedded PostgreSQL, met per test een schone database.
  */
-class V2MigratieTest {
+class V2MigratieTest extends MigratieTestBasis {
 
-    private static final String DB_USER = "postgres";
-    private static final String DB_PASSWORD = "postgres";
     private static final OffsetDateTime AANGEMAAKT = OffsetDateTime.parse("2026-01-15T10:00:00.123456Z");
-
-    private static EmbeddedPostgres postgres;
 
     private String jdbcUrl;
     private Connection verbinding;
 
-    @BeforeAll
-    static void startPostgres() throws IOException {
-        postgres = EmbeddedPostgres.start();
-    }
-
-    @AfterAll
-    static void stopPostgres() throws IOException {
-        if (postgres != null) {
-            postgres.close();
-        }
-    }
-
     // Een eigen database per test, zodat de Flyway-historie van de ene test de andere niet raakt.
     @BeforeEach
     void setUp() throws SQLException {
-        String database = "v2migratie_" + UUID.randomUUID().toString().replace("-", "");
-        String beheerUrl = "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres";
-
-        try (Connection beheer = DriverManager.getConnection(beheerUrl, DB_USER, DB_PASSWORD);
-             var statement = beheer.createStatement()) {
-            statement.execute("CREATE DATABASE " + database);
-        }
-
-        jdbcUrl = "jdbc:postgresql://localhost:" + postgres.getPort() + "/" + database;
-        verbinding = DriverManager.getConnection(jdbcUrl, DB_USER, DB_PASSWORD);
+        jdbcUrl = nieuweDatabase();
+        verbinding = verbind(jdbcUrl);
     }
 
     @AfterEach
@@ -87,12 +58,7 @@ class V2MigratieTest {
     }
 
     private void migreerTot(String versie) {
-        Flyway.configure()
-                .dataSource(jdbcUrl, DB_USER, DB_PASSWORD)
-                .locations("classpath:db/migration")
-                .target(versie)
-                .load()
-                .migrate();
+        migreerTot(jdbcUrl, versie);
     }
 
     private UUID voegV1RijToe(String status) throws SQLException {

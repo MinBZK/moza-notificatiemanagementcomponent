@@ -10,7 +10,6 @@ import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
@@ -29,6 +28,9 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.poging;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.taken;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -209,18 +211,5 @@ class BezorgingVaststellenTest {
     private void maakVaststeltaakDue(UUID notificatieId) {
         QuarkusTransaction.requiringNew().run(() -> taakRepository.update("due = ?1 WHERE notificatieId = ?2",
                 OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1), notificatieId));
-    }
-
-    private Notificatie notificatie(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findById(id));
-    }
-
-    private Poging poging(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() -> pogingRepository.findById(id));
-    }
-
-    // Zonder de wistaak die elke eindstatus krijgt; die staat in WisTaakHandlerTest.
-    private List<Taak> taken() {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.list(Taak_.TAAK_SOORT + " != ?1", TaakSoort.WISSEN));
     }
 }

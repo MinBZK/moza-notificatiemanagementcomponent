@@ -446,8 +446,7 @@ class TerugkoppelTaakHandlerTest {
     }
 
     private void zetWebhook(String url, Integer maxMislukkingen, Integer bundel) {
-        QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.zetWebhook(entityManager, NotificatieFixtures.DV_ID, url, maxMislukkingen, bundel));
+        TaakFixtures.zetWebhook(url, maxMislukkingen, bundel);
     }
 
     private void zetPogingen(int pogingen) {

@@ -5,9 +5,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.domain.Event;
-import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
-import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
@@ -127,18 +125,8 @@ class ReceiptVerwerkerBotsingTest {
     }
 
     private UUID verzondenNotificatie() {
-        UUID notifyId = UUID.randomUUID();
-        QuarkusTransaction.requiringNew().run(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
-            overgangsfunctie.neemAan(notificatie);
-            Poging poging = new Poging(notificatie.getId(), 1);
-            pogingRepository.persist(poging);
-            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
-            poging.markeerVerzonden(notifyId, OffsetDateTime.parse("2025-01-01T12:00:00Z"));
-            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
-        });
-
-        return notifyId;
+        return NotificatieFixtures.verzondenNotificatie(UUID.randomUUID(),
+                OffsetDateTime.parse("2025-01-01T12:00:00Z")).notifyId();
     }
 
     private List<NotificatieStatus> overgangen(UUID notifyId) {

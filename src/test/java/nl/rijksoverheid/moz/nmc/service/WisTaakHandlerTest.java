@@ -11,7 +11,6 @@ import nl.rijksoverheid.moz.nmc.domain.OvergangUitkomst;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.domain.VersleuteldeGegevens;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
@@ -30,6 +29,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.taken;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -255,19 +256,11 @@ class WisTaakHandlerTest {
                 OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1)));
     }
 
-    private Notificatie notificatie(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findById(id));
-    }
-
     private Taak wistaak(UUID id) {
         List<Taak> wistaken = taken(TaakSoort.WISSEN);
         assertEquals(1, wistaken.size());
         assertEquals(id, wistaken.getFirst().getNotificatieId());
 
         return wistaken.getFirst();
-    }
-
-    private List<Taak> taken(TaakSoort taakSoort) {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.list(Taak_.TAAK_SOORT, taakSoort));
     }
 }

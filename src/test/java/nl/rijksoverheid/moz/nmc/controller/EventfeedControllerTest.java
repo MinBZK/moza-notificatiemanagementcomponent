@@ -6,14 +6,9 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
-import nl.rijksoverheid.moz.nmc.domain.Notificatie;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
-import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
 import nl.rijksoverheid.moz.nmc.repository.BevestigingRepository;
-import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.service.Aanroeplimiet;
-import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,12 +35,6 @@ class EventfeedControllerTest {
 
     @InjectMock
     Aanroeplimiet aanroeplimiet;
-
-    @Inject
-    Overgangsfunctie overgangsfunctie;
-
-    @Inject
-    PogingRepository pogingRepository;
 
     @Inject
     BevestigingRepository bevestigingRepository;
@@ -145,17 +134,7 @@ class EventfeedControllerTest {
     }
 
     private UUID verzondenNotificatie() {
-        UUID notifyId = UUID.randomUUID();
-        QuarkusTransaction.requiringNew().run(() -> {
-            Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
-            overgangsfunctie.neemAan(notificatie);
-            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
-            Poging poging = new Poging(notificatie.getId(), 1);
-            pogingRepository.persist(poging);
-            poging.markeerVerzonden(notifyId, OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1));
-            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
-        });
-
-        return notifyId;
+        return NotificatieFixtures.verzondenNotificatie(UUID.randomUUID(),
+                OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1)).notifyId();
     }
 }

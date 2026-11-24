@@ -18,7 +18,6 @@ import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailRespons
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
-import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
@@ -28,15 +27,13 @@ import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
-import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
-import nl.rijksoverheid.moz.nmc.repository.EventRepository;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.NotifyNLFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
@@ -53,6 +50,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.overgangen;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.taken;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -70,8 +70,6 @@ import static org.mockito.Mockito.when;
 class VerzendTaakHandlerTest {
 
     private static final String TEMPLATE_ID = BerichtType.DEMO_TEMPLATE.getTemplateId();
-    // Een 400 van NotifyNL die niet over het adres gaat: ligt aan het verzoek van het NMC.
-    private static final String TEAM_KEY_FOUT = "{\"errors\":[{\"error\":\"BadRequestError\",\"message\":\"Can't send to this recipient using a team-only API key\"}],\"status_code\":400}";
     private static final String EMAIL = "burger@example.nl";
 
     // De klok staat stil, zodat de test exacte tijdstippen kan verwachten.
@@ -105,13 +103,7 @@ class VerzendTaakHandlerTest {
     Overgangsfunctie overgangsfunctie;
 
     @Inject
-    NotificatieRepository notificatieRepository;
-
-    @Inject
     PogingRepository pogingRepository;
-
-    @Inject
-    EventRepository eventRepository;
 
     @Inject
     TaakRepository taakRepository;
@@ -126,7 +118,7 @@ class VerzendTaakHandlerTest {
     void setUp() {
         QuarkusMock.installMockForType(clock, Clock.class);
         TestDatabase.leeg();
-        when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
+        NotifyNLFixtures.stubJwt(notifyNLJwtFactory);
     }
 
     @Test
@@ -262,9 +254,9 @@ class VerzendTaakHandlerTest {
     @Test
     void uitgeputteVerzendtaak_eindigtInTechnischMislukt() {
         when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(400).entity(TEAM_KEY_FOUT).build()));
+                .thenThrow(new WebApplicationException(Response.status(400).entity(NotifyNLFixtures.TEAM_KEY_FOUT).build()));
         when(getMessageDataApi.getMultipleMessagesStatus(any(), any(), any(), any(), any()))
-                .thenThrow(new WebApplicationException(Response.status(400).entity(TEAM_KEY_FOUT).build()));
+                .thenThrow(new WebApplicationException(Response.status(400).entity(NotifyNLFixtures.TEAM_KEY_FOUT).build()));
         UUID id = aannameService.neemAan(decentraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -301,7 +293,7 @@ class VerzendTaakHandlerTest {
     @Test
     void notifyWeigertHetVerzoekOmEenAndereReden_kostEenPoging() {
         when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(400).entity(TEAM_KEY_FOUT).build()));
+                .thenThrow(new WebApplicationException(Response.status(400).entity(NotifyNLFixtures.TEAM_KEY_FOUT).build()));
         UUID id = aannameService.neemAan(decentraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -345,7 +337,7 @@ class VerzendTaakHandlerTest {
         when(sendAMessageApi.sendEmail(any()))
                 .thenThrow(new WebApplicationException(Response.status(Response.Status.SERVICE_UNAVAILABLE).build()));
         when(getMessageDataApi.getMultipleMessagesStatus(any(), any(), any(), any(), any()))
-                .thenThrow(new WebApplicationException(Response.status(400).entity("{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}],\"status_code\":400}").build()));
+                .thenThrow(new WebApplicationException(Response.status(400).entity(NotifyNLFixtures.ADRES_AFGEWEZEN).build()));
         UUID id = aannameService.neemAan(decentraal());
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
         zetDue(taken().getFirst(), clock.nu().minusSeconds(1));
@@ -373,7 +365,7 @@ class VerzendTaakHandlerTest {
     @Test
     void notifyWeigertHetAdres_eindigtInNietBezorgbaarMetOnbereikbaar() {
         when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(400).entity("{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}],\"status_code\":400}").build()));
+                .thenThrow(new WebApplicationException(Response.status(400).entity(NotifyNLFixtures.ADRES_AFGEWEZEN).build()));
         UUID id = aannameService.neemAan(decentraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -512,7 +504,7 @@ class VerzendTaakHandlerTest {
             SendEmailRequest verzoek = aanroep.getArgument(0);
             receiptVerwerker.verwerk(notifyId, verzoek.getReference(), "delivered", clock.nu());
 
-            throw new WebApplicationException(Response.status(400).entity("{\"errors\":[{\"error\":\"ValidationError\",\"message\":\"email_address Not a valid email address\"}]}").build());
+            throw new WebApplicationException(Response.status(400).entity(NotifyNLFixtures.ADRES_AFGEWEZEN).build());
         });
         UUID id = aannameService.neemAan(decentraal());
 
@@ -639,26 +631,8 @@ class VerzendTaakHandlerTest {
                 new ContactgegevenResponse().type(ContactgegevenResponse.TypeEnum.EMAIL).waarde(email).isDefault(true)));
     }
 
-    private Notificatie notificatie(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() -> notificatieRepository.findById(id));
-    }
-
     private Poging poging(UUID notificatieId) {
         return QuarkusTransaction.requiringNew().call(() -> pogingRepository.findLaatsteVan(notificatieId).orElseThrow());
-    }
-
-    // Zonder de wistaak die elke eindstatus krijgt; die staat in WisTaakHandlerTest.
-    private List<Taak> taken() {
-        return QuarkusTransaction.requiringNew().call(() -> taakRepository.list(Taak_.TAAK_SOORT + " != ?1", TaakSoort.WISSEN));
-    }
-
-    private List<Taak> taken(TaakSoort soort) {
-        return taken().stream().filter(taak -> taak.getTaakSoort() == soort).toList();
-    }
-
-    private List<NotificatieStatus> overgangen(UUID id) {
-        return QuarkusTransaction.requiringNew().call(() ->
-                eventRepository.findByNotificatie(id).stream().map(Event::getNaar).toList());
     }
 
     private void zetDue(Taak taak, OffsetDateTime due) {

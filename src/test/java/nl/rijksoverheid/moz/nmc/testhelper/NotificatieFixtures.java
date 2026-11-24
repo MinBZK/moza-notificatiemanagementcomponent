@@ -1,14 +1,18 @@
 package nl.rijksoverheid.moz.nmc.testhelper;
 
+import io.quarkus.arc.Arc;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.domain.Event_;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.Poging_;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
+import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
+import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import org.hibernate.Session;
 
 import javax.sql.DataSource;
@@ -137,6 +141,32 @@ public final class NotificatieFixtures {
         entityManager.createQuery("DELETE FROM Notificatie WHERE " + Notificatie_.ID + " = :id")
                 .setParameter("id", id)
                 .executeUpdate();
+    }
+
+    /** De ids van een notificatie op verzonden, met haar ene poging en het id waaronder NotifyNL haar kent. */
+    public record Verzonden(UUID notificatieId, UUID pogingId, UUID notifyId) {
+    }
+
+    /**
+     * Brengt via de overgangsfunctie een nieuwe notificatie naar {@code verzonden}, met één poging die
+     * NotifyNL onder {@code notifyId} heeft aangenomen. In een eigen transactie; alleen in een
+     * {@code @QuarkusTest}.
+     */
+    public static Verzonden verzondenNotificatie(UUID notifyId, OffsetDateTime verzondenOp) {
+        Overgangsfunctie overgangsfunctie = Arc.container().instance(Overgangsfunctie.class).get();
+        PogingRepository pogingRepository = Arc.container().instance(PogingRepository.class).get();
+
+        return QuarkusTransaction.requiringNew().call(() -> {
+            Notificatie notificatie = new Notificatie(DV_ID, OffsetDateTime.now());
+            overgangsfunctie.neemAan(notificatie);
+            Poging poging = new Poging(notificatie.getId(), 1);
+            pogingRepository.persist(poging);
+            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
+            poging.markeerVerzonden(notifyId, verzondenOp);
+            overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
+
+            return new Verzonden(notificatie.getId(), poging.getId(), notifyId);
+        });
     }
 
     /** Het aantal transacties op deze database dat op een vergrendeling wacht. */

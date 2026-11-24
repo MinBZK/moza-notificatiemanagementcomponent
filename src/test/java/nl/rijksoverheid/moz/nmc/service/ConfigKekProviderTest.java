@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service;
 
+import nl.rijksoverheid.moz.nmc.testhelper.SleutelFixtures;
 import io.smallrye.config.EnvConfigSource;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
@@ -9,6 +10,8 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
+import static nl.rijksoverheid.moz.nmc.testhelper.SleutelFixtures.KEK_1;
+import static nl.rijksoverheid.moz.nmc.testhelper.SleutelFixtures.KEK_2;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -16,9 +19,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigKekProviderTest {
-
-    private static final String KEK_1 = SleutelbeheerTest.KEK_1;
-    private static final String KEK_2 = SleutelbeheerTest.KEK_2;
 
     @Test
     void constructor_huidigeVersieMetGeldigeKek_levertKekOp() {
@@ -170,6 +170,6 @@ class ConfigKekProviderTest {
     }
 
     private static ConfigKekProvider provider(Map<String, String> config) {
-        return SleutelbeheerTest.kekProvider(config);
+        return SleutelFixtures.kekProvider(config);
     }
 }
