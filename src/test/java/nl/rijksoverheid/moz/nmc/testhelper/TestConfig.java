@@ -26,11 +26,15 @@ public final class TestConfig {
     }
 
     public static TaakConfig taak() {
+        return taak(2);
+    }
+
+    public static TaakConfig taak(int maxPogingen) {
         TaakConfig config = mock(TaakConfig.class);
         when(config.interval()).thenReturn("off");
         when(config.batch()).thenReturn(10);
         when(config.lease()).thenReturn(LEASE);
-        when(config.maxPogingen()).thenReturn(2);
+        when(config.maxPogingen()).thenReturn(maxPogingen);
         when(config.metriekVerversing()).thenReturn(Duration.ZERO);
         when(config.uitstel()).thenReturn(Duration.ofMinutes(5));
 
