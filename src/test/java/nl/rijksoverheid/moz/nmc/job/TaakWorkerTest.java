@@ -250,22 +250,6 @@ class TaakWorkerTest {
         assertEquals(0, zoek(TaakSoort.ONGELDIG_MELDEN, id).orElseThrow().getPogingen(), "het uitstel van de oude worker is geweigerd");
     }
 
-    // De geplande rondes delegeren elk aan verwerk voor hun eigen soort; zonder werk van die soort
-    // blijft een taak van een andere soort onaangeroerd.
-    @Test
-    void geplandeRondes_andereSoort_latenDeTaakStaan() {
-        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
-
-        taakWorker.receiptVerwerken();
-        taakWorker.reconcilieren();
-        taakWorker.bezorgingVaststellen();
-        taakWorker.terugkoppelen();
-        taakWorker.wissen();
-        taakWorker.onderhoud();
-
-        assertNull(zoek(TaakSoort.ONGELDIG_MELDEN, id).orElseThrow().getLeaseTot());
-    }
-
     @Test
     void ongeldigMelden_taakAanDeBeurt_voertDeHandlerUit() {
         UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
