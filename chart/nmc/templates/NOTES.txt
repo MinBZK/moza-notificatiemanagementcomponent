@@ -1,0 +1,5 @@
+De NMC draait als Service {{ .Release.Name }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}.
+
+Vanaf je eigen machine:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ .Release.Name }} 8080:{{ .Values.service.port }}
+  curl http://localhost:8080/q/health/ready

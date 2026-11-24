@@ -1,0 +1,73 @@
+# Een OpenFSC-peer naast een applicatie in dezelfde namespace. Zonder operator: de openfsc-operator van
+# Fundament levert v2.4.0, en een groep rekent met één versie (zie docs/fundament-deploy.md, "FSC op het
+# fieldlab: het MOZa FSC-testnet").
+
+# Voorvoegsel van de componenten en Services: <prefix>-fscmgr, -fscctl, -fsctxlog, -fscinway, -fscoutway.
+# Moet gelijk zijn aan de SAN's in de certificaten (deploy/fsc-testnet/gen-csr.sh).
+prefix: ""
+
+group:
+  id: moza-fbs-test
+  directory:
+    peerID: "00000000000000000010"
+    # Met poort; zonder stopt de manager met "missing port in manager address".
+    managerAddress: https://dirmgr-test-mft-tp9.rig.prd1.gn2.quattro.rijksapps.nl:443
+
+# Waar de manager en de inway van buitenaf bereikbaar zijn: <prefix>-fscmgr.<domein> en <prefix>-fscinway.<domein>.
+externalDomain: cluster-c.fieldlab2026.nl
+
+inway:
+  enabled: false
+outway:
+  enabled: false
+
+# Secret met de certificaten en sleutels van deze peer (deploy/fsc-testnet/pki-secret.sh). Staat niet in git.
+pkiSecret: fsc-pki
+
+# OpenFSC-componenten releasen en draaien in lockstep; gelijk aan openfsc_min_version van de groep.
+# Digests gelijk aan de Dockerfiles in moza-fsc-testnet (deploy/zad/*-migrate).
+images:
+  manager: docker.io/federatedserviceconnectivity/manager:v2.9.0@sha256:3d0ba86cc83145b982224da482eb8bb421a2fbfb0ac12eb468a74c9a0ab92284
+  controller: docker.io/federatedserviceconnectivity/controller:v2.9.0@sha256:b1efa0c31729b4d1e75d5822f7158e7deac2f35522bb4492e67f4fd367fdb99c
+  txlog: docker.io/federatedserviceconnectivity/txlog-api:v2.9.0@sha256:f4dc9046478cb393cb7dab9713eff1d87a3890b614f459e2beef644cc2f8f538
+  inway: docker.io/federatedserviceconnectivity/inway:v2.9.0@sha256:550cf6b6e8572f2618861b5a99e78853cac06eb2185e4af6b61f7f63fb16bcc1
+  outway: docker.io/federatedserviceconnectivity/outway:v2.9.0@sha256:e9a307282ef772e6ca6c65f1ae3fe0db72fd73c59aef0e915f32447da7faeaab
+
+# De Gateway met de TLS-passthrough-listeners (in de NMC-chart: gateway.passthrough). FSC doet de mTLS zelf,
+# dus de Gateway mag TLS niet afsluiten.
+gateway:
+  name: nmc
+  namespace: tnt-notificatiedienst--nmc
+  # Publiek IP van die Gateway; external-dns maakt de A-records.
+  address: ""
+
+postgres:
+  imageCatalog: postgresql-standard-trixie
+  majorVersion: 17
+  storage:
+    size: 1Gi
+    storageClass: ""
+
+logLevel: info
+
+# Kyverno (restricted). De images draaien als de niet-numerieke gebruiker appuser, dus een expliciete uid.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 64Mi
+  limits:
+    memory: 256Mi

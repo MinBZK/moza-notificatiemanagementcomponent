@@ -1,0 +1,44 @@
+{{- $p := include "fsc-peer.prefix" . }}
+{{- $g := .Values.gateway }}
+{{- $public := list "fscmgr" }}
+{{- if .Values.inway.enabled }}{{ $public = append $public "fscinway" }}{{ end }}
+{{- range $short := $public }}
+---
+# TLS-passthrough: de Gateway kiest op SNI en laat TLS door naar het component, dat de mTLS van FSC doet.
+apiVersion: gateway.networking.k8s.io/v1
+kind: TLSRoute
+metadata:
+  name: {{ $p }}-{{ $short }}
+  labels:
+    {{- include "fsc-peer.labels" $ | nindent 4 }}
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ $g.name }}
+      namespace: {{ $g.namespace }}
+      sectionName: {{ $p }}-{{ $short }}
+  hostnames:
+    - {{ $p }}-{{ $short }}.{{ $.Values.externalDomain }}
+  rules:
+    - backendRefs:
+        - name: {{ $p }}-{{ $short }}
+          port: 8443
+{{- end }}
+{{- with $g.address }}
+---
+apiVersion: externaldns.k8s.io/v1alpha1
+kind: DNSEndpoint
+metadata:
+  name: {{ $p }}-fsc
+  labels:
+    {{- include "fsc-peer.labels" $ | nindent 4 }}
+spec:
+  endpoints:
+    {{- range $short := $public }}
+    - dnsName: {{ $p }}-{{ $short }}.{{ $.Values.externalDomain }}
+      recordType: A
+      targets:
+        - {{ $g.address }}
+    {{- end }}
+{{- end }}

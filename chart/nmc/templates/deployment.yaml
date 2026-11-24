@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "nmc.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "nmc.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nmc.labels" . | nindent 8 }}
+      {{- with .Values.notify.trustCertsFile }}
+      annotations:
+        checksum/notify-trust: {{ $.Files.Get . | sha256sum }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: nmc
+          image: "{{ .Values.image.repository }}@{{ required "image.digest is verplicht (sha256:...)" .Values.image.digest }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            # Datasource uit het Secret dat CloudNativePG bij het Cluster aanmaakt (ook bij postgres.create=false
+            # verwacht de chart een CNPG-Cluster met de naam postgres.name).
+            - name: QUARKUS_DATASOURCE_JDBC_URL
+              value: "jdbc:postgresql://{{ .Values.postgres.name }}-rw:5432/{{ .Values.postgres.database }}"
+            - name: QUARKUS_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.name }}-app
+                  key: username
+            - name: QUARKUS_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.name }}-app
+                  key: password
+            # Het prod-profiel migreert niet bij het starten; zonder migraties faalt de start op schema-validatie.
+            - name: QUARKUS_FLYWAY_MIGRATE_AT_START
+              value: "true"
+            # Bij een nieuwe installatie start de NMC eerder dan zijn database; wacht dan in plaats van te crashen.
+            - name: QUARKUS_FLYWAY_CONNECT_RETRIES
+              value: "30"
+            - name: QUARKUS_FLYWAY_CONNECT_RETRIES_INTERVAL
+              value: "5s"
+            - name: QUARKUS_REST_CLIENT_PROFIELSERVICE_URL
+              value: {{ required "profielservice.url is verplicht" .Values.profielservice.url | quote }}
+            - name: QUARKUS_REST_CLIENT_NOTIFY_URL
+              value: {{ required "notify.url is verplicht" .Values.notify.url | quote }}
+            {{- if .Values.notify.trustCertsFile }}
+            - name: QUARKUS_TLS_NOTIFY_TRUST_ALL
+              value: "false"
+            - name: QUARKUS_TLS_NOTIFY_TRUST_STORE_PEM_CERTS
+              value: /etc/nmc/notify-trust/ca.pem
+            {{- end }}
+            - name: NMC_KEK_HUIDIGE_VERSIE
+              value: {{ .Values.kek.huidigeVersie | quote }}
+            - name: NMC_WEBHOOK_JWT_KEY_ID
+              value: {{ required "webhook.jwtKeyId is verplicht" .Values.webhook.jwtKeyId | quote }}
+            - name: NMC_FEED_SOURCE
+              value: {{ required "feed.source is verplicht" .Values.feed.source | quote }}
+            - name: LOGBOEKDATAVERWERKING_ENABLED
+              value: {{ .Values.logboekdataverwerking.enabled | quote }}
+            {{- range list "NOTIFY_API_KEY" "NOTIFY_CALLBACK_BEARER_TOKEN" "HASH_PEPPER" "NMC_WEBHOOK_JWT_PRIVATE_KEY" }}
+            {{- include "nmc.geheim" (dict "naam" . "secret" $.Values.secretName) | nindent 12 }}
+            {{- end }}
+            {{- $kekVersies := list }}
+            {{- range .Values.kek.versies }}
+            {{- $kekVersies = append $kekVersies (toString .) }}
+            {{- include "nmc.geheim" (dict "naam" (printf "NMC_KEK_VERSIE_%v" .) "secret" $.Values.secretName) | nindent 12 }}
+            {{- end }}
+            {{- if not (has (toString .Values.kek.huidigeVersie) $kekVersies) }}
+            {{- fail (printf "kek.huidigeVersie %v staat niet in kek.versies" .Values.kek.huidigeVersie) }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /q/health/started
+              port: http
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: http
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.notify.trustCertsFile }}
+            - name: notify-trust
+              mountPath: /etc/nmc/notify-trust
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        {{- if .Values.notify.trustCertsFile }}
+        - name: notify-trust
+          configMap:
+            name: {{ .Release.Name }}-notify-trust
+        {{- end }}

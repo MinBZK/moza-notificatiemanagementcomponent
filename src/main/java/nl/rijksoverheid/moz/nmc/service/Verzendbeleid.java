@@ -10,14 +10,16 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
- * Het verzendbeleid per berichttype: hoe lang een notificatie na de aanname nog verstuurd mag worden
- * ({@code geldig_tot}), hoe lang de herverzending wacht en hoeveel herverzendingen er zijn. Per
- * berichttype te overschrijven met {@code nmc.beleid.<berichttype>.geldigheid},
- * {@code .herverzend-wachttijd} en {@code .max-herverzendingen}, met de enum-naam in kleine letters;
- * anders geldt de standaard. Eager bij het opstarten, zodat een negatief aantal of een duur van nul of
- * minder de applicatie niet laat starten.
+ * Het verzendbeleid per berichttype: met welk NotifyNL-template, hoe lang een notificatie na de aanname
+ * nog verstuurd mag worden ({@code geldig_tot}), hoe lang de herverzending wacht en hoeveel
+ * herverzendingen er zijn. Per berichttype te overschrijven met {@code nmc.beleid.<berichttype>.template-id},
+ * {@code .geldigheid}, {@code .herverzend-wachttijd} en {@code .max-herverzendingen}, met de enum-naam in
+ * kleine letters; anders geldt de standaard. Het template-ID hoort bij de NotifyNL-service van de API-key,
+ * dus een andere NotifyNL vraagt andere ID's. Eager bij het opstarten, zodat een negatief aantal, een duur
+ * van nul of minder of een template-ID dat geen UUID is de applicatie niet laat starten.
  */
 @Startup
 @ApplicationScoped
@@ -54,7 +56,27 @@ public class Verzendbeleid {
 
             eisPositief(prefix + ".geldigheid", geldigheid(berichtType));
             eisPositief(prefix + ".herverzend-wachttijd", herverzendWachttijd(berichtType.name()));
+            eisUuid(prefix + ".template-id", templateId(berichtType));
         }
+    }
+
+    // NotifyNL meldt een onbekend template pas bij de verzending; een typfout valt zo al bij het starten op.
+    // UUID.fromString accepteert ook verkorte vormen als "1-1-1-1-1"; alleen de volledige vorm telt.
+    private static void eisUuid(String sleutel, String waarde) {
+        boolean geldig;
+        try {
+            geldig = UUID.fromString(waarde).toString().equalsIgnoreCase(waarde);
+        } catch (IllegalArgumentException e) {
+            geldig = false;
+        }
+
+        if (!geldig) {
+            throw new IllegalStateException(sleutel + " moet een UUID zijn, is '" + waarde + "'");
+        }
+    }
+
+    public String templateId(BerichtType berichtType) {
+        return waarde(berichtType.name(), "template-id", String.class).orElse(berichtType.getTemplateId());
     }
 
     private static void eisPositief(String sleutel, Duration duur) {

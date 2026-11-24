@@ -1,0 +1,31 @@
+{{- if .Values.postgres.create }}
+# CNPG maakt hierbij het Secret <name>-app aan (username, password, ...), waar de Deployment uit leest.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Values.postgres.name }}
+  labels:
+    {{- include "nmc.labels" . | nindent 4 }}
+  annotations:
+    # helm uninstall laat de database staan: met het Cluster gaat ook de PVC weg, en daarmee de
+    # notificaties en het afleverbewijs. Weggooien gaat bewust met kubectl delete cluster.
+    helm.sh/resource-policy: keep
+spec:
+  instances: 1
+  # Met één instantie laat een PDB geen enkele verstoring toe en blokkeert hij elke node drain.
+  enablePDB: false
+  imageCatalogRef:
+    apiGroup: postgresql.cnpg.io
+    kind: ClusterImageCatalog
+    name: {{ .Values.postgres.imageCatalog }}
+    major: {{ .Values.postgres.majorVersion }}
+  bootstrap:
+    initdb:
+      database: {{ .Values.postgres.database }}
+      owner: {{ .Values.postgres.owner }}
+  storage:
+    size: {{ .Values.postgres.storage.size }}
+    {{- with .Values.postgres.storage.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+{{- end }}

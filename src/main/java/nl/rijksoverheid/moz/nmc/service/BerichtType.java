@@ -1,7 +1,8 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 /**
- * Bekende berichttypes en hun bijbehorende NotifyNL-template-IDs.
+ * Bekende berichttypes en hun standaard NotifyNL-template-IDs (van de NotifyNL van het LPC). Een andere
+ * NotifyNL zet ze met {@code nmc.beleid.<berichttype>.template-id}; zie {@link Verzendbeleid}.
  */
 public enum BerichtType {
 

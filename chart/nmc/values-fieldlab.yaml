@@ -1,0 +1,62 @@
+# Gedeelde Fundament-omgeving van het fieldlab (fundament-poc.nl, cluster-c, project notificatiedienst).
+# Fundament zet het project voor de namespace: tnt-notificatiedienst--<namespace>.
+image:
+  # ghcr.io/minbzk/moza-notificatiemanagementcomponent:pr-109 op 23 november 2026 (#109, eabd479): #66 plus
+  # instelbare NotifyNL-template-ID's (nmc.beleid.<berichttype>.template-id).
+  digest: sha256:d7618dc0ecf2549ae6350919166a238c7085a1315748a25c7e3e7048e61ecee9
+
+profielservice:
+  # Via FSC (#1661): de eigen outway, grant link `profielservice` naar de peer profielservice-mock op het
+  # MOZa FSC-testnet. Zonder FSC: http://moza-mock.tnt-notificatiedienst--mock-profielservice.svc:8080
+  url: http://nmc-fscoutway:8080/profielservice
+notify:
+  # De echte NotifyNL (Worth), met een team-key: die bezorgt alleen bij de adressen van het team. De
+  # receipt-callback staat in het dashboard op de NMC van ZAD, dus deze NMC vraagt de status zelf na.
+  # Terug naar de mock: http://moza-mock.tnt-notificatiedienst--mock-notifynl.svc:8080/notifynl/lokaal
+  url: https://api.notifynl.nl
+
+# De templates van de NotifyNL van Worth; de standaard in BerichtType is die van het LPC.
+# Stuurgroep Agenda staat hier niet in: dat template is bij Worth nog niet bevestigd.
+extraEnv:
+  - name: NMC_BELEID_DEMO_TEMPLATE_TEMPLATE_ID
+    value: a1f49022-846c-420d-b7f7-dd7b328f1474
+
+webhook:
+  jwtKeyId: fieldlab-1
+
+feed:
+  # Placeholder-OIN, net als de geconfigureerde dienstverlener uit migratie V8.
+  source: urn:nld:oin:00000000000000000000:systeem:nmc
+
+gateway:
+  enabled: true
+  # Zoals fbs-magazijn.cluster-c.fieldlab2026.nl van het FBS; external-dns beheert dat domein.
+  hostname: nmc.cluster-c.fieldlab2026.nl
+  # Kreeg de Gateway bij de eerste installatie (23 november 2026); nieuwe Gateway, nieuw adres.
+  address: 194.135.48.139
+  # Net als op ZAD de hele NMC publiek, zodat een dienstverlener-mock buiten Fundament hem kan bellen.
+  # Let op: de NMC heeft nog geen authenticatie.
+  paths:
+    - type: PathPrefix
+      value: /
+  # FSC-peers op het MOZa FSC-testnet (chart fsc-peer, #1661): manager en inway van de NMC en de mock.
+  passthrough:
+    - name: nmc-fscmgr
+      hostname: nmc-fscmgr.cluster-c.fieldlab2026.nl
+      namespace: tnt-notificatiedienst--nmc
+    - name: nmc-fscinway
+      hostname: nmc-fscinway.cluster-c.fieldlab2026.nl
+      namespace: tnt-notificatiedienst--nmc
+    - name: ps-fscmgr
+      hostname: ps-fscmgr.cluster-c.fieldlab2026.nl
+      namespace: tnt-notificatiedienst--mock-profielservice
+    - name: ps-fscinway
+      hostname: ps-fscinway.cluster-c.fieldlab2026.nl
+      namespace: tnt-notificatiedienst--mock-profielservice
+
+postgres:
+  # De CloudNativePG-operator op dit cluster komt van Haven+, met deze catalogus (PG 15 tot en met 18).
+  imageCatalog: postgresql-standard-trixie
+  storage:
+    size: 2Gi
+    # Leeg: de default storageClass van het cluster (ceph-incluster).
