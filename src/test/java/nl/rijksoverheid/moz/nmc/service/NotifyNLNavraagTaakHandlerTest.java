@@ -223,6 +223,27 @@ class NotifyNLNavraagTaakHandlerTest {
         assertEquals(0, TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN), "de ruimte voor dit tijdvak is op");
     }
 
+    // Een andere worker claimt de navraagtaak terwijl de opvraag bij NotifyNL loopt. De uitkomst is dan
+    // aan die worker: deze legt niets vast.
+    @Test
+    void navraag_claimVerlorenTijdensDeOpvraag_verwerktDeUitkomstNiet() {
+        Verzonden verzonden = verzonden(clock.nu().minusHours(2));
+        UUID taakId = taken().getFirst().getId();
+        when(getMessageDataApi.getMessageData(verzonden.notifyId().toString())).thenAnswer(aanroep -> {
+            QuarkusTransaction.requiringNew().run(() -> TaakFixtures.claimDoorAndereWorker(
+                    taakRepository.getEntityManager(), TaakSoort.RECONCILIEREN, taakId));
+
+            return new GetOneMessageResponse().status("delivered").completedAt(clock.nu().minusHours(1).toString());
+        });
+
+        TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN);
+
+        assertEquals(NotificatieStatus.VERZONDEN, notificatie(verzonden.notificatieId()).getStatus());
+        assertEquals(PogingStatus.VERZONDEN, poging(verzonden.pogingId()).getStatus());
+        assertEquals(List.of(TaakSoort.RECONCILIEREN), taken().stream().map(Taak::getTaakSoort).toList(),
+                "de navraagtaak blijft staan en er komt geen vaststeltaak");
+    }
+
     private record Verzonden(UUID notificatieId, UUID pogingId, UUID notifyId) {
     }
 

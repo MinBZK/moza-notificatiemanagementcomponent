@@ -63,6 +63,12 @@ class WisTaakHandlerTest {
     @Inject
     EntityManager entityManager;
 
+    @Inject
+    TaakClaimer taakClaimer;
+
+    @Inject
+    WisTaakHandler wisTaakHandler;
+
     @BeforeEach
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
@@ -180,6 +186,20 @@ class WisTaakHandlerTest {
 
         assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(id).getStatus());
         assertNull(notificatie(id).getVersleuteldeGegevens().sleutelGewrapt());
+    }
+
+    // Het wissen en het afronden van de taak gaan in één transactie: een worker die zijn claim kwijt is,
+    // wist niets.
+    @Test
+    void wistaak_claimVerloren_wistDeSleutelNiet() {
+        UUID id = metEindstatus(NotificatieStatus.GEANNULEERD);
+        verzetNaarVerleden(id, 8);
+        Taak taak = TaakFixtures.geclaimdEnVerloren(taakClaimer, entityManager, TaakSoort.WISSEN);
+
+        assertThrows(TaakVerlorenException.class, () -> wisTaakHandler.voerUit(taak, () -> { }));
+
+        assertNotNull(notificatie(id).getVersleuteldeGegevens().sleutelGewrapt());
+        assertEquals(taak.getId(), wistaak(id).getId());
     }
 
     private UUID aangenomen() {

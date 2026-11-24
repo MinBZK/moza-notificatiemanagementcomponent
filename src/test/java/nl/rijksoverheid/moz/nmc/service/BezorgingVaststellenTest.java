@@ -18,6 +18,7 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // %test: vaststellingstermijn 7 dagen, callback-venster 1 dag.
@@ -54,6 +56,12 @@ class BezorgingVaststellenTest {
 
     @Inject
     TaakRepository taakRepository;
+
+    @Inject
+    TaakClaimer taakClaimer;
+
+    @Inject
+    BezorgingVaststellenTaakHandler bezorgingVaststellenTaakHandler;
 
     @BeforeEach
     void setUp() {
@@ -162,6 +170,21 @@ class BezorgingVaststellenTest {
         TaakRonde.draai(taakWorker, TaakSoort.BEZORGING_VASTSTELLEN);
 
         assertTrue(taken().isEmpty());
+    }
+
+    // De overgang en het afronden van de taak gaan in één transactie: een worker die zijn claim kwijt is,
+    // stelt niets vast.
+    @Test
+    void vaststeltaak_claimVerloren_maaktDeBezorgingNietDefinitief() {
+        Bezorgd bezorgd = bezorgd(OffsetDateTime.now(ZoneOffset.UTC).minusDays(9));
+        maakVaststeltaakDue(bezorgd.notificatieId());
+        Taak taak = TaakFixtures.geclaimdEnVerloren(taakClaimer, taakRepository.getEntityManager(),
+                TaakSoort.BEZORGING_VASTSTELLEN);
+
+        assertThrows(TaakVerlorenException.class, () -> bezorgingVaststellenTaakHandler.voerUit(taak, () -> { }));
+
+        assertEquals(NotificatieStatus.BEZORGD, notificatie(bezorgd.notificatieId()).getStatus());
+        assertEquals(List.of(taak.getId()), taken().stream().map(Taak::getId).toList());
     }
 
     private record Bezorgd(UUID notificatieId, UUID pogingId, UUID notifyId) {
