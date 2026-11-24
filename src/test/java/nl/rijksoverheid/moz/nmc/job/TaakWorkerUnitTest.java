@@ -9,26 +9,38 @@ import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.service.TaakClaimer;
 import nl.rijksoverheid.moz.nmc.service.TaakHandler;
 import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
+import io.quarkus.scheduler.Scheduled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.ArgumentCaptor;
 
+import java.lang.reflect.Method;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 // Zonder Quarkus: in de applicatie heeft inmiddels elke soort een handler.
@@ -98,6 +110,54 @@ class TaakWorkerUnitTest {
         worker.verwerk(TaakSoort.CONTROLE);
 
         verify(taakClaimer).stelUit(taak, NU.plusSeconds(240), false);
+    }
+
+    static Stream<Arguments> geplandeMethodes() {
+        return Stream.of(
+                arguments(TaakSoort.VERZENDEN, (Consumer<TaakWorker>) TaakWorker::verzenden),
+                arguments(TaakSoort.RECEIPT_VERWERKEN, (Consumer<TaakWorker>) TaakWorker::receiptVerwerken),
+                arguments(TaakSoort.RECONCILIEREN, (Consumer<TaakWorker>) TaakWorker::reconcilieren),
+                arguments(TaakSoort.BEZORGING_VASTSTELLEN, (Consumer<TaakWorker>) TaakWorker::bezorgingVaststellen),
+                arguments(TaakSoort.TERUGKOPPELEN, (Consumer<TaakWorker>) TaakWorker::terugkoppelen),
+                arguments(TaakSoort.ONGELDIG_MELDEN, (Consumer<TaakWorker>) TaakWorker::ongeldigMelden),
+                arguments(TaakSoort.WISSEN, (Consumer<TaakWorker>) TaakWorker::wissen),
+                arguments(TaakSoort.CONTROLE, (Consumer<TaakWorker>) TaakWorker::controle),
+                arguments(TaakSoort.ONDERHOUD, (Consumer<TaakWorker>) TaakWorker::onderhoud));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("geplandeMethodes")
+    void geplandeMethode_claimtAlleenDeEigenSoort(TaakSoort soort, Consumer<TaakWorker> geplandeMethode) {
+        TaakWorker worker = workerMetElkeHandler();
+
+        geplandeMethode.accept(worker);
+
+        verify(taakClaimer).claim(eq(soort), anyInt());
+        verifyNoMoreInteractions(taakClaimer);
+    }
+
+    // De scheduler staat uit in tests. Een methode zonder @Scheduled draait in productie nooit, en een
+    // nieuwe taaksoort zonder geplande methode wordt nooit geclaimd.
+    @Test
+    void elkeTaaksoort_heeftPreciesEenGeplandeMethode() throws ReflectiveOperationException {
+        TaakWorker worker = workerMetElkeHandler();
+        List<Method> gepland = Arrays.stream(TaakWorker.class.getDeclaredMethods())
+                .filter(methode -> methode.isAnnotationPresent(Scheduled.class))
+                .toList();
+
+        for (Method methode : gepland) {
+            methode.invoke(worker);
+        }
+
+        ArgumentCaptor<TaakSoort> geclaimd = ArgumentCaptor.forClass(TaakSoort.class);
+        verify(taakClaimer, times(gepland.size())).claim(geclaimd.capture(), anyInt());
+        assertEquals(TaakSoort.values().length, gepland.size());
+        assertEquals(EnumSet.allOf(TaakSoort.class), EnumSet.copyOf(geclaimd.getAllValues()));
+    }
+
+    // Zonder handler voor een soort claimt de worker die soort niet.
+    private TaakWorker workerMetElkeHandler() {
+        return worker(Arrays.stream(TaakSoort.values()).map(TaakWorkerUnitTest::handler).toArray(TaakHandler[]::new));
     }
 
     // De claim levert deze ene taak, die al een aantal keer mislukt is.
