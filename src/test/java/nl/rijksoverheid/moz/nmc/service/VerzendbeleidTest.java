@@ -1,10 +1,9 @@
-package nl.rijksoverheid.moz.nmc.service.verzending;
+package nl.rijksoverheid.moz.nmc.service;
 
 import io.smallrye.config.PropertiesConfigSource;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
-import nl.rijksoverheid.moz.nmc.service.BerichtType;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;

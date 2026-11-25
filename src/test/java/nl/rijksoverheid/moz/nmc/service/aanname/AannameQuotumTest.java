@@ -10,7 +10,7 @@ import nl.rijksoverheid.moz.nmc.service.BerichtType;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.service.Regie;
 import nl.rijksoverheid.moz.nmc.service.sleutel.Sleutelbeheer;
-import nl.rijksoverheid.moz.nmc.service.verzending.Verzendbeleid;
+import nl.rijksoverheid.moz.nmc.service.Verzendbeleid;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;

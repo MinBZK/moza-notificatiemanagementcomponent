@@ -37,7 +37,7 @@ import nl.rijksoverheid.moz.nmc.service.receipt.ReceiptVerwerker;
 import nl.rijksoverheid.moz.nmc.service.receipt.Vaststellingstermijn;
 import nl.rijksoverheid.moz.nmc.service.sleutel.KekProvider;
 import nl.rijksoverheid.moz.nmc.service.sleutel.Sleutelbeheer;
-import nl.rijksoverheid.moz.nmc.service.verzending.Verzendbeleid;
+import nl.rijksoverheid.moz.nmc.service.Verzendbeleid;
 import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 

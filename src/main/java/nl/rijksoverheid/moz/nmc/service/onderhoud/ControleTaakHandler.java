@@ -18,7 +18,7 @@ import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.service.receipt.Vaststellingstermijn;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
-import nl.rijksoverheid.moz.nmc.service.verzending.Verzendbeleid;
+import nl.rijksoverheid.moz.nmc.service.Verzendbeleid;
 
 import java.time.Clock;
 import java.time.Duration;

@@ -17,7 +17,7 @@ import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.service.NotificatieNietGevondenException;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
-import nl.rijksoverheid.moz.nmc.service.verzending.Verzendbeleid;
+import nl.rijksoverheid.moz.nmc.service.Verzendbeleid;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Clock;

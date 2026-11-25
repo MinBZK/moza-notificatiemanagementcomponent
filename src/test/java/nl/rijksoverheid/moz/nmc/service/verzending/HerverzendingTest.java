@@ -30,6 +30,7 @@ import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.service.BerichtType;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.service.Regie;
+import nl.rijksoverheid.moz.nmc.service.Verzendbeleid;
 import nl.rijksoverheid.moz.nmc.service.aanname.AannameOpdracht;
 import nl.rijksoverheid.moz.nmc.service.aanname.AannameService;
 import nl.rijksoverheid.moz.nmc.service.receipt.ReceiptVerwerker;

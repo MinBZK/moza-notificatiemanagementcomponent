@@ -15,7 +15,7 @@ import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.service.DvProvider;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.service.sleutel.Sleutelbeheer;
-import nl.rijksoverheid.moz.nmc.service.verzending.Verzendbeleid;
+import nl.rijksoverheid.moz.nmc.service.Verzendbeleid;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Clock;
