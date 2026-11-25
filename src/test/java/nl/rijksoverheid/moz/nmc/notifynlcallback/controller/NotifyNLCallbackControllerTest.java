@@ -21,7 +21,7 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
-import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
+import nl.rijksoverheid.moz.nmc.service.receipt.ReceiptVerwerker;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;

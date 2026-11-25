@@ -10,11 +10,11 @@ import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.helper.AannameResponse;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
-import nl.rijksoverheid.moz.nmc.service.AannameOpdracht;
-import nl.rijksoverheid.moz.nmc.service.AannameService;
+import nl.rijksoverheid.moz.nmc.service.aanname.AannameOpdracht;
+import nl.rijksoverheid.moz.nmc.service.aanname.AannameService;
 import nl.rijksoverheid.moz.nmc.service.BerichtType;
 import nl.rijksoverheid.moz.nmc.service.OnbekendBerichtTypeException;
-import nl.rijksoverheid.moz.nmc.service.QuotumOverschredenException;
+import nl.rijksoverheid.moz.nmc.service.aanname.QuotumOverschredenException;
 import nl.rijksoverheid.moz.nmc.service.Regie;
 
 

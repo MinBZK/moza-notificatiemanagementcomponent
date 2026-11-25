@@ -1,7 +1,7 @@
 package nl.rijksoverheid.moz.nmc.testhelper;
 
 import io.quarkus.test.Mock;
-import nl.rijksoverheid.moz.nmc.service.WebhookUrlValidator;
+import nl.rijksoverheid.moz.nmc.service.webhook.WebhookUrlValidator;
 
 /**
  * Laat in tests de http-URL van {@link WebhookOntvanger} op localhost toe; elke andere URL gaat door

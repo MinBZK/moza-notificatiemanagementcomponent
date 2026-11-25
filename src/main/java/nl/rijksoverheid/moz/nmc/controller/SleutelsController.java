@@ -6,7 +6,7 @@ import nl.rijksoverheid.moz.nmc.api.SleutelsApi;
 import nl.rijksoverheid.moz.nmc.api.model.JsonWebKey;
 import nl.rijksoverheid.moz.nmc.api.model.JsonWebKeySet;
 import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
-import nl.rijksoverheid.moz.nmc.service.WebhookSleutel;
+import nl.rijksoverheid.moz.nmc.service.webhook.WebhookSleutel;
 
 import java.util.List;
 

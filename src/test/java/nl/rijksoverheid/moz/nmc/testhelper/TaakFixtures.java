@@ -12,7 +12,7 @@ import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.domain.VerzendbudgetTijdvak_;
 import nl.rijksoverheid.moz.nmc.domain.Webhookpositie_;
-import nl.rijksoverheid.moz.nmc.service.TaakClaimer;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakClaimer;
 import org.hibernate.Session;
 
 import java.time.Duration;

@@ -13,10 +13,10 @@ import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-import nl.rijksoverheid.moz.nmc.service.TaakClaimer;
-import nl.rijksoverheid.moz.nmc.service.TaakHandler;
-import nl.rijksoverheid.moz.nmc.service.TaakUitkomst;
-import nl.rijksoverheid.moz.nmc.service.TaakVerlorenException;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakClaimer;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakVerlorenException;
 
 import java.time.Clock;
 import java.time.Duration;
