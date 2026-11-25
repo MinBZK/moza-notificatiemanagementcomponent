@@ -132,7 +132,7 @@ Haal die override pas weg als de Quarkus-BOM zelf een veilige versie levert.
 - **`service/` is per domein onderverdeeld**: `aanname/`, `feed/`, `onderhoud/`, `receipt/`,
   `sleutel/`, `taak/`, `verzending/` en `webhook/`, elk met de eigen exceptions. Direct in
   `service/` staat wat meerdere domeinen delen en zelf van geen domein afhangt:
-  `Overgangsfunctie`, `Opruimtermijnen`, `DvProvider`, `BerichtType` en `Regie`. `taak/`,
+  `Overgangsfunctie`, `Opruimtermijnen`, `Verzendbeleid`, `DvProvider`, `BerichtType` en `Regie`. `taak/`,
   `sleutel/` en `feed/` hangen van geen ander domein af; de handlers staan bij hun domein en
   importeren `taak/`. Een methode of veld dat een ander domein niet nodig heeft, blijft
   package-private.
