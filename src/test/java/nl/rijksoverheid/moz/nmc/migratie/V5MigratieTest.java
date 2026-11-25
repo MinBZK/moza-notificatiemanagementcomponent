@@ -1,8 +1,10 @@
 package nl.rijksoverheid.moz.nmc.migratie;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -14,14 +16,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Draait de V5-backfill over rijen zoals het oude schrijfpad ze achterliet: een projectie in
@@ -67,8 +66,15 @@ class V5MigratieTest extends MigratieTestBasis {
     @Test
     void v5_terugkerendeStatus_wordtOvergenomenAlsGeschiedenis() throws SQLException {
         migreerTot("4");
-        UUID id = oudeNotificatie(UUID.randomUUID(), "PERMANENT_FAILURE", 4,
-                "CREATED", "SENDING", "PERMANENT_FAILURE", "DELIVERED", "PERMANENT_FAILURE");
+        UUID id = oudeNotificatie(
+                UUID.randomUUID(),
+                "PERMANENT_FAILURE",
+                4,
+                "CREATED",
+                "SENDING",
+                "PERMANENT_FAILURE",
+                "DELIVERED",
+                "PERMANENT_FAILURE");
 
         migreerTot("5");
 
@@ -91,15 +97,18 @@ class V5MigratieTest extends MigratieTestBasis {
     // mapping er geen heeft (CREATED met een referentie van NotifyNL); verzonden_op komt uit het eerste
     // SENDING-record en receipt_tijdstip uit het laatste record met een uitkomst.
     @ParameterizedTest(name = "{0}")
-    @CsvSource(nullValues = "-", value = {
-            "CREATED,           CREATED,                           AANGENOMEN,        -,            VERZONDEN",
-            "SENDING,           CREATED|SENDING,                   VERZONDEN,         -,            VERZONDEN",
-            "DELIVERED,         CREATED|SENDING|DELIVERED,         BEZORGD,           -,            BEZORGD",
-            "PERMANENT_FAILURE, CREATED|SENDING|PERMANENT_FAILURE, NIET_BEZORGBAAR,   ONBEREIKBAAR, PERMANENT_MISLUKT",
-            "TEMPORARY_FAILURE, CREATED|SENDING|TEMPORARY_FAILURE, NIET_BEZORGBAAR,   ONBEREIKBAAR, TIJDELIJK_MISLUKT",
-            "TECHNICAL_FAILURE, CREATED|SENDING|TECHNICAL_FAILURE, TECHNISCH_MISLUKT, TECHNISCH,    TECHNISCH_MISLUKT"})
-    void v5_elkeOudeStatus_krijgtStatusRedenEnPogingUitDeMapping(String oud, String geschiedenis, String status,
-                                                               String reden, String pogingStatus) throws SQLException {
+    @CsvSource(
+            nullValues = "-",
+            value = {
+                "CREATED,           CREATED,                           AANGENOMEN,        -,            VERZONDEN",
+                "SENDING,           CREATED|SENDING,                   VERZONDEN,         -,            VERZONDEN",
+                "DELIVERED,         CREATED|SENDING|DELIVERED,         BEZORGD,           -,            BEZORGD",
+                "PERMANENT_FAILURE, CREATED|SENDING|PERMANENT_FAILURE, NIET_BEZORGBAAR,   ONBEREIKBAAR, PERMANENT_MISLUKT",
+                "TEMPORARY_FAILURE, CREATED|SENDING|TEMPORARY_FAILURE, NIET_BEZORGBAAR,   ONBEREIKBAAR, TIJDELIJK_MISLUKT",
+                "TECHNICAL_FAILURE, CREATED|SENDING|TECHNICAL_FAILURE, TECHNISCH_MISLUKT, TECHNISCH,    TECHNISCH_MISLUKT"
+            })
+    void v5_elkeOudeStatus_krijgtStatusRedenEnPogingUitDeMapping(
+            String oud, String geschiedenis, String status, String reden, String pogingStatus) throws SQLException {
         String[] records = geschiedenis.split("\\|");
         migreerTot("4");
         UUID notifyId = UUID.randomUUID();
@@ -109,18 +118,24 @@ class V5MigratieTest extends MigratieTestBasis {
 
         assertEquals(Arrays.asList(status, reden, String.valueOf(records.length - 1)), notificatie(id));
         assertEquals(List.of(pogingStatus, notifyId.toString()), poging(id));
-        assertEquals(Arrays.asList(records.length > 1 ? AANGEMAAKT.plusMinutes(1).toInstant() : null,
-                records.length > 2 ? AANGEMAAKT.plusMinutes(2).toInstant() : null), pogingTijdstippen(id));
+        assertEquals(
+                Arrays.asList(
+                        records.length > 1 ? AANGEMAAKT.plusMinutes(1).toInstant() : null,
+                        records.length > 2 ? AANGEMAAKT.plusMinutes(2).toInstant() : null),
+                pogingTijdstippen(id));
         assertEquals(records.length, events(id).size());
     }
 
     // Het vangnet: een rij zonder geschiedenisrecord met een bekende status krijgt haar status uit
     // laatste_status en houdt haar versie. Zo'n rij krijgt geen events.
     @ParameterizedTest
-    @CsvSource(nullValues = "-", value = {
-            "PERMANENT_FAILURE, NIET_BEZORGBAAR,       ONBEREIKBAAR",
-            "TECHNICAL_FAILURE, TECHNISCH_MISLUKT,     TECHNISCH",
-            "ONBEKEND,          BEZORGSTATUS_ONBEKEND, -"})
+    @CsvSource(
+            nullValues = "-",
+            value = {
+                "PERMANENT_FAILURE, NIET_BEZORGBAAR,       ONBEREIKBAAR",
+                "TECHNICAL_FAILURE, TECHNISCH_MISLUKT,     TECHNISCH",
+                "ONBEKEND,          BEZORGSTATUS_ONBEKEND, -"
+            })
     void v5_rijZonderBruikbareGeschiedenis_krijgtDeStatusUitLaatsteStatus(String oud, String status, String reden)
             throws SQLException {
         migreerTot("4");
@@ -142,7 +157,8 @@ class V5MigratieTest extends MigratieTestBasis {
         migreerTot("8");
 
         assertEquals(List.of(GECONFIGUREERDE_DV), kolom("SELECT dv_id FROM notificatie WHERE id = ?", id, UUID.class));
-        assertEquals(List.of(GECONFIGUREERDE_DV, GECONFIGUREERDE_DV, GECONFIGUREERDE_DV),
+        assertEquals(
+                List.of(GECONFIGUREERDE_DV, GECONFIGUREERDE_DV, GECONFIGUREERDE_DV),
                 kolom("SELECT dv_id FROM event WHERE notificatie_id = ? ORDER BY volgnummer", id, UUID.class));
     }
 
@@ -194,8 +210,8 @@ class V5MigratieTest extends MigratieTestBasis {
         migreerTot("5");
 
         assertThrows(SQLException.class, () -> {
-            try (PreparedStatement update = verbinding.prepareStatement(
-                    "UPDATE notificatie SET versie = 2, status = 'BEZORGD' WHERE id = ?")) {
+            try (PreparedStatement update =
+                    verbinding.prepareStatement("UPDATE notificatie SET versie = 2, status = 'BEZORGD' WHERE id = ?")) {
                 update.setObject(1, id);
                 update.executeUpdate();
             }
@@ -213,7 +229,8 @@ class V5MigratieTest extends MigratieTestBasis {
         migreerTot("6");
 
         try (ResultSet tabellen = verbinding.getMetaData().getTables(null, null, "notificatie_status", null);
-             ResultSet kolommen = verbinding.getMetaData().getColumns(null, null, "notificatie", "external_reference")) {
+                ResultSet kolommen =
+                        verbinding.getMetaData().getColumns(null, null, "notificatie", "external_reference")) {
             assertFalse(tabellen.next(), "notificatie_status hoort vervallen te zijn");
             assertFalse(kolommen.next(), "notificatie.external_reference hoort vervallen te zijn");
         }
@@ -271,8 +288,8 @@ class V5MigratieTest extends MigratieTestBasis {
     }
 
     private List<String> notificatie(UUID id) throws SQLException {
-        try (PreparedStatement select = verbinding.prepareStatement(
-                "SELECT status, reden, versie FROM notificatie WHERE id = ?")) {
+        try (PreparedStatement select =
+                verbinding.prepareStatement("SELECT status, reden, versie FROM notificatie WHERE id = ?")) {
             select.setObject(1, id);
             try (ResultSet rij = select.executeQuery()) {
                 assertTrue(rij.next());
@@ -287,8 +304,8 @@ class V5MigratieTest extends MigratieTestBasis {
     }
 
     private List<String> poging(UUID id) throws SQLException {
-        try (PreparedStatement select = verbinding.prepareStatement(
-                "SELECT status, notify_id FROM poging WHERE notificatie_id = ?")) {
+        try (PreparedStatement select =
+                verbinding.prepareStatement("SELECT status, notify_id FROM poging WHERE notificatie_id = ?")) {
             select.setObject(1, id);
             try (ResultSet rij = select.executeQuery()) {
                 if (!rij.next()) {
@@ -315,7 +332,8 @@ class V5MigratieTest extends MigratieTestBasis {
 
     private List<Instant> aangenomenOp(UUID id) throws SQLException {
         return kolom("SELECT aangenomen_op FROM notificatie WHERE id = ?", id, OffsetDateTime.class).stream()
-                .map(OffsetDateTime::toInstant).toList();
+                .map(OffsetDateTime::toInstant)
+                .toList();
     }
 
     private static Instant instant(ResultSet rij, String kolom) throws SQLException {

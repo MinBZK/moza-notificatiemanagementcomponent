@@ -1,12 +1,11 @@
 package nl.rijksoverheid.moz.nmc.client.notifynl;
 
 import io.quarkus.logging.Log;
-import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
-
 import java.time.OffsetDateTime;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 
 /**
  * De afleverstatus van een verzending zoals NotifyNL hem geeft, in een receipt of bij een navraag, en
@@ -34,8 +33,10 @@ public record NotifyNLAfleverstatus(String status, OffsetDateTime tijdstip) {
                 yield Optional.empty();
             }
             default -> {
-                Log.errorf("Onbekende NotifyNL-status '%s' ontvangen voor NotifyNL-referentie %s; geen uitkomst vastgelegd. "
-                        + "Controleer of NotifyNL nieuwe statussen is gaan sturen", status, notifyId);
+                Log.errorf(
+                        "Onbekende NotifyNL-status '%s' ontvangen voor NotifyNL-referentie %s; geen uitkomst vastgelegd. "
+                                + "Controleer of NotifyNL nieuwe statussen is gaan sturen",
+                        status, notifyId);
                 yield Optional.empty();
             }
         };

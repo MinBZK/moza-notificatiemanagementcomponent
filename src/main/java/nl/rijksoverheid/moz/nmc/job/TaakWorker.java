@@ -8,22 +8,20 @@ import io.quarkus.runtime.Startup;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
-import nl.rijksoverheid.moz.nmc.config.TaakConfig;
-import nl.rijksoverheid.moz.nmc.domain.Taak;
-import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
-import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-import nl.rijksoverheid.moz.nmc.service.taak.TaakClaimer;
-import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
-import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
-import nl.rijksoverheid.moz.nmc.service.taak.TaakVerlorenException;
-
 import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import nl.rijksoverheid.moz.nmc.config.TaakConfig;
+import nl.rijksoverheid.moz.nmc.domain.Taak;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakClaimer;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakVerlorenException;
 
 /**
  * De worker-lus: per soort een periodieke ronde die een batch claimt en elke taak aan de
@@ -53,8 +51,13 @@ public class TaakWorker {
     private long geteldOpNanos;
     private boolean geteld;
 
-    public TaakWorker(TaakClaimer taakClaimer, TaakRepository taakRepository, Instance<TaakHandler> handlerBeans,
-                      MeterRegistry meterRegistry, Clock clock, TaakConfig config) {
+    public TaakWorker(
+            TaakClaimer taakClaimer,
+            TaakRepository taakRepository,
+            Instance<TaakHandler> handlerBeans,
+            MeterRegistry meterRegistry,
+            Clock clock,
+            TaakConfig config) {
         this.taakClaimer = taakClaimer;
         this.taakRepository = taakRepository;
         this.clock = clock;
@@ -67,7 +70,8 @@ public class TaakWorker {
 
             if (eerder != null) {
                 throw new IllegalStateException("Twee handlers voor taaksoort " + handler.taakSoort() + ": "
-                        + eerder.getClass().getName() + " en " + handler.getClass().getName());
+                        + eerder.getClass().getName() + " en "
+                        + handler.getClass().getName());
             }
         }
 
@@ -89,7 +93,8 @@ public class TaakWorker {
         long nu = System.nanoTime();
 
         if (!geteld || nu - geteldOpNanos >= metriekVerversing.toNanos()) {
-            tellingen = QuarkusTransaction.requiringNew().call(() -> taakRepository.telPerSoort(OffsetDateTime.now(clock)));
+            tellingen =
+                    QuarkusTransaction.requiringNew().call(() -> taakRepository.telPerSoort(OffsetDateTime.now(clock)));
             geteldOpNanos = nu;
             geteld = true;
         }
@@ -97,47 +102,74 @@ public class TaakWorker {
         return tellingen.getOrDefault(taakSoort, TaakRepository.TaakTelling.GEEN);
     }
 
-    @Scheduled(identity = "taak-verzenden", every = "{nmc.taak.interval}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    @Scheduled(
+            identity = "taak-verzenden",
+            every = "{nmc.taak.interval}",
+            concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void verzenden() {
         verwerk(TaakSoort.VERZENDEN);
     }
 
-    @Scheduled(identity = "taak-receipt-verwerken", every = "{nmc.taak.interval}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    @Scheduled(
+            identity = "taak-receipt-verwerken",
+            every = "{nmc.taak.interval}",
+            concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void receiptVerwerken() {
         verwerk(TaakSoort.RECEIPT_VERWERKEN);
     }
 
-    @Scheduled(identity = "taak-reconcilieren", every = "{nmc.taak.interval}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    @Scheduled(
+            identity = "taak-reconcilieren",
+            every = "{nmc.taak.interval}",
+            concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void reconcilieren() {
         verwerk(TaakSoort.RECONCILIEREN);
     }
 
-    @Scheduled(identity = "taak-bezorging-vaststellen", every = "{nmc.taak.interval}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    @Scheduled(
+            identity = "taak-bezorging-vaststellen",
+            every = "{nmc.taak.interval}",
+            concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void bezorgingVaststellen() {
         verwerk(TaakSoort.BEZORGING_VASTSTELLEN);
     }
 
-    @Scheduled(identity = "taak-terugkoppelen", every = "{nmc.taak.interval}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    @Scheduled(
+            identity = "taak-terugkoppelen",
+            every = "{nmc.taak.interval}",
+            concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void terugkoppelen() {
         verwerk(TaakSoort.TERUGKOPPELEN);
     }
 
-    @Scheduled(identity = "taak-ongeldig-melden", every = "{nmc.taak.interval}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    @Scheduled(
+            identity = "taak-ongeldig-melden",
+            every = "{nmc.taak.interval}",
+            concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void ongeldigMelden() {
         verwerk(TaakSoort.ONGELDIG_MELDEN);
     }
 
-    @Scheduled(identity = "taak-wissen", every = "{nmc.taak.interval}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    @Scheduled(
+            identity = "taak-wissen",
+            every = "{nmc.taak.interval}",
+            concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void wissen() {
         verwerk(TaakSoort.WISSEN);
     }
 
-    @Scheduled(identity = "taak-controle", every = "{nmc.taak.interval}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    @Scheduled(
+            identity = "taak-controle",
+            every = "{nmc.taak.interval}",
+            concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void controle() {
         verwerk(TaakSoort.CONTROLE);
     }
 
-    @Scheduled(identity = "taak-onderhoud", every = "{nmc.taak.interval}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    @Scheduled(
+            identity = "taak-onderhoud",
+            every = "{nmc.taak.interval}",
+            concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void onderhoud() {
         verwerk(TaakSoort.ONDERHOUD);
     }
@@ -210,8 +242,9 @@ public class TaakWorker {
         try {
             switch (uitkomst) {
                 case TaakUitkomst.Afgerond() -> taakClaimer.rondAf(taak);
-                case TaakUitkomst.Uitgesteld u when u.teltAlsPoging() && taak.getPogingen() + 1 >= maxPogingen ->
-                        verwerkUitputting(handler, taak, null);
+                case TaakUitkomst.Uitgesteld u
+                when u.teltAlsPoging() && taak.getPogingen() + 1 >= maxPogingen ->
+                    verwerkUitputting(handler, taak, null);
                 case TaakUitkomst.Uitgesteld u -> taakClaimer.stelUit(taak, u.due(), u.teltAlsPoging());
                 case TaakUitkomst.Herpland h -> taakClaimer.herplanNaSucces(taak, h.due());
                 case TaakUitkomst.AlAfgerond() -> {
@@ -222,7 +255,8 @@ public class TaakWorker {
             Log.warn(e.getMessage());
         } catch (RuntimeException e) {
             // De handler draait dan opnieuw; zie het contract van TaakHandler.
-            Log.errorf(e, "Taak %s/%s is uitgevoerd maar kon niet worden bijgewerkt", taak.getTaakSoort(), taak.getId());
+            Log.errorf(
+                    e, "Taak %s/%s is uitgevoerd maar kon niet worden bijgewerkt", taak.getTaakSoort(), taak.getId());
         }
     }
 
@@ -237,8 +271,14 @@ public class TaakWorker {
             } else {
                 OffsetDateTime due = OffsetDateTime.now(clock).plus(wachttijd(pogingen));
                 taakClaimer.stelUit(taak, due, true);
-                Log.warnf(fout, "Taak %s/%s mislukt (poging %d van %d), opnieuw op %s",
-                        taak.getTaakSoort(), taak.getId(), pogingen, maxPogingen, due);
+                Log.warnf(
+                        fout,
+                        "Taak %s/%s mislukt (poging %d van %d), opnieuw op %s",
+                        taak.getTaakSoort(),
+                        taak.getId(),
+                        pogingen,
+                        maxPogingen,
+                        due);
             }
         } catch (TaakVerlorenException e) {
             Log.warn(e.getMessage());
@@ -253,8 +293,13 @@ public class TaakWorker {
         if (handler.periodiek()) {
             OffsetDateTime due = OffsetDateTime.now(clock).plus(wachttijd(maxPogingen));
             taakClaimer.stelUit(taak, due, false);
-            Log.errorf(fout, "Periodieke taak %s/%s faalt na %d pogingen; opnieuw op %s",
-                    taak.getTaakSoort(), taak.getId(), maxPogingen, due);
+            Log.errorf(
+                    fout,
+                    "Periodieke taak %s/%s faalt na %d pogingen; opnieuw op %s",
+                    taak.getTaakSoort(),
+                    taak.getId(),
+                    maxPogingen,
+                    due);
 
             return;
         }
@@ -272,11 +317,19 @@ public class TaakWorker {
         });
 
         if (afgehandeld) {
-            Log.warnf(fout, "Taak %s/%s uitgeput na %d pogingen; door de handler afgehandeld",
-                    taak.getTaakSoort(), taak.getId(), maxPogingen);
+            Log.warnf(
+                    fout,
+                    "Taak %s/%s uitgeput na %d pogingen; door de handler afgehandeld",
+                    taak.getTaakSoort(),
+                    taak.getId(),
+                    maxPogingen);
         } else {
-            Log.errorf(fout, "Taak %s/%s na %d pogingen op mislukt gezet; wacht op beheer",
-                    taak.getTaakSoort(), taak.getId(), maxPogingen);
+            Log.errorf(
+                    fout,
+                    "Taak %s/%s na %d pogingen op mislukt gezet; wacht op beheer",
+                    taak.getTaakSoort(),
+                    taak.getId(),
+                    maxPogingen);
         }
     }
 

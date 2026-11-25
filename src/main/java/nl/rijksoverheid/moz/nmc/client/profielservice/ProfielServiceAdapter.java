@@ -5,15 +5,13 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
-import jakarta.ws.rs.core.Response;
+import java.util.List;
+import java.util.function.Predicate;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijRequest;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
-
-import java.util.List;
-import java.util.function.Predicate;
 
 @ApplicationScoped
 public class ProfielServiceAdapter {
@@ -29,9 +27,7 @@ public class ProfielServiceAdapter {
 
         List<ContactgegevenResponse> emails = partij.getContactgegevens() == null
                 ? List.of()
-                : partij.getContactgegevens().stream()
-                        .filter(this::isEmail)
-                        .toList();
+                : partij.getContactgegevens().stream().filter(this::isEmail).toList();
 
         List<Predicate<ContactgegevenResponse>> prioriteiten = List.of(
                 c -> heeftExacteScope(c, identificatie.dienstverlener(), identificatie.dienst()),
@@ -43,13 +39,15 @@ public class ProfielServiceAdapter {
                 .flatMap(p -> emails.stream().filter(p).findFirst().stream())
                 .findFirst()
                 .map(ContactgegevenResponse::getWaarde)
-                .orElseThrow(() -> new GeenEmailadresGevondenException(
-                        "Voor de opgegeven identificatie konden geen e-mailadressen worden gevonden in de profielgegevens van de partij"));
+                .orElseThrow(
+                        () -> new GeenEmailadresGevondenException(
+                                "Voor de opgegeven identificatie konden geen e-mailadressen worden gevonden in de profielgegevens van de partij"));
     }
 
     private PartijResponse zoekPartij(PartijIdentificatie identificatie) {
         PartijRequest partijRequest = new PartijRequest()
-                .identificatieType(PartijRequest.IdentificatieTypeEnum.valueOf(identificatie.identificatieType().name()))
+                .identificatieType(PartijRequest.IdentificatieTypeEnum.valueOf(
+                        identificatie.identificatieType().name()))
                 .identificatieNummer(identificatie.identificatieNummer())
                 .dienstverlener(identificatie.dienstverlener())
                 .dienstNaam(identificatie.dienst());
@@ -62,8 +60,8 @@ public class ProfielServiceAdapter {
             // 404 en 422 gaan over de partij: een onbekend nummer. Een 400 gaat over de vorm van het
             // verzoek van het NMC en zegt niets over de partij.
             if (status == 404 || status == 422) {
-                throw new PartijNietGevondenException("Geen partij gevonden met de opgegeven identificatie (status "
-                        + status + ")");
+                throw new PartijNietGevondenException(
+                        "Geen partij gevonden met de opgegeven identificatie (status " + status + ")");
             }
 
             Log.error("Profielservice gaf status " + e.getResponse().getStatus() + " terug", e);
@@ -80,12 +78,18 @@ public class ProfielServiceAdapter {
     }
 
     private boolean heeftExacteScope(ContactgegevenResponse email, String dienstverlener, String dienst) {
-        return dienst != null && email.getScopes() != null && email.getScopes().stream()
-                .anyMatch(s -> dienstverlener.equals(s.getDienstverlenerNaam()) && dienst.equals(s.getDienstNaam()));
+        return dienst != null
+                && email.getScopes() != null
+                && email.getScopes().stream()
+                        .anyMatch(s ->
+                                dienstverlener.equals(s.getDienstverlenerNaam()) && dienst.equals(s.getDienstNaam()));
     }
 
     private boolean heeftDienstverlenerScope(ContactgegevenResponse email, String dienstverlener) {
-        return email.getScopes() != null && email.getScopes().stream()
-                .anyMatch(s -> dienstverlener.equals(s.getDienstverlenerNaam()) && (s.getDienstNaam() == null || s.getDienstNaam().isBlank()));
+        return email.getScopes() != null
+                && email.getScopes().stream()
+                        .anyMatch(s -> dienstverlener.equals(s.getDienstverlenerNaam())
+                                && (s.getDienstNaam() == null
+                                        || s.getDienstNaam().isBlank()));
     }
 }

@@ -1,16 +1,15 @@
 package nl.rijksoverheid.moz.nmc.migratie;
 
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
-import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.UUID;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 
 /**
  * Basis voor tests die een migratie over bestaande rijen draaien. De gedeelde testdatabase staat al op
@@ -46,7 +45,7 @@ abstract class MigratieTestBasis {
         String server = "jdbc:postgresql://localhost:" + postgres.getPort() + "/";
 
         try (Connection beheer = DriverManager.getConnection(server + "postgres", GEBRUIKER, WACHTWOORD);
-             var statement = beheer.createStatement()) {
+                var statement = beheer.createStatement()) {
             statement.execute("CREATE DATABASE " + database);
         }
 

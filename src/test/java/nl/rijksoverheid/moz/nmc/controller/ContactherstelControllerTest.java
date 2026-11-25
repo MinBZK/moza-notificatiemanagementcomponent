@@ -1,27 +1,26 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
-import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.junit.mockito.InjectSpy;
-import jakarta.inject.Inject;
-import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
-import nl.rijksoverheid.moz.nmc.helper.HashHelper;
-import nl.rijksoverheid.moz.nmc.service.DvProvider;
-import io.restassured.http.ContentType;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+
+import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.mockito.InjectSpy;
+import io.restassured.http.ContentType;
+import jakarta.inject.Inject;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
+import nl.rijksoverheid.moz.nmc.helper.HashHelper;
+import nl.rijksoverheid.moz.nmc.service.DvProvider;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 @QuarkusTest
 class ContactherstelControllerTest {
@@ -45,10 +44,10 @@ class ContactherstelControllerTest {
         aanvraag.put("notificatieStatus", notificatieStatus);
         aanvraag.put("berichtsoort", berichtsoort);
 
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(aanvraag)
-                .when().post(PAD)
+                .when()
+                .post(PAD)
                 .then()
                 .statusCode(501)
                 .contentType("application/problem+json")
@@ -59,10 +58,10 @@ class ContactherstelControllerTest {
 
     @Test
     void contactherstelStarten_geldigeAanvraag_zetGehashteOntvangerAlsBetrokkene() {
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(geldigeStartAanvraag())
-                .when().post(PAD)
+                .when()
+                .post(PAD)
                 .then()
                 .statusCode(501);
 
@@ -76,10 +75,10 @@ class ContactherstelControllerTest {
         Map<String, Object> aanvraag = geldigeStartAanvraag();
         aanvraag.put("emailAdres", "geen-adres");
 
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(aanvraag)
-                .when().post(PAD)
+                .when()
+                .post(PAD)
                 .then()
                 .statusCode(400);
 
@@ -91,10 +90,10 @@ class ContactherstelControllerTest {
         Map<String, Object> aanvraag = geldigeStartAanvraag();
         aanvraag.remove("notificatieId");
 
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(aanvraag)
-                .when().post(PAD)
+                .when()
+                .post(PAD)
                 .then()
                 .statusCode(400);
     }
@@ -104,10 +103,10 @@ class ContactherstelControllerTest {
         Map<String, Object> aanvraag = geldigeStartAanvraag();
         aanvraag.put("emailAdres", "geen-adres");
 
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(aanvraag)
-                .when().post(PAD)
+                .when()
+                .post(PAD)
                 .then()
                 .statusCode(400)
                 .contentType("application/problem+json")
@@ -119,18 +118,18 @@ class ContactherstelControllerTest {
         Map<String, Object> aanvraag = geldigeStartAanvraag();
         aanvraag.put("notificatieStatus", "bezorgd");
 
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(aanvraag)
-                .when().post(PAD)
+                .when()
+                .post(PAD)
                 .then()
                 .statusCode(400);
     }
 
     @Test
     void contactherstelOpvragen_geeft501() {
-        given()
-                .when().get(PAD_MET_ID, UUID.randomUUID())
+        given().when()
+                .get(PAD_MET_ID, UUID.randomUUID())
                 .then()
                 .statusCode(501)
                 .contentType("application/problem+json")
@@ -143,10 +142,10 @@ class ContactherstelControllerTest {
     @ParameterizedTest
     @ValueSource(strings = {"afgerond", "ingetrokken"})
     void contactherstelBijwerken_geldigeStatus_geeft501(String status) {
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(Map.of("status", status))
-                .when().patch(PAD_MET_ID, UUID.randomUUID())
+                .when()
+                .patch(PAD_MET_ID, UUID.randomUUID())
                 .then()
                 .statusCode(501)
                 .contentType("application/problem+json")
@@ -158,20 +157,20 @@ class ContactherstelControllerTest {
 
     @Test
     void contactherstelBijwerken_statusBuitenDeEnum_geeft400() {
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(Map.of("status", "gestart"))
-                .when().patch(PAD_MET_ID, UUID.randomUUID())
+                .when()
+                .patch(PAD_MET_ID, UUID.randomUUID())
                 .then()
                 .statusCode(400);
     }
 
     @Test
     void contactherstelBijwerken_zonderStatus_geeft400() {
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(Map.of())
-                .when().patch(PAD_MET_ID, UUID.randomUUID())
+                .when()
+                .patch(PAD_MET_ID, UUID.randomUUID())
                 .then()
                 .statusCode(400);
     }

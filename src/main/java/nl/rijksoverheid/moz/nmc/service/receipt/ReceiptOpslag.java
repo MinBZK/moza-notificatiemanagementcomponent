@@ -5,13 +5,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
-import nl.rijksoverheid.moz.nmc.domain.Notificatie;
-import nl.rijksoverheid.moz.nmc.domain.Poging;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
-import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
-import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
-
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -19,6 +12,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.Poging;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
 
 /**
  * Slaat een binnengekomen delivery receipt op als receipttaak, zodat de callback pas 2xx antwoordt als
@@ -38,8 +37,12 @@ public class ReceiptOpslag {
     private final Counter afgewezen;
     private final Clock clock;
 
-    public ReceiptOpslag(PogingRepository pogingRepository, NotificatieRepository notificatieRepository,
-                         TaakRepository taakRepository, MeterRegistry meterRegistry, Clock clock) {
+    public ReceiptOpslag(
+            PogingRepository pogingRepository,
+            NotificatieRepository notificatieRepository,
+            TaakRepository taakRepository,
+            MeterRegistry meterRegistry,
+            Clock clock) {
         this.pogingRepository = pogingRepository;
         this.notificatieRepository = notificatieRepository;
         this.taakRepository = taakRepository;
@@ -86,13 +89,19 @@ public class ReceiptOpslag {
         payload.put(PAYLOAD_STATUS, status);
         // Leeg in plaats van null: de unieke index behandelt elke NULL als verschillend, waardoor een
         // herhaalde receipt zonder tijdstip anders een tweede taak oplevert.
-        payload.put(PAYLOAD_TIJDSTIP, tijdstip == null ? "" : tijdstip.withOffsetSameInstant(ZoneOffset.UTC).toString());
+        payload.put(
+                PAYLOAD_TIJDSTIP,
+                tijdstip == null
+                        ? ""
+                        : tijdstip.withOffsetSameInstant(ZoneOffset.UTC).toString());
 
-        boolean nieuw = taakRepository.planReceipt(notificatie.getDvId(), notificatie.getId(), payload,
-                OffsetDateTime.now(clock));
+        boolean nieuw = taakRepository.planReceipt(
+                notificatie.getDvId(), notificatie.getId(), payload, OffsetDateTime.now(clock));
 
         if (!nieuw) {
-            Log.debugf("Receipt %s voor poging %s staat al klaar; herhaling genegeerd", status, poging.get().getId());
+            Log.debugf(
+                    "Receipt %s voor poging %s staat al klaar; herhaling genegeerd",
+                    status, poging.get().getId());
         }
 
         return nieuw ? Uitkomst.OPGESLAGEN : Uitkomst.HERHALING;

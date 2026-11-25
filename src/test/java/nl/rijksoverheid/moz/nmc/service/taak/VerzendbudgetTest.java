@@ -1,23 +1,22 @@
 package nl.rijksoverheid.moz.nmc.service.taak;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.when;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import nl.rijksoverheid.moz.nmc.repository.VerzendbudgetRepository;
-import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import jakarta.persistence.EntityManager;
-import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
-import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.when;
+import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
+import nl.rijksoverheid.moz.nmc.repository.VerzendbudgetRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 // %test: 20 tokens per minuut, 10 gereserveerd voor het verzenden en 5 voor de navraag, 5 gedeeld.
 @QuarkusTest
@@ -92,7 +91,8 @@ class VerzendbudgetTest {
 
     @Test
     void geefTerug_navraag_komtTerugInDeReserveringVanDeNavraag() {
-        Verzendbudget.Genomen genomen = QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.NAVRAAG, 5));
+        Verzendbudget.Genomen genomen =
+                QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.NAVRAAG, 5));
 
         QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(genomen, 3));
 
@@ -104,7 +104,8 @@ class VerzendbudgetTest {
     // gedeeld, dus 3 terug is gedeeld en 7 terug is 5 gedeeld plus 2 reservering.
     @Test
     void geefTerug_verzenden_vultEerstDeGedeeldeRuimteBij() {
-        Verzendbudget.Genomen genomen = QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.VERZENDEN, 15));
+        Verzendbudget.Genomen genomen =
+                QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.VERZENDEN, 15));
 
         QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(genomen, 3));
 
@@ -114,7 +115,8 @@ class VerzendbudgetTest {
 
     @Test
     void geefTerug_verzenden_meerDanHetGedeeldeDeel_komtInDeEigenReservering() {
-        Verzendbudget.Genomen genomen = QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.VERZENDEN, 15));
+        Verzendbudget.Genomen genomen =
+                QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.VERZENDEN, 15));
 
         QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(genomen, 7));
 
@@ -125,7 +127,8 @@ class VerzendbudgetTest {
     // De ander heeft intussen genomen; de teruggave mag de reserveringen niet boven de tokens brengen.
     @Test
     void geefTerug_naEenClaimVanDeAnder_houdtDeReserveringenBinnenDeTokens() {
-        Verzendbudget.Genomen genomen = QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.VERZENDEN, 15));
+        Verzendbudget.Genomen genomen =
+                QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.VERZENDEN, 15));
         assertEquals(5, neem(BudgetDoel.NAVRAAG, 100));
 
         QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(genomen, 15));
@@ -146,7 +149,8 @@ class VerzendbudgetTest {
 
     @Test
     void geefTerug_zetHoogstensHetGenomenAantalTerug() {
-        Verzendbudget.Genomen genomen = QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.VERZENDEN, 10));
+        Verzendbudget.Genomen genomen =
+                QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.VERZENDEN, 10));
 
         QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(genomen, 4));
         assertEquals(14, tokensInDatabase());
@@ -159,14 +163,18 @@ class VerzendbudgetTest {
     // tijdvak stoppen: dat zou meer verzendingen toelaten dan de limiet.
     @Test
     void geefTerug_naDeMinuutgrens_laatHetNieuweTijdvakOngemoeid() {
-        Verzendbudget.Genomen genomen = QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.VERZENDEN, 10));
+        Verzendbudget.Genomen genomen =
+                QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(BudgetDoel.VERZENDEN, 10));
         when(clock.instant()).thenReturn(TIJDVAK_B);
         assertEquals(15, neem(BudgetDoel.VERZENDEN, 15));
 
         QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(genomen, 10));
 
-        assertEquals(5, QuarkusTransaction.requiringNew().call(() ->
-                TaakFixtures.tokens(entityManager, java.time.OffsetDateTime.ofInstant(TIJDVAK_B, ZoneOffset.UTC))));
+        assertEquals(
+                5,
+                QuarkusTransaction.requiringNew()
+                        .call(() -> TaakFixtures.tokens(
+                                entityManager, java.time.OffsetDateTime.ofInstant(TIJDVAK_B, ZoneOffset.UTC))));
     }
 
     @Test
@@ -178,14 +186,21 @@ class VerzendbudgetTest {
 
     @Test
     void geefTerug_nul_doetNiets() {
-        QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(
-                new Verzendbudget.Genomen(0, java.time.OffsetDateTime.ofInstant(TIJDVAK_A, ZoneOffset.UTC), BudgetDoel.VERZENDEN, 0), 0));
+        QuarkusTransaction.requiringNew()
+                .run(() -> verzendbudget.geefTerug(
+                        new Verzendbudget.Genomen(
+                                0,
+                                java.time.OffsetDateTime.ofInstant(TIJDVAK_A, ZoneOffset.UTC),
+                                BudgetDoel.VERZENDEN,
+                                0),
+                        0));
 
         assertEquals(0, QuarkusTransaction.requiringNew().call(() -> TaakFixtures.telBudgetrijen(entityManager)));
     }
 
     private int neem(BudgetDoel doel, int gevraagd) {
-        return QuarkusTransaction.requiringNew().call(() -> verzendbudget.neem(doel, gevraagd).aantal());
+        return QuarkusTransaction.requiringNew()
+                .call(() -> verzendbudget.neem(doel, gevraagd).aantal());
     }
 
     private int tokensInDatabase() {

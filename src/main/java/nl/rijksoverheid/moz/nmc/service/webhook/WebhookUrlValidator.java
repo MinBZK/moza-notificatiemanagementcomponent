@@ -1,7 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service.webhook;
 
 import jakarta.enterprise.context.ApplicationScoped;
-
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
@@ -27,9 +26,8 @@ public class WebhookUrlValidator {
 
     // Gelijk aan de kolom webhook_url (varchar(2048)).
     private static final int MAX_LENGTE = 2048;
-    private static final List<String> INTERNE_SUFFIXEN = List.of(
-            ".localhost", ".local", ".internal", ".svc",
-            ".home.arpa", ".home", ".corp", ".lan", ".intranet");
+    private static final List<String> INTERNE_SUFFIXEN =
+            List.of(".localhost", ".local", ".internal", ".svc", ".home.arpa", ".home", ".corp", ".lan", ".intranet");
 
     /**
      * Controleert de URL uit het register en geeft hem genormaliseerd terug.

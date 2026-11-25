@@ -6,6 +6,11 @@ import io.quarkus.panache.common.Parameters;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.LockModeType;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.domain.Dienstverlener_;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
@@ -13,12 +18,6 @@ import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import org.hibernate.Timeouts;
 import org.hibernate.jpa.SpecHints;
-
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Toegang tot de takentabel. Elke query noemt de soort, zodat PostgreSQL naar één partitie kan, en
@@ -49,7 +48,10 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, UUID> {
                         + " WHERE " + Taak_.TAAK_SOORT + " = ?2"
                         + " AND " + Taak_.NOTIFICATIE_ID + " = ?3"
                         + " AND " + Taak_.STATUS + " = ?4",
-                due, TaakSoort.WISSEN, notificatieId, TaakStatus.OPEN);
+                due,
+                TaakSoort.WISSEN,
+                notificatieId,
+                TaakStatus.OPEN);
 
         if (verzet == 0) {
             persist(new Taak(TaakSoort.WISSEN, dvId, notificatieId, due, null, null));
@@ -65,7 +67,9 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, UUID> {
         // De unieke index op (dv_id, soort) voor terugkoppeltaken maakt dit veilig bij gelijktijdige pods.
         // Hibernate leidt de parametertypen in een insert niet af uit de kolommen; vandaar de types van
         // de attributen.
-        return getSession().createMutationQuery("INSERT INTO Taak (" + Taak_.ID + ", " + Taak_.TAAK_SOORT + ", " + Taak_.DV_ID + ", "
+        return getSession()
+                .createMutationQuery("INSERT INTO Taak (" + Taak_.ID + ", " + Taak_.TAAK_SOORT + ", " + Taak_.DV_ID
+                        + ", "
                         + Taak_.DUE + ", " + Taak_.STATUS + ") SELECT FUNCTION('gen_random_uuid'), :taakSoort, d."
                         + Dienstverlener_.ID + ", :due, :open"
                         + " FROM Dienstverlener d WHERE d." + Dienstverlener_.WEBHOOK_URL + " IS NOT NULL"
@@ -84,8 +88,10 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, UUID> {
      */
     public List<UUID> dienstverlenersMetOpenWerk(TaakSoort taakSoort, OffsetDateTime nu) {
         return getEntityManager()
-                .createQuery("SELECT " + Taak_.DV_ID + " FROM Taak WHERE " + AAN_DE_BEURT
-                        + " GROUP BY " + Taak_.DV_ID + " ORDER BY MIN(" + Taak_.DUE + ")", UUID.class)
+                .createQuery(
+                        "SELECT " + Taak_.DV_ID + " FROM Taak WHERE " + AAN_DE_BEURT + " GROUP BY " + Taak_.DV_ID
+                                + " ORDER BY MIN(" + Taak_.DUE + ")",
+                        UUID.class)
                 .setParameter("taakSoort", taakSoort)
                 .setParameter("open", TaakStatus.OPEN)
                 .setParameter("nu", nu)
@@ -103,15 +109,19 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, UUID> {
      * @param leaseTot  tot wanneer de lease op de geclaimde taken loopt
      */
     public List<Taak> claim(TaakSoort taakSoort, UUID dvId, int maximum, OffsetDateTime nu, OffsetDateTime leaseTot) {
-        Parameters parameters = Parameters.with("taakSoort", taakSoort).and("open", TaakStatus.OPEN).and("nu", nu);
+        Parameters parameters = Parameters.with("taakSoort", taakSoort)
+                .and("open", TaakStatus.OPEN)
+                .and("nu", nu);
         PanacheQuery<Taak> query = dvId == null
                 ? find(AAN_DE_BEURT + " AND " + Taak_.DV_ID + " IS NULL", Sort.by(Taak_.DUE), parameters)
-                : find(AAN_DE_BEURT + " AND " + Taak_.DV_ID + " = :dvId", Sort.by(Taak_.DUE), parameters.and("dvId", dvId));
+                : find(
+                        AAN_DE_BEURT + " AND " + Taak_.DV_ID + " = :dvId",
+                        Sort.by(Taak_.DUE),
+                        parameters.and("dvId", dvId));
 
         // SKIP LOCKED slaat rijen over die een andere worker op dit moment claimt. De lease en het
         // epoch gaan bij de commit naar de database, met een toets op het oude epoch.
-        List<Taak> taken = query
-                .withLock(LockModeType.PESSIMISTIC_WRITE)
+        List<Taak> taken = query.withLock(LockModeType.PESSIMISTIC_WRITE)
                 .withHint(SpecHints.HINT_SPEC_LOCK_TIMEOUT, Timeouts.SKIP_LOCKED_MILLI)
                 .page(0, maximum)
                 .list();
@@ -128,18 +138,22 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, UUID> {
     public boolean planReceipt(UUID dvId, UUID notificatieId, Map<String, String> payload, OffsetDateTime due) {
         // Hibernate leidt het parametertype in een insert niet af uit de kolom; zonder het type van het
         // attribuut gaat de payload als bytea en weigert PostgreSQL hem voor jsonb.
-        return getSession().createMutationQuery("INSERT INTO Taak (" + Taak_.ID + ", " + Taak_.TAAK_SOORT + ", "
-                        + Taak_.DV_ID + ", " + Taak_.NOTIFICATIE_ID + ", " + Taak_.DUE + ", " + Taak_.STATUS + ", "
-                        + Taak_.PAYLOAD
-                        + ") VALUES (:id, :taakSoort, :dvId, :notificatieId, :due, :open, :payload) ON CONFLICT DO NOTHING")
-                .setParameter("id", UUID.randomUUID())
-                .setParameter("taakSoort", TaakSoort.RECEIPT_VERWERKEN)
-                .setParameter("dvId", dvId)
-                .setParameter("notificatieId", notificatieId)
-                .setParameter("due", due)
-                .setParameter("open", TaakStatus.OPEN)
-                .setParameter("payload", payload, Taak_.payload.getType())
-                .executeUpdate() == 1;
+        return getSession()
+                        .createMutationQuery(
+                                "INSERT INTO Taak (" + Taak_.ID + ", " + Taak_.TAAK_SOORT + ", "
+                                        + Taak_.DV_ID + ", " + Taak_.NOTIFICATIE_ID + ", " + Taak_.DUE + ", "
+                                        + Taak_.STATUS + ", "
+                                        + Taak_.PAYLOAD
+                                        + ") VALUES (:id, :taakSoort, :dvId, :notificatieId, :due, :open, :payload) ON CONFLICT DO NOTHING")
+                        .setParameter("id", UUID.randomUUID())
+                        .setParameter("taakSoort", TaakSoort.RECEIPT_VERWERKEN)
+                        .setParameter("dvId", dvId)
+                        .setParameter("notificatieId", notificatieId)
+                        .setParameter("due", due)
+                        .setParameter("open", TaakStatus.OPEN)
+                        .setParameter("payload", payload, Taak_.payload.getType())
+                        .executeUpdate()
+                == 1;
     }
 
     /**
@@ -147,13 +161,19 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, UUID> {
      * heeft; diens afronding vindt de taak dan niet meer en rolt terug.
      */
     public long verwijderOpen(TaakSoort taakSoort, UUID notificatieId) {
-        return delete(Taak_.TAAK_SOORT + " = ?1 AND " + Taak_.NOTIFICATIE_ID + " = ?2 AND " + Taak_.STATUS + " = ?3",
-                taakSoort, notificatieId, TaakStatus.OPEN);
+        return delete(
+                Taak_.TAAK_SOORT + " = ?1 AND " + Taak_.NOTIFICATIE_ID + " = ?2 AND " + Taak_.STATUS + " = ?3",
+                taakSoort,
+                notificatieId,
+                TaakStatus.OPEN);
     }
 
     /** Verlengt de lease; false als de taak inmiddels door een andere worker is geclaimd. */
     public boolean verlengLease(Taak taak, OffsetDateTime tot) {
-        return update(Taak_.LEASE_TOT + " = :tot WHERE " + ZELFDE_CLAIM, claimVan(taak).and("tot", tot)) == 1;
+        return update(
+                        Taak_.LEASE_TOT + " = :tot WHERE " + ZELFDE_CLAIM,
+                        claimVan(taak).and("tot", tot))
+                == 1;
     }
 
     /** Verwijdert de afgeronde taak; false als de taak inmiddels door een andere worker is geclaimd. */
@@ -170,9 +190,11 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, UUID> {
      * @param teltAlsPoging of dit uitstel een mislukking in het NMC zelf was
      */
     public boolean stelUit(Taak taak, OffsetDateTime due, boolean teltAlsPoging) {
-        return update(Taak_.LEASE_TOT + " = NULL, " + Taak_.DUE + " = :due, " + Taak_.POGINGEN + " = "
-                        + Taak_.POGINGEN + " + :extra WHERE " + ZELFDE_CLAIM,
-                claimVan(taak).and("due", due).and("extra", teltAlsPoging ? 1 : 0)) == 1;
+        return update(
+                        Taak_.LEASE_TOT + " = NULL, " + Taak_.DUE + " = :due, " + Taak_.POGINGEN + " = "
+                                + Taak_.POGINGEN + " + :extra WHERE " + ZELFDE_CLAIM,
+                        claimVan(taak).and("due", due).and("extra", teltAlsPoging ? 1 : 0))
+                == 1;
     }
 
     /**
@@ -180,14 +202,19 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, UUID> {
      * de taak inmiddels door een andere worker is geclaimd.
      */
     public boolean herplanNaSucces(Taak taak, OffsetDateTime due) {
-        return update(Taak_.LEASE_TOT + " = NULL, " + Taak_.DUE + " = :due, " + Taak_.POGINGEN + " = 0 WHERE "
-                + ZELFDE_CLAIM, claimVan(taak).and("due", due)) == 1;
+        return update(
+                        Taak_.LEASE_TOT + " = NULL, " + Taak_.DUE + " = :due, " + Taak_.POGINGEN + " = 0 WHERE "
+                                + ZELFDE_CLAIM,
+                        claimVan(taak).and("due", due))
+                == 1;
     }
 
     /** Zet de taak op mislukt en geeft de lease vrij; false als een andere worker hem inmiddels claimde. */
     public boolean markeerMislukt(Taak taak) {
-        return update(Taak_.LEASE_TOT + " = NULL, " + Taak_.STATUS + " = :mislukt WHERE " + ZELFDE_CLAIM,
-                claimVan(taak).and("mislukt", TaakStatus.MISLUKT)) == 1;
+        return update(
+                        Taak_.LEASE_TOT + " = NULL, " + Taak_.STATUS + " = :mislukt WHERE " + ZELFDE_CLAIM,
+                        claimVan(taak).and("mislukt", TaakStatus.MISLUKT))
+                == 1;
     }
 
     public long telMetStatus(TaakSoort taakSoort, TaakStatus status) {
@@ -199,10 +226,14 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, UUID> {
      * query over alle partities. Een soort zonder taken ontbreekt in de map.
      */
     public Map<TaakSoort, TaakTelling> telPerSoort(OffsetDateTime nu) {
-        List<Object[]> rijen = getEntityManager().createQuery("SELECT " + Taak_.TAAK_SOORT
-                        + ", SUM(CASE WHEN " + Taak_.STATUS + " = :mislukt THEN 1 ELSE 0 END)"
-                        + ", SUM(CASE WHEN " + Taak_.STATUS + " = :open AND " + Taak_.DUE + " <= :nu THEN 1 ELSE 0 END)"
-                        + " FROM Taak GROUP BY " + Taak_.TAAK_SOORT, Object[].class)
+        List<Object[]> rijen = getEntityManager()
+                .createQuery(
+                        "SELECT " + Taak_.TAAK_SOORT
+                                + ", SUM(CASE WHEN " + Taak_.STATUS + " = :mislukt THEN 1 ELSE 0 END)"
+                                + ", SUM(CASE WHEN " + Taak_.STATUS + " = :open AND " + Taak_.DUE
+                                + " <= :nu THEN 1 ELSE 0 END)"
+                                + " FROM Taak GROUP BY " + Taak_.TAAK_SOORT,
+                        Object[].class)
                 .setParameter("mislukt", TaakStatus.MISLUKT)
                 .setParameter("open", TaakStatus.OPEN)
                 .setParameter("nu", nu)
@@ -210,7 +241,8 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, UUID> {
         Map<TaakSoort, TaakTelling> tellingen = new java.util.EnumMap<>(TaakSoort.class);
 
         for (Object[] rij : rijen) {
-            tellingen.put((TaakSoort) rij[0], new TaakTelling(((Number) rij[1]).longValue(), ((Number) rij[2]).longValue()));
+            tellingen.put(
+                    (TaakSoort) rij[0], new TaakTelling(((Number) rij[1]).longValue(), ((Number) rij[2]).longValue()));
         }
 
         return tellingen;
@@ -223,7 +255,8 @@ public class TaakRepository implements PanacheRepositoryBase<Taak, UUID> {
     }
 
     public Optional<Taak> zoek(TaakSoort taakSoort, UUID id) {
-        return find(Taak_.TAAK_SOORT + " = ?1 AND " + Taak_.ID + " = ?2", taakSoort, id).singleResultOptional();
+        return find(Taak_.TAAK_SOORT + " = ?1 AND " + Taak_.ID + " = ?2", taakSoort, id)
+                .singleResultOptional();
     }
 
     private static Parameters claimVan(Taak taak) {

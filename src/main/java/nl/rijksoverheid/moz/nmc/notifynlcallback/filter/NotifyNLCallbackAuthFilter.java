@@ -7,12 +7,11 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.ext.Provider;
-import nl.rijksoverheid.moz.nmc.helper.Problems;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Optional;
+import nl.rijksoverheid.moz.nmc.helper.Problems;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 @Provider
 @Priority(Priorities.AUTHENTICATION)
@@ -46,8 +45,6 @@ public class NotifyNLCallbackAuthFilter implements ContainerRequestFilter {
 
     // Constant-time vergelijking om timing-aanvallen te voorkomen
     private boolean tokenGeldig(String ontvangen) {
-        return MessageDigest.isEqual(
-                verwachteTokenBytes,
-                ontvangen.getBytes(StandardCharsets.UTF_8));
+        return MessageDigest.isEqual(verwachteTokenBytes, ontvangen.getBytes(StandardCharsets.UTF_8));
     }
 }

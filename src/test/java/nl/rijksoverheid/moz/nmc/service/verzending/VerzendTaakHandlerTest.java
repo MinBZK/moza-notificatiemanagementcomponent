@@ -1,5 +1,21 @@
 package nl.rijksoverheid.moz.nmc.service.verzending;
 
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.overgangen;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.taken;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusMock;
@@ -8,6 +24,11 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
+import java.time.Clock;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.GetMessageDataApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
@@ -41,9 +62,9 @@ import nl.rijksoverheid.moz.nmc.service.receipt.ReceiptVerwerker;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakClaimer;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakVerlorenException;
 import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
-import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.NotifyNLFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
@@ -52,29 +73,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;
-
-import java.time.Clock;
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
-import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.overgangen;
-import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.taken;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 @QuarkusTest
 class VerzendTaakHandlerTest {
@@ -149,7 +147,9 @@ class VerzendTaakHandlerTest {
         assertEquals(PogingStatus.VERZONDEN, poging.getStatus());
         assertEquals(notifyId, poging.getNotifyId());
         assertNotNull(poging.getVerzondenOp());
-        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN), overgangen(id));
+        assertEquals(
+                List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN),
+                overgangen(id));
 
         ArgumentCaptor<SendEmailRequest> verzoek = ArgumentCaptor.forClass(SendEmailRequest.class);
         verify(sendAMessageApi).sendEmail(verzoek.capture());
@@ -162,15 +162,17 @@ class VerzendTaakHandlerTest {
         assertEquals(1, taken.size(), "de verzendtaak is afgerond, de navraagtaak staat");
         assertEquals(TaakSoort.RECONCILIEREN, taken.getFirst().getTaakSoort());
         assertEquals(id, taken.getFirst().getNotificatieId());
-        assertEquals(clock.nu().plusHours(1).toInstant(), taken.getFirst().getDue().toInstant(),
-                "het eerste navraagmoment");
-        assertEquals(poging.getId().toString(), taken.getFirst().getPayload().get(VerzendTaakHandler.PAYLOAD_POGING_ID));
+        assertEquals(
+                clock.nu().plusHours(1).toInstant(), taken.getFirst().getDue().toInstant(), "het eerste navraagmoment");
+        assertEquals(
+                poging.getId().toString(), taken.getFirst().getPayload().get(VerzendTaakHandler.PAYLOAD_POGING_ID));
     }
 
     @Test
     void centraal_happyFlow_haaltHetAdresOpInDeVerzendtaakEnBewaartHetNiet() {
         when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail(EMAIL));
-        when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
+        when(sendAMessageApi.sendEmail(any()))
+                .thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
         UUID id = aannameService.neemAan(centraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -186,7 +188,8 @@ class VerzendTaakHandlerTest {
     @Test
     void centraal_partijNietGevonden_eindigtInNietBezorgbaarMetGeenContactgegevens() {
         when(profielApi.apiProfielserviceV1PartijPost(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.NOT_FOUND).build()));
+                .thenThrow(new WebApplicationException(
+                        Response.status(Response.Status.NOT_FOUND).build()));
         UUID id = aannameService.neemAan(centraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -200,7 +203,8 @@ class VerzendTaakHandlerTest {
 
     @Test
     void centraal_partijZonderEmailadres_eindigtInNietBezorgbaar() {
-        when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(new PartijResponse().partijId(UUID.randomUUID()));
+        when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenReturn(new PartijResponse().partijId(UUID.randomUUID()));
         UUID id = aannameService.neemAan(centraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -213,7 +217,8 @@ class VerzendTaakHandlerTest {
     @Test
     void centraal_profielserviceStoring_steltUitZonderPoging() {
         when(profielApi.apiProfielserviceV1PartijPost(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.INTERNAL_SERVER_ERROR).build()));
+                .thenThrow(new WebApplicationException(
+                        Response.status(Response.Status.INTERNAL_SERVER_ERROR).build()));
         UUID id = aannameService.neemAan(centraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -245,7 +250,8 @@ class VerzendTaakHandlerTest {
     // De controletaak plant een verzendtaak zonder payload; de verzendgegevens komen van de notificatie.
     @Test
     void verzendtaakZonderPayload_verstuurtMetDeGegevensVanDeNotificatie() {
-        when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
+        when(sendAMessageApi.sendEmail(any()))
+                .thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
         UUID id = aannameService.neemAan(decentraal());
         UUID dvId = notificatie(id).getDvId();
         QuarkusTransaction.requiringNew().run(() -> {
@@ -267,9 +273,13 @@ class VerzendTaakHandlerTest {
     @Test
     void uitgeputteVerzendtaak_eindigtInTechnischMislukt() {
         when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(400).entity(NotifyNLFixtures.TEAM_KEY_FOUT).build()));
+                .thenThrow(new WebApplicationException(Response.status(400)
+                        .entity(NotifyNLFixtures.TEAM_KEY_FOUT)
+                        .build()));
         when(getMessageDataApi.getMultipleMessagesStatus(any(), any(), any(), any(), any()))
-                .thenThrow(new WebApplicationException(Response.status(400).entity(NotifyNLFixtures.TEAM_KEY_FOUT).build()));
+                .thenThrow(new WebApplicationException(Response.status(400)
+                        .entity(NotifyNLFixtures.TEAM_KEY_FOUT)
+                        .build()));
         UUID id = aannameService.neemAan(decentraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -279,7 +289,11 @@ class VerzendTaakHandlerTest {
         Notificatie notificatie = notificatie(id);
         assertEquals(NotificatieStatus.TECHNISCH_MISLUKT, notificatie.getStatus());
         assertEquals(Reden.TECHNISCH, notificatie.getReden());
-        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.TECHNISCH_MISLUKT),
+        assertEquals(
+                List.of(
+                        NotificatieStatus.AANGENOMEN,
+                        NotificatieStatus.IN_VERZENDING,
+                        NotificatieStatus.TECHNISCH_MISLUKT),
                 overgangen(id));
         assertEquals(List.of(), taken());
     }
@@ -289,8 +303,8 @@ class VerzendTaakHandlerTest {
     @Test
     void notificatieZonderVerzendgegevens_eindigtMeteenInTechnischMislukt() {
         UUID id = aannameService.neemAan(decentraal());
-        QuarkusTransaction.requiringNew().run(() ->
-                NotificatieFixtures.wisTemplateId(taakRepository.getEntityManager(), id));
+        QuarkusTransaction.requiringNew()
+                .run(() -> NotificatieFixtures.wisTemplateId(taakRepository.getEntityManager(), id));
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
@@ -306,7 +320,9 @@ class VerzendTaakHandlerTest {
     @Test
     void notifyWeigertHetVerzoekOmEenAndereReden_kostEenPoging() {
         when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(400).entity(NotifyNLFixtures.TEAM_KEY_FOUT).build()));
+                .thenThrow(new WebApplicationException(Response.status(400)
+                        .entity(NotifyNLFixtures.TEAM_KEY_FOUT)
+                        .build()));
         UUID id = aannameService.neemAan(decentraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -349,9 +365,12 @@ class VerzendTaakHandlerTest {
     @Test
     void herclaimZoekvraagGeeft400_isGeenAdresafwijzing() {
         when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.SERVICE_UNAVAILABLE).build()));
+                .thenThrow(new WebApplicationException(
+                        Response.status(Response.Status.SERVICE_UNAVAILABLE).build()));
         when(getMessageDataApi.getMultipleMessagesStatus(any(), any(), any(), any(), any()))
-                .thenThrow(new WebApplicationException(Response.status(400).entity(NotifyNLFixtures.ADRES_AFGEWEZEN).build()));
+                .thenThrow(new WebApplicationException(Response.status(400)
+                        .entity(NotifyNLFixtures.ADRES_AFGEWEZEN)
+                        .build()));
         UUID id = aannameService.neemAan(decentraal());
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
         zetDue(taken().getFirst(), clock.nu().minusSeconds(1));
@@ -366,8 +385,8 @@ class VerzendTaakHandlerTest {
     @Test
     void kekVersieNietGeconfigureerd_steltUitZonderPoging() {
         UUID id = aannameService.neemAan(decentraal());
-        QuarkusTransaction.requiringNew().run(() ->
-                NotificatieFixtures.zetKekVersie(taakRepository.getEntityManager(), id, 99));
+        QuarkusTransaction.requiringNew()
+                .run(() -> NotificatieFixtures.zetKekVersie(taakRepository.getEntityManager(), id, 99));
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
@@ -415,8 +434,9 @@ class VerzendTaakHandlerTest {
     @Test
     void inVerzendingZonderPoging_eindigtNaUitputtingInTechnischMislukt() {
         UUID id = aannameService.neemAan(decentraal());
-        QuarkusTransaction.requiringNew().run(() ->
-                NotificatieFixtures.zetStatus(taakRepository.getEntityManager(), id, NotificatieStatus.IN_VERZENDING));
+        QuarkusTransaction.requiringNew()
+                .run(() -> NotificatieFixtures.zetStatus(
+                        taakRepository.getEntityManager(), id, NotificatieStatus.IN_VERZENDING));
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
         assertEquals(1, taken().getFirst().getPogingen());
@@ -433,7 +453,9 @@ class VerzendTaakHandlerTest {
     @Test
     void notifyWeigertHetAdres_eindigtInNietBezorgbaarMetOnbereikbaar() {
         when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(400).entity(NotifyNLFixtures.ADRES_AFGEWEZEN).build()));
+                .thenThrow(new WebApplicationException(Response.status(400)
+                        .entity(NotifyNLFixtures.ADRES_AFGEWEZEN)
+                        .build()));
         UUID id = aannameService.neemAan(decentraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -449,7 +471,8 @@ class VerzendTaakHandlerTest {
     @ParameterizedTest
     @ValueSource(ints = {429, 500, 503})
     void notifySysteemfout_steltUitZonderPoging(int status) {
-        when(sendAMessageApi.sendEmail(any())).thenThrow(new WebApplicationException(Response.status(status).build()));
+        when(sendAMessageApi.sendEmail(any()))
+                .thenThrow(new WebApplicationException(Response.status(status).build()));
         UUID id = aannameService.neemAan(decentraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -467,7 +490,8 @@ class VerzendTaakHandlerTest {
     void receiptTijdensHetWachtenNaEenTimeout_bezorgtZonderTweedeVerzending() {
         when(sendAMessageApi.sendEmail(any())).thenThrow(new ProcessingException("connection timed out"));
         when(getMessageDataApi.getMultipleMessagesStatus(any(), any(), any(), any(), any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.FORBIDDEN).build()));
+                .thenThrow(new WebApplicationException(
+                        Response.status(Response.Status.FORBIDDEN).build()));
         UUID id = aannameService.neemAan(decentraal());
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
         zetDue(taken().getFirst(), clock.nu().minusSeconds(1));
@@ -484,7 +508,10 @@ class VerzendTaakHandlerTest {
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         assertEquals(List.of(), taken(TaakSoort.VERZENDEN), "de verzendtaak is afgerond zonder tweede verzending");
-        assertEquals(1, taken(TaakSoort.BEZORGING_VASTSTELLEN).size(), "de bezorging uit de receipt wordt na de termijn vastgesteld");
+        assertEquals(
+                1,
+                taken(TaakSoort.BEZORGING_VASTSTELLEN).size(),
+                "de bezorging uit de receipt wordt na de termijn vastgesteld");
         verify(sendAMessageApi, times(1)).sendEmail(any());
     }
 
@@ -493,7 +520,8 @@ class VerzendTaakHandlerTest {
     @Test
     void notifyStoring_steltUit_enHerclaimZoektEerstOpReference() {
         when(sendAMessageApi.sendEmail(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.SERVICE_UNAVAILABLE).build()));
+                .thenThrow(new WebApplicationException(
+                        Response.status(Response.Status.SERVICE_UNAVAILABLE).build()));
         UUID id = aannameService.neemAan(decentraal());
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
@@ -504,9 +532,12 @@ class VerzendTaakHandlerTest {
 
         // De e-mail bleek toch aangeboden: NotifyNL kent de reference.
         UUID notifyId = UUID.randomUUID();
-        when(getMessageDataApi.getMultipleMessagesStatus(isNull(), isNull(), eq(poging.getId().toString()), isNull(), isNull()))
-                .thenReturn(new GetMultipleMessagesResponse().notifications(List.of(
-                        new GetOneMessageResponse().id(notifyId.toString()).reference(poging.getId().toString()))));
+        when(getMessageDataApi.getMultipleMessagesStatus(
+                        isNull(), isNull(), eq(poging.getId().toString()), isNull(), isNull()))
+                .thenReturn(new GetMultipleMessagesResponse()
+                        .notifications(List.of(new GetOneMessageResponse()
+                                .id(notifyId.toString())
+                                .reference(poging.getId().toString()))));
         zetDue(uitgesteld, clock.nu().minusSeconds(1));
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -557,9 +588,16 @@ class VerzendTaakHandlerTest {
         assertEquals(PogingStatus.BEZORGD, poging.getStatus());
         assertEquals(notifyId, poging.getNotifyId());
         assertEquals(List.of(), poging.getDuplicaatIds());
-        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
-                NotificatieStatus.BEZORGD), overgangen(id));
-        assertEquals(List.of(TaakSoort.BEZORGING_VASTSTELLEN), taken().stream().map(Taak::getTaakSoort).toList(),
+        assertEquals(
+                List.of(
+                        NotificatieStatus.AANGENOMEN,
+                        NotificatieStatus.IN_VERZENDING,
+                        NotificatieStatus.VERZONDEN,
+                        NotificatieStatus.BEZORGD),
+                overgangen(id));
+        assertEquals(
+                List.of(TaakSoort.BEZORGING_VASTSTELLEN),
+                taken().stream().map(Taak::getTaakSoort).toList(),
                 "geen navraag voor een al bezorgde notificatie, wel de vaststeltaak");
     }
 
@@ -572,21 +610,26 @@ class VerzendTaakHandlerTest {
             SendEmailRequest verzoek = aanroep.getArgument(0);
             receiptVerwerker.verwerk(notifyId, verzoek.getReference(), "delivered", clock.nu());
 
-            throw new WebApplicationException(Response.status(400).entity(NotifyNLFixtures.ADRES_AFGEWEZEN).build());
+            throw new WebApplicationException(Response.status(400)
+                    .entity(NotifyNLFixtures.ADRES_AFGEWEZEN)
+                    .build());
         });
         UUID id = aannameService.neemAan(decentraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
         assertEquals(NotificatieStatus.BEZORGD, notificatie(id).getStatus());
-        assertEquals(List.of(TaakSoort.BEZORGING_VASTSTELLEN), taken().stream().map(Taak::getTaakSoort).toList());
+        assertEquals(
+                List.of(TaakSoort.BEZORGING_VASTSTELLEN),
+                taken().stream().map(Taak::getTaakSoort).toList());
     }
 
     // Een 400 ligt aan het verzoek van het NMC en zegt niets over de partij: geen eindstatus en geen poging.
     @Test
     void centraal_profielserviceWijstHetVerzoekAf_steltUitZonderPoging() {
         when(profielApi.apiProfielserviceV1PartijPost(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build()));
+                .thenThrow(new WebApplicationException(
+                        Response.status(Response.Status.BAD_REQUEST).build()));
         UUID id = aannameService.neemAan(centraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -604,7 +647,8 @@ class VerzendTaakHandlerTest {
     @Test
     void centraal_profielserviceWeigertDeAanroep_steltUitZonderPoging() {
         when(profielApi.apiProfielserviceV1PartijPost(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.FORBIDDEN).build()));
+                .thenThrow(new WebApplicationException(
+                        Response.status(Response.Status.FORBIDDEN).build()));
         UUID id = aannameService.neemAan(centraal());
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -616,7 +660,8 @@ class VerzendTaakHandlerTest {
     @Test
     void notificatieInmiddelsGeannuleerd_rondtDeTaakAfZonderVerzending() {
         UUID id = aannameService.neemAan(decentraal());
-        QuarkusTransaction.requiringNew().run(() -> overgangsfunctie.voerUit(id, NotificatieStatus.GEANNULEERD, Reden.GEANNULEERD));
+        QuarkusTransaction.requiringNew()
+                .run(() -> overgangsfunctie.voerUit(id, NotificatieStatus.GEANNULEERD, Reden.GEANNULEERD));
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
@@ -645,7 +690,9 @@ class VerzendTaakHandlerTest {
         assertEquals(PogingStatus.GEPLAND, poging.getStatus());
         assertNull(poging.getNotifyId());
         assertTrue(taken(TaakSoort.RECONCILIEREN).isEmpty(), "geen navraagtaak van de worker die zijn claim kwijt is");
-        assertEquals(List.of(taakId), taken(TaakSoort.VERZENDEN).stream().map(Taak::getId).toList());
+        assertEquals(
+                List.of(taakId),
+                taken(TaakSoort.VERZENDEN).stream().map(Taak::getId).toList());
     }
 
     // Hetzelfde voor een uitkomst zonder verzending: de eindstatus is aan de worker die de taak nu heeft.
@@ -656,7 +703,8 @@ class VerzendTaakHandlerTest {
         when(profielApi.apiProfielserviceV1PartijPost(any())).thenAnswer(aanroep -> {
             claimDoorAndereWorker(taakId);
 
-            throw new WebApplicationException(Response.status(Response.Status.NOT_FOUND).build());
+            throw new WebApplicationException(
+                    Response.status(Response.Status.NOT_FOUND).build());
         });
 
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
@@ -670,41 +718,61 @@ class VerzendTaakHandlerTest {
     @Test
     void claimVerlorenVoorDeEersteTransactie_startGeenPoging() {
         UUID id = aannameService.neemAan(decentraal());
-        Taak taak = TaakFixtures.geclaimdEnVerloren(taakClaimer, taakRepository.getEntityManager(), TaakSoort.VERZENDEN);
+        Taak taak =
+                TaakFixtures.geclaimdEnVerloren(taakClaimer, taakRepository.getEntityManager(), TaakSoort.VERZENDEN);
 
-        assertThrows(TaakVerlorenException.class, () -> verzendTaakHandler.voerUit(taak, () -> { }));
+        assertThrows(TaakVerlorenException.class, () -> verzendTaakHandler.voerUit(taak, () -> {}));
 
         assertEquals(NotificatieStatus.AANGENOMEN, notificatie(id).getStatus());
-        assertTrue(QuarkusTransaction.requiringNew().call(() -> pogingRepository.findLaatsteVan(id)).isEmpty());
+        assertTrue(QuarkusTransaction.requiringNew()
+                .call(() -> pogingRepository.findLaatsteVan(id))
+                .isEmpty());
         verify(sendAMessageApi, never()).sendEmail(any());
     }
 
     private void claimDoorAndereWorker(UUID taakId) {
-        QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.claimDoorAndereWorker(taakRepository.getEntityManager(), TaakSoort.VERZENDEN, taakId));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.claimDoorAndereWorker(
+                        taakRepository.getEntityManager(), TaakSoort.VERZENDEN, taakId));
     }
 
     private static AannameOpdracht decentraal() {
-        return new AannameOpdracht(Regie.DECENTRAAL, Ontvanger.email(EMAIL), null, null, BerichtType.DEMO_TEMPLATE,
+        return new AannameOpdracht(
+                Regie.DECENTRAAL,
+                Ontvanger.email(EMAIL),
+                null,
+                null,
+                BerichtType.DEMO_TEMPLATE,
                 Map.of("naam", "Voorbeeld BV"));
     }
 
     private static AannameOpdracht centraal() {
-        return new AannameOpdracht(Regie.CENTRAAL, new Ontvanger(Ontvanger.Soort.KVK, "12345678"), "Gemeente Voorbeeld",
-                "Parkeervergunning", BerichtType.DEMO_TEMPLATE, Map.of("naam", "Voorbeeld BV"));
+        return new AannameOpdracht(
+                Regie.CENTRAAL,
+                new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
+                "Gemeente Voorbeeld",
+                "Parkeervergunning",
+                BerichtType.DEMO_TEMPLATE,
+                Map.of("naam", "Voorbeeld BV"));
     }
 
     private static PartijResponse partijMetEmail(String email) {
-        return new PartijResponse().partijId(UUID.randomUUID()).contactgegevens(List.of(
-                new ContactgegevenResponse().type(ContactgegevenResponse.TypeEnum.EMAIL).waarde(email).isDefault(true)));
+        return new PartijResponse()
+                .partijId(UUID.randomUUID())
+                .contactgegevens(List.of(new ContactgegevenResponse()
+                        .type(ContactgegevenResponse.TypeEnum.EMAIL)
+                        .waarde(email)
+                        .isDefault(true)));
     }
 
     private Poging poging(UUID notificatieId) {
-        return QuarkusTransaction.requiringNew().call(() -> pogingRepository.findLaatsteVan(notificatieId).orElseThrow());
+        return QuarkusTransaction.requiringNew()
+                .call(() -> pogingRepository.findLaatsteVan(notificatieId).orElseThrow());
     }
 
     private void zetDue(Taak taak, OffsetDateTime due) {
-        QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.zetDue(taakRepository.getEntityManager(), taak.getTaakSoort(), taak.getId(), due));
+        QuarkusTransaction.requiringNew()
+                .run(() ->
+                        TaakFixtures.zetDue(taakRepository.getEntityManager(), taak.getTaakSoort(), taak.getId(), due));
     }
 }

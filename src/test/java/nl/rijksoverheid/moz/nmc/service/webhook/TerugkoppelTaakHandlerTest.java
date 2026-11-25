@@ -1,5 +1,14 @@
 package nl.rijksoverheid.moz.nmc.service.webhook;
 
+import static io.restassured.RestAssured.given;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -11,10 +20,25 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceException;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
-import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
-import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
 import nl.rijksoverheid.moz.nmc.domain.Webhookpositie;
@@ -27,6 +51,7 @@ import nl.rijksoverheid.moz.nmc.service.taak.TaakClaimer;
 import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.LogVanger;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import nl.rijksoverheid.moz.nmc.testhelper.WebhookOntvanger;
@@ -37,32 +62,6 @@ import org.jose4j.keys.resolvers.JwksVerificationKeyResolver;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.time.Clock;
-import java.util.Base64;
-import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-
-import static io.restassured.RestAssured.given;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 
 // %test: nmc.webhook.bundel=3, nmc.webhook.max-mislukkingen=2, herpoging 30s, pauze 15m, feed max-pagina 10.
 @QuarkusTest
@@ -102,18 +101,18 @@ class TerugkoppelTaakHandlerTest {
         QuarkusMock.installMockForType(clock, Clock.class);
         when(aanroeplimiet.registreer(any())).thenReturn(true);
         WebhookOntvanger.AANROEPEN.clear();
-        WebhookOntvanger.TIJDENS_AANROEP = () -> { };
+        WebhookOntvanger.TIJDENS_AANROEP = () -> {};
         TestDatabase.leeg();
         QuarkusTransaction.requiringNew().run(() -> {
-            taakRepository.persist(new Taak(TaakSoort.TERUGKOPPELEN, NotificatieFixtures.DV_ID, null,
-                    clock.nu(), null, null));
+            taakRepository.persist(
+                    new Taak(TaakSoort.TERUGKOPPELEN, NotificatieFixtures.DV_ID, null, clock.nu(), null, null));
         });
     }
 
     // Ook na een falende assert: de hook is statisch en zou anders in een andere testklasse afgaan.
     @AfterEach
     void tearDown() {
-        WebhookOntvanger.TIJDENS_AANROEP = () -> { };
+        WebhookOntvanger.TIJDENS_AANROEP = () -> {};
         zetWebhook(null, null);
     }
 
@@ -127,8 +126,12 @@ class TerugkoppelTaakHandlerTest {
         TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
         assertEquals(2, WebhookOntvanger.AANROEPEN.size());
-        assertEquals(1, geleverdeEvents(List.of(WebhookOntvanger.AANROEPEN.getFirst())).size());
-        assertEquals(1, geleverdeEvents(List.of(WebhookOntvanger.AANROEPEN.getLast())).size());
+        assertEquals(
+                1,
+                geleverdeEvents(List.of(WebhookOntvanger.AANROEPEN.getFirst())).size());
+        assertEquals(
+                1,
+                geleverdeEvents(List.of(WebhookOntvanger.AANROEPEN.getLast())).size());
     }
 
     @Test
@@ -140,16 +143,21 @@ class TerugkoppelTaakHandlerTest {
         assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN));
         assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN));
 
-        assertEquals(2, WebhookOntvanger.AANROEPEN.size(), "twee bundels van ten hoogste drie; de derde ronde vond niets");
-        JsonNode feed = objectMapper.readTree(given().when().get(FEED).then().statusCode(200).extract().asString());
+        assertEquals(
+                2, WebhookOntvanger.AANROEPEN.size(), "twee bundels van ten hoogste drie; de derde ronde vond niets");
+        JsonNode feed = objectMapper.readTree(
+                given().when().get(FEED).then().statusCode(200).extract().asString());
         assertEquals(feed.get("events"), geleverdeEvents(WebhookOntvanger.AANROEPEN));
-        assertEquals(feed.get("cursor").asText(), WebhookOntvanger.AANROEPEN.getLast().cursor());
+        assertEquals(
+                feed.get("cursor").asText(),
+                WebhookOntvanger.AANROEPEN.getLast().cursor());
         assertEquals(Cursor.decodeer(feed.get("cursor").asText()), positie().getPositie());
 
         Taak taak = terugkoppeltaak();
         assertEquals(TaakStatus.OPEN, taak.getStatus());
         assertEquals(0, taak.getPogingen());
-        assertEquals(clock.nu().plusSeconds(10).toInstant(), taak.getDue().toInstant(), "na een lege ronde op het interval");
+        assertEquals(
+                clock.nu().plusSeconds(10).toInstant(), taak.getDue().toInstant(), "na een lege ronde op het interval");
     }
 
     // De taak plant zichzelf zijn hele levensduur opnieuw; fouten die verspreid over die tijd vallen
@@ -181,8 +189,12 @@ class TerugkoppelTaakHandlerTest {
 
         String autorisatie = WebhookOntvanger.AANROEPEN.getFirst().autorisatie();
         assertTrue(autorisatie.startsWith("Bearer "));
-        JsonWebKeySet jwks = new JsonWebKeySet(given().when().get("/api/nmc/v1/.well-known/jwks.json")
-                .then().statusCode(200).extract().asString());
+        JsonWebKeySet jwks = new JsonWebKeySet(given().when()
+                .get("/api/nmc/v1/.well-known/jwks.json")
+                .then()
+                .statusCode(200)
+                .extract()
+                .asString());
         JwtClaims claims = new JwtConsumerBuilder()
                 .setVerificationKeyResolver(new JwksVerificationKeyResolver(jwks.getJsonWebKeys()))
                 .setExpectedIssuer("https://mijnoverheidzakelijk.nl/nmc")
@@ -191,13 +203,18 @@ class TerugkoppelTaakHandlerTest {
                 .setRequireIssuedAt()
                 .build()
                 .processToClaims(autorisatie.substring("Bearer ".length()));
-        assertEquals(Duration.ofMinutes(5).toSeconds(),
+        assertEquals(
+                Duration.ofMinutes(5).toSeconds(),
                 claims.getExpirationTime().getValue() - claims.getIssuedAt().getValue());
         byte[] digest = MessageDigest.getInstance("SHA-256")
                 .digest(WebhookOntvanger.AANROEPEN.getFirst().body().getBytes(StandardCharsets.UTF_8));
-        assertEquals(Base64.getUrlEncoder().withoutPadding().encodeToString(digest),
-                claims.getStringClaimValue("body_sha256"), "de JWT bindt de body aan het token");
-        assertEquals(WebhookOntvanger.AANROEPEN.getFirst().cursor(), claims.getStringClaimValue("cursor"),
+        assertEquals(
+                Base64.getUrlEncoder().withoutPadding().encodeToString(digest),
+                claims.getStringClaimValue("body_sha256"),
+                "de JWT bindt de body aan het token");
+        assertEquals(
+                WebhookOntvanger.AANROEPEN.getFirst().cursor(),
+                claims.getStringClaimValue("cursor"),
                 "de cursor uit de header valt onder de handtekening");
         assertNotNull(claims.getJwtId(), "elke aanroep draagt een jti");
     }
@@ -225,8 +242,10 @@ class TerugkoppelTaakHandlerTest {
 
         List<WebhookOntvanger.Aanroep> aanroepen = WebhookOntvanger.AANROEPEN;
         assertEquals(3, aanroepen.size());
-        assertEquals(aanroepen.get(1).body(), aanroepen.get(2).body(), "dezelfde bundel opnieuw, vanaf dezelfde positie");
-        JsonNode feed = objectMapper.readTree(given().when().get(FEED).then().statusCode(200).extract().asString());
+        assertEquals(
+                aanroepen.get(1).body(), aanroepen.get(2).body(), "dezelfde bundel opnieuw, vanaf dezelfde positie");
+        JsonNode feed = objectMapper.readTree(
+                given().when().get(FEED).then().statusCode(200).extract().asString());
         assertEquals(feed.get("events"), geleverdeEvents(List.of(aanroepen.get(0), aanroepen.get(2))));
         assertEquals(0, positie().getMislukkingen());
     }
@@ -300,8 +319,9 @@ class TerugkoppelTaakHandlerTest {
         schrijfEvents(1);
         zetWebhook(ontvanger + "/204", null);
         OffsetDateTime tot = clock.nu().plusHours(2).withNano(0);
-        QuarkusTransaction.requiringNew().run(() -> webhookpositieRepository.bewaar(
-                new Webhookpositie(NotificatieFixtures.DV_ID, null, 4, tot), clock.nu()));
+        QuarkusTransaction.requiringNew()
+                .run(() -> webhookpositieRepository.bewaar(
+                        new Webhookpositie(NotificatieFixtures.DV_ID, null, 4, tot), clock.nu()));
 
         TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
@@ -312,13 +332,17 @@ class TerugkoppelTaakHandlerTest {
     // Opnieuw aanzetten begint dan weer bij het registratiemoment, niet bij de oude positie.
     @Test
     void geenWebhookMeer_rondtDeTaakAfEnWistDeLeverpositie() {
-        QuarkusTransaction.requiringNew().run(() -> webhookpositieRepository.bewaar(
-                new Webhookpositie(NotificatieFixtures.DV_ID, new Cursor(1, 1, 1), 0, null), clock.nu()));
+        QuarkusTransaction.requiringNew()
+                .run(() -> webhookpositieRepository.bewaar(
+                        new Webhookpositie(NotificatieFixtures.DV_ID, new Cursor(1, 1, 1), 0, null), clock.nu()));
 
         TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
         assertEquals(0, LeesHelper.aantalTaken(TaakSoort.TERUGKOPPELEN));
-        assertTrue(QuarkusTransaction.requiringNew().call(() -> webhookpositieRepository.findByIdOptional(NotificatieFixtures.DV_ID).isEmpty()));
+        assertTrue(QuarkusTransaction.requiringNew()
+                .call(() -> webhookpositieRepository
+                        .findByIdOptional(NotificatieFixtures.DV_ID)
+                        .isEmpty()));
     }
 
     // Een Dienstverlener die zich later registreert, krijgt niet de hele historie: de eerste ronde
@@ -332,7 +356,10 @@ class TerugkoppelTaakHandlerTest {
 
         assertEquals(0, WebhookOntvanger.AANROEPEN.size());
         assertNotNull(positie().getPositie(), "de registratieronde legt de kop van het log vast");
-        assertEquals(clock.nu().plusSeconds(10).toInstant(), terugkoppeltaak().getDue().toInstant(), "daarna op het interval");
+        assertEquals(
+                clock.nu().plusSeconds(10).toInstant(),
+                terugkoppeltaak().getDue().toInstant(),
+                "daarna op het interval");
 
         schrijfEvents(1);
         maakAanDeBeurt();
@@ -350,15 +377,15 @@ class TerugkoppelTaakHandlerTest {
         schrijfEvents(2);
         Cursor voor = positie().getPositie();
         UUID id = terugkoppeltaak().getId();
-        WebhookOntvanger.TIJDENS_AANROEP = () -> QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.TERUGKOPPELEN, id));
+        WebhookOntvanger.TIJDENS_AANROEP = () -> QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.TERUGKOPPELEN, id));
 
         TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
         assertEquals(1, WebhookOntvanger.AANROEPEN.size());
         assertEquals(voor, positie().getPositie(), "een verloren claim verzet de positie niet");
 
-        WebhookOntvanger.TIJDENS_AANROEP = () -> { };
+        WebhookOntvanger.TIJDENS_AANROEP = () -> {};
         OffsetDateTime verstreken = clock.nu().minusSeconds(1);
         QuarkusTransaction.requiringNew().run(() -> {
             TaakFixtures.zetLeaseTot(entityManager, TaakSoort.TERUGKOPPELEN, id, verstreken);
@@ -367,16 +394,20 @@ class TerugkoppelTaakHandlerTest {
         TaakRonde.draai(taakWorker, TaakSoort.TERUGKOPPELEN);
 
         assertEquals(2, WebhookOntvanger.AANROEPEN.size());
-        assertEquals(WebhookOntvanger.AANROEPEN.getFirst().body(), WebhookOntvanger.AANROEPEN.getLast().body(),
+        assertEquals(
+                WebhookOntvanger.AANROEPEN.getFirst().body(),
+                WebhookOntvanger.AANROEPEN.getLast().body(),
                 "dezelfde bundel opnieuw");
     }
 
     @Test
     void terugkoppeltaakZonderDienstverlener_wordtGeweigerd() {
-        assertThrows(PersistenceException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
-            taakRepository.persist(new Taak(TaakSoort.TERUGKOPPELEN, null, null, clock.nu(), null, null));
-            taakRepository.flush();
-        }));
+        assertThrows(
+                PersistenceException.class,
+                () -> QuarkusTransaction.requiringNew().run(() -> {
+                    taakRepository.persist(new Taak(TaakSoort.TERUGKOPPELEN, null, null, clock.nu(), null, null));
+                    taakRepository.flush();
+                }));
     }
 
     // Eén taak per dienstverlener, geclaimd met SKIP LOCKED en een lease: twee workers die tegelijk
@@ -412,11 +443,13 @@ class TerugkoppelTaakHandlerTest {
 
     @Test
     void tweedeTerugkoppeltaakVoorDezelfdeDienstverlener_wordtGeweigerd() {
-        assertThrows(PersistenceException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
-            taakRepository.persist(new Taak(TaakSoort.TERUGKOPPELEN, NotificatieFixtures.DV_ID, null,
-                    clock.nu(), null, null));
-            taakRepository.flush();
-        }));
+        assertThrows(
+                PersistenceException.class,
+                () -> QuarkusTransaction.requiringNew().run(() -> {
+                    taakRepository.persist(
+                            new Taak(TaakSoort.TERUGKOPPELEN, NotificatieFixtures.DV_ID, null, clock.nu(), null, null));
+                    taakRepository.flush();
+                }));
     }
 
     private ArrayNode geleverdeEvents(List<WebhookOntvanger.Aanroep> aanroepen) throws Exception {
@@ -432,8 +465,8 @@ class TerugkoppelTaakHandlerTest {
     private void schrijfEvents(int aantal) {
         QuarkusTransaction.requiringNew().run(() -> {
             for (int i = 0; i < aantal; i++) {
-                NotificatieFixtures.voegEventToe(entityManager, UUID.randomUUID(), 0, null, NotificatieStatus.AANGENOMEN,
-                        clock.nu());
+                NotificatieFixtures.voegEventToe(
+                        entityManager, UUID.randomUUID(), 0, null, NotificatieStatus.AANGENOMEN, clock.nu());
             }
         });
     }
@@ -456,8 +489,8 @@ class TerugkoppelTaakHandlerTest {
 
     private void zetPogingen(int pogingen) {
         UUID id = terugkoppeltaak().getId();
-        QuarkusTransaction.requiringNew().run(() ->
-                TaakFixtures.zetPogingen(entityManager, TaakSoort.TERUGKOPPELEN, id, pogingen));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.zetPogingen(entityManager, TaakSoort.TERUGKOPPELEN, id, pogingen));
     }
 
     // Laat de wachttijd en een eventuele pauze verstrijken.

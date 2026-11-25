@@ -1,12 +1,11 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import java.time.Duration;
+import java.time.OffsetDateTime;
 import nl.rijksoverheid.moz.nmc.config.AfleverbewijsConfig;
 import nl.rijksoverheid.moz.nmc.config.FeedConfig;
 import nl.rijksoverheid.moz.nmc.config.WissenConfig;
-
-import java.time.Duration;
-import java.time.OffsetDateTime;
 
 /**
  * De termijnen waarop het onderhoud gegevens opruimt. Na de wistermijn wordt de sleutel per notificatie gewist,

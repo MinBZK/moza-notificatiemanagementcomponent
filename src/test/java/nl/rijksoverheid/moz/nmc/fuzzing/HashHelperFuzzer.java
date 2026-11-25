@@ -1,9 +1,8 @@
 package nl.rijksoverheid.moz.nmc.fuzzing;
 
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
-import nl.rijksoverheid.moz.nmc.helper.HashHelper;
-
 import java.util.Optional;
+import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 
 /**
  * Standalone fuzz target for ClusterFuzzLite.
@@ -14,8 +13,7 @@ import java.util.Optional;
  */
 public class HashHelperFuzzer {
 
-    private static final HashHelper hashHelper =
-            new HashHelper(Optional.of("fuzz-pepper-niet-voor-productie"));
+    private static final HashHelper hashHelper = new HashHelper(Optional.of("fuzz-pepper-niet-voor-productie"));
 
     public static void fuzzerTestOneInput(FuzzedDataProvider data) {
         String input = data.consumeRemainingAsString();

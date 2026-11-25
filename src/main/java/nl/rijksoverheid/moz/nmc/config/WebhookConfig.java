@@ -3,10 +3,9 @@ package nl.rijksoverheid.moz.nmc.config;
 import io.smallrye.config.ConfigMapping;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import org.hibernate.validator.constraints.time.DurationMin;
-
 import java.time.Duration;
 import java.util.Optional;
+import org.hibernate.validator.constraints.time.DurationMin;
 
 /**
  * De instellingen van de terugkoppeltaak onder {@code nmc.webhook}. Een ongeldige waarde laat de

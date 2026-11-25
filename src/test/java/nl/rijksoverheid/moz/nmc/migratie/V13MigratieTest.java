@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.migratie;
 
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -8,9 +9,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import org.junit.jupiter.api.Test;
 
 /**
  * Draait V13 over een database waarin de controletaak vaststeltaken plande voordat de termijn bestond.
@@ -63,8 +62,9 @@ class V13MigratieTest extends MigratieTestBasis {
 
     private static void poging(Connection verbinding, UUID notificatieId, String status, OffsetDateTime receipt)
             throws SQLException {
-        try (PreparedStatement insert = verbinding.prepareStatement("INSERT INTO poging "
-                + "(id, notificatie_id, nummer, status, notify_id, verzonden_op, receipt_tijdstip) VALUES (?, ?, 1, ?, ?, ?, ?)")) {
+        try (PreparedStatement insert = verbinding.prepareStatement(
+                "INSERT INTO poging "
+                        + "(id, notificatie_id, nummer, status, notify_id, verzonden_op, receipt_tijdstip) VALUES (?, ?, 1, ?, ?, ?, ?)")) {
             insert.setObject(1, UUID.randomUUID());
             insert.setObject(2, notificatieId);
             insert.setString(3, status);
@@ -86,7 +86,8 @@ class V13MigratieTest extends MigratieTestBasis {
     }
 
     private static OffsetDateTime bezorgdOp(Connection verbinding, UUID notificatieId) throws SQLException {
-        try (PreparedStatement select = verbinding.prepareStatement("SELECT bezorgd_op FROM poging WHERE notificatie_id = ?")) {
+        try (PreparedStatement select =
+                verbinding.prepareStatement("SELECT bezorgd_op FROM poging WHERE notificatie_id = ?")) {
             select.setObject(1, notificatieId);
 
             try (ResultSet rij = select.executeQuery()) {

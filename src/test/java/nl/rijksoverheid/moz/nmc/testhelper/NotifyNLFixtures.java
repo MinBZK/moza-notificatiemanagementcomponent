@@ -1,9 +1,9 @@
 package nl.rijksoverheid.moz.nmc.testhelper;
 
-import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+
+import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 
 /** Antwoorden van NotifyNL en de stub voor zijn JWT, voor tests die de NotifyNL-client mocken. */
 public final class NotifyNLFixtures {
@@ -16,8 +16,7 @@ public final class NotifyNLFixtures {
     public static final String TEAM_KEY_FOUT = "{\"errors\":[{\"error\":\"BadRequestError\","
             + "\"message\":\"Can't send to this recipient using a team-only API key\"}],\"status_code\":400}";
 
-    private NotifyNLFixtures() {
-    }
+    private NotifyNLFixtures() {}
 
     /** Laat de gemockte factory een vaste header geven, zodat de adapter geen echte API-key nodig heeft. */
     public static void stubJwt(NotifyNLJwtFactory notifyNLJwtFactory) {

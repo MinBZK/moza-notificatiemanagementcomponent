@@ -1,7 +1,6 @@
 package nl.rijksoverheid.moz.nmc.client.profielservice;
 
 import jakarta.ws.rs.WebApplicationException;
-
 import java.util.Optional;
 
 /**

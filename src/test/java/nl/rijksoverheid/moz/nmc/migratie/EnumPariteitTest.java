@@ -1,9 +1,18 @@
 package nl.rijksoverheid.moz.nmc.migratie;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie_;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
@@ -18,16 +27,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collectors;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * De enums die de database met een {@code CHECK}-constraint of een partitie kent. Een nieuwe constante
@@ -54,7 +53,8 @@ class EnumPariteitTest {
     void notificatieStatus_elkeWaarde_isOpTeSlaan(NotificatieStatus status) {
         UUID id = UUID.randomUUID();
 
-        QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.voegNotificatieToe(entityManager, id, status, null));
+        QuarkusTransaction.requiringNew()
+                .run(() -> NotificatieFixtures.voegNotificatieToe(entityManager, id, status, null));
 
         assertEquals(status, LeesHelper.notificatie(id).getStatus());
     }
@@ -66,8 +66,9 @@ class EnumPariteitTest {
 
         QuarkusTransaction.requiringNew().run(() -> {
             NotificatieFixtures.voegNotificatieToe(entityManager, id, NotificatieStatus.TECHNISCH_MISLUKT, null);
-            entityManager.createQuery("UPDATE Notificatie SET " + Notificatie_.REDEN + " = :reden WHERE "
-                            + Notificatie_.ID + " = :id")
+            entityManager
+                    .createQuery("UPDATE Notificatie SET " + Notificatie_.REDEN + " = :reden WHERE " + Notificatie_.ID
+                            + " = :id")
                     .setParameter("reden", reden)
                     .setParameter("id", id)
                     .executeUpdate();
@@ -104,10 +105,11 @@ class EnumPariteitTest {
     @Test
     void taakSoort_heeftPreciesEenPartitiePerWaarde() {
         @SuppressWarnings("unchecked")
-        List<String> grenzen = QuarkusTransaction.requiringNew().call(() -> entityManager
-                .createNativeQuery("SELECT pg_get_expr(c.relpartbound, c.oid) FROM pg_inherits i "
-                        + "JOIN pg_class c ON c.oid = i.inhrelid WHERE i.inhparent = 'taak'::regclass")
-                .getResultList());
+        List<String> grenzen = QuarkusTransaction.requiringNew()
+                .call(() -> entityManager
+                        .createNativeQuery("SELECT pg_get_expr(c.relpartbound, c.oid) FROM pg_inherits i "
+                                + "JOIN pg_class c ON c.oid = i.inhrelid WHERE i.inhparent = 'taak'::regclass")
+                        .getResultList());
 
         Set<String> verwacht = Arrays.stream(TaakSoort.values())
                 .map(soort -> "FOR VALUES IN ('" + soort.name() + "')")

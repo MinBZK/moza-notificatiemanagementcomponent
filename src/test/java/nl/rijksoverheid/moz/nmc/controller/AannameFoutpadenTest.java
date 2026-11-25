@@ -1,5 +1,15 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import io.restassured.http.ContentType;
@@ -13,16 +23,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
-import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.not;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
-
 /**
  * De foutpaden die de centrale en de decentrale aanname elk apart dragen: een eigen catch in de
  * controller en eigen grenzen in het schema. Elke test draait daarom over beide paden.
@@ -32,7 +32,8 @@ class AannameFoutpadenTest {
 
     private static final String PROBLEM_JSON = "application/problem+json";
     // De versie uit het contract; ook een foutantwoord draagt hem.
-    private static final String API_VERSIE = ConfigProvider.getConfig().getValue("mp.openapi.info.version", String.class);
+    private static final String API_VERSIE =
+            ConfigProvider.getConfig().getValue("mp.openapi.info.version", String.class);
 
     enum Intake {
         CENTRAAL("/api/nmc/v1/centraal/notificaties", "identificatieNummer", """
@@ -53,7 +54,8 @@ class AannameFoutpadenTest {
         }
 
         String aanvraag(String berichtType, String berichtgegevens) {
-            return "{ %s \"berichtType\": \"%s\", \"berichtgegevens\": %s }".formatted(ontvangerVelden, berichtType, berichtgegevens);
+            return "{ %s \"berichtType\": \"%s\", \"berichtgegevens\": %s }"
+                    .formatted(ontvangerVelden, berichtType, berichtgegevens);
         }
 
         String aanvraagMetDvRef(String dvRef) {
@@ -87,12 +89,17 @@ class AannameFoutpadenTest {
     @EnumSource(Intake.class)
     void aanname_quotumBereikt_retourneert429MetEigenType(Intake intake) {
         TaakFixtures.zetQuotumPerDag(1);
-        given().contentType(ContentType.JSON).body(intake.aanvraag()).when().post(intake.pad).then().statusCode(202);
-
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(intake.aanvraag())
-                .when().post(intake.pad)
+                .when()
+                .post(intake.pad)
+                .then()
+                .statusCode(202);
+
+        given().contentType(ContentType.JSON)
+                .body(intake.aanvraag())
+                .when()
+                .post(intake.pad)
                 .then()
                 .statusCode(429)
                 .header("API-Version", API_VERSIE)
@@ -133,10 +140,10 @@ class AannameFoutpadenTest {
     @ParameterizedTest
     @EnumSource(Intake.class)
     void aanname_verplichtVeldVanDeOntvangerOntbreekt_retourneert400OpDatVeld(Intake intake) {
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(intake.aanvraagZonderVerplichtVeld())
-                .when().post(intake.pad)
+                .when()
+                .post(intake.pad)
                 .then()
                 .statusCode(400)
                 .contentType(PROBLEM_JSON)
@@ -148,10 +155,10 @@ class AannameFoutpadenTest {
     @ParameterizedTest
     @EnumSource(Intake.class)
     void aanname_onbekendBerichtType_retourneert400AlsProblem(Intake intake) {
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(intake.aanvraag("Bestaat Niet", "{}"))
-                .when().post(intake.pad)
+                .when()
+                .post(intake.pad)
                 .then()
                 .statusCode(400)
                 .contentType(PROBLEM_JSON)
@@ -164,13 +171,31 @@ class AannameFoutpadenTest {
     @ParameterizedTest
     @EnumSource(Intake.class)
     void aanname_zelfdeDvRefEnInhoudOpnieuw_retourneert202MetHetzelfdeNotificatieId(Intake intake) {
-        String eerste = given().contentType(ContentType.JSON).body(intake.aanvraagMetDvRef("order-1"))
-                .when().post(intake.pad).then().statusCode(202).extract().path("notificatieId");
+        String eerste = given().contentType(ContentType.JSON)
+                .body(intake.aanvraagMetDvRef("order-1"))
+                .when()
+                .post(intake.pad)
+                .then()
+                .statusCode(202)
+                .extract()
+                .path("notificatieId");
 
-        String tweede = given().contentType(ContentType.JSON).body(intake.aanvraagMetDvRef("order-1"))
-                .when().post(intake.pad).then().statusCode(202).extract().path("notificatieId");
-        String andere = given().contentType(ContentType.JSON).body(intake.aanvraagMetDvRef("order-2"))
-                .when().post(intake.pad).then().statusCode(202).extract().path("notificatieId");
+        String tweede = given().contentType(ContentType.JSON)
+                .body(intake.aanvraagMetDvRef("order-1"))
+                .when()
+                .post(intake.pad)
+                .then()
+                .statusCode(202)
+                .extract()
+                .path("notificatieId");
+        String andere = given().contentType(ContentType.JSON)
+                .body(intake.aanvraagMetDvRef("order-2"))
+                .when()
+                .post(intake.pad)
+                .then()
+                .statusCode(202)
+                .extract()
+                .path("notificatieId");
 
         assertEquals(eerste, tweede);
         assertNotEquals(eerste, andere);
@@ -183,20 +208,26 @@ class AannameFoutpadenTest {
         weigertOpVeld(intake, intake.aanvraagMetDvRef(""), "dvRef");
         weigertOpVeld(intake, intake.aanvraagMetDvRef("r".repeat(101)), "dvRef");
 
-        given().contentType(ContentType.JSON).body(intake.aanvraagMetDvRef("r".repeat(100)))
-                .when().post(intake.pad).then().statusCode(202);
+        given().contentType(ContentType.JSON)
+                .body(intake.aanvraagMetDvRef("r".repeat(100)))
+                .when()
+                .post(intake.pad)
+                .then()
+                .statusCode(202);
     }
 
     // De melding van de oorzaak kan gegevens uit de aanvraag of de database bevatten en gaat niet mee.
     @ParameterizedTest
     @EnumSource(Intake.class)
     void aanname_onverwachteFout_retourneert500ZonderDeOorzaakTeNoemen(Intake intake) {
-        doThrow(new IllegalStateException("verbinding met db-host-1 verbroken")).when(aannameService).neemAan(any(), any());
+        doThrow(new IllegalStateException("verbinding met db-host-1 verbroken"))
+                .when(aannameService)
+                .neemAan(any(), any());
 
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(intake.aanvraag())
-                .when().post(intake.pad)
+                .when()
+                .post(intake.pad)
                 .then()
                 .statusCode(500)
                 .header("API-Version", API_VERSIE)
@@ -207,10 +238,10 @@ class AannameFoutpadenTest {
     }
 
     private static void weigertOpVeld(Intake intake, String aanvraag, String veld) {
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(aanvraag)
-                .when().post(intake.pad)
+                .when()
+                .post(intake.pad)
                 .then()
                 .statusCode(400)
                 .contentType(PROBLEM_JSON)
