@@ -12,6 +12,8 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 public class Notificatie {
@@ -60,6 +62,18 @@ public class Notificatie {
 
     @Column(name = "kek_versie", updatable = false)
     private Integer kekVersie;
+
+    // De eigen referentie van de dienstverlener en de inhoud van de aanvraag, elk als HMAC met de pepper
+    // van pepperVersie; samen herkent de aanname er een herhaalde aanvraag aan. Leeg zonder referentie.
+    @Column(name = "dv_ref_hmac", updatable = false)
+    private byte[] dvRefHmac;
+
+    @Column(name = "payload_hash", updatable = false)
+    private byte[] payloadHash;
+
+    @Column(name = "pepper_versie", updatable = false)
+    @JdbcTypeCode(SqlTypes.SMALLINT)
+    private Integer pepperVersie;
 
     @Column(name = "template_id", length = 64)
     private String templateId;
@@ -154,6 +168,23 @@ public class Notificatie {
         this.regie = Objects.requireNonNull(regie, "regie is verplicht");
         this.dienstverlenerNaam = dienstverlener;
         this.dienst = dienst;
+    }
+
+    /**
+     * Legt de referentie van de dienstverlener vast. Alleen bij de aanname, vóór de eerste opslag.
+     *
+     * @param dvRefHmac     de HMAC over dienstverlener en referentie
+     * @param payloadHash   de HMAC over de inhoud van de aanvraag
+     * @param pepperVersie  de versie van de pepper waarmee beide zijn berekend
+     */
+    public void bewaarDvRef(byte[] dvRefHmac, byte[] payloadHash, int pepperVersie) {
+        this.dvRefHmac = Objects.requireNonNull(dvRefHmac, "dvRefHmac is verplicht");
+        this.payloadHash = Objects.requireNonNull(payloadHash, "payloadHash is verplicht");
+        this.pepperVersie = pepperVersie;
+    }
+
+    public byte[] getDvRefHmac() {
+        return dvRefHmac;
     }
 
     public String getTemplateId() {

@@ -13,6 +13,7 @@ import org.hibernate.type.StandardBasicTypes;
 
 import java.time.OffsetDateTime;
 import java.util.Collection;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -51,6 +52,10 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
     // kolommen op de entity updatable = false staan.
     private static final String WIS_SLEUTEL_SQL =
             "UPDATE notificatie SET sleutel_gewrapt = NULL, kek_versie = NULL WHERE id = ?1";
+
+    // Twee gelijktijdige aanvragen met dezelfde referentie: de tweede wacht hier tot de eerste gecommit
+    // is en vindt dan haar notificatie. De vergrendeling vervalt met de transactie.
+    private static final String VERGRENDEL_DV_REF_SQL = "SELECT pg_advisory_xact_lock(hashtextextended(?1, 0))";
 
     private static final String ZET_SLEUTEL_SQL =
             "UPDATE notificatie SET sleutel_gewrapt = ?2, kek_versie = ?3 WHERE id = ?1";
@@ -95,6 +100,25 @@ public class NotificatieRepository implements PanacheRepositoryBase<Notificatie,
                 .getResultList();
 
         return rijen.stream().map(rij -> new GewrapteSleutel((UUID) rij[0], (byte[]) rij[1], (Integer) rij[2])).toList();
+    }
+
+    /**
+     * Het id van de notificatie die deze dienstverlener eerder met dezelfde referentie en dezelfde inhoud
+     * aanbood. Houdt de referentie tot het einde van de transactie vast, zodat een gelijktijdige aanvraag
+     * met dezelfde referentie wacht en daarna de notificatie van deze transactie vindt.
+     *
+     * @param dvRefHmac   de HMAC over dienstverlener en referentie
+     * @param payloadHash de HMAC over de inhoud van de aanvraag
+     */
+    public Optional<UUID> vergrendelEnZoekOpDvRef(UUID dvId, byte[] dvRefHmac, byte[] payloadHash) {
+        getEntityManager().createNativeQuery(VERGRENDEL_DV_REF_SQL)
+                .setParameter(1, dvId + ":" + HexFormat.of().formatHex(dvRefHmac))
+                .getSingleResult();
+
+        return find(Notificatie_.DV_ID + " = ?1 AND " + Notificatie_.DV_REF_HMAC + " = ?2 AND "
+                        + Notificatie_.PAYLOAD_HASH + " = ?3", dvId, dvRefHmac, payloadHash)
+                .firstResultOptional()
+                .map(Notificatie::getId);
     }
 
     /** Wist de gewrapte sleutel en de KEK-versie, zonder de versie van de notificatie te verhogen. */

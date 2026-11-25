@@ -404,6 +404,15 @@ components:
           type: string
           minLength: 1
           description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template"
+        dvRef:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: >-
+            De eigen referentie van de Dienstverlener voor deze aanvraag. Een latere aanvraag met dezelfde
+            referentie en dezelfde inhoud maakt geen tweede notificatie: het antwoord is 202 met het
+            `notificatieId` van de eerste. Daarmee is een aanvraag veilig te herhalen als het antwoord niet
+            aankwam. Het NMC bewaart de referentie niet in leesbare vorm.
         berichtgegevens:
           type: object
           description: Templatevariabelen voor het bericht, ten hoogste 50, met namen tot 100 tekens en waarden tot 2000 tekens
@@ -434,6 +443,15 @@ components:
           type: string
           minLength: 1
           description: "Type bericht dat verstuurd wordt (bepaalt de te gebruiken template). Geaccepteerde berichttype(n) zijn:\n- Stuurgroep Agenda\n- Demo template"
+        dvRef:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: >-
+            De eigen referentie van de Dienstverlener voor deze aanvraag. Een latere aanvraag met dezelfde
+            referentie en dezelfde inhoud maakt geen tweede notificatie: het antwoord is 202 met het
+            `notificatieId` van de eerste. Daarmee is een aanvraag veilig te herhalen als het antwoord niet
+            aankwam. Het NMC bewaart de referentie niet in leesbare vorm.
         berichtgegevens:
           type: object
           description: Templatevariabelen voor het bericht, ten hoogste 50, met namen tot 100 tekens en waarden tot 2000 tekens

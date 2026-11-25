@@ -136,6 +136,7 @@ public class NotificatieVerwerkingFuzzer {
                 taken,
                 verzendbeleid,
                 Clock.systemUTC(),
+                new HashHelper(Optional.of("pepper-voor-de-fuzzer")),
                 Optional.empty());
         receiptVerwerker = new ReceiptVerwerker(pogingen, overgangsfunctie,
                 taken, new Vaststellingstermijn(TestConfig.vaststelling(Duration.ofDays(7), Duration.ofDays(1))), verzendbeleid,

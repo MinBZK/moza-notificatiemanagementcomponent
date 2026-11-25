@@ -57,7 +57,7 @@ Elk van deze regels voorkomt een fout die de build niet altijd vangt.
    `getEntityManager()` verlaat de repository niet.
 6. **Afleverstatussen komen at-least-once en ongeordend binnen.** Elke verwerking moet een
    herhaling en een oudere status verdragen zonder iets te veranderen.
-7. **Migraties zijn onveranderlijk.** Voeg een nieuwe toe; de volgende is **V16**.
+7. **Migraties zijn onveranderlijk.** Voeg een nieuwe toe; de volgende is **V17**.
 8. **Schrijf geen DTO met de hand en bewerk niets onder `target/generated-sources`.** Pas het
    contract aan en bouw opnieuw.
 9. **Zet geen JAX-RS-annotatie op een controllermethode.** Dan vervallen alle annotaties van
@@ -110,7 +110,7 @@ en `hash.pepper` falen pas bij het eerste gebruik. Lokaal horen ze in een niet-i
 |----------|---------------|
 | `notify.api-key` | `NotifyNLVerzendAdapter`: JWT voor NotifyNL |
 | `notify.callback.bearer-token` | `NotifyNLCallbackAuthFilter`: controle op de NotifyNL-callback |
-| `hash.pepper` | `HashHelper`: HMAC-SHA-256 om BSN/KVK/RSIN en e-mailadressen te pseudonimiseren voor het logboek |
+| `hash.pepper` | `HashHelper`: HMAC-SHA-256 om BSN/KVK/RSIN en e-mailadressen te pseudonimiseren voor het logboek, en voor de HMAC's van `dvRef` en de inhoud waaraan de aanname een herhaalde aanvraag herkent |
 | `nmc.kek.huidige-versie` | `ConfigKekProvider`: KEK-versie waarmee `Sleutelbeheer` nieuwe sleutels wrapt |
 | `nmc.kek.versie.<n>` | `ConfigKekProvider`: KEK per versie, base64 van 32 bytes; oudere versies zolang er rijen mee bestaan |
 | `nmc.webhook.jwt.private-key` | `WebhookSleutel`: RSA-sleutel (PKCS#8-PEM, minstens 2048 bits) voor de webhook-JWT |

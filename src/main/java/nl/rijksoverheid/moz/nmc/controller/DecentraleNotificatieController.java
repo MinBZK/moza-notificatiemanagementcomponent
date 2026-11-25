@@ -47,7 +47,7 @@ public class DecentraleNotificatieController implements DecentraleNotificatiesAp
         logboekContext.setDataSubjectType(BETROKKENE_TYPE_EMAIL);
 
         try {
-            return AannameResponse.notificatieAangenomen(aannameService.neemAan(opdracht(request)));
+            return AannameResponse.notificatieAangenomen(aannameService.neemAan(opdracht(request), request.getDvRef()));
         } catch (OnbekendBerichtTypeException e) {
             throw Problems.badRequest("Notificatie niet aangenomen.", e.getMessage());
         } catch (QuotumOverschredenException e) {

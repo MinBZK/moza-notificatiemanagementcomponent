@@ -45,7 +45,8 @@ public class CentraleNotificatieController implements CentraleNotificatiesApi {
         logboekContext.setDataSubjectType(String.valueOf(notificatieAanvraagRequest.getIdentificatieType()));
 
         try {
-            return AannameResponse.notificatieAangenomen(aannameService.neemAan(opdracht(notificatieAanvraagRequest)));
+            return AannameResponse.notificatieAangenomen(aannameService.neemAan(opdracht(notificatieAanvraagRequest),
+                    notificatieAanvraagRequest.getDvRef()));
         } catch (OnbekendBerichtTypeException e) {
             throw Problems.badRequest("Notificatie niet aangenomen.", e.getMessage());
         } catch (QuotumOverschredenException e) {

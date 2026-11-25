@@ -9,7 +9,7 @@ paths:
 - **Migraties zijn onveranderlijk na toepassing.** Wijzig een bestaande `V*.sql` nooit; voeg
   een nieuwe toe in `src/main/resources/db/migration/`. Flyway bewaart een checksum per script:
   een gewijzigd script laat de migratie falen op elke database waar het al gedraaid heeft, ook
-  op een previewcluster. De volgende is **V16**.
+  op een previewcluster. De volgende is **V17**.
 - **Houd de migratie en de entity gelijk.** In elk profiel staat
   `schema-management.strategy=validate`: wijkt een entity af van het schema, dan start de
   applicatie niet, en de testsuite dus ook niet.
@@ -29,15 +29,19 @@ paths:
 - **Een index op een gevulde tabel gaat met `CREATE INDEX CONCURRENTLY`.** Een gewone
   `CREATE INDEX` laat elke `INSERT`, `UPDATE` en `DELETE` wachten tot de index klaar is.
   `CONCURRENTLY` kan niet in een transactie, dus zo'n statement krijgt een eigen migratie met
-  `-- flyway:executeInTransaction=false`. Faalt de bouw halverwege, dan blijft er een `INVALID`
-  index achter die handmatig gedropt moet worden. V3 en V9 doen het bewust zonder, omdat die
+  ernaast een bestand `<naam>.sql.conf` met `executeInTransaction=false`; een commentaarregel in
+  het script zelf negeert Flyway. Flyway moet zijn vergrendeling dan op de sessie nemen
+  (`flyway.postgresql.transactional.lock=false`), anders wacht de bouw eindeloos op Flyways eigen
+  transactie. Faalt de bouw halverwege, dan blijft er een `INVALID` index achter die handmatig
+  gedropt moet worden. V3, V9 en V16 doen het bewust zonder, omdat die
   indexen er vóór de eerste productiedata waren; V15 omdat de retentiejob het register tot dan
   op zeven dagen hield.
 - **De databaserol heeft timeouts** (V15): `statement_timeout` 30s, `transaction_timeout` 1min,
   `idle_in_transaction_session_timeout` 30s. Ze gelden ook voor Flyway. Een migratie die langer
   kan duren zet ze uit met `SET LOCAL statement_timeout = 0` en `SET LOCAL transaction_timeout = 0`.
   Zonder transactie (`executeInTransaction=false`) doet `SET LOCAL` niets; gebruik daar
-  `SET statement_timeout = 0`, anders breekt het statement na 30 seconden af.
+  `SET statement_timeout = 0` en `SET transaction_timeout = 0`, anders breekt het statement na 30
+  seconden of een minuut af.
 - **Een `UPDATE` op `notificatie` in een migratie zet deferred triggercontroles klaar**, en
   zolang die openstaan weigert PostgreSQL DDL op die tabel ("pending trigger events"). Zet na
   zo'n update `SET CONSTRAINTS notificatie_overgang IMMEDIATE`, zoals V15 doet.

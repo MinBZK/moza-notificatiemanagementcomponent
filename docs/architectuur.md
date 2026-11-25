@@ -149,6 +149,18 @@ dienstverlener per dag (`dienstverlener.quotum_per_dag`, zonder waarde daar
 De controllers antwoorden 202 via `AannameResponse.notificatieAangenomen`; daarvoor genereert
 de `notificaties`-run in de pom met `returnResponse=true`.
 
+**Herhaalde aanvraag.** Met een `dvRef` in de aanvraag is de aanname idempotent op
+dienstverlener, referentie en inhoud: een herhaling geeft 202 met het bestaande id, maakt niets
+aan en telt niet voor het quotum. De referentie staat niet leesbaar op de rij:
+`notificatie.dv_ref_hmac` is een HMAC over dienstverlener en referentie en `payload_hash` een
+HMAC over de inhoud, elk met een eigen sleutel uit `hash.pepper` (`HashHelper.hmac`), met de
+pepperversie erbij. Twee gelijktijdige aanvragen met dezelfde referentie gaan na elkaar door
+een `pg_advisory_xact_lock`; de unieke index `notificatie_dv_ref_idx` is het vangnet. De
+herkenning geldt zolang de rij bestaat. Dezelfde referentie met een andere inhoud is een nieuwe
+notificatie. Een andere `hash.pepper` geeft andere HMAC's: een herhaling van een aanvraag van
+vóór die wijziging wordt dan niet herkend. `pepper_versie` staat op de rij voor een latere
+rotatie; er is nu één versie.
+
 **Grenzen op de aanvraag.** Het identificerend nummer is 8 of 9 cijfers; `dienstverlener` en
 `dienst` bevatten een leesbaar teken en geen regeleinde. De berichtgegevens zijn ten hoogste 50
 variabelen, met namen tot 100 en waarden tot 2000 tekens (`BerichtgegevensConstraintValidator`).

@@ -261,6 +261,9 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
 - **`POST /decentraal/notificaties`**: idem voor een meegegeven e-mailadres (geen
   Profielservice-lookup). Retourneert `202`, `400` bij een onbekend berichttype of
   een ongeldig e-mailadres, en `429` bij het quotum.
+  Beide aannames accepteren een optionele `dvRef`, de eigen referentie van de
+  Dienstverlener: een herhaalde aanvraag met dezelfde referentie en inhoud geeft `202`
+  met het bestaande `notificatieId` en maakt geen tweede notificatie.
 - **`GET /notificaties/events?cursor=&limiet=`**: de events van de eigen
   notificaties als CloudEvents, in commitvolgorde, met de cursor voor de volgende
   pagina. Zonder cursor vanaf het oudste beschikbare event. `400` bij een ongeldige

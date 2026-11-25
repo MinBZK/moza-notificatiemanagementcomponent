@@ -19,6 +19,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 
@@ -53,6 +54,11 @@ class AannameFoutpadenTest {
 
         String aanvraag(String berichtType, String berichtgegevens) {
             return "{ %s \"berichtType\": \"%s\", \"berichtgegevens\": %s }".formatted(ontvangerVelden, berichtType, berichtgegevens);
+        }
+
+        String aanvraagMetDvRef(String dvRef) {
+            return "{ %s \"dvRef\": \"%s\", \"berichtType\": \"Stuurgroep Agenda\", \"berichtgegevens\": { \"naam\": \"Voorbeeld BV\" } }"
+                    .formatted(ontvangerVelden, dvRef);
         }
 
         String aanvraag() {
@@ -155,11 +161,37 @@ class AannameFoutpadenTest {
         assertEquals(0, LeesHelper.aantalNotificaties());
     }
 
+    @ParameterizedTest
+    @EnumSource(Intake.class)
+    void aanname_zelfdeDvRefEnInhoudOpnieuw_retourneert202MetHetzelfdeNotificatieId(Intake intake) {
+        String eerste = given().contentType(ContentType.JSON).body(intake.aanvraagMetDvRef("order-1"))
+                .when().post(intake.pad).then().statusCode(202).extract().path("notificatieId");
+
+        String tweede = given().contentType(ContentType.JSON).body(intake.aanvraagMetDvRef("order-1"))
+                .when().post(intake.pad).then().statusCode(202).extract().path("notificatieId");
+        String andere = given().contentType(ContentType.JSON).body(intake.aanvraagMetDvRef("order-2"))
+                .when().post(intake.pad).then().statusCode(202).extract().path("notificatieId");
+
+        assertEquals(eerste, tweede);
+        assertNotEquals(eerste, andere);
+        assertEquals(2, LeesHelper.aantalNotificaties());
+    }
+
+    @ParameterizedTest
+    @EnumSource(Intake.class)
+    void aanname_dvRefLeegOfLangerDan100Tekens_retourneert400OpDvRef(Intake intake) {
+        weigertOpVeld(intake, intake.aanvraagMetDvRef(""), "dvRef");
+        weigertOpVeld(intake, intake.aanvraagMetDvRef("r".repeat(101)), "dvRef");
+
+        given().contentType(ContentType.JSON).body(intake.aanvraagMetDvRef("r".repeat(100)))
+                .when().post(intake.pad).then().statusCode(202);
+    }
+
     // De melding van de oorzaak kan gegevens uit de aanvraag of de database bevatten en gaat niet mee.
     @ParameterizedTest
     @EnumSource(Intake.class)
     void aanname_onverwachteFout_retourneert500ZonderDeOorzaakTeNoemen(Intake intake) {
-        doThrow(new IllegalStateException("verbinding met db-host-1 verbroken")).when(aannameService).neemAan(any());
+        doThrow(new IllegalStateException("verbinding met db-host-1 verbroken")).when(aannameService).neemAan(any(), any());
 
         given()
                 .contentType(ContentType.JSON)

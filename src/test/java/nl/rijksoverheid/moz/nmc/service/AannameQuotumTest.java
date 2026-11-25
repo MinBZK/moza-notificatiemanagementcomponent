@@ -14,6 +14,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -91,7 +92,7 @@ class AannameQuotumTest {
     private AannameService aannameService(Optional<Integer> standaardQuotum, Clock clock) {
         return new AannameService(mock(Overgangsfunctie.class), mock(Sleutelbeheer.class), () -> DV_ID,
                 dienstverlenerRepository, notificatieRepository, mock(TaakRepository.class), verzendbeleid(),
-                clock, standaardQuotum);
+                clock, mock(HashHelper.class), standaardQuotum);
     }
 
     private static Verzendbeleid verzendbeleid() {
