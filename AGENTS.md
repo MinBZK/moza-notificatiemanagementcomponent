@@ -95,8 +95,9 @@ podman compose up -d                    # PostgreSQL voor dev-mode (docker compo
   CI is het de workflow `Mutation testing`: informatief, geen verplichte check en geen drempel.
   De overlevende mutanten staan in de samenvatting van de run.
 - **De opmaak van de Java-code ligt vast**: Spotless met palantir-java-format (4 spaties,
-  120 tekens), gecontroleerd in `verify`. Draai `./mvnw spotless:apply` in plaats van opmaak met
-  de hand te corrigeren.
+  120 tekens), gecontroleerd in `verify`. CI en de push-hook draaien `spotless:check` eerst, zodat
+  een opmaakfout niet op de testsuite hoeft te wachten. Draai `./mvnw spotless:apply` in plaats
+  van opmaak met de hand te corrigeren.
 - **JaCoCo-drempels en excludes staan in `pom.xml`.** De excludes staan ook als
   `%test.quarkus.jacoco.excludes` in `application.properties`; `ConfiguratiePariteitTest`
   bewaakt dat ze gelijk blijven.

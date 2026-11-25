@@ -59,6 +59,12 @@ class VerifyVoorPushHookTest {
 
         uitvoerbaar(repo.resolve("mvnw"), """
                 #!/bin/sh
+                case "$*" in
+                    *spotless:check*)
+                        echo spotless >> "$VERIFY_TELLER"
+                        exit "${SPOTLESS_EXIT:-0}"
+                        ;;
+                esac
                 echo verify >> "$VERIFY_TELLER"
                 exit "${VERIFY_EXIT:-0}"
                 """);
@@ -104,6 +110,49 @@ class VerifyVoorPushHookTest {
         Uitkomst uitkomst = draai("git push origin HEAD");
 
         assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertEquals(1, verifyAanroepen());
+    }
+
+    @Test
+    void kalePush_zonderSpotlessInPom_slaatOpmaakcontroleOver() throws Exception {
+        Uitkomst uitkomst = draai("git push");
+
+        assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertEquals(0, aanroepen("spotless"));
+        assertEquals(1, verifyAanroepen());
+    }
+
+    @Test
+    void kalePush_metSpotless_controleertOpmaakEnDraaitDaarnaVerify() throws Exception {
+        metSpotlessInPom();
+
+        Uitkomst uitkomst = draai("git push");
+
+        assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertEquals(List.of("spotless", "verify"), Files.readAllLines(teller));
+    }
+
+    @Test
+    void kalePush_opmaakKloptNiet_blokkeertZonderVerify() throws Exception {
+        metSpotlessInPom();
+
+        Uitkomst uitkomst = draai("git push", Map.of("SPOTLESS_EXIT", "1"));
+
+        assertEquals(2, uitkomst.exitcode());
+        assertTrue(uitkomst.stderr().contains("./mvnw spotless:apply"), uitkomst.stderr());
+        assertEquals(1, aanroepen("spotless"));
+        assertEquals(0, verifyAanroepen());
+    }
+
+    @Test
+    void kalePush_naMislukteOpmaakcontrole_controleertOpnieuw() throws Exception {
+        metSpotlessInPom();
+
+        draai("git push", Map.of("SPOTLESS_EXIT", "1"));
+        Uitkomst tweede = draai("git push");
+
+        assertEquals(0, tweede.exitcode(), tweede.stderr());
+        assertEquals(2, aanroepen("spotless"));
         assertEquals(1, verifyAanroepen());
     }
 
@@ -421,7 +470,21 @@ class VerifyVoorPushHookTest {
     }
 
     private int verifyAanroepen() throws IOException {
-        return Files.exists(teller) ? Files.readAllLines(teller).size() : 0;
+        return aanroepen("verify");
+    }
+
+    // De nep-mvnw schrijft per aanroep het goal (spotless of verify) als regel in de teller.
+    private int aanroepen(String goal) throws IOException {
+        return Files.exists(teller)
+                ? (int) Files.readAllLines(teller).stream().filter(goal::equals).count()
+                : 0;
+    }
+
+    // De hook controleert de opmaak alleen als de pom van de commit Spotless kent.
+    private void metSpotlessInPom() throws Exception {
+        Files.writeString(repo.resolve("pom.xml"), "<artifactId>spotless-maven-plugin</artifactId>\n");
+        git("add", "pom.xml");
+        git("commit", "-q", "-m", "spotless");
     }
 
     private String git(String... argumenten) throws Exception {
