@@ -1,0 +1,30 @@
+# NMC als peer in de groep fsc-fieldlab (Directory van RINIS op cluster A), naast de peers op het MOZa
+# FSC-testnet. Eigen namespace, zodat de bestaande opzet ongemoeid blijft.
+apiVersion: openfsc.rinis.nl/v1
+kind: FSCInstallation
+metadata:
+  name: nmc
+  namespace: tnt-notificatiedienst--fsc-fieldlab
+spec:
+  groupID: fsc-fieldlab
+  peerID: "19000000000000000010"
+  organization: "Notificatiedienst (NMC)"
+  directory:
+    mode: External
+    external:
+      address: https://fsc-directory.cluster-a.fieldlab2026.nl:443
+      peerID: "07000000000000000001"
+      certPortal:
+        url: https://fsc-certportal.cluster-a.fieldlab2026.nl
+  managerAddress: https://nmc-fsc-manager.cluster-c.fieldlab2026.nl:443
+  publicGateway:
+    name: public-gateway
+    namespace: istio-gateway
+    sectionName: tls-passthrough
+  postgres:
+    storageClass: ceph-incluster
+  inways:
+    - name: nmc-inway
+      selfAddress: https://nmc-fsc-inway.cluster-c.fieldlab2026.nl:443
+  outways:
+    - name: nmc-outway

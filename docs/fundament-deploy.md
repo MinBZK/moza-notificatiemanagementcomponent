@@ -292,9 +292,11 @@ projecten van het fieldlab), project `notificatiedienst`. Het FBS zit in een eig
 
 ```text
 project notificatiedienst
-├─ nmc                  NMC + nmc-db (CNPG, PG 18); FSC-peer nmc (inway + outway)
-├─ mock-profielservice  moza-mock, als Profielservice; FSC-peer profielservice-mock (inway)
-└─ mock-notifynl        moza-mock, als NotifyNL; geen FSC (ook de echte NotifyNL is een publieke API)
+├─ nmc                  NMC + nmc-db (CNPG, PG 18); testnet-peer nmc (inway + outway)
+├─ mock-profielservice  moza-mock, als Profielservice; testnet-peer profielservice-mock (inway)
+├─ mock-notifynl        moza-mock, als NotifyNL; geen FSC (ook de echte NotifyNL is een publieke API)
+├─ fsc-fieldlab         fsc-fieldlab-peer van de NMC (19000000000000000010, inway + outway)
+└─ fsc-fieldlab-ps      fsc-fieldlab-peer van de Profielservice-mock (19000000000000000011, inway)
 ```
 
 Een namespace `X` van het project heet in Kubernetes **`tnt-notificatiedienst--X`**. De mocks zijn
@@ -351,10 +353,12 @@ centrale notificatie en de vaste BSN's dezelfde uitkomst als lokaal.
   veilige volumetypes). Beide charts voldoen.
 - Geen ResourceQuota, LimitRange of NetworkPolicies in de namespaces van het project.
 - Een projectlid heeft hier ruime rechten (ook buiten het project): blijf in de eigen namespaces.
-- **Geen OpenFSC.** De OpenFSC-plug-in installeert zelf cert-manager v1.17.2 onder dezelfde
-  releasenaam (`cert-manager`) en een tweede CNPG (release `cnpg`). Hier zou dat cert-manager voor
-  alle teams terugzetten, en Flux zet hem daarna weer terug: niet installeren zolang
-  miscellaneous#1289 open staat. Alleen de openfsc-operator zou genoeg zijn.
+- **OpenFSC:** de plug-in **OpenFSC (RINIS)** (`rinis-openfsc`, v1.0.7, 25 november 2026) staat erop:
+  de operator in `rinis-openfsc-system`, CRD `fscinstallations.openfsc.rinis.nl`, OpenFSC 2.9.1. Hij
+  installeert cert-manager en CNPG alleen als hun CRD's ontbreken, dus hier niet; vóór en na de
+  installatie vergeleken: cert-manager en CNPG ongewijzigd. **Niet** de plug-in `openfsc` van Fundament
+  zelf: die installeert altijd cert-manager v1.17.2 (zelfde release als die van Haven+) en een tweede
+  CNPG (1.25), zie miscellaneous#1289.
 
 ### FSC op het fieldlab: het MOZa FSC-testnet
 
@@ -431,8 +435,58 @@ dezelfde uitkomst als zonder FSC.
 Terug zonder FSC: `profielservice.url` op
 `http://moza-mock.tnt-notificatiedienst--mock-profielservice.svc:8080`. De peers kunnen blijven staan.
 
-De optionele `FSCInstallation` in beide charts (`fsc.enabled`, standaard uit) is voor als de
-openfsc-operator en `fsc-fieldlab` er wel zijn; op het fieldlab gebruiken we hem niet.
+De optionele `FSCInstallation` in beide charts (`fsc.enabled`, standaard uit) is voor de
+openfsc-operator van Fundament (`openfsc.fundament.io`); op het fieldlab gebruiken we hem niet.
+
+### FSC op het fieldlab: de groep fsc-fieldlab
+
+Sinds 25 november 2026 ook in de groep `fsc-fieldlab` van RINIS: Directory en certportal op cluster A,
+onze peers op cluster C via de plug-in OpenFSC (RINIS). De handleiding van RINIS:
+[user-guide-join-fieldlab-directory.md](https://code.digitaledienst.overheid.nl/openfsc/plugin/src/branch/main/docs/user-guide-join-fieldlab-directory.md).
+De testnet-peers blijven staan, zodat we terug kunnen.
+
+| Peer | Peer-ID | Namespace | Manager / inway |
+|---|---|---|---|
+| NMC | `19000000000000000010` | `tnt-notificatiedienst--fsc-fieldlab` | `nmc-fsc-manager` / `nmc-fsc-inway` |
+| Profielservice-mock | `19000000000000000011` | `tnt-notificatiedienst--fsc-fieldlab-ps` | `ps-fsc-manager` / `ps-fsc-inway` |
+| FBS (gepland) | `19000000000000000020` | in hun eigen project | `fbs-fsc-manager` |
+
+Peer-ID's van ons team beginnen met `19`; de Directory is `07000000000000000001`. Hostnamen onder
+`.cluster-c.fieldlab2026.nl`; de wildcard wijst naar `istio-gateway/public-gateway`.
+
+- **Installeren:** een eigen namespace per peer (`functl namespace create`), dan
+  `kubectl apply -f deploy/fsc-fieldlab/<peer>.yaml`. De operator maakt de database, de componenten, de
+  TLSRoutes op `public-gateway` (listener `tls-passthrough`) en vraagt de certificaten bij de certportal
+  aan. Klaar als `kubectl get fscinstallation -n <ns>` fase `Active` geeft.
+- **Certificaten:** via de certportal, zonder Secrets of trust anchor in te vullen. Volgens de
+  handleiding werkt die alleen binnen cluster A; vanaf cluster C werkt hij wel (de certportal is
+  publiek). Hij heeft geen authenticatie: alleen voor testen.
+- **Controller:** `kubectl -n <ns> port-forward svc/fsc-open-fsc-controller 8086:80`.
+- **Contracten** zoals bij het testnet, met één verschil: bij een service connection kies je als
+  outway-identificatie de outway die de Controller aanbiedt (niet `Domeinnaam`). Grant link met de
+  hash van de service connection (`$1$3$…`).
+- **De NMC via deze groep:** `profielservice.url` op
+  `http://fsc-outway-nmc-outway.tnt-notificatiedienst--fsc-fieldlab.svc/profielservice` (gewone HTTP,
+  poort 80). Op 25 november 2026 getest: KVK `68750110` geeft 200, `111222333` eindigt in
+  `NIET_BEZORGBAAR`, met `forwarding API request` in de outway van `…10` en `proxying request to API`
+  in de inway van `…11`.
+- **Verwijderen:** `kubectl -n <ns> delete fscinstallation <naam>`; de namespace blijft.
+
+#### Het FBS aansluiten
+
+1. **NMC (wij):** in de Controller van `…10` de service `nmc` met endpoint
+   `http://nmc.tnt-notificatiedienst--nmc.svc:8080` op inway `nmc-inway`, gepubliceerd naar de Directory.
+2. **FBS:** een eigen namespace en een FSCInstallation zoals `deploy/fsc-fieldlab/nmc.yaml`, met
+   `peerID: "19000000000000000020"`, een eigen `organization` (niet meer te wijzigen),
+   `managerAddress: https://fbs-fsc-manager.cluster-c.fieldlab2026.nl:443` en alleen een outway (een
+   inway alleen als het FBS zelf diensten in deze groep aanbiedt).
+3. **FBS:** in hun Controller toegang aanvragen tot service `nmc` van peer `19000000000000000010`.
+4. **NMC (wij):** het verzoek accepteren.
+5. **FBS:** grant link `nmc` op hun outway; daarna
+   `http://fsc-outway-<outway>.<namespace>.svc/nmc/api/nmc/v1/…`.
+
+Testen zonder echte mail: BSN `111222333`. De NotifyNL van het LPC bezorgt echt, dus niet de fictieve
+adressen van de Profielservice-mock gebruiken.
 
 ### Publiek adres
 
@@ -503,6 +557,8 @@ spec staat op `/q/openapi` (en `/q/swagger-ui/`). Met FSC blijven de paden gelij
 het begin van de URL: `http://<outway van het FBS>/nmc/api/nmc/v1/…`, met een grant link `nmc`. De
 NMC staat als service `nmc` van peer `00000000000000000050` in de Directory van het testnet; het FBS
 heeft een eigen peer in die groep nodig en vraagt toegang aan, die de NMC in zijn Controller accepteert.
+In de groep `fsc-fieldlab` is de NMC peer `19000000000000000010`; zie
+[Het FBS aansluiten](#het-fbs-aansluiten).
 
 ## Lokaal tegenover de gedeelde omgeving
 
@@ -528,12 +584,11 @@ Beantwoord op 23 november (zie [hierboven](#wat-er-op-het-cluster-staat)): cert-
 API-CRD's staan er, Kyverno dwingt restricted af, de storageClass is Ceph, en een projectlid mag een
 CNPG-`Cluster` aanmaken en bijwerken. Nog open:
 
-- Komt OpenFSC op `cluster-c` zonder de gedeelde cert-manager en CNPG te raken (alleen de operator,
-  of een plug-in waarin miscellaneous#1289 is opgelost)? Het OpenFSC-team werkt de plug-in bij.
-- FSC (`fsc-fieldlab`): waar komt de Directory, en wat zijn het adres, de peer-ID en de trust anchor?
-  Hoe komen we via de certportal aan certificaten, en wat hebben ze van ons nodig (peer-ID/OIN)? Tot
-  dan het MOZa FSC-testnet (zie [hierboven](#fsc-op-het-fieldlab-het-moza-fsc-testnet)).
-- Na het fieldlab: de peers `…0050` en `…0060` afmelden bij het testnet, of afspreken dat ze blijven.
+- Beantwoord op 25 november: OpenFSC staat op `cluster-c` via de plug-in OpenFSC (RINIS), zonder de
+  gedeelde cert-manager en CNPG te raken, en de groep `fsc-fieldlab` werkt vanaf cluster C (zie
+  [de groep fsc-fieldlab](#fsc-op-het-fieldlab-de-groep-fsc-fieldlab)).
+- Na het fieldlab: de peers `…0050` en `…0060` afmelden bij het testnet, of afspreken dat ze blijven;
+  idem voor `…10` en `…11` in `fsc-fieldlab`.
 
 ## Bekende beperkingen
 
@@ -544,7 +599,7 @@ CNPG-`Cluster` aanmaken en bijwerken. Nog open:
 - NotifyNL loopt niet via FSC; alleen de Profielservice.
 - De FSC Controller heeft geen login: wie de service kan bereiken, kan contracten tekenen. Op een
   gedeeld cluster hoort daar authenticatie voor; de operator stelt die nu niet in, en `chart/fsc-peer`
-  ook niet (`AUTHN none`). Niet publiek, maar zonder NetworkPolicy wel vanuit elke pod op het
+  ook niet (`AUTHN none`); de plug-in OpenFSC (RINIS) evenmin. Niet publiek, maar zonder NetworkPolicy wel vanuit elke pod op het
   cluster; dat geldt ook voor de outway (gewone HTTP op 8080), die dan namens onze peer aanroept.
 - `chart/fsc-peer` draait één replica per component en zet `DISABLE_CRL_CHECKS=true`, zoals de runbook
   van het testnet voorschrijft. Een ingetrokken testcertificaat wordt dus niet geweigerd.
