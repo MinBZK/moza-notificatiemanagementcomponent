@@ -1,11 +1,10 @@
 # Gedeelde Fundament-omgeving van het fieldlab (fundament-poc.nl, cluster-c, project notificatiedienst).
 # Fundament zet het project voor de namespace: tnt-notificatiedienst--<namespace>.
 image:
-  # ghcr.io/minbzk/moza-notificatiemanagementcomponent:pr-123 op 25 november 2026 (c15d0ca): #109 gemerged met
-  # de oude base 369a457, zoals het vorige image, plus de berichttypen Herinnering-Fieldlab en Magazijn-Fieldlab.
-  # Tijdelijke PR, omdat #109 conflicten heeft met zijn herschreven base; zie #123 voor wat er na het fieldlab
-  # moet. Daarvoor: pr-109, sha256:d7618dc0…61ecee9.
-  digest: sha256:f855d8bb70bcecda63727cdaef579e768fc646185f77e8135cddedc320164a1b
+  # ghcr.io/minbzk/moza-notificatiemanagementcomponent:pr-123 op 25 november 2026 (665735d): als c15d0ca plus de
+  # inzage in het logboek (feature/ldv-inzage-fieldlab), tegen de oude base 369a457. Zie #123 voor wat er na het
+  # fieldlab moet. Zonder inzage (1637-nmc-op-fundament): sha256:f855d8bb…20164a1b.
+  digest: sha256:d44aff27734f1abc07a5e5c65d4f197dcf60e6273766becbd3c26f79ee4055ce
 
 profielservice:
   # Via FSC, groep fsc-fieldlab (plugin OpenFSC (RINIS), Directory op cluster A): de outway van peer
