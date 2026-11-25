@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.ConnectException;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -18,12 +19,14 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class WebhookAdapterTest {
@@ -35,7 +38,7 @@ class WebhookAdapterTest {
     @BeforeEach
     void setUp() {
         client = Mockito.mock(WebhookClient.class);
-        when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().voidItem());
+        when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().nullItem());
         adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(5)));
     }
 
@@ -44,6 +47,28 @@ class WebhookAdapterTest {
         adapter.lever(URL, "Bearer jwt", "cursor", body());
 
         verify(client, times(1)).lever(URL, "Bearer jwt", "cursor", body());
+    }
+
+    // De body van het antwoord wordt niet gelezen: sluiten laat de client de rest weggooien.
+    @Test
+    void lever_2xxMetBody_sluitHetAntwoordZonderHetTeLezen() throws Exception {
+        InputStream antwoord = Mockito.mock(InputStream.class);
+        when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().item(antwoord));
+
+        adapter.lever(URL, "Bearer jwt", "cursor", body());
+
+        verify(antwoord).close();
+        verifyNoMoreInteractions(antwoord);
+    }
+
+    // De status is er al; een fout bij het sluiten maakt de levering niet ongedaan.
+    @Test
+    void lever_sluitenVanHetAntwoordFaalt_teltAlsAfgeleverd() throws Exception {
+        InputStream antwoord = Mockito.mock(InputStream.class);
+        Mockito.doThrow(new IOException("verbinding weg")).when(antwoord).close();
+        when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().item(antwoord));
+
+        assertDoesNotThrow(() -> adapter.lever(URL, "Bearer jwt", "cursor", body()));
     }
 
     // Eén poging: de terugkoppeltaak bepaalt wanneer het opnieuw gaat.

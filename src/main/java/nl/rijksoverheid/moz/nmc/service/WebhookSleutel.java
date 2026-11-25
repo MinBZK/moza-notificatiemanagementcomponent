@@ -20,6 +20,8 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
+import org.eclipse.microprofile.jwt.Claims;
 
 /**
  * De RSA-sleutel waarmee het NMC de bearer-JWT op elke webhook-aanroep ondertekent (RS256), en de
@@ -35,6 +37,9 @@ public class WebhookSleutel {
 
     /** De claim met de SHA-256 van de body (base64url), die token en inhoud aan elkaar bindt. */
     static final String BODY_HASH_CLAIM = "body_sha256";
+
+    /** De claim met de cursor uit de header {@code Nmc-Cursor}, zodat de header onder de handtekening valt. */
+    static final String CURSOR_CLAIM = "cursor";
 
     private final RSAPrivateCrtKey privateSleutel;
     private final String keyId;
@@ -77,15 +82,18 @@ public class WebhookSleutel {
     }
 
     /**
-     * Een vers ondertekende JWT met de webhook-URL als {@code aud} en de hash van de body als
-     * {@code body_sha256}, zodat een onderschepte token niet met een andere body te gebruiken is.
+     * Een vers ondertekende JWT met de webhook-URL als {@code aud}, de hash van de body als
+     * {@code body_sha256} en de cursor als {@code cursor}, zodat een onderschepte token niet met een andere
+     * body of cursor te gebruiken is, en een eigen {@code jti} per aanroep.
      */
-    String onderteken(String webhookUrl, String bodyHash) {
+    String onderteken(String webhookUrl, String bodyHash, String cursor) {
         Instant nu = clock.instant();
 
         return Jwt.issuer(issuer)
                 .audience(webhookUrl)
+                .claim(Claims.jti.name(), UUID.randomUUID().toString())
                 .claim(BODY_HASH_CLAIM, bodyHash)
+                .claim(CURSOR_CLAIM, cursor)
                 .issuedAt(nu)
                 .expiresAt(nu.plus(geldigheid))
                 .jws()

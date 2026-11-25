@@ -205,7 +205,11 @@ paths:
                 via `PUT /api/nmc/v1/notificaties/events/bevestiging`.
 
                 De bearer token is een JWT (RS256) met de webhook-URL als `aud`; controleer hem
-                met de sleutel uit `GET /api/nmc/v1/.well-known/jwks.json`.
+                met de sleutel uit `GET /api/nmc/v1/.well-known/jwks.json`. De claim `body_sha256` is de
+                SHA-256 van de body (base64url), `cursor` is gelijk aan de header `Nmc-Cursor` en `jti` is
+                uniek per aanroep.
+
+                Alleen de status van het antwoord telt; een body in het antwoord leest het NMC niet.
               security:
                 - webhookJwt: []
               parameters:

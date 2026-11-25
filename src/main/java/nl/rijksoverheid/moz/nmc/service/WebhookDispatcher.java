@@ -16,7 +16,8 @@ import java.util.List;
 
 /**
  * Levert een bundel events in één aanroep aan de webhook van een Dienstverlener, met een vers
- * ondertekende bearer-JWT ({@code aud} de webhook-URL, {@code body_sha256} de hash van de body) en in
+ * ondertekende bearer-JWT ({@code aud} de webhook-URL, {@code body_sha256} de hash van de body,
+ * {@code cursor} de cursor uit de header) en in
  * de header {@code Nmc-Cursor} de cursor van het laatste event in de bundel. Draait buiten elke
  * transactie.
  */
@@ -44,7 +45,9 @@ public class WebhookDispatcher {
         // De body gaat als tekst, zodat de hash in de JWT over precies de verzonden bytes gaat.
         String body = serialiseer(events);
 
-        webhookAdapter.lever(url, "Bearer " + webhookSleutel.onderteken(url, hash(body)), cursor.codeer(), body);
+        String gecodeerd = cursor.codeer();
+
+        webhookAdapter.lever(url, "Bearer " + webhookSleutel.onderteken(url, hash(body), gecodeerd), gecodeerd, body);
     }
 
     private String serialiseer(List<NotificatieStatusEvent> events) {

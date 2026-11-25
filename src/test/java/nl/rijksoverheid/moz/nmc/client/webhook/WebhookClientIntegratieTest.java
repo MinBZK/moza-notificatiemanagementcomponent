@@ -118,18 +118,28 @@ class WebhookClientIntegratieTest {
                 () -> adapter.lever("http://localhost:1/webhook", "Bearer jwt", "cursor", json(event(UUID.randomUUID()))));
     }
 
-    // Een webhook die blijft druppelen valt nooit onder de read-time-out; de totale termijn breekt hem af.
+    // De webhook antwoordt 200 en blijft daarna tien seconden body sturen. De levering telt zodra de status
+    // er is: de adapter wacht niet op de body en leest hem niet in, hoe groot of traag hij ook is.
     @Test
-    void druppelendeWebhook_wordtNaDeTermijnAfgebroken() {
-        WebhookAdapter adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(1)));
+    void webhookMetEenBodyDieBlijftKomen_teltAlsAfgeleverdZonderOpDeBodyTeWachten() {
+        WebhookAdapter adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(5)));
         long start = System.nanoTime();
 
-        WebhookLeveringException fout = assertThrows(WebhookLeveringException.class,
-                () -> adapter.lever(ontvanger + "/druppel", "Bearer jwt", "cursor", json(event(UUID.randomUUID()))));
+        assertDoesNotThrow(() -> adapter.lever(ontvanger + "/druppel", "Bearer jwt", "cursor", json(event(UUID.randomUUID()))));
 
-        assertTrue(fout.getMessage().contains("niet binnen"), fout.getMessage());
-        assertTrue(Duration.ofNanos(System.nanoTime() - start).compareTo(Duration.ofSeconds(5)) < 0,
-                "afgebroken vóór de webhook klaar was met druppelen");
+        assertTrue(Duration.ofNanos(System.nanoTime() - start).compareTo(Duration.ofSeconds(3)) < 0,
+                "klaar vóór de webhook klaar was met zijn body");
+    }
+
+    // Een antwoord buiten 2xx met een body: de status telt en de body blijft ongelezen.
+    @Test
+    void antwoordBuiten2xx_viaDeAdapter_wordtEenLeveringExceptionMetDeStatus() {
+        WebhookAdapter adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(5)));
+
+        WebhookLeveringException fout = assertThrows(WebhookLeveringException.class,
+                () -> adapter.lever(ontvanger + "/500", "Bearer jwt", "cursor", json(event(UUID.randomUUID()))));
+
+        assertTrue(fout.getMessage().contains("500"), fout.getMessage());
     }
 
     private String json(NotificatieStatusEvent... events) {

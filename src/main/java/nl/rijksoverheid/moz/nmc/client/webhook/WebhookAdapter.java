@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.client.webhook;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import io.quarkus.logging.Log;
 import io.vertx.core.http.HttpClosedException;
 import io.vertx.core.http.StreamResetException;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -9,6 +10,7 @@ import jakarta.ws.rs.WebApplicationException;
 import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.CompletionException;
@@ -16,7 +18,8 @@ import java.util.concurrent.TimeoutException;
 
 /**
  * Levert een bundel CloudEvents in één POST aan de webhook van een Dienstverlener. Eén poging: de
- * terugkoppeltaak bepaalt wanneer het opnieuw gaat.
+ * terugkoppeltaak bepaalt wanneer het opnieuw gaat. De levering telt zodra de status van het antwoord er
+ * is; de body van het antwoord wordt niet gelezen en niet in het geheugen gehouden.
  * <p>
  * Een fout aan de kant van de Dienstverlener (geen 2xx, geen verbinding) wordt een
  * {@link WebhookLeveringException}; een fout in het NMC zelf, zoals een serialisatiefout, gaat
@@ -47,16 +50,33 @@ public class WebhookAdapter {
         Objects.requireNonNull(url, "url is verplicht");
 
         try {
-            // De read-time-out van de client geldt tussen twee stukken antwoord; een webhook die blijft
-            // druppelen houdt de aanroep anders langer open dan de lease van de taak.
-            client.lever(url, autorisatie, cursor, body)
+            // De read-time-out van de client geldt tussen twee stukken antwoord; een webhook die zijn
+            // antwoord uitstelt houdt de aanroep anders langer open dan de lease van de taak.
+            sluit(client.lever(url, autorisatie, cursor, body)
                     .ifNoItem().after(timeout)
                     .failWith(() -> new WebhookLeveringException("Webhook antwoordde niet binnen " + timeout))
-                    .await().indefinitely();
+                    .await().indefinitely());
         } catch (WebApplicationException e) {
-            throw new WebhookLeveringException("Webhook antwoordde met HTTP " + e.getResponse().getStatus(), e);
+            int status = e.getResponse().getStatus();
+            e.getResponse().close();
+
+            throw new WebhookLeveringException("Webhook antwoordde met HTTP " + status, e);
         } catch (ProcessingException | CompletionException e) {
             throw vertaal(e);
+        }
+    }
+
+    // Sluiten zonder te lezen: de client gooit de rest van het antwoord dan weg in plaats van het te
+    // bewaren. Een antwoord zonder body heeft geen stream.
+    private static void sluit(InputStream antwoord) {
+        if (antwoord == null) {
+            return;
+        }
+
+        try {
+            antwoord.close();
+        } catch (IOException e) {
+            Log.debugf(e, "Het antwoord van de webhook kon niet worden gesloten; de levering is wel aangenomen");
         }
     }
 

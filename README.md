@@ -277,7 +277,8 @@ De huidige endpoints zitten onder `/api/nmc/v1`:
   anders `nmc.webhook.bundel`; ten hoogste `nmc.feed.max-pagina`), als
   `application/cloudevents-batch+json`. Elke aanroep draagt de header `Nmc-Cursor`
   met de cursor van het laatste event in de bundel en een bearer-JWT (RS256, `iss` het
-  NMC, `aud` de webhook-URL, `body_sha256` de SHA-256 van de body als base64url, 5 minuten
+  NMC, `aud` de webhook-URL, `body_sha256` de SHA-256 van de body als base64url, `cursor`
+  gelijk aan de header, een eigen `jti` per aanroep, 5 minuten
   geldig). Een `2xx` zet de leverpositie vooruit
   maar is geen bevestiging. Een mislukte levering komt later opnieuw vanaf dezelfde
   positie, met een oplopende wachttijd; na `webhook_max_mislukkingen` (default

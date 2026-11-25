@@ -16,9 +16,12 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
+import java.util.UUID;
 import org.jose4j.jws.JsonWebSignature;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -42,9 +45,10 @@ class WebhookSleutelTest {
                 .setExpectedIssuer("https://nmc.example.nl")
                 .setExpectedAudience(URL)
                 .build()
-                .processToClaims(sleutel.onderteken(URL, "hash-van-de-body"));
+                .processToClaims(sleutel.onderteken(URL, "hash-van-de-body", "cursor-1"));
         assertEquals(120, claims.getExpirationTime().getValue() - claims.getIssuedAt().getValue());
         assertEquals("hash-van-de-body", claims.getStringClaimValue(WebhookSleutel.BODY_HASH_CLAIM));
+        assertEquals("cursor-1", claims.getStringClaimValue(WebhookSleutel.CURSOR_CLAIM));
         assertEquals("sleutel-1", gepubliceerd.keyId());
     }
 
@@ -54,10 +58,27 @@ class WebhookSleutelTest {
         WebhookSleutel sleutel = sleutel(pem(rsa(2048)), "sleutel-1");
         JsonWebSignature jws = new JsonWebSignature();
 
-        jws.setCompactSerialization(sleutel.onderteken(URL, "hash-van-de-body"));
+        jws.setCompactSerialization(sleutel.onderteken(URL, "hash-van-de-body", "cursor-1"));
 
         assertEquals("sleutel-1", jws.getKeyIdHeaderValue());
         assertEquals("RS256", jws.getAlgorithmHeaderValue());
+    }
+
+    // Aan de jti herkent een ontvanger een token dat voor de tweede keer wordt aangeboden.
+    @Test
+    void onderteken_geeftElkeTokenEenEigenJti() throws Exception {
+        WebhookSleutel sleutel = sleutel(pem(rsa(2048)), "sleutel-1");
+
+        String eerste = jti(sleutel.onderteken(URL, "hash-van-de-body", "cursor-1"));
+        String tweede = jti(sleutel.onderteken(URL, "hash-van-de-body", "cursor-1"));
+
+        assertDoesNotThrow(() -> UUID.fromString(eerste));
+        assertNotEquals(eerste, tweede);
+    }
+
+    private static String jti(String token) throws Exception {
+        return new JwtConsumerBuilder().setSkipAllValidators().setDisableRequireSignature().setSkipSignatureVerification()
+                .build().processToClaims(token).getJwtId();
     }
 
     // Een env-var draagt de PEM vaak op één regel, zonder kop en voet.

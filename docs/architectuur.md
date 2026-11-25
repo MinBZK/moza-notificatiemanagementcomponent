@@ -325,8 +325,10 @@ Heeft een dienstverlener een `webhook_url` in het register, dan levert één
 `TERUGKOPPELEN`-taak per dienstverlener (`TerugkoppelTaakHandler`) de events na
 `webhookpositie` onder het watermerk van de feed als CloudEvents-batch aan die URL
 (`WebhookDispatcher`, `WebhookAdapter`), met de header `Nmc-Cursor` en een
-RS256-bearer-JWT met `body_sha256` (`WebhookSleutel`). Er is geen push per overgang: de
-webhook leest het eventlog.
+RS256-bearer-JWT met `body_sha256`, `cursor` en een eigen `jti` (`WebhookSleutel`). Er is geen
+push per overgang: de webhook leest het eventlog. De levering telt zodra de status van het
+antwoord er is; `WebhookClient` geeft de body als stream terug, zodat de rest-client hem niet
+buffert, en `WebhookAdapter` sluit die stream ongelezen.
 
 De taak (`notificatie_id` leeg) plant zichzelf steeds opnieuw. De eerste plant
 `ControleTaakHandler`, dus een nieuwe `webhook_url` gaat binnen `nmc.controle.interval`

@@ -195,6 +195,9 @@ class TerugkoppelTaakHandlerTest {
                 .digest(WebhookOntvanger.AANROEPEN.getFirst().body().getBytes(StandardCharsets.UTF_8));
         assertEquals(Base64.getUrlEncoder().withoutPadding().encodeToString(digest),
                 claims.getStringClaimValue("body_sha256"), "de JWT bindt de body aan het token");
+        assertEquals(WebhookOntvanger.AANROEPEN.getFirst().cursor(), claims.getStringClaimValue("cursor"),
+                "de cursor uit de header valt onder de handtekening");
+        assertNotNull(claims.getJwtId(), "elke aanroep draagt een jti");
     }
 
     @Test
