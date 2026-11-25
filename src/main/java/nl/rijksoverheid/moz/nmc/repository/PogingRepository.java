@@ -4,6 +4,7 @@ import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
+import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging_;
 
 import java.util.Optional;
@@ -39,6 +40,12 @@ public class PogingRepository implements PanacheRepositoryBase<Poging, UUID> {
     /** De poging met het hoogste nummer van een notificatie: de lopende of laatst afgeronde verzending. */
     public Optional<Poging> findLaatsteVan(UUID notificatieId) {
         return find(Poging_.NOTIFICATIE_ID + " = ?1", Sort.descending(Poging_.NUMMER), notificatieId).firstResultOptional();
+    }
+
+    /** Of een andere poging van de notificatie dan {@code pogingId} op bezorgd staat. */
+    public boolean heeftAndereBezorgdePoging(UUID notificatieId, UUID pogingId) {
+        return count(Poging_.NOTIFICATIE_ID + " = ?1 AND " + Poging_.ID + " <> ?2 AND " + Poging_.STATUS + " = ?3",
+                notificatieId, pogingId, PogingStatus.BEZORGD) > 0;
     }
 
     /** Leest de poging opnieuw uit de database, voorbij wat de persistence context al had. */

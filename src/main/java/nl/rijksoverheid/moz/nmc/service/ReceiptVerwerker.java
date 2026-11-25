@@ -29,9 +29,10 @@ import java.util.UUID;
  * Verwerkt een delivery receipt van NotifyNL: legt de uitkomst op de poging vast en voert de
  * bijbehorende overgang van de notificatie uit. Receipts komen at-least-once en ongeordend binnen;
  * een herhaalde of oudere receipt verandert niets. De volgorde komt uit het tijdstip van NotifyNL;
- * een tijdstip dat verder dan {@code nmc.receipt.klokmarge} vooruit ligt op de eigen klok wordt het
- * moment van ontvangst, omdat dat tijdstip het afleverbewijs is en een tijdstip ver in de toekomst
- * anders elke latere receipt op de poging zou blokkeren.
+ * een tijdstip dat verder dan {@code nmc.receipt.klokmarge} vooruit ligt op de eigen klok of vóór het
+ * verzenden van de poging wordt het moment van ontvangst. Dat tijdstip is het afleverbewijs: ver in de
+ * toekomst zou het elke latere receipt op de poging blokkeren, en vóór het verzenden zou het de
+ * vaststellingstermijn laten verstrijken voordat hij begon.
  */
 @ApplicationScoped
 public class ReceiptVerwerker {
@@ -69,7 +70,8 @@ public class ReceiptVerwerker {
      *                   geldt het NotifyNL-id
      * @param status     de afleverstatus volgens NotifyNL
      * @param opgetreden het tijdstip van de status volgens NotifyNL, dat de volgorde van de receipts
-     *                   bepaalt, begrensd op de eigen klok plus de klokmarge; null als de receipt er
+     *                   bepaalt, begrensd tussen het verzenden van de poging en de eigen klok, elk met de
+     *                   klokmarge; null als de receipt er
      *                   geen heeft, dan geldt het moment van ontvangst en gaat de receipt nooit vóór een
      *                   al vastgelegde uitkomst
      * @throws NotificatieNietGevondenException als geen poging bij deze receipt hoort
@@ -91,7 +93,9 @@ public class ReceiptVerwerker {
         pogingRepository.herlaad(poging);
         poging.registreerNotifyStatus(status);
         OffsetDateTime ontvangen = normaliseer(OffsetDateTime.now(clock));
-        OffsetDateTime tijdstip = opgetreden == null ? ontvangen : begrens(normaliseer(opgetreden), ontvangen, status, notifyId);
+        OffsetDateTime tijdstip = opgetreden == null
+                ? ontvangen
+                : begrens(normaliseer(opgetreden), ontvangen, poging.getVerzondenOp(), status, notifyId);
 
         if (poging.getNotifyId() == null) {
             // De receipt is er eerder dan de verzend-commit van de worker: de poging neemt het id over
@@ -139,6 +143,16 @@ public class ReceiptVerwerker {
                     || !vaststellingstermijn.binnen(poging.getBezorgdOp(), tijdstip))) {
             Log.infof("Receipt %s voor bezorgde notificatie %s geeft geen overgang (technische fout, andere poging of "
                     + "na de vaststellingstermijn); alleen op de poging vastgelegd", status, notificatie.getId());
+
+            return;
+        }
+
+        // Bezorgd blijft staan zolang een andere poging bezorgd is: na een herverzending kunnen beide
+        // pogingen zijn aangekomen, en een fout op de ene maakt de andere niet ongedaan.
+        if (notificatie.getStatus() == NotificatieStatus.BEZORGD && uitkomst.get() != PogingStatus.BEZORGD
+                && pogingRepository.heeftAndereBezorgdePoging(notificatie.getId(), poging.getId())) {
+            Log.infof("Receipt %s voor poging %d van bezorgde notificatie %s, waarvan een andere poging bezorgd is; alleen "
+                    + "op de poging vastgelegd", status, poging.getNummer(), notificatie.getId());
 
             return;
         }
@@ -227,15 +241,24 @@ public class ReceiptVerwerker {
                         "Geen poging gevonden voor NotifyNL-referentie " + notifyId + " (reference " + reference + ")"));
     }
 
-    private OffsetDateTime begrens(OffsetDateTime opgetreden, OffsetDateTime ontvangen, String status, UUID notifyId) {
-        if (!opgetreden.isAfter(ontvangen.plus(klokmarge))) {
-            return opgetreden;
+    // verzondenOp is null als de receipt er eerder is dan de verzend-commit; dan is er geen ondergrens.
+    private OffsetDateTime begrens(OffsetDateTime opgetreden, OffsetDateTime ontvangen, OffsetDateTime verzondenOp,
+                                   String status, UUID notifyId) {
+        if (opgetreden.isAfter(ontvangen.plus(klokmarge))) {
+            Log.warnf("Receipt %s voor NotifyNL-referentie %s heeft tijdstip %s, meer dan %s na de eigen klok; het moment "
+                    + "van ontvangst %s geldt", status, notifyId, opgetreden, klokmarge, ontvangen);
+
+            return ontvangen;
         }
 
-        Log.warnf("Receipt %s voor NotifyNL-referentie %s heeft tijdstip %s, meer dan %s na de eigen klok; het moment "
-                + "van ontvangst %s geldt", status, notifyId, opgetreden, klokmarge, ontvangen);
+        if (verzondenOp != null && opgetreden.isBefore(verzondenOp.minus(klokmarge))) {
+            Log.warnf("Receipt %s voor NotifyNL-referentie %s heeft tijdstip %s, meer dan %s voor het verzenden op %s; "
+                    + "het moment van ontvangst %s geldt", status, notifyId, opgetreden, klokmarge, verzondenOp, ontvangen);
 
-        return ontvangen;
+            return ontvangen;
+        }
+
+        return opgetreden;
     }
 
     // Zoals de database het tijdstip bewaart, zodat een herlezen waarde gelijk vergelijkt.

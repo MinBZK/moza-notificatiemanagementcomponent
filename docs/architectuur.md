@@ -280,7 +280,10 @@ en `created_at` als terugval; zonder tijdstip geldt het moment van ontvangst en 
 receipt nooit vóór een al vastgelegde uitkomst); een herhaalde of oudere receipt verandert
 niets. De poging wordt pas na het vergrendelen van de notificatie opnieuw gelezen, zodat een
 receipt die op de vergrendeling wachtte de uitkomst van de eerste ziet. Een faalreceipt voor
-een poging die niet meer de laatste is, geeft geen overgang. Een tussenstatus verandert
+een poging die niet meer de laatste is, geeft geen overgang, en een faalreceipt op een
+bezorgde notificatie ook niet zolang een andere poging bezorgd is. Een tijdstip dat meer dan
+`nmc.receipt.klokmarge` na de eigen klok of vóór het verzenden van de poging ligt, wordt het
+moment van ontvangst. Een tussenstatus verandert
 niets; een onbekende status komt op `poging.laatste_notify_status`, wordt op ERROR gelogd en
 verandert verder niets.
 

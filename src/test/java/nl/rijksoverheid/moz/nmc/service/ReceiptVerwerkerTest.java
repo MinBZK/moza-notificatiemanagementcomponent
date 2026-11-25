@@ -28,6 +28,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import java.util.logging.Level;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -150,6 +151,32 @@ class ReceiptVerwerkerTest {
 
         assertEquals(PogingStatus.PERMANENT_MISLUKT, poging(notifyId).getStatus());
         assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(notifyId).getStatus());
+    }
+
+    // Een tijdstip van ruim vóór het verzenden kan niet kloppen. Zou het gelden, dan is de
+    // vaststellingstermijn al om op het moment dat de receipt binnenkomt.
+    @Test
+    void verwerk_tijdstipVoorHetVerzenden_krijgtHetMomentVanOntvangst() {
+        UUID notifyId = verzondenNotificatie();
+        OffsetDateTime voorOntvangst = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+
+        receiptVerwerker.verwerk(notifyId, null, "delivered", T1.minusDays(30));
+
+        assertFalse(poging(notifyId).getReceiptTijdstip().isBefore(voorOntvangst));
+        assertFalse(poging(notifyId).getBezorgdOp().isBefore(voorOntvangst));
+        assertTrue(LeesHelper.enigeTaak(TaakSoort.BEZORGING_VASTSTELLEN).getDue().isAfter(voorOntvangst.plusDays(6)),
+                "de vaststellingstermijn loopt vanaf de ontvangst");
+    }
+
+    // De klok van NotifyNL mag binnen de klokmarge (%test: 5m) achterlopen op het eigen moment van verzenden.
+    @Test
+    void verwerk_tijdstipBinnenDeKlokmargeVoorHetVerzenden_blijftStaan() {
+        UUID notifyId = verzondenNotificatie();
+        OffsetDateTime netVoorVerzenden = poging(notifyId).getVerzondenOp().minusMinutes(4);
+
+        receiptVerwerker.verwerk(notifyId, null, "delivered", netVoorVerzenden);
+
+        assertEquals(netVoorVerzenden.toInstant(), poging(notifyId).getReceiptTijdstip().toInstant());
     }
 
     // De volgorde komt uit het tijdstip in de receipt, niet uit de aankomst.

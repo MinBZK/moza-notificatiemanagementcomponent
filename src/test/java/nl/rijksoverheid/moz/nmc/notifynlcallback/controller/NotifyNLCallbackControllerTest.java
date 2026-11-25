@@ -51,7 +51,10 @@ class NotifyNLCallbackControllerTest {
 
     // Een vast tijdstip in het verleden: moet herkenbaar verschillen van het moment waarop de test
     // de callback verwerkt, anders bewijst de assertie op het receipttijdstip niets.
-    private static final String COMPLETED_AT = "2025-01-01T12:00:02Z";
+    // Rond het moment van verzenden: een tijdstip van vóór het verzenden wordt het moment van ontvangst.
+    private static final OffsetDateTime CREATED_AT = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS);
+    private static final OffsetDateTime SENT_AT = CREATED_AT.plusSeconds(1);
+    private static final OffsetDateTime COMPLETED_AT = CREATED_AT.plusSeconds(2);
 
     // Moet overeenkomen met %test.notify.callback.bearer-token in application.properties
     private static final String CALLBACK_BEARER_TOKEN = "test-callback-token-niet-voor-productie";
@@ -235,7 +238,7 @@ class NotifyNLCallbackControllerTest {
 
         Poging poging = poging(notifyNlId);
         assertEquals(PogingStatus.BEZORGD, poging.getStatus());
-        assertEquals(OffsetDateTime.parse(COMPLETED_AT), poging.getReceiptTijdstip());
+        assertEquals(COMPLETED_AT, poging.getReceiptTijdstip());
     }
 
     // Zonder completed_at geldt sent_at, en zonder die created_at: een andere volgorde zou receipts
@@ -245,10 +248,10 @@ class NotifyNLCallbackControllerTest {
         UUID notifyNlId = verstuurNotificatie();
 
         stuurDeliveryReceipt("""
-                {"id": "%s", "status": "delivered", "created_at": "2025-01-01T12:00:00Z", "sent_at": "2025-01-01T12:00:01Z"}
-                """.formatted(notifyNlId));
+                {"id": "%s", "status": "delivered", "created_at": "%s", "sent_at": "%s"}
+                """.formatted(notifyNlId, CREATED_AT, SENT_AT));
 
-        assertEquals(OffsetDateTime.parse("2025-01-01T12:00:01Z"), poging(notifyNlId).getReceiptTijdstip());
+        assertEquals(SENT_AT, poging(notifyNlId).getReceiptTijdstip());
     }
 
     @Test
@@ -256,10 +259,10 @@ class NotifyNLCallbackControllerTest {
         UUID notifyNlId = verstuurNotificatie();
 
         stuurDeliveryReceipt("""
-                {"id": "%s", "status": "delivered", "created_at": "2025-01-01T12:00:00Z"}
-                """.formatted(notifyNlId));
+                {"id": "%s", "status": "delivered", "created_at": "%s"}
+                """.formatted(notifyNlId, CREATED_AT));
 
-        assertEquals(OffsetDateTime.parse("2025-01-01T12:00:00Z"), poging(notifyNlId).getReceiptTijdstip());
+        assertEquals(CREATED_AT, poging(notifyNlId).getReceiptTijdstip());
     }
 
     // Geen van de tijdstipvelden is verplicht; een 400 zou de receipt na vijf herhalingen kosten.
@@ -328,11 +331,11 @@ class NotifyNLCallbackControllerTest {
                   "to": "test@example.nl",
                   "status": "%s",
                   "notification_type": "email",
-                  "created_at": "2025-01-01T12:00:00Z",
-                  "sent_at": "2025-01-01T12:00:01Z",
+                  "created_at": "%s",
+                  "sent_at": "%s",
                   "completed_at": "%s"
                 }
-                """.formatted(notifyNlId, status, COMPLETED_AT);
+                """.formatted(notifyNlId, status, CREATED_AT, SENT_AT, COMPLETED_AT);
     }
 
     private static PartijResponse partijMetEmail(String email) {

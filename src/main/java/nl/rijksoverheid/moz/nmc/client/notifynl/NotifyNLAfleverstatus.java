@@ -20,7 +20,8 @@ public record NotifyNLAfleverstatus(String status, OffsetDateTime tijdstip) {
 
     /**
      * De tussenstatussen van NotifyNL leveren geen uitkomst op. Een onbekende status wordt op ERROR
-     * gelogd en levert ook niets op, zodat hij niet als een bekende uitkomst landt.
+     * gelogd en levert ook geen uitkomst op, zodat hij niet als een bekende uitkomst landt; de aanroeper
+     * bewaart de status zelf op de poging.
      */
     public static Optional<PogingStatus> naarUitkomst(String status, UUID notifyId) {
         return switch (status.toLowerCase(Locale.ROOT)) {
@@ -33,7 +34,7 @@ public record NotifyNLAfleverstatus(String status, OffsetDateTime tijdstip) {
                 yield Optional.empty();
             }
             default -> {
-                Log.errorf("Onbekende NotifyNL-status '%s' ontvangen voor NotifyNL-referentie %s; niets vastgelegd. "
+                Log.errorf("Onbekende NotifyNL-status '%s' ontvangen voor NotifyNL-referentie %s; geen uitkomst vastgelegd. "
                         + "Controleer of NotifyNL nieuwe statussen is gaan sturen", status, notifyId);
                 yield Optional.empty();
             }
