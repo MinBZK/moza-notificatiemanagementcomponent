@@ -66,6 +66,35 @@ spec:
               value: {{ required "feed.source is verplicht" .Values.feed.source | quote }}
             - name: LOGBOEKDATAVERWERKING_ENABLED
               value: {{ .Values.logboekdataverwerking.enabled | quote }}
+            - name: LOGBOEKDATAVERWERKING_WRITE_FAILURE_POLICY
+              value: {{ .Values.logboekdataverwerking.writeFailurePolicy | quote }}
+            {{- with .Values.logboekdataverwerking.postgres }}
+            {{- if .create }}
+            - name: LOGBOEKDATAVERWERKING_DBMS
+              value: postgresql
+            - name: LOGBOEKDATAVERWERKING_POSTGRESQL_URL
+              value: "jdbc:postgresql://{{ .name }}-rw:5432/{{ .database }}"
+            - name: LOGBOEKDATAVERWERKING_POSTGRESQL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .name }}-app
+                  key: username
+            - name: LOGBOEKDATAVERWERKING_POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .name }}-app
+                  key: password
+            - name: LOGBOEKDATAVERWERKING_POSTGRESQL_TABLE
+              value: {{ .table | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.logboekdataverwerking.inzage }}
+            {{- if not .Values.logboekdataverwerking.postgres.create }}
+            {{- fail "logboekdataverwerking.inzage vraagt logboekdataverwerking.postgres.create" }}
+            {{- end }}
+            - name: NMC_LOGBOEK_INZAGE_ENABLED
+              value: "true"
+            {{- end }}
             {{- range list "NOTIFY_API_KEY" "NOTIFY_CALLBACK_BEARER_TOKEN" "HASH_PEPPER" "NMC_WEBHOOK_JWT_PRIVATE_KEY" }}
             {{- include "nmc.geheim" (dict "naam" . "secret" $.Values.secretName) | nindent 12 }}
             {{- end }}

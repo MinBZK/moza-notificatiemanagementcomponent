@@ -31,6 +31,11 @@ tags:
     description: >-
       De publieke sleutels waarmee een Dienstverlener de JWT op een webhook-aanroep van
       het NMC controleert.
+  - name: Logboek
+    description: >-
+      Inzage in het Logboek Dataverwerkingen per betrokkene, bijvoorbeeld bij een verzoek tot
+      inzage (AVG art. 15). Demonstratie voor het Fundament Fieldlab: niet afgeschermd en
+      standaard uit (`nmc.logboek.inzage.enabled`).
 
 paths:
   /api/nmc/v1/centraal/notificaties:
@@ -322,6 +327,79 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JsonWebKeySet'
+
+  /api/nmc/v1/logboek/verwerkingen:
+    get:
+      operationId: logboekVerwerkingenOpvragen
+      summary: Verwerkingen van één betrokkene uit het Logboek Dataverwerkingen
+      description: |
+        Geeft per verwerking van persoonsgegevens van de betrokkene uit `X-Betrokkene` één
+        regel, met één uitkomst volgens de leesregel van het logboek: een logregel op `UNSET`
+        zonder ERROR-child is geslaagd; een logregel op `ERROR`, of met een ERROR-child, is
+        mislukt. Nieuwste verwerking eerst. Zelfde vorm als de inzage van het berichtenmagazijn
+        van het FBS, plus het type `EMAIL` voor decentrale notificaties.
+
+        Het logboek bewaart de betrokkene als sleutel-hash; het NMC hasht de waarde uit de
+        header op dezelfde manier en zoekt daarop. De inzage zelf wordt ook als verwerking in
+        het logboek vastgelegd. Staat de inzage uit, dan 404.
+      tags:
+        - Logboek
+      parameters:
+        - name: X-Betrokkene
+          in: header
+          required: true
+          description: |
+            Betrokkene in formaat `<TYPE>:<WAARDE>`, bijvoorbeeld `BSN:999990020` of
+            `EMAIL:iemand@example.nl`. Als header, zodat persoonsgegevens niet in URL en
+            toegangslogs verschijnen.
+          schema:
+            type: string
+            pattern: '^(BSN:[0-9]{9}|RSIN:[0-9]{9}|KVK:[0-9]{8}|EMAIL:[^@\s]+@[^@\s]+\.[^@\s]+)$'
+            maxLength: 260
+        - name: van
+          in: query
+          required: false
+          description: Alleen verwerkingen vanaf dit tijdstip (inclusief).
+          schema:
+            type: string
+            format: date-time
+        - name: tot
+          in: query
+          required: false
+          description: Alleen verwerkingen vóór dit tijdstip (exclusief).
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: De verwerkingen van de betrokkene; een lege lijst als er geen zijn.
+          headers:
+            API-Version:
+              schema:
+                type: string
+              description: Versie van de API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogboekVerwerkingen'
+        '400':
+          description: Ongeldige of ontbrekende `X-Betrokkene`, of een ongeldig tijdstip
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: De inzage staat uit
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Het logboek kon niet worden gelezen
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 
 components:
   securitySchemes:
@@ -657,6 +735,52 @@ components:
           type: string
           description: De publieke exponent, base64url
           example: AQAB
+
+    LogboekVerwerkingen:
+      type: object
+      required: [betrokkene, verwerkingen]
+      properties:
+        betrokkene:
+          $ref: '#/components/schemas/LogboekBetrokkene'
+        verwerkingen:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogboekVerwerking'
+
+    LogboekBetrokkene:
+      type: object
+      required: [type, waarde]
+      description: De betrokkene uit `X-Betrokkene`, zoals gevraagd.
+      properties:
+        type:
+          type: string
+          enum: [BSN, RSIN, KVK, EMAIL]
+        waarde:
+          type: string
+
+    LogboekVerwerking:
+      type: object
+      required: [tijdstip, handeling, uitkomst]
+      properties:
+        tijdstip:
+          type: string
+          format: date-time
+          description: Begin van de verwerking.
+        handeling:
+          type: string
+          description: >-
+            Wat het NMC deed, zoals `notificatieAannemen`, `decentraleNotificatieAannemen` of
+            `logboekInzien`.
+          example: notificatieAannemen
+        verwerkingsactiviteit:
+          type: string
+          description: Identificatie van de verwerkingsactiviteit in het verwerkingsregister.
+        uitkomst:
+          type: string
+          enum: [geslaagd, mislukt]
+        foutcategorie:
+          type: string
+          description: Bij een mislukte verwerking de soort fout, zonder details uit het verzoek.
 
     Problem:
       type: object

@@ -1,14 +1,18 @@
 # Gedeelde Fundament-omgeving van het fieldlab (fundament-poc.nl, cluster-c, project notificatiedienst).
 # Fundament zet het project voor de namespace: tnt-notificatiedienst--<namespace>.
 image:
-  # ghcr.io/minbzk/moza-notificatiemanagementcomponent:pr-109 op 23 november 2026 (#109, eabd479): #66 plus
-  # instelbare NotifyNL-template-ID's (nmc.beleid.<berichttype>.template-id).
-  digest: sha256:d7618dc0ecf2549ae6350919166a238c7085a1315748a25c7e3e7048e61ecee9
+  # ghcr.io/minbzk/moza-notificatiemanagementcomponent:pr-123 op 25 november 2026 (c15d0ca): #109 gemerged met
+  # de oude base 369a457, zoals het vorige image, plus de berichttypen Herinnering-Fieldlab en Magazijn-Fieldlab.
+  # Tijdelijke PR, omdat #109 conflicten heeft met zijn herschreven base; zie #123 voor wat er na het fieldlab
+  # moet. Daarvoor: pr-109, sha256:d7618dc0…61ecee9.
+  digest: sha256:f855d8bb70bcecda63727cdaef579e768fc646185f77e8135cddedc320164a1b
 
 profielservice:
-  # Via FSC (#1661): de eigen outway, grant link `profielservice` naar de peer profielservice-mock op het
-  # MOZa FSC-testnet. Zonder FSC: http://moza-mock.tnt-notificatiedienst--mock-profielservice.svc:8080
-  url: http://nmc-fscoutway:8080/profielservice
+  # Via FSC, groep fsc-fieldlab (plugin OpenFSC (RINIS), Directory op cluster A): de outway van peer
+  # 19000000000000000010 in tnt-notificatiedienst--fsc-fieldlab, grant link `profielservice` naar peer
+  # 19000000000000000011. Terug naar het MOZa FSC-testnet (#1661): http://nmc-fscoutway:8080/profielservice.
+  # Zonder FSC: http://moza-mock.tnt-notificatiedienst--mock-profielservice.svc:8080
+  url: http://fsc-outway-nmc-outway.tnt-notificatiedienst--fsc-fieldlab.svc/profielservice
 notify:
   # De demo-NotifyNL van het LPC (Logius), met dezelfde key als ZAD; Logius laat alleen het egress-IP van
   # cluster-c door. De templates in BerichtType zijn van deze NotifyNL. De receipt-callback staat in het
@@ -52,6 +56,16 @@ gateway:
     - name: ps-fscinway
       hostname: ps-fscinway.cluster-c.fieldlab2026.nl
       namespace: tnt-notificatiedienst--mock-profielservice
+
+logboekdataverwerking:
+  enabled: true
+  # fail-open tijdens het fieldlab: de PostgreSQL-backend van het Logboek is hier nieuw, en een schrijffout
+  # zou anders de aanname van een notificatie laten falen (500). Na het fieldlab terug naar fail-closed.
+  writeFailurePolicy: fail-open
+  postgres:
+    create: true
+  # Voor de demo: de inzage per betrokkene, open via nmc.cluster-c.fieldlab2026.nl, naast die van het FBS.
+  inzage: true
 
 postgres:
   # De CloudNativePG-operator op dit cluster komt van Haven+, met deze catalogus (PG 15 tot en met 18).
