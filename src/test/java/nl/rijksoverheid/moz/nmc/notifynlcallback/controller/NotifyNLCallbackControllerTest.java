@@ -265,6 +265,20 @@ class NotifyNLCallbackControllerTest {
         assertEquals(CREATED_AT, poging(notifyNlId).getReceiptTijdstip());
     }
 
+    // De database bewaart microseconden in UTC; een tijdstip met nanoseconden en een andere offset komt
+    // als hetzelfde moment op de poging.
+    @Test
+    void verwerkAfleverstatus_tijdstipMetNanosecondenEnOffset_legtHetzelfdeMomentVast() {
+        UUID notifyNlId = verstuurNotificatie();
+        OffsetDateTime completedAt = COMPLETED_AT.plusNanos(123_456_789).withOffsetSameInstant(ZoneOffset.ofHours(2));
+
+        stuurDeliveryReceipt("""
+                {"id": "%s", "status": "delivered", "completed_at": "%s"}
+                """.formatted(notifyNlId, completedAt));
+
+        assertEquals(COMPLETED_AT.plusNanos(123_456_000), poging(notifyNlId).getReceiptTijdstip());
+    }
+
     // Geen van de tijdstipvelden is verplicht; een 400 zou de receipt na vijf herhalingen kosten.
     @Test
     void verwerkAfleverstatus_receiptZonderTijdstippen_wordtVerwerktOpDeEigenKlok() {

@@ -7,6 +7,7 @@ import nl.rijksoverheid.moz.nmc.service.AannameService;
 import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -29,6 +30,8 @@ import static org.mockito.Mockito.doThrow;
 class AannameFoutpadenTest {
 
     private static final String PROBLEM_JSON = "application/problem+json";
+    // De versie uit het contract; ook een foutantwoord draagt hem.
+    private static final String API_VERSIE = ConfigProvider.getConfig().getValue("mp.openapi.info.version", String.class);
 
     enum Intake {
         CENTRAAL("/api/nmc/v1/centraal/notificaties", "identificatieNummer", """
@@ -86,6 +89,7 @@ class AannameFoutpadenTest {
                 .when().post(intake.pad)
                 .then()
                 .statusCode(429)
+                .header("API-Version", API_VERSIE)
                 .contentType(PROBLEM_JSON)
                 .body("type", equalTo("https://mijnoverheidzakelijk.nl/nmc/problemen/quotum-overschreden"));
 
@@ -163,6 +167,7 @@ class AannameFoutpadenTest {
                 .when().post(intake.pad)
                 .then()
                 .statusCode(500)
+                .header("API-Version", API_VERSIE)
                 .contentType(PROBLEM_JSON)
                 .body("title", equalTo("Aannamefout"))
                 .body("detail", equalTo("Er kan momenteel geen notificatie worden aangenomen"))

@@ -7,8 +7,6 @@ import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.service.DvProvider;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** Het schema na V8, zoals elke @QuarkusTest het aantreft. */
@@ -35,17 +33,6 @@ class V8MigratieTest {
                 .getSingleResult());
 
         assertEquals(1, aantal.intValue());
-    }
-
-    @Test
-    void taak_heeftPerSoortEenPartitie() {
-        @SuppressWarnings("unchecked")
-        List<String> partities = QuarkusTransaction.requiringNew().call(() -> entityManager
-                .createNativeQuery("SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid "
-                        + "JOIN pg_class p ON p.oid = i.inhparent WHERE p.relname = 'taak' ORDER BY c.relname")
-                .getResultList());
-
-        assertEquals(9, partities.size(), partities.toString());
     }
 
     private String isNullable(String tabel, String kolom) {

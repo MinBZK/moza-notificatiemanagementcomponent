@@ -24,6 +24,7 @@ import java.util.stream.IntStream;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.service.Sleutelbeheer;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import static io.restassured.RestAssured.given;
@@ -61,6 +62,7 @@ class CentraleNotificatieControllerTest {
                 .when().post(PAD)
                 .then()
                 .statusCode(202)
+                .header("API-Version", ConfigProvider.getConfig().getValue("mp.openapi.info.version", String.class))
                 .body("notificatieId", notNullValue())
                 .extract().path("notificatieId");
 

@@ -8,11 +8,14 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,6 +31,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class V5MigratieTest extends MigratieTestBasis {
 
     private static final OffsetDateTime AANGEMAAKT = OffsetDateTime.parse("2026-01-15T10:00:00Z");
+    // Later dan elk geschiedenisrecord, zodat te zien is uit welke bron een gemigreerd tijdstip komt.
+    private static final OffsetDateTime LAATSTE_UPDATE = AANGEMAAKT.plusHours(1);
+    private static final UUID GECONFIGUREERDE_DV = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     private String jdbcUrl;
     private Connection verbinding;
@@ -79,6 +85,79 @@ class V5MigratieTest extends MigratieTestBasis {
 
         assertEquals(Arrays.asList("AANGENOMEN", null, "0"), notificatie(id));
         assertNull(poging(id));
+    }
+
+    // Elke oude status met haar geschiedenis. De poging krijgt de status uit de mapping, of verzonden als de
+    // mapping er geen heeft (CREATED met een referentie van NotifyNL); verzonden_op komt uit het eerste
+    // SENDING-record en receipt_tijdstip uit het laatste record met een uitkomst.
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(nullValues = "-", value = {
+            "CREATED,           CREATED,                           AANGENOMEN,        -,            VERZONDEN",
+            "SENDING,           CREATED|SENDING,                   VERZONDEN,         -,            VERZONDEN",
+            "DELIVERED,         CREATED|SENDING|DELIVERED,         BEZORGD,           -,            BEZORGD",
+            "PERMANENT_FAILURE, CREATED|SENDING|PERMANENT_FAILURE, NIET_BEZORGBAAR,   ONBEREIKBAAR, PERMANENT_MISLUKT",
+            "TEMPORARY_FAILURE, CREATED|SENDING|TEMPORARY_FAILURE, NIET_BEZORGBAAR,   ONBEREIKBAAR, TIJDELIJK_MISLUKT",
+            "TECHNICAL_FAILURE, CREATED|SENDING|TECHNICAL_FAILURE, TECHNISCH_MISLUKT, TECHNISCH,    TECHNISCH_MISLUKT"})
+    void v5_elkeOudeStatus_krijgtStatusRedenEnPogingUitDeMapping(String oud, String geschiedenis, String status,
+                                                               String reden, String pogingStatus) throws SQLException {
+        String[] records = geschiedenis.split("\\|");
+        migreerTot("4");
+        UUID notifyId = UUID.randomUUID();
+        UUID id = oudeNotificatie(notifyId, oud, records.length - 1, records);
+
+        migreerTot("5");
+
+        assertEquals(Arrays.asList(status, reden, String.valueOf(records.length - 1)), notificatie(id));
+        assertEquals(List.of(pogingStatus, notifyId.toString()), poging(id));
+        assertEquals(Arrays.asList(records.length > 1 ? AANGEMAAKT.plusMinutes(1).toInstant() : null,
+                records.length > 2 ? AANGEMAAKT.plusMinutes(2).toInstant() : null), pogingTijdstippen(id));
+        assertEquals(records.length, events(id).size());
+    }
+
+    // Het vangnet: een rij zonder geschiedenisrecord met een bekende status krijgt haar status uit
+    // laatste_status en houdt haar versie. Zo'n rij krijgt geen events.
+    @ParameterizedTest
+    @CsvSource(nullValues = "-", value = {
+            "PERMANENT_FAILURE, NIET_BEZORGBAAR,       ONBEREIKBAAR",
+            "TECHNICAL_FAILURE, TECHNISCH_MISLUKT,     TECHNISCH",
+            "ONBEKEND,          BEZORGSTATUS_ONBEKEND, -"})
+    void v5_rijZonderBruikbareGeschiedenis_krijgtDeStatusUitLaatsteStatus(String oud, String status, String reden)
+            throws SQLException {
+        migreerTot("4");
+        UUID id = oudeNotificatie(null, oud, 3);
+
+        migreerTot("5");
+
+        assertEquals(Arrays.asList(status, reden, "3"), notificatie(id));
+        assertNull(poging(id));
+        assertEquals(List.of(), events(id));
+    }
+
+    // V8 geeft bestaande rijen en hun events de ene geconfigureerde dienstverlener.
+    @Test
+    void v8_bestaandeRijenEnEvents_krijgenDeGeconfigureerdeDienstverlener() throws SQLException {
+        migreerTot("4");
+        UUID id = oudeNotificatie(UUID.randomUUID(), "DELIVERED", 2, "CREATED", "SENDING", "DELIVERED");
+
+        migreerTot("8");
+
+        assertEquals(List.of(GECONFIGUREERDE_DV), kolom("SELECT dv_id FROM notificatie WHERE id = ?", id, UUID.class));
+        assertEquals(List.of(GECONFIGUREERDE_DV, GECONFIGUREERDE_DV, GECONFIGUREERDE_DV),
+                kolom("SELECT dv_id FROM event WHERE notificatie_id = ? ORDER BY volgnummer", id, UUID.class));
+    }
+
+    // aangenomen_op stuurt het dagquotum en de controletaak. Het komt uit het eerste event, en voor een
+    // rij zonder events uit laatste_status_update.
+    @Test
+    void v9_aangenomenOp_komtUitHetEersteEventEnAndersUitDeLaatsteStatusUpdate() throws SQLException {
+        migreerTot("4");
+        UUID metEvents = oudeNotificatie(UUID.randomUUID(), "DELIVERED", 2, "CREATED", "SENDING", "DELIVERED");
+        UUID zonderEvents = oudeNotificatie(null, "PERMANENT_FAILURE", 0);
+
+        migreerTot("9");
+
+        assertEquals(List.of(AANGEMAAKT.toInstant()), aangenomenOp(metEvents));
+        assertEquals(List.of(LAATSTE_UPDATE.toInstant()), aangenomenOp(zonderEvents));
     }
 
     // Een onbekende status verandert in het nieuwe model niets; de status komt uit het laatste record
@@ -171,7 +250,7 @@ class V5MigratieTest extends MigratieTestBasis {
             insert.setLong(2, versie);
             insert.setObject(3, notifyId);
             insert.setString(4, laatsteStatus);
-            insert.setObject(5, AANGEMAAKT);
+            insert.setObject(5, LAATSTE_UPDATE);
             insert.executeUpdate();
         }
 
@@ -217,6 +296,45 @@ class V5MigratieTest extends MigratieTestBasis {
                 }
 
                 return List.of(rij.getString("status"), rij.getString("notify_id"));
+            }
+        }
+    }
+
+    // verzonden_op en receipt_tijdstip van de poging; null waar de kolom leeg is.
+    private List<Instant> pogingTijdstippen(UUID id) throws SQLException {
+        try (PreparedStatement select = verbinding.prepareStatement(
+                "SELECT verzonden_op, receipt_tijdstip FROM poging WHERE notificatie_id = ?")) {
+            select.setObject(1, id);
+            try (ResultSet rij = select.executeQuery()) {
+                assertTrue(rij.next());
+
+                return Arrays.asList(instant(rij, "verzonden_op"), instant(rij, "receipt_tijdstip"));
+            }
+        }
+    }
+
+    private List<Instant> aangenomenOp(UUID id) throws SQLException {
+        return kolom("SELECT aangenomen_op FROM notificatie WHERE id = ?", id, OffsetDateTime.class).stream()
+                .map(OffsetDateTime::toInstant).toList();
+    }
+
+    private static Instant instant(ResultSet rij, String kolom) throws SQLException {
+        OffsetDateTime waarde = rij.getObject(kolom, OffsetDateTime.class);
+
+        return waarde == null ? null : waarde.toInstant();
+    }
+
+    private <T> List<T> kolom(String sql, UUID id, Class<T> type) throws SQLException {
+        try (PreparedStatement select = verbinding.prepareStatement(sql)) {
+            select.setObject(1, id);
+            try (ResultSet rij = select.executeQuery()) {
+                List<T> waarden = new ArrayList<>();
+
+                while (rij.next()) {
+                    waarden.add(rij.getObject(1, type));
+                }
+
+                return waarden;
             }
         }
     }
