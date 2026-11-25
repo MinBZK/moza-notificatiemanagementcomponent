@@ -32,7 +32,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
-
 import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -43,6 +42,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
+import nl.rijksoverheid.moz.nmc.service.NotificatieNietGevondenException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;

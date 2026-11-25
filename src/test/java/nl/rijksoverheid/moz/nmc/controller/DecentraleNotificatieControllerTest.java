@@ -17,7 +17,7 @@ import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-import nl.rijksoverheid.moz.nmc.service.AannameService;
+import nl.rijksoverheid.moz.nmc.service.aanname.AannameService;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import org.eclipse.microprofile.rest.client.inject.RestClient;

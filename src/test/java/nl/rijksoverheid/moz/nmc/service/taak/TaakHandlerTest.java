@@ -1,4 +1,4 @@
-package nl.rijksoverheid.moz.nmc.service;
+package nl.rijksoverheid.moz.nmc.service.taak;
 
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;

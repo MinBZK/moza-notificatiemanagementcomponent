@@ -1,4 +1,4 @@
-package nl.rijksoverheid.moz.nmc.service;
+package nl.rijksoverheid.moz.nmc.service.receipt;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import nl.rijksoverheid.moz.nmc.domain.Poging;

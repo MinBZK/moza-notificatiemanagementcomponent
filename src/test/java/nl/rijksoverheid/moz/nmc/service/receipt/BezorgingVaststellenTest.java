@@ -24,7 +24,6 @@ import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
@@ -36,6 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
 
 import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
 import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.poging;

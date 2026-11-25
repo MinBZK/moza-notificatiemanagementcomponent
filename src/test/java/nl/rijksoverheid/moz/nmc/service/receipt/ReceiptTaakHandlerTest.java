@@ -1,19 +1,21 @@
-package nl.rijksoverheid.moz.nmc.service;
+package nl.rijksoverheid.moz.nmc.service.receipt;
 
 import io.quarkus.test.junit.QuarkusTest;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakClaimer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.ArgumentMatchers.any;
@@ -79,7 +81,7 @@ class ReceiptTaakHandlerTest {
 
     private static Map<String, String> payload(String status, String tijdstip) {
         Map<String, String> payload = new HashMap<>();
-        payload.put(ReceiptOpslag.PAYLOAD_POGING_ID, POGING_ID.toString());
+        payload.put(TaakHandler.PAYLOAD_POGING_ID, POGING_ID.toString());
         payload.put(ReceiptOpslag.PAYLOAD_NOTIFY_ID, NOTIFY_ID.toString());
         payload.put(ReceiptOpslag.PAYLOAD_STATUS, status);
 
