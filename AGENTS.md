@@ -129,6 +129,10 @@ Haal die override pas weg als de Quarkus-BOM zelf een veilige versie levert.
   `client/<systeem>/`, `job/`, `helper/`, `validation/`, `config/` (`@ConfigMapping`-interfaces).
   Uitzondering: `notifynlcallback/` heeft een eigen `controller/` en `filter/`, omdat het uit een
   eigen contract komt.
+- **`service/` is per domein onderverdeeld**: `aanname/`, `feed/`, `onderhoud/`, `receipt/`,
+  `sleutel/`, `taak/`, `verzending/` en `webhook/`, elk met de eigen exceptions. Direct in
+  `service/` staat wat elk domein gebruikt: `Overgangsfunctie` en `DvProvider`. Wat een ander
+  domein niet nodig heeft, blijft package-private.
 - **Constructor-injectie, geen field-injectie.** Dit wijkt bewust af van andere repo's.
 - **Repositories implementeren `PanacheRepositoryBase<T, Id>`**, niet `PanacheRepository<T>`:
   die legt het id-type vast op `Long`, en methodes als `deleteById` gaan dan stil verkeerd.
