@@ -3,24 +3,35 @@ package nl.rijksoverheid.moz.nmc.notifynlcallback.controller;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.mockito.InjectSpy;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.ConsumentCallbackAdapter;
-import nl.rijksoverheid.moz.nmc.client.consumentcallback.StatusUpdateOpdracht;
+import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
-import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
-import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
-import nl.rijksoverheid.moz.nmc.domain.StatusWaarde;
+import nl.rijksoverheid.moz.nmc.domain.Poging;
+import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
+import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.domain.Taak;
+import nl.rijksoverheid.moz.nmc.service.ReceiptVerwerker;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.job.TaakRonde;
+import nl.rijksoverheid.moz.nmc.job.TaakWorker;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
+import nl.rijksoverheid.moz.nmc.testhelper.NotifyNLFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 import java.time.OffsetDateTime;
@@ -39,11 +50,24 @@ import static org.mockito.ArgumentMatchers.any;
 class NotifyNLCallbackControllerTest {
 
     // Een vast tijdstip in het verleden: moet herkenbaar verschillen van het moment waarop de test
-    // de callback verwerkt, anders bewijst de assertie op de gebeurtenistijd niets.
-    private static final String COMPLETED_AT = "2025-01-01T12:00:02Z";
+    // de callback verwerkt, anders bewijst de assertie op het receipttijdstip niets.
+    // Rond het moment van verzenden: een tijdstip van vóór het verzenden wordt het moment van ontvangst.
+    private static final OffsetDateTime CREATED_AT = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS);
+    private static final OffsetDateTime SENT_AT = CREATED_AT.plusSeconds(1);
+    private static final OffsetDateTime COMPLETED_AT = CREATED_AT.plusSeconds(2);
 
     // Moet overeenkomen met %test.notify.callback.bearer-token in application.properties
     private static final String CALLBACK_BEARER_TOKEN = "test-callback-token-niet-voor-productie";
+
+    private static final String AANVRAAG = """
+            {
+              "identificatieType": "KVK",
+              "identificatieNummer": "12345678",
+              "dienstverlener": "Gemeente Voorbeeld",
+              "dienst": "Parkeervergunning",
+              "berichtType": "Stuurgroep Agenda"
+            }
+            """;
 
     @InjectMock
     @RestClient
@@ -56,53 +80,118 @@ class NotifyNLCallbackControllerTest {
     @InjectMock
     NotifyNLJwtFactory notifyNLJwtFactory;
 
-    @InjectMock
-    ConsumentCallbackAdapter consumentCallbackAdapter;
+    @Inject
+    TaakWorker taakWorker;
+
+    @Inject
+    TaakRepository taakRepository;
+
+    @Inject
+    MeterRegistry meterRegistry;
+
+    @InjectSpy
+    ReceiptVerwerker receiptVerwerker;
 
     @Inject
     NotificatieRepository notificatieRepository;
 
+    @Inject
+    PogingRepository pogingRepository;
+
+    @Inject
+    EventRepository eventRepository;
+
     @BeforeEach
     void setUp() {
-        // Voorkomt dat notificaties van een vorige test de lookup-by-notifyNlNotificatieId
-        // in een volgende test beïnvloeden.
-        QuarkusTransaction.requiringNew().run(notificatieRepository::deleteAll);
+        TestDatabase.leeg();
 
-        Mockito.when(notifyNLJwtFactory.authorizationHeader(any())).thenReturn("Bearer test-token");
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail("test@example.nl", true));
+        NotifyNLFixtures.stubJwt(notifyNLJwtFactory);
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmail("test@example.nl"));
     }
 
     @Test
-    void verwerkAfleverstatus_gelukt_retourneert204() {
-        UUID notifyNlId = UUID.randomUUID();
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
+    void verwerkAfleverstatus_gelukt_retourneert204EnZetDeNotificatieOpBezorgd() {
+        UUID notifyNlId = verstuurNotificatie();
 
-        // Zorg dat er een notificatie bestaat voor dit notifyNlId
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag(null))
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then().statusCode(200);
+        stuurDeliveryReceipt(deliveryReceipt(notifyNlId, "delivered"));
 
-        given()
-                .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
-                .body(deliveryReceipt(notifyNlId, "delivered"))
-                .when().post("/api/nmc/v1/notifynl-callback")
-                .then()
-                .statusCode(204);
+        assertEquals(NotificatieStatus.BEZORGD, status(notifyNlId));
     }
 
+    // Een receipt die bij geen poging hoort krijgt 2xx, zodat NotifyNL hem niet vijf keer herhaalt, en
+    // wordt geteld maar niet opgeslagen.
     @Test
-    void verwerkAfleverstatus_onbekendId_retourneert404() {
-        given()
-                .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
-                .body(deliveryReceipt(UUID.randomUUID(), "delivered"))
-                .when().post("/api/nmc/v1/notifynl-callback")
-                .then()
-                .statusCode(404)
-                .contentType("application/problem+json");
+    void verwerkAfleverstatus_onbekendeReceipt_retourneert204ZonderTaakEnTeltHem() {
+        double voor = meterRegistry.get("nmc.receipts.afgewezen").counter().count();
+
+        stuurDeliveryReceiptZonderVerwerking(deliveryReceipt(UUID.randomUUID(), "delivered"));
+
+        assertEquals(voor + 1, meterRegistry.get("nmc.receipts.afgewezen").counter().count());
+        assertEquals(0L, LeesHelper.aantalTaken(TaakSoort.RECEIPT_VERWERKEN));
+    }
+
+    // De receipt ligt vast voordat hij verwerkt wordt, zonder het e-mailadres uit het veld `to`.
+    @Test
+    void verwerkAfleverstatus_slaatDeReceiptOpZonderEmailadres() {
+        UUID notifyNlId = verstuurNotificatie();
+
+        stuurDeliveryReceiptZonderVerwerking(deliveryReceipt(notifyNlId, "delivered"));
+
+        Taak taak = LeesHelper.enigeTaak(TaakSoort.RECEIPT_VERWERKEN);
+        assertEquals("delivered", taak.getPayload().get("status"));
+        assertTrue(taak.getPayload().values().stream().noneMatch(waarde -> waarde.contains("@")),
+                "het e-mailadres staat niet in de payload: " + taak.getPayload());
+        assertEquals(NotificatieStatus.VERZONDEN, status(notifyNlId), "verwerking volgt pas in de taak");
+    }
+
+    // NotifyNL herhaalt een receipt bij elke niet-2xx; dezelfde receipt levert één taak op.
+    @Test
+    void verwerkAfleverstatus_herhaaldeReceipt_levertEenTaak() {
+        UUID notifyNlId = verstuurNotificatie();
+        String receipt = deliveryReceipt(notifyNlId, "delivered");
+
+        stuurDeliveryReceiptZonderVerwerking(receipt);
+        stuurDeliveryReceiptZonderVerwerking(receipt);
+
+        assertEquals(1L, LeesHelper.aantalTaken(TaakSoort.RECEIPT_VERWERKEN));
+    }
+
+    // Na verwerking is de taakrij weg, dus een herhaling van NotifyNL levert een nieuwe taak op. De
+    // verwerker herkent dezelfde uitkomst: geen tweede event, en dus ook niets nieuws voor de webhook.
+    @Test
+    void verwerkAfleverstatus_herhaaldeReceiptNaVerwerking_geeftGeenTweedeEvent() {
+        UUID notifyNlId = verstuurNotificatie();
+        String receipt = deliveryReceipt(notifyNlId, "delivered");
+        stuurDeliveryReceipt(receipt);
+        UUID notificatieId = poging(notifyNlId).getNotificatieId();
+        int events = aantalEvents(notificatieId);
+
+        stuurDeliveryReceipt(receipt);
+
+        assertEquals(NotificatieStatus.BEZORGD, status(notifyNlId));
+        assertEquals(events, aantalEvents(notificatieId), "een herhaalde receipt schrijft geen tweede event");
+        assertEquals(0L, LeesHelper.aantalTaken(TaakSoort.RECEIPT_VERWERKEN),
+                "de tweede receipttaak is verwerkt en opgeruimd");
+    }
+
+    // Een fout in de verwerking kost de receipt niet: de taak blijft staan en slaagt bij een volgende ronde.
+    @Test
+    void verwerkAfleverstatus_foutInDeVerwerking_verliestDeReceiptNiet() {
+        UUID notifyNlId = verstuurNotificatie();
+        stuurDeliveryReceiptZonderVerwerking(deliveryReceipt(notifyNlId, "delivered"));
+        Mockito.doThrow(new IllegalStateException("gesimuleerde storing")).doCallRealMethod()
+                .when(receiptVerwerker).verwerk(any(), any(), any(), any());
+
+        TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
+        assertEquals(NotificatieStatus.VERZONDEN, status(notifyNlId));
+        Taak taak = LeesHelper.enigeTaak(TaakSoort.RECEIPT_VERWERKEN);
+        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetDue(taakRepository.getEntityManager(),
+                TaakSoort.RECEIPT_VERWERKEN, taak.getId(), OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1)));
+
+        TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
+
+        assertEquals(NotificatieStatus.BEZORGD, status(notifyNlId));
+        assertEquals(0L, LeesHelper.aantalTaken(TaakSoort.RECEIPT_VERWERKEN));
     }
 
     @Test
@@ -128,260 +217,149 @@ class NotifyNLCallbackControllerTest {
                 .contentType("application/problem+json");
     }
 
+    // Een status die de NMC niet kent krijgt 204, zodat NotifyNL niet blijft herhalen, maar verandert
+    // niets.
     @Test
-    void verwerkAfleverstatus_onbekendStatus_slaatOnbekendOp() {
-        // Onbekende statussen van NotifyNL moeten als ONBEKEND worden opgeslagen (niet als een
-        // bekende, mogelijk definitieve status)
-        UUID notifyNlId = UUID.randomUUID();
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
+    void verwerkAfleverstatus_onbekendeStatus_retourneert204ZonderOvergang() {
+        UUID notifyNlId = verstuurNotificatie();
 
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag(null))
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then().statusCode(200);
+        stuurDeliveryReceipt(deliveryReceipt(notifyNlId, "some-unknown-status"));
 
-        given()
-                .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
-                .body(deliveryReceipt(notifyNlId, "some-unknown-status"))
-                .when().post("/api/nmc/v1/notifynl-callback")
-                .then()
-                .statusCode(204);
-
-        ArgumentCaptor<StatusUpdateOpdracht> captor = ArgumentCaptor.forClass(StatusUpdateOpdracht.class);
-        Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(captor.capture());
-        assertEquals(StatusWaarde.ONBEKEND, captor.getValue().status());
+        assertEquals(NotificatieStatus.VERZONDEN, status(notifyNlId));
     }
 
-    // completed_at is "the last time the status was updated" en dus het tijdstip van déze status;
-    // dat hoort in de geschiedenis, niet het moment waarop de NMC de callback verwerkte. NotifyNL
-    // herhaalt een callback tot 5x met 5 minuten ertussen, dus die twee lopen echt uiteen.
+    // completed_at is het tijdstip van déze status en bepaalt de volgorde van receipts; het moment
+    // van verwerken hoort er niet in.
     @Test
-    void verwerkAfleverstatus_legtCompletedAtVastAlsGebeurtenistijd() {
-        UUID notifyNlId = UUID.randomUUID();
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
+    void verwerkAfleverstatus_legtCompletedAtVastOpDePoging() {
+        UUID notifyNlId = verstuurNotificatie();
 
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag(null))
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then().statusCode(200);
+        stuurDeliveryReceipt(deliveryReceipt(notifyNlId, "delivered"));
 
-        given()
-                .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
-                .body(deliveryReceipt(notifyNlId, "delivered"))
-                .when().post("/api/nmc/v1/notifynl-callback")
-                .then()
-                .statusCode(204);
-
-        QuarkusTransaction.requiringNew().run(() -> {
-            Notificatie notificatie = notificatieRepository.findByExternalReference(notifyNlId).orElseThrow();
-            List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
-            NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
-
-            assertEquals(StatusWaarde.DELIVERED, laatste.status());
-            assertEquals(OffsetDateTime.parse(COMPLETED_AT), laatste.tijdstip());
-            // De registratietijd komt van de eigen klok, niet van NotifyNL: completed_at ligt in 2025,
-            // de registratie is van nu.
-            assertTrue(notificatie.getLaatsteStatusUpdate().isAfter(OffsetDateTime.parse(COMPLETED_AT)));
-        });
+        Poging poging = poging(notifyNlId);
+        assertEquals(PogingStatus.BEZORGD, poging.getStatus());
+        assertEquals(COMPLETED_AT, poging.getReceiptTijdstip());
     }
 
-    // Geen van de tijdstipvelden is verplicht (NotifyNL's EmailCallbackRequest kent geen required en
-    // completed_at/sent_at mogen null zijn). Zo'n receipt moet gewoon verwerkt worden, met de eigen
-    // klok als gebeurtenistijd — een 400 zou de receipt na 5 herhalingen kosten.
+    // Zonder completed_at geldt sent_at, en zonder die created_at: een andere volgorde zou receipts
+    // verkeerd ten opzichte van elkaar ordenen.
     @Test
-    void verwerkAfleverstatus_receiptZonderTijdstippen_wordtVerwerkt() {
-        UUID notifyNlId = UUID.randomUUID();
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
-        // Afgekapt op microseconden, net als NotificatieStatus; zie NotificatieTest.
+    void verwerkAfleverstatus_zonderCompletedAt_legtSentAtVast() {
+        UUID notifyNlId = verstuurNotificatie();
+
+        stuurDeliveryReceipt("""
+                {"id": "%s", "status": "delivered", "created_at": "%s", "sent_at": "%s"}
+                """.formatted(notifyNlId, CREATED_AT, SENT_AT));
+
+        assertEquals(SENT_AT, poging(notifyNlId).getReceiptTijdstip());
+    }
+
+    @Test
+    void verwerkAfleverstatus_alleenCreatedAt_legtCreatedAtVast() {
+        UUID notifyNlId = verstuurNotificatie();
+
+        stuurDeliveryReceipt("""
+                {"id": "%s", "status": "delivered", "created_at": "%s"}
+                """.formatted(notifyNlId, CREATED_AT));
+
+        assertEquals(CREATED_AT, poging(notifyNlId).getReceiptTijdstip());
+    }
+
+    // De database bewaart microseconden in UTC; een tijdstip met nanoseconden en een andere offset komt
+    // als hetzelfde moment op de poging.
+    @Test
+    void verwerkAfleverstatus_tijdstipMetNanosecondenEnOffset_legtHetzelfdeMomentVast() {
+        UUID notifyNlId = verstuurNotificatie();
+        OffsetDateTime completedAt = COMPLETED_AT.plusNanos(123_456_789).withOffsetSameInstant(ZoneOffset.ofHours(2));
+
+        stuurDeliveryReceipt("""
+                {"id": "%s", "status": "delivered", "completed_at": "%s"}
+                """.formatted(notifyNlId, completedAt));
+
+        assertEquals(COMPLETED_AT.plusNanos(123_456_000), poging(notifyNlId).getReceiptTijdstip());
+    }
+
+    // Geen van de tijdstipvelden is verplicht; een 400 zou de receipt na vijf herhalingen kosten.
+    @Test
+    void verwerkAfleverstatus_receiptZonderTijdstippen_wordtVerwerktOpDeEigenKlok() {
+        UUID notifyNlId = verstuurNotificatie();
         OffsetDateTime voorCallback = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
+        stuurDeliveryReceipt("""
+                {"id": "%s", "status": "delivered"}
+                """.formatted(notifyNlId));
+
+        assertEquals(NotificatieStatus.BEZORGD, status(notifyNlId));
+        assertFalse(poging(notifyNlId).getReceiptTijdstip().isBefore(voorCallback));
+    }
+
+    private UUID verstuurNotificatie() {
+        UUID notifyNlId = UUID.randomUUID();
+        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(notifyNlId.toString()));
+
         given()
                 .contentType(ContentType.JSON)
-                .body(aanvraag(null))
+                .body(AANVRAAG)
                 .when().post("/api/nmc/v1/centraal/notificaties")
-                .then().statusCode(200);
+                .then().statusCode(202);
+        // De verzending is asynchroon: de verzendtaak zet de poging op het NotifyNL-id uit de mock.
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
+        return notifyNlId;
+    }
+
+    // De callback slaat op; de receipttaak verwerkt.
+    private void stuurDeliveryReceipt(String body) {
+        stuurDeliveryReceiptZonderVerwerking(body);
+        TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
+    }
+
+    private static void stuurDeliveryReceiptZonderVerwerking(String body) {
         given()
                 .contentType(ContentType.JSON)
                 .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
-                .body(deliveryReceiptZonderTijdstippen(notifyNlId, "delivered"))
-                .when().post("/api/nmc/v1/notifynl-callback")
-                .then()
-                .statusCode(204);
-
-        QuarkusTransaction.requiringNew().run(() -> {
-            Notificatie notificatie = notificatieRepository.findByExternalReference(notifyNlId).orElseThrow();
-            List<NotificatieStatus> geschiedenis = notificatie.getStatusGeschiedenis();
-            NotificatieStatus laatste = geschiedenis.get(geschiedenis.size() - 1);
-
-            assertEquals(StatusWaarde.DELIVERED, laatste.status());
-            assertFalse(laatste.tijdstip().isBefore(voorCallback));
-        });
-    }
-
-    @Test
-    void verwerkAfleverstatus_metCallbackUrl_roeptConsumentCallbackAdapterAan() {
-        UUID notifyNlId = UUID.randomUUID();
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag("https://omc.example.com/callback"))
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then().statusCode(200);
-
-        given()
-                .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
-                .body(deliveryReceipt(notifyNlId, "delivered"))
-                .when().post("/api/nmc/v1/notifynl-callback")
-                .then()
-                .statusCode(204);
-
-        Mockito.verify(consumentCallbackAdapter).stuurStatusUpdate(any());
-    }
-
-    @Test
-    void verwerkAfleverstatus_bewaartNotificatieInDatabase() {
-        // Een geslaagde statusupdate verwijdert de notificatie niet; de statusgeschiedenis blijft staan.
-        UUID notifyNlId = UUID.randomUUID();
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag("https://omc.example.com/callback"))
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then().statusCode(200);
-
-        given()
-                .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
-                .body(deliveryReceipt(notifyNlId, "delivered"))
-                .when().post("/api/nmc/v1/notifynl-callback")
-                .then()
-                .statusCode(204);
-
-        assertTrue(notificatieRepository.findByExternalReference(notifyNlId).isPresent());
-    }
-
-    // De statusupdate naar de Dienstverlener staat los van het vastleggen: mislukt die, dan krijgt
-    // NotifyNL alsnog 204 (anders herhaalt het die receipt) en blijft de statusgeschiedenis staan.
-    @Test
-    void verwerkAfleverstatus_mislukteConsumentCallback_geeftTochTweehonderdvierEnBewaartDeStatus() {
-        UUID notifyNlId = UUID.randomUUID();
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
-        Mockito.doThrow(new IllegalStateException("consument onbereikbaar"))
-                .when(consumentCallbackAdapter).stuurStatusUpdate(any());
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag("https://omc.example.com/callback"))
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then().statusCode(200);
-
-        stuurDeliveryReceipt(notifyNlId, "delivered");
-
-        QuarkusTransaction.requiringNew().run(() -> {
-            Notificatie notificatie = notificatieRepository.findByExternalReference(notifyNlId).orElseThrow();
-
-            assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
-            assertEquals(3, notificatie.getStatusGeschiedenis().size());
-        });
-        Mockito.reset(consumentCallbackAdapter);
-    }
-
-    // Einde-tot-eind-tegenhanger van de unit test in NotificatieServiceTest: een laat aangekomen
-    // niet-definitieve callback ná een definitieve status wordt geaccepteerd (204, zodat NotifyNL
-    // niet blijft herhalen) maar niet geregistreerd — de eindstatus blijft staan.
-    @Test
-    void verwerkAfleverstatus_nietDefinitieveStatusNaDefinitieve_laatDeEindstatusStaan() {
-        UUID notifyNlId = UUID.randomUUID();
-        Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(notifyResponse(notifyNlId));
-
-        given()
-                .contentType(ContentType.JSON)
-                .body(aanvraag(null))
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then().statusCode(200);
-
-        stuurDeliveryReceipt(notifyNlId, "delivered");
-        stuurDeliveryReceipt(notifyNlId, "sending");
-
-        QuarkusTransaction.requiringNew().run(() -> {
-            Notificatie notificatie = notificatieRepository.findByExternalReference(notifyNlId).orElseThrow();
-            assertEquals(StatusWaarde.DELIVERED, notificatie.getStatus());
-        });
-    }
-
-    private void stuurDeliveryReceipt(UUID notifyNlId, String status) {
-        given()
-                .contentType(ContentType.JSON)
-                .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
-                .body(deliveryReceipt(notifyNlId, status))
+                .body(body)
                 .when().post("/api/nmc/v1/notifynl-callback")
                 .then()
                 .statusCode(204);
     }
 
-    private String aanvraag(String callbackUrl) {
-        String callbackPart = callbackUrl != null
-                ? """
-                , "callbackUrl": "%s"
-                """.formatted(callbackUrl)
-                : "";
-        return """
-                {
-                  "identificatieType": "KVK",
-                  "identificatieNummer": "12345678",
-                  "dienstverlener": "Gemeente Voorbeeld",
-                  "dienst": "Parkeervergunning",
-                  "berichtType": "Stuurgroep Agenda"%s
-                }
-                """.formatted(callbackPart);
+    private Poging poging(UUID notifyNlId) {
+        return LeesHelper.pogingVanNotifyId(notifyNlId);
     }
 
-    private String deliveryReceipt(UUID notifyNlId, String status) {
+    private int aantalEvents(UUID notificatieId) {
+        return QuarkusTransaction.requiringNew().call(() -> eventRepository.findByNotificatie(notificatieId).size());
+    }
+
+    private NotificatieStatus status(UUID notifyNlId) {
+        return QuarkusTransaction.requiringNew().call(() ->
+                notificatieRepository.findById(pogingRepository.findByNotifyId(notifyNlId).orElseThrow().getNotificatieId())
+                        .getStatus());
+    }
+
+    private static String deliveryReceipt(UUID notifyNlId, String status) {
         return """
                 {
                   "id": "%s",
                   "to": "test@example.nl",
                   "status": "%s",
                   "notification_type": "email",
-                  "created_at": "2025-01-01T12:00:00Z",
-                  "sent_at": "2025-01-01T12:00:01Z",
+                  "created_at": "%s",
+                  "sent_at": "%s",
                   "completed_at": "%s"
                 }
-                """.formatted(notifyNlId, status, COMPLETED_AT);
+                """.formatted(notifyNlId, status, CREATED_AT, SENT_AT, COMPLETED_AT);
     }
 
-    // Alleen id en status zijn verplicht in de callback-spec; NotifyNL's eigen EmailCallbackRequest
-    // kent zelfs geen enkel verplicht veld. Een receipt zonder tijdstippen mag dus geen 400 geven —
-    // die zou na 5 herhalingen de receipt kosten.
-    private String deliveryReceiptZonderTijdstippen(UUID notifyNlId, String status) {
-        return """
-                {
-                  "id": "%s",
-                  "status": "%s"
-                }
-                """.formatted(notifyNlId, status);
-    }
-
-    private PartijResponse partijMetEmail(String email, boolean isDefault) {
+    private static PartijResponse partijMetEmail(String email) {
         ContactgegevenResponse contactgegeven = new ContactgegevenResponse()
                 .type(ContactgegevenResponse.TypeEnum.EMAIL)
                 .waarde(email)
-                .isDefault(isDefault);
+                .isDefault(true);
 
         return new PartijResponse()
                 .partijId(UUID.randomUUID())
                 .contactgegevens(List.of(contactgegeven));
-    }
-
-    private SendEmailResponse notifyResponse(UUID notifyNlId) {
-        return new SendEmailResponse().id(notifyNlId.toString());
     }
 }

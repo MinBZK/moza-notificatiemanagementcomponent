@@ -1,0 +1,394 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "NMC Contactherstel API",
+    "description": "Powered by AI\n\nConcept-contract voor contactherstel binnen het Notificatie Management Component (NMC), op basis van MijnOverheidZakelijk #1424. Met deze API start een Dienstverlener contactherstel, rondt die het af of trekt die het in, en vraagt die de status op.\n\nContractversie 0.2.0 (concept), vastgelegd in x-contractversie. De contractversie staat los van de versie van de API zelf. De versie van de API staat in info.version en in de header API-Version van elk antwoord; de major-versie van de API staat in het adres.\n\nNog niet getoetst aan de functionele beschrijvingen (#1093 en #1094) en het contract met de Contactherstelservice (#1420). De NMC leidt de Dienstverlener af uit het token van de aanroep; de precieze authenticatie is nog niet in dit contract vastgelegd.",
+    "version": "0.2.0",
+    "x-contractversie": "0.2.0",
+    "contact": {
+      "name": "MijnOverheid Zakelijk Team",
+      "email": "moza@minbzk.nl",
+      "url": "https://github.com/MinBZK/moza-notificatiemanagementcomponent"
+    }
+  },
+  "tags": [
+    {
+      "name": "Contactherstel",
+      "description": "Contactherstel starten, bijwerken en de status opvragen"
+    }
+  ],
+  "paths": {
+    "/api/nmc/v1/contactherstellen": {
+      "post": {
+        "tags": ["Contactherstel"],
+        "operationId": "contactherstelStarten",
+        "summary": "Contactherstel starten",
+        "description": "Neemt de aanvraag voor contactherstel aan voor een notificatie die niet is aangekomen en antwoordt 202 zodra de aanvraag is opgeslagen. De uitvoering volgt asynchroon. Loopt er voor dit e-mailadres al contactherstel, dan start de NMC geen nieuw contactherstel en geeft die het bestaande contactherstelId terug.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactherstelStartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Aanvraag aangenomen en opgeslagen; de uitvoering volgt asynchroon. Liep er al contactherstel voor dit e-mailadres, dan is alLopend true en is het bestaande contactherstelId teruggegeven.",
+            "headers": {
+              "API-Version": {
+                "$ref": "#/components/headers/API-Version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactherstelStartResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OngeldigeAanvraag"
+          },
+          "429": {
+            "$ref": "#/components/responses/QuotumOverschreden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerFout"
+          }
+        }
+      }
+    },
+    "/api/nmc/v1/contactherstellen/{contactherstelId}": {
+      "parameters": [
+        {
+          "name": "contactherstelId",
+          "in": "path",
+          "required": true,
+          "description": "Kenmerk van het contactherstel",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "tags": ["Contactherstel"],
+        "operationId": "contactherstelOpvragen",
+        "summary": "Status van contactherstel opvragen",
+        "responses": {
+          "200": {
+            "description": "De huidige status van het contactherstel",
+            "headers": {
+              "API-Version": {
+                "$ref": "#/components/headers/API-Version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactherstelResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OngeldigeAanvraag"
+          },
+          "404": {
+            "$ref": "#/components/responses/NietGevonden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerFout"
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Contactherstel"],
+        "operationId": "contactherstelBijwerken",
+        "summary": "Contactherstel afronden of intrekken",
+        "description": "Met status afgerond meldt de Dienstverlener dat het contact is hersteld. Met status ingetrokken meldt de Dienstverlener dat contactherstel niet meer nodig is.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactherstelWijzigingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Het contactherstel is bijgewerkt",
+            "headers": {
+              "API-Version": {
+                "$ref": "#/components/headers/API-Version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactherstelResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OngeldigeAanvraag"
+          },
+          "404": {
+            "$ref": "#/components/responses/NietGevonden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerFout"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "headers": {
+      "API-Version": {
+        "description": "Volledige versie van de API volgens semantic versioning (major.minor.patch)",
+        "schema": {
+          "type": "string"
+        },
+        "example": "0.2.0"
+      }
+    },
+    "responses": {
+      "OngeldigeAanvraag": {
+        "description": "Ongeldige aanvraag, bijvoorbeeld een onbekend notificatieId",
+        "headers": {
+          "API-Version": {
+            "$ref": "#/components/headers/API-Version"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "NietGevonden": {
+        "description": "Contactherstel niet gevonden",
+        "headers": {
+          "API-Version": {
+            "$ref": "#/components/headers/API-Version"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Het contactherstel kan niet worden bijgewerkt, omdat het al is afgerond, ingetrokken of gefaald",
+        "headers": {
+          "API-Version": {
+            "$ref": "#/components/headers/API-Version"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "QuotumOverschreden": {
+        "description": "Het quotum van de Dienstverlener voor vandaag is bereikt (type https://mijnoverheidzakelijk.nl/nmc/problemen/quotum-overschreden)",
+        "headers": {
+          "API-Version": {
+            "$ref": "#/components/headers/API-Version"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "ServerFout": {
+        "description": "De aanvraag kon door een fout bij de NMC niet worden verwerkt",
+        "headers": {
+          "API-Version": {
+            "$ref": "#/components/headers/API-Version"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ContactherstelStartRequest": {
+        "type": "object",
+        "required": [
+          "identificatieType",
+          "identificatieNummer",
+          "emailAdres",
+          "notificatieId",
+          "berichtsoort",
+          "notificatieStatus"
+        ],
+        "properties": {
+          "identificatieType": {
+            "$ref": "#/components/schemas/IdentificatieType"
+          },
+          "identificatieNummer": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^.*\\S.*$",
+            "description": "BSN-, KVK- of RSIN-nummer van de ontvanger"
+          },
+          "emailAdres": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+            "description": "Het e-mailadres van de ontvanger waarop de notificatie niet is aangekomen"
+          },
+          "notificatieId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Kenmerk van de notificatie die niet is aangekomen"
+          },
+          "berichtsoort": {
+            "$ref": "#/components/schemas/Berichtsoort"
+          },
+          "notificatieStatus": {
+            "$ref": "#/components/schemas/NietBezorgdeNotificatieStatus"
+          }
+        }
+      },
+      "ContactherstelStartResponse": {
+        "type": "object",
+        "required": ["contactherstelId", "alLopend"],
+        "properties": {
+          "contactherstelId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Kenmerk van het contactherstel"
+          },
+          "alLopend": {
+            "type": "boolean",
+            "description": "True als er voor dit e-mailadres al contactherstel liep"
+          }
+        }
+      },
+      "ContactherstelWijzigingRequest": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "De nieuwe status van het contactherstel",
+            "enum": ["afgerond", "ingetrokken"]
+          }
+        }
+      },
+      "ContactherstelResponse": {
+        "type": "object",
+        "required": ["contactherstelId", "status"],
+        "properties": {
+          "contactherstelId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Kenmerk van het contactherstel"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ContactherstelStatus"
+          }
+        }
+      },
+      "IdentificatieType": {
+        "type": "string",
+        "description": "Type identificatie van de ontvanger",
+        "enum": ["BSN", "KVK", "RSIN"]
+      },
+      "NietBezorgdeNotificatieStatus": {
+        "type": "string",
+        "description": "Status van de notificatie waarvoor contactherstel wordt gestart. Dit zijn waarden uit NotificatieStatus van de NMC: niet-bezorgbaar betekent niet bezorgd, bezorgstatus-onbekend betekent dat NotifyNL geen uitkomst heeft gemeld.",
+        "enum": ["niet-bezorgbaar", "bezorgstatus-onbekend"]
+      },
+      "Berichtsoort": {
+        "type": "string",
+        "description": "Soort notificatie die niet is aangekomen. Een kennisgeving verwijst naar een bericht in een berichtenmagazijn; bij een attendering staat de informatie in de notificatie zelf.",
+        "enum": ["kennisgeving", "attendering"]
+      },
+      "ContactherstelStatus": {
+        "type": "string",
+        "description": "Status van het contactherstel",
+        "enum": ["gestart", "afgeleverd", "afgerond", "ingetrokken", "gefaald"]
+      },
+      "Problem": {
+        "type": "object",
+        "description": "Problem Details (RFC 9457)",
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri",
+            "default": "about:blank"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string",
+            "format": "uri"
+          },
+          "violations": {
+            "type": "array",
+            "description": "Gevuld als de aanvraag door validatie is afgekeurd. detail blijft dan leeg; de reden staat per veld in deze lijst.",
+            "items": {
+              "$ref": "#/components/schemas/Violation"
+            }
+          }
+        }
+      },
+      "Violation": {
+        "type": "object",
+        "description": "Eén afgekeurd veld uit de aanvraag",
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "Het veld waarop de validatie is mislukt"
+          },
+          "in": {
+            "type": "string",
+            "description": "Het deel van het HTTP-verzoek waar de validatiefout optrad"
+          },
+          "message": {
+            "type": "string",
+            "description": "Omschrijving van de validatiefout"
+          }
+        }
+      }
+    }
+  }
+}

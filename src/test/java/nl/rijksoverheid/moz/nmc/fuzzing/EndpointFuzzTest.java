@@ -1,33 +1,28 @@
 package nl.rijksoverheid.moz.nmc.fuzzing;
 
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
-import jakarta.inject.Inject;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
-import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
-import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
-import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
-import nl.rijksoverheid.moz.nmc.domain.Notificatie;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.mockito.Mockito;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.lessThan;
-import static org.mockito.ArgumentMatchers.any;
 
 /**
  * HTTP counterpart of {@link NotificatieVerwerkingFuzzer} through a @QuarkusTest, which adds the
@@ -38,8 +33,8 @@ import static org.mockito.ArgumentMatchers.any;
  * {@link NotificatieVerwerkingFuzzer}'s input encoding and belong in
  * `.clusterfuzzlite/seed-corpus/NotificatieVerwerkingFuzzer/`.
  *
- * <p>The Profielservice and NotifyNL clients are mocked. The consument-callback client is real;
- * the seeded notificaties carry no callbackUrl and trigger no callback.
+ * <p>The Profielservice and NotifyNL clients are mocked, so no test can reach an external service;
+ * each test verifies they were not called.
  */
 @QuarkusTest
 public class EndpointFuzzTest {
@@ -63,26 +58,22 @@ public class EndpointFuzzTest {
     @RestClient
     SendAMessageApi sendAMessageApi;
 
-    @Inject
-    NotificatieRepository notificatieRepository;
-
     @BeforeEach
     void setUp() {
         // Wipes what earlier invocations committed, then seeds the notificaties the
         // afleverstatus-corpus refers to.
-        QuarkusTransaction.requiringNew().run(() -> {
-            notificatieRepository.deleteAll();
-            for (UUID referentie : BEKENDE_NOTIFY_REFERENTIES) {
-                Notificatie notificatie = new Notificatie(null);
-                notificatie.markeerVerzonden(referentie);
-                notificatieRepository.persist(notificatie);
-            }
-        });
+        TestDatabase.leeg();
 
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMetEmailadres());
-        // One id per invocation: external_reference is unique and each fuzz method sends exactly once.
-        Mockito.when(sendAMessageApi.sendEmail(any()))
-                .thenReturn(new SendEmailResponse().id(UUID.randomUUID().toString()));
+        for (UUID referentie : BEKENDE_NOTIFY_REFERENTIES) {
+            NotificatieFixtures.verzondenNotificatie(referentie, OffsetDateTime.now(ZoneOffset.UTC));
+        }
+    }
+
+    // The intake only stores the notificatie and the worker loop is off in tests, so nothing here
+    // looks up an address or sends.
+    @AfterEach
+    void geenExterneAanroep() {
+        Mockito.verifyNoInteractions(profielApi, sendAMessageApi);
     }
 
     @FuzzTest
@@ -93,7 +84,6 @@ public class EndpointFuzzTest {
         body.put("dienstverlener", data.consumeString(50));
         body.put("dienst", data.consumeString(50));
         body.put("berichtType", data.pickValue(new String[]{"Stuurgroep Agenda", "Demo template", "onbekend"}));
-        body.put("callbackUrl", fuzzedCallbackUrl(data));
 
         post("/api/nmc/v1/centraal/notificaties", body.toString(), null);
     }
@@ -103,7 +93,6 @@ public class EndpointFuzzTest {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("emailAdres", data.consumeString(60));
         body.put("berichtType", data.pickValue(new String[]{"Stuurgroep Agenda", "Demo template", "onbekend"}));
-        body.put("callbackUrl", fuzzedCallbackUrl(data));
 
         post("/api/nmc/v1/decentraal/notificaties", body.toString(), null);
     }
@@ -126,30 +115,6 @@ public class EndpointFuzzTest {
         post("/api/nmc/v1/notifynl-callback", body.toString(), token);
     }
 
-    // Each entry trips a different CallbackUrlValidator reject branch. A raw fuzzed string
-    // almost always dies at the first scheme check, so it never reaches the
-    // host/userinfo/IP branches; a fixed pool of near-valid shapes does.
-    private static final String[] ONGELDIGE_CALLBACK_URLS = {
-            "http://consument.example.invalid/cb",          // scheme
-            "https://user:pw@consument.example.invalid/cb", // userinfo
-            "https://127.0.0.1/cb",                         // IPv4 literal
-            "https://[::1]/cb",                             // IPv6 literal
-            "https://intranet/cb",                          // single-label internal name
-            "https://svc.ns.svc/cb",                        // internal suffix
-            "https:///cb",                                  // geen hostnaam
-            "https://consument.example.invalid:99999/cb",   // poort buiten bereik
-    };
-
-    // Half the URLs pass validation (reserved .invalid TLD, never resolves) so the send path
-    // stays reachable; half exercise the reject path. The fuzzed suffix is percent-encoded:
-    // a raw one makes URI parsing fail, which 400s in Jackson before the controller runs.
-    private static String fuzzedCallbackUrl(FuzzedDataProvider data) {
-        return data.consumeBoolean()
-                ? "https://consument.example.invalid/"
-                        + URLEncoder.encode(data.consumeString(20), StandardCharsets.UTF_8)
-                : data.pickValue(ONGELDIGE_CALLBACK_URLS);
-    }
-
     @FuzzTest
     public void fuzzRawJsonBody(FuzzedDataProvider data) {
         String path = data.consumeBoolean()
@@ -167,14 +132,5 @@ public class EndpointFuzzTest {
         }
 
         request.when().post(path).then().statusCode(lessThan(500));
-    }
-
-    private PartijResponse partijMetEmailadres() {
-        return new PartijResponse()
-                .partijId(UUID.randomUUID())
-                .contactgegevens(List.of(new ContactgegevenResponse()
-                        .type(ContactgegevenResponse.TypeEnum.EMAIL)
-                        .waarde("fuzz@example.invalid")
-                        .isDefault(true)));
     }
 }

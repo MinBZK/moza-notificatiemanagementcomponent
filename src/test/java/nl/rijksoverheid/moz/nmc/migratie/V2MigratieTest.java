@@ -5,10 +5,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import javax.sql.DataSource;
-import java.lang.reflect.Proxy;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -21,19 +18,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Draait de V2-backfill over bestaande V1-rijen. De gewone tests migreren een lege database, waar de
- * INSERT ... SELECT en UPDATE in V2 geen enkele rij raken. Draait op H2; PostgreSQL is hier niet getoetst.
+ * INSERT ... SELECT en UPDATE in V2 geen enkele rij raken. Bewust geen {@code @QuarkusTest}: de
+ * database moet hier op V1 stilgezet worden, en de gedeelde testdatabase staat al op de laatste
+ * versie. Daarom een eigen embedded PostgreSQL, met per test een schone database.
  */
-class V2MigratieTest {
+class V2MigratieTest extends MigratieTestBasis {
 
     private static final OffsetDateTime AANGEMAAKT = OffsetDateTime.parse("2026-01-15T10:00:00.123456Z");
 
-    // Eén gedeelde sessie: H2 bindt een IN-CHECK aan de sessie die de tabel aanmaakte, en die van
-    // Flyway is na de migratie gesloten.
+    private String jdbcUrl;
     private Connection verbinding;
 
+    // Een eigen database per test, zodat de Flyway-historie van de ene test de andere niet raakt.
     @BeforeEach
     void setUp() throws SQLException {
-        verbinding = DriverManager.getConnection("jdbc:h2:mem:v2migratie-" + UUID.randomUUID(), "sa", "");
+        jdbcUrl = nieuweDatabase();
+        verbinding = verbind(jdbcUrl);
     }
 
     @AfterEach
@@ -53,17 +53,12 @@ class V2MigratieTest {
         bevestigGeschiedenis(verbinding, afgeleverd, "DELIVERED");
         bevestigProjectie(verbinding, aangemaakt, "CREATED");
         bevestigProjectie(verbinding, afgeleverd, "DELIVERED");
-        assertFalse(kolomBestaat(verbinding, "STATUS"), "notificatie.status hoort vervallen te zijn");
-        assertFalse(kolomBestaat(verbinding, "AANGEMAAKT"), "notificatie.aangemaakt hoort vervallen te zijn");
+        assertFalse(kolomBestaat(verbinding, "status"), "notificatie.status hoort vervallen te zijn");
+        assertFalse(kolomBestaat(verbinding, "aangemaakt"), "notificatie.aangemaakt hoort vervallen te zijn");
     }
 
     private void migreerTot(String versie) {
-        Flyway.configure()
-                .dataSource(gedeeldeBron())
-                .locations("classpath:db/migration")
-                .target(versie)
-                .load()
-                .migrate();
+        migreerTot(jdbcUrl, versie);
     }
 
     private UUID voegV1RijToe(String status) throws SQLException {
@@ -110,24 +105,10 @@ class V2MigratieTest {
         }
     }
 
+    // PostgreSQL slaat ongequote namen in kleine letters op.
     private static boolean kolomBestaat(Connection verbinding, String kolom) throws SQLException {
-        try (ResultSet kolommen = verbinding.getMetaData().getColumns(null, null, "NOTIFICATIE", kolom)) {
+        try (ResultSet kolommen = verbinding.getMetaData().getColumns(null, null, "notificatie", kolom)) {
             return kolommen.next();
         }
-    }
-
-    // Geeft steeds de gedeelde verbinding, met een close() die niets doet.
-    private DataSource gedeeldeBron() {
-        Connection nietSluitend = (Connection) Proxy.newProxyInstance(getClass().getClassLoader(),
-                new Class<?>[]{Connection.class},
-                (proxy, methode, argumenten) -> methode.getName().equals("close")
-                        ? null
-                        : methode.invoke(verbinding, argumenten));
-
-        return (DataSource) Proxy.newProxyInstance(getClass().getClassLoader(),
-                new Class<?>[]{DataSource.class},
-                (proxy, methode, argumenten) -> methode.getName().equals("getConnection")
-                        ? nietSluitend
-                        : null);
     }
 }
