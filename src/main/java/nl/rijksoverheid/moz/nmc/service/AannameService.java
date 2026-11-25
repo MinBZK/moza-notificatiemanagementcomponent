@@ -74,7 +74,7 @@ public class AannameService {
         notificatie.bewaarVersleuteldeGegevens(
                 sleutelbeheer.versleutel(notificatie.getId(), opdracht.ontvanger(), opdracht.berichtgegevens()));
         // Op de notificatie en niet in de taak, zodat ook een later geplande verzendtaak kan versturen.
-        notificatie.bewaarVerzendgegevens(opdracht.berichtType().getTemplateId(), opdracht.regie().name(),
+        notificatie.bewaarVerzendgegevens(verzendbeleid.templateId(opdracht.berichtType()), opdracht.regie().name(),
                 opdracht.dienstverlener(), opdracht.dienst());
         notificatie.bewaarVerzendbeleid(opdracht.berichtType().name(),
                 notificatie.getAangenomenOp().plus(verzendbeleid.geldigheid(opdracht.berichtType())));

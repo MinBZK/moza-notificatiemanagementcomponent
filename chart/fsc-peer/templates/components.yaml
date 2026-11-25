@@ -1,0 +1,167 @@
+{{- /* Env per component zoals in docs/peer-aansluiten.md (stap 4c) van moza-fsc-testnet. */ -}}
+{{- $p := include "fsc-peer.prefix" . }}
+{{- $v := .Values }}
+{{- $mgr := include "fsc-peer.svc" (dict "root" . "short" "fscmgr" "port" 9443) }}
+{{- $mgrUnauth := include "fsc-peer.svc" (dict "root" . "short" "fscmgr" "port" 9444) }}
+{{- $ctlReg := include "fsc-peer.svc" (dict "root" . "short" "fscctl" "port" 9443) }}
+{{- $txlog := include "fsc-peer.svc" (dict "root" . "short" "fsctxlog" "port" 8443) }}
+
+{{- $env := printf `
+- name: LOG_TYPE
+  value: live
+- name: LOG_LEVEL
+  value: %s
+- name: AUDITLOG_TYPE
+  value: stdout
+- name: GROUP_ID
+  value: %s
+- name: DIRECTORY_PEER_ID
+  value: %q
+- name: DIRECTORY_MANAGER_ADDRESS
+  value: %s
+- name: SELF_ADDRESS
+  value: https://%s-fscmgr.%s:443
+- name: CONTROLLER_REGISTRATION_API_ADDRESS
+  value: %s
+- name: TX_LOG_API_ADDRESS
+  value: %s
+- name: AUTO_SIGN_GRANTS
+  value: ""
+- name: LISTEN_ADDRESS_EXTERNAL
+  value: 0.0.0.0:8443
+- name: LISTEN_ADDRESS_INTERNAL
+  value: 0.0.0.0:9443
+- name: LISTEN_ADDRESS_INTERNAL_UNAUTHENTICATED
+  value: 0.0.0.0:9444
+- name: MONITORING_ADDRESS
+  value: 0.0.0.0:8080
+- name: TLS_GROUP_TOKEN_CERT
+  value: /etc/fsc/group/cert.pem
+- name: TLS_GROUP_TOKEN_KEY
+  value: /etc/fsc/group/key.pem
+- name: TLS_GROUP_CONTRACT_CERT
+  value: /etc/fsc/group/cert.pem
+- name: TLS_GROUP_CONTRACT_KEY
+  value: /etc/fsc/group/key.pem
+- name: TLS_INTERNAL_UNAUTHENTICATED_ROOT_CERT
+  value: /etc/fsc/internal/root.pem
+- name: TLS_INTERNAL_UNAUTHENTICATED_CERT
+  value: /etc/fsc/internal/cert.pem
+- name: TLS_INTERNAL_UNAUTHENTICATED_KEY
+  value: /etc/fsc/internal/key.pem
+` $v.logLevel $v.group.id $v.group.directory.peerID $v.group.directory.managerAddress $p $v.externalDomain $ctlReg $txlog }}
+{{- $env = printf "%s\n%s\n%s\n%s" $env (include "fsc-peer.dsn" (dict "root" . "schema" "manager")) (include "fsc-peer.tls-group" .) (include "fsc-peer.tls-internal" .) }}
+{{- include "fsc-peer.component" (dict "root" . "endpoint" "manager" "short" "fscmgr" "image" $v.images.manager
+      "binary" "/usr/local/bin/manager" "group" true "env" $env
+      "ports" (list (dict "name" "external" "port" 8443) (dict "name" "internal" "port" 9443) (dict "name" "internal-unauth" "port" 9444))) }}
+---
+{{- /* Controller: AUTHN_TYPE=none, dus de UI alleen via kubectl port-forward, nooit via de Gateway. */ -}}
+{{- $env = printf `
+- name: LOG_TYPE
+  value: live
+- name: LOG_LEVEL
+  value: %s
+- name: AUDITLOG_TYPE
+  value: stdout
+- name: GROUP_ID
+  value: %s
+- name: DIRECTORY_PEER_ID
+  value: %q
+- name: MANAGER_ADDRESS_INTERNAL
+  value: %s
+- name: AUTHN_TYPE
+  value: none
+- name: AUTHZ_TYPE
+  value: rbac
+- name: CSRF_PROTECTION_ENABLED
+  value: "false"
+- name: LISTEN_ADDRESS_UI
+  value: 0.0.0.0:8080
+- name: LISTEN_ADDRESS_REGISTRATION_API
+  value: 0.0.0.0:9443
+- name: LISTEN_ADDRESS_ADMINISTRATION_API
+  value: 0.0.0.0:9444
+- name: MONITORING_ADDRESS
+  value: 0.0.0.0:8081
+` $v.logLevel $v.group.id $v.group.directory.peerID $mgr }}
+{{- $env = printf "%s\n%s\n%s" $env (include "fsc-peer.dsn" (dict "root" . "schema" "")) (include "fsc-peer.tls-internal" .) }}
+{{ include "fsc-peer.component" (dict "root" . "endpoint" "controller" "short" "fscctl" "image" $v.images.controller
+      "binary" "/usr/local/bin/controller" "group" false "env" $env
+      "ports" (list (dict "name" "ui" "port" 8080) (dict "name" "registration" "port" 9443) (dict "name" "admin" "port" 9444))) }}
+---
+{{- $env = printf `
+- name: LOG_TYPE
+  value: live
+- name: LOG_LEVEL
+  value: %s
+- name: LISTEN_ADDRESS
+  value: 0.0.0.0:8443
+- name: MONITORING_ADDRESS
+  value: 0.0.0.0:8081
+` $v.logLevel }}
+{{- $env = printf "%s\n%s\n%s" $env (include "fsc-peer.dsn" (dict "root" . "schema" "txlog")) (include "fsc-peer.tls-internal" .) }}
+{{ include "fsc-peer.component" (dict "root" . "endpoint" "txlog" "short" "fsctxlog" "image" $v.images.txlog
+      "binary" "/usr/local/bin/txlog-api" "group" false "env" $env
+      "ports" (list (dict "name" "api" "port" 8443))) }}
+{{- if $v.inway.enabled }}
+---
+{{- $env = printf `
+- name: LOG_TYPE
+  value: live
+- name: LOG_LEVEL
+  value: %s
+- name: NAME
+  value: %s-inway
+- name: GROUP_ID
+  value: %s
+- name: SELF_ADDRESS
+  value: https://%s-fscinway.%s:443
+- name: LISTEN_ADDRESS
+  value: 0.0.0.0:8443
+- name: MONITORING_ADDRESS
+  value: 0.0.0.0:8081
+- name: CONTROLLER_REGISTRATION_API_ADDRESS
+  value: %s
+- name: MANAGER_INTERNAL_UNAUTHENTICATED_ADDRESS
+  value: %s
+- name: TX_LOG_API_ADDRESS
+  value: %s
+` $v.logLevel $p $v.group.id $p $v.externalDomain $ctlReg $mgrUnauth $txlog }}
+{{- $env = printf "%s\n%s\n%s" $env (include "fsc-peer.tls-group" .) (include "fsc-peer.tls-internal" .) }}
+{{ include "fsc-peer.component" (dict "root" . "endpoint" "inway" "short" "fscinway" "image" $v.images.inway
+      "binary" "" "group" true "env" $env
+      "ports" (list (dict "name" "inway" "port" 8443))) }}
+{{- end }}
+{{- if $v.outway.enabled }}
+---
+{{- /* De applicatie roept de outway binnen de namespace aan over gewone HTTP (http://<prefix>-fscoutway:8080),
+zodat die de internal-CA niet hoeft te vertrouwen. Naar buiten gaat het verkeer over mTLS. */ -}}
+{{- $env = printf `
+- name: LOG_TYPE
+  value: live
+- name: LOG_LEVEL
+  value: %s
+- name: NAME
+  value: %s-outway
+- name: GROUP_ID
+  value: %s
+- name: SELF_ADDRESS
+  value: http://%s-fscoutway:8080
+- name: LISTEN_ADDRESS
+  value: 0.0.0.0:8080
+- name: MONITORING_ADDRESS
+  value: 0.0.0.0:8081
+- name: MANAGER_INTERNAL_ADDRESS
+  value: %s
+- name: CONTROLLER_REGISTRATION_API_ADDRESS
+  value: %s
+- name: TX_LOG_API_ADDRESS
+  value: %s
+- name: ENABLE_GRANT_HASH_SUGGESTION
+  value: "true"
+` $v.logLevel $p $v.group.id $p $mgr $ctlReg $txlog }}
+{{- $env = printf "%s\n%s\n%s" $env (include "fsc-peer.tls-group" .) (include "fsc-peer.tls-internal" .) }}
+{{ include "fsc-peer.component" (dict "root" . "endpoint" "outway" "short" "fscoutway" "image" $v.images.outway
+      "binary" "" "group" true "env" $env
+      "ports" (list (dict "name" "http" "port" 8080))) }}
+{{- end }}

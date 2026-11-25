@@ -72,7 +72,7 @@ import java.util.logging.Logger;
 public class NotificatieVerwerkingFuzzer {
 
     private static final String[] IDENTIFICATIE_TYPES = {"BSN", "KVK", "RSIN", "INVALID"};
-    private static final String[] BERICHT_TYPES = {"Stuurgroep Agenda", "Demo template", "onbekend"};
+    private static final String[] BERICHT_TYPES = {"Stuurgroep Agenda", "Demo template", "Herinnering-Fieldlab", "Magazijn-Fieldlab", "onbekend"};
     private static final String[] AFLEVER_STATUSSEN = {
         "delivered", "permanent-failure", "temporary-failure", "technical-failure", "onbekend",
         "created", "sending", "pending"

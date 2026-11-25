@@ -1,0 +1,146 @@
+image:
+  repository: ghcr.io/minbzk/moza-notificatiemanagementcomponent
+  # Altijd op digest: een tag als `pr-66` wordt bij een gelijke naam niet opnieuw gepulld.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+# Eén replica: Flyway migreert bij het starten (QUARKUS_FLYWAY_MIGRATE_AT_START). Flyway neemt daarbij een
+# lock op de database, maar bij meer replica's hoort de migratie in een aparte Job, zodat een mislukte
+# migratie niet elke pod laat crashen.
+replicaCount: 1
+
+service:
+  port: 8080
+
+# Secret met de geheimen van de NMC; de sleutels zijn de namen van de env-vars.
+# Zie docs/fundament-deploy.md voor het aanmaken.
+secretName: nmc-secrets
+
+profielservice:
+  url: ""
+notify:
+  # Bij moza-mock: <mock>/notifynl/<target>; het target bepaalt waar de receipt-callback heen gaat.
+  url: ""
+  # PEM-bestand in de chart met de CA('s) die de NMC voor NotifyNL vertrouwt. Leeg: trust-all uit
+  # application.properties. Gezet: alleen deze CA's, bijvoorbeeld een intermediate die de server niet meestuurt.
+  trustCertsFile: ""
+
+kek:
+  # Versie waarmee nieuwe sleutels gewrapt worden; moet in `versies` staan.
+  huidigeVersie: 1
+  # Alle KEK-versies die de NMC moet kunnen lezen, elk als NMC_KEK_VERSIE_<n> in het Secret. Bij een
+  # rotatie blijft de oude versie hier staan tot er geen notificaties meer onder gewrapt zijn
+  # (zie docs/zad-deploy.md); anders zijn die rijen niet meer te ontsleutelen.
+  versies: [1]
+
+webhook:
+  # `kid` in de JWT-header en in /api/nmc/v1/.well-known/jwks.json. Nieuwe sleutel, nieuwe id.
+  jwtKeyId: ""
+
+feed:
+  # urn:nld:oin:<OIN van 20 cijfers>:systeem:<naam>; een andere vorm laat de NMC niet starten.
+  source: ""
+
+logboekdataverwerking:
+  enabled: false
+  # Wat de NMC doet als het Logboek een schrijfactie weigert: fail-closed (de verwerking faalt; zo vraagt de
+  # standaard het) of fail-open (fout loggen en doorgaan).
+  writeFailurePolicy: fail-closed
+  # GET /api/nmc/v1/logboek/verwerkingen: inzage per betrokkene, zonder afscherming. Alleen voor een demo, en
+  # alleen met postgres.create (de inzage leest die database).
+  inzage: false
+  # Een eigen CloudNativePG-Cluster als Logboek (backend postgresql van de LDV-wrapper), los van de database
+  # van de NMC: het Logboek heeft een eigen bewaartermijn. Catalogus, versie en storageClass als bij postgres.
+  # De wrapper maakt de tabel zelf aan.
+  postgres:
+    create: false
+    name: nmc-ldv
+    database: ldv
+    owner: ldv
+    table: spans
+    storage:
+      size: 1Gi
+
+# Extra env-vars, bijvoorbeeld NMC_AFLEVERBEWIJS_BEWAARTERMIJN.
+extraEnv: []
+
+postgres:
+  # Een eigen CloudNativePG-Cluster in de namespace (de NMC hoort een eigen instantie te hebben).
+  create: true
+  name: nmc-db
+  database: nmc
+  owner: nmc
+  # ClusterImageCatalog van de CloudNativePG-plug-in van Fundament. V16 vraagt PostgreSQL 17 of hoger.
+  imageCatalog: fundament-postgresql
+  majorVersion: 18
+  storage:
+    size: 5Gi
+    storageClass: ""
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 768Mi
+
+# Het image draait als UID 1001 (quarkus.jib.user).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+gateway:
+  # Een publieke hostname via een eigen Envoy Gateway (zie templates/gateway.yaml). Standaard alleen de
+  # OpenAPI-spec en Swagger UI: de NMC heeft nog geen authenticatie, dus de API blijft dicht.
+  enabled: false
+  className: eg
+  hostname: ""
+  # Het publieke IP van de Gateway (status.addresses), na de eerste installatie; dan komt het DNS-record.
+  address: ""
+  acmeServer: https://acme-v02.api.letsencrypt.org/directory
+  paths:
+    - type: Exact
+      value: /q/openapi
+    - type: PathPrefix
+      value: /q/swagger-ui
+  # Extra listeners met TLS-passthrough voor FSC-peers (chart fsc-peer), elk {name, hostname, namespace}.
+  # name is gelijk aan de sectionName in de TLSRoute van die peer: <prefix>-fscmgr of <prefix>-fscinway.
+  passthrough: []
+
+fsc:
+  # Een eigen FSC-peer (FSCInstallation) in deze namespace; vraagt de openfsc-operator op het cluster.
+  enabled: false
+  groupID: ""
+  # 20 cijfers; op het fieldlab nog een placeholder, er is geen eigen OIN.
+  peerID: ""
+  directory:
+    # Manager van de Directory van de groep, bijvoorbeeld https://<manager>:8443.
+    address: ""
+    peerID: ""
+    trustAnchor:
+      # Secret met het CA-certificaat van de groep (zonder sleutel).
+      secretName: fsc-group-trust
+      key: ca.crt
+  # Groepscertificaat van de Manager (kubernetes.io/tls), met de peer-ID als serialNumber.
+  certificateSecretName: fsc-manager-group-tls
+  autoSignGrants: []
+  inway:
+    enabled: true
+    certificateSecretName: fsc-inway-default-group-tls
+  outway:
+    enabled: true
+    certificateSecretName: fsc-outway-default-group-tls
+  postgres:
+    image: ghcr.io/cloudnative-pg/postgresql:16
+    storageClass: ""
+    storageSize: 1Gi

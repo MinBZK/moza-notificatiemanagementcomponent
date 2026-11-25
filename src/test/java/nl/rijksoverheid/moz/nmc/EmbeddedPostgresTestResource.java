@@ -23,10 +23,17 @@ public class EmbeddedPostgresTestResource implements QuarkusTestResourceLifecycl
             throw new UncheckedIOException("Embedded PostgreSQL kon niet starten", e);
         }
 
+        String url = "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres";
+
+        // De logboekinzage leest in de tests uit dezelfde database; de wrapper zelf blijft uit.
         return Map.of(
-                "quarkus.datasource.jdbc.url", "jdbc:postgresql://localhost:" + postgres.getPort() + "/postgres",
+                "quarkus.datasource.jdbc.url", url,
                 "quarkus.datasource.username", "postgres",
-                "quarkus.datasource.password", "postgres");
+                "quarkus.datasource.password", "postgres",
+                "logboekdataverwerking.postgresql.url", url,
+                "logboekdataverwerking.postgresql.username", "postgres",
+                "logboekdataverwerking.postgresql.password", "postgres",
+                "logboekdataverwerking.postgresql.table", "logboek_spans");
     }
 
     @Override

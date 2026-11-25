@@ -1,0 +1,28 @@
+# Profielservice-mock als peer in de groep fsc-fieldlab, naast zijn peer op het MOZa FSC-testnet. Alleen een
+# inway; de service wijst naar moza-mock in tnt-notificatiedienst--mock-profielservice.
+apiVersion: openfsc.rinis.nl/v1
+kind: FSCInstallation
+metadata:
+  name: profielservice-mock
+  namespace: tnt-notificatiedienst--fsc-fieldlab-ps
+spec:
+  groupID: fsc-fieldlab
+  peerID: "19000000000000000011"
+  organization: "Profielservice-mock (Notificatiedienst)"
+  directory:
+    mode: External
+    external:
+      address: https://fsc-directory.cluster-a.fieldlab2026.nl:443
+      peerID: "07000000000000000001"
+      certPortal:
+        url: https://fsc-certportal.cluster-a.fieldlab2026.nl
+  managerAddress: https://ps-fsc-manager.cluster-c.fieldlab2026.nl:443
+  publicGateway:
+    name: public-gateway
+    namespace: istio-gateway
+    sectionName: tls-passthrough
+  postgres:
+    storageClass: ceph-incluster
+  inways:
+    - name: ps-inway
+      selfAddress: https://ps-fsc-inway.cluster-c.fieldlab2026.nl:443
