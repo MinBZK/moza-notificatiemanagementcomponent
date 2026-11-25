@@ -191,6 +191,11 @@ public class Notificatie {
         return geldigTot != null && !nu.isBefore(geldigTot);
     }
 
+    /** Of de sleutel gewist is; ontvanger en personalisation zijn dan niet meer te ontsleutelen. */
+    public boolean isSleutelGewist() {
+        return sleutelGewrapt == null;
+    }
+
     public VersleuteldeGegevens getVersleuteldeGegevens() {
         return new VersleuteldeGegevens(ontvangerVersleuteld, personalisationVersleuteld, sleutelGewrapt, kekVersie);
     }

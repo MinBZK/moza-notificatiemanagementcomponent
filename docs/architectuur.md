@@ -224,7 +224,11 @@ Foutafhandeling:
 - Een andere 4xx van NotifyNL, behalve 401, 403 en 429, ligt aan het verzoek van het NMC en
   kost een poging.
 - 401, 403, 429, 5xx, een verbindingsfout, een ongeldige NotifyNL-configuratie en een
-  ontbrekende KEK-versie stellen de taak uit zonder poging, begrensd door `geldig_tot`.
+  ontbrekende of verkeerde KEK stellen de taak uit zonder poging, begrensd door `geldig_tot`.
+- Is de sleutel van de notificatie gewist, dan eindigt ze direct in `technisch-mislukt`. Een
+  faalreceipt plant in dat geval geen herverzending en geeft de eindstatus van een laatste
+  poging.
+- `in-verzending` zonder poging eindigt na het maximum aantal pogingen in `technisch-mislukt`.
 
 De verzendtaak schrijft nog geen LDV-registratie: de `@Logboek`-interceptor werkt alleen
 binnen een REST-aanroep.

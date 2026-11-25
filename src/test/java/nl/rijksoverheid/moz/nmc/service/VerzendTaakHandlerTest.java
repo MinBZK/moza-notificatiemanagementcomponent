@@ -50,6 +50,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 
 import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
 import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.overgangen;
@@ -114,6 +115,9 @@ class VerzendTaakHandlerTest {
 
     @Inject
     VerzendTaakHandler verzendTaakHandler;
+
+    @Inject
+    NotificatieRepository notificatieRepository;
 
     @BeforeEach
     void setUp() {
@@ -361,6 +365,60 @@ class VerzendTaakHandlerTest {
 
         assertEquals(NotificatieStatus.AANGENOMEN, notificatie(id).getStatus());
         assertEquals(0, taken().getFirst().getPogingen());
+        verify(sendAMessageApi, never()).sendEmail(any());
+    }
+
+    // Een verkeerde maar goed gevormde KEK start gewoon op en raakt elke notificatie. Ook na het maximum
+    // aantal rondes (%test: max-pogingen=2) staat de notificatie er nog, zodat herstel van de KEK volstaat.
+    @Test
+    void gewrapteSleutelPastNietBijDeKek_steltUitZonderPoging() {
+        UUID id = aannameService.neemAan(decentraal());
+        int kekVersie = notificatie(id).getVersleuteldeGegevens().kekVersie();
+        QuarkusTransaction.requiringNew().run(() -> notificatieRepository.zetSleutel(id, new byte[60], kekVersie));
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+        zetDue(taken().getFirst(), clock.nu().minusSeconds(1));
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+        zetDue(taken().getFirst(), clock.nu().minusSeconds(1));
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        assertEquals(NotificatieStatus.AANGENOMEN, notificatie(id).getStatus());
+        assertEquals(0, taken().getFirst().getPogingen());
+        verify(sendAMessageApi, never()).sendEmail(any());
+    }
+
+    // Een gewiste sleutel komt niet terug: de notificatie eindigt in de eerste ronde, zonder herhalingen.
+    @Test
+    void sleutelGewist_eindigtMeteenInTechnischMislukt() {
+        UUID id = aannameService.neemAan(decentraal());
+        QuarkusTransaction.requiringNew().run(() -> notificatieRepository.wisSleutel(id));
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        Notificatie notificatie = notificatie(id);
+        assertEquals(NotificatieStatus.TECHNISCH_MISLUKT, notificatie.getStatus());
+        assertEquals(Reden.TECHNISCH, notificatie.getReden());
+        assertEquals(List.of(), taken());
+        verify(sendAMessageApi, never()).sendEmail(any());
+    }
+
+    // Poging en status komen uit dezelfde transactie, dus dit ontstaat alleen door een ingreep in de
+    // database. Zonder eindstatus plant de controletaak de verzending elke ronde opnieuw.
+    @Test
+    void inVerzendingZonderPoging_eindigtNaUitputtingInTechnischMislukt() {
+        UUID id = aannameService.neemAan(decentraal());
+        QuarkusTransaction.requiringNew().run(() ->
+                NotificatieFixtures.zetStatus(taakRepository.getEntityManager(), id, NotificatieStatus.IN_VERZENDING));
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+        assertEquals(1, taken().getFirst().getPogingen());
+        zetDue(taken().getFirst(), clock.nu().minusSeconds(1));
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        Notificatie notificatie = notificatie(id);
+        assertEquals(NotificatieStatus.TECHNISCH_MISLUKT, notificatie.getStatus());
+        assertEquals(Reden.TECHNISCH, notificatie.getReden());
+        assertEquals(List.of(), taken());
         verify(sendAMessageApi, never()).sendEmail(any());
     }
 

@@ -93,17 +93,19 @@ public class VerzendTaakHandler implements TaakHandler {
      * Een uitgeputte verzendtaak eindigt in {@code technisch-mislukt} (ADR 0024, beslispunt 2), zodat de
      * Dienstverlener een eindstatus krijgt. Vanuit {@code aangenomen} loopt dat via
      * {@code in-verzending}, omdat er geen directe overgang is. Dat geldt ook voor een herverzending die
-     * haar poging nooit kon aanmaken; anders plant de controletaak haar elke ronde opnieuw. Een notificatie
-     * die al verder is, houdt haar status.
+     * haar poging nooit kon aanmaken, en voor {@code in-verzending} zonder poging; anders plant de
+     * controletaak de verzending elke ronde opnieuw. Een notificatie die al verder is, houdt haar status.
      */
     @Override
     public boolean handelUitputtingAf(Taak taak) {
         Notificatie notificatie = overgangsfunctie.vergrendel(taak.getNotificatieId());
+        Optional<Poging> laatste = pogingRepository.findLaatsteVan(notificatie.getId());
+        boolean inVerzendingZonderPoging = laatste.isEmpty() && notificatie.getStatus() == NotificatieStatus.IN_VERZENDING;
 
         if (notificatie.getStatus() == NotificatieStatus.AANGENOMEN) {
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.IN_VERZENDING, null);
-        } else if (pogingRepository.findLaatsteVan(notificatie.getId())
-                .filter(p -> isInVerzending(notificatie, p) || isHerverzendbaar(notificatie, p)).isEmpty()) {
+        } else if (!inVerzendingZonderPoging
+                && laatste.filter(p -> isInVerzending(notificatie, p) || isHerverzendbaar(notificatie, p)).isEmpty()) {
             Log.infof("Notificatie %s staat inmiddels op %s; uitgeputte verzendtaak afgerond zonder overgang",
                     notificatie.getId(), notificatie.getStatus());
 
@@ -123,9 +125,19 @@ public class VerzendTaakHandler implements TaakHandler {
 
         try {
             verzending = QuarkusTransaction.requiringNew().call(() -> bereidVoor(taak));
-        } catch (KekOntbreektException e) {
-            // Tijdens een uitrol kent een oude pod de nieuwe KEK nog niet; een pod die hem wel kent pakt
-            // de taak later op.
+        } catch (SleutelGewistException e) {
+            // De sleutel komt niet terug, dus herhalen heeft geen zin.
+            Log.warnf("%s; notificatie %s is niet meer te verzenden", e.getMessage(), taak.getNotificatieId());
+            QuarkusTransaction.requiringNew().run(() -> {
+                handelUitputtingAf(taak);
+                taakClaimer.rondAf(taak);
+            });
+
+            return TaakUitkomst.alAfgerond();
+        } catch (OntsleutelenMisluktException e) {
+            // Een ontbrekende of verkeerde KEK raakt elke notificatie tegelijk en kost daarom geen poging.
+            // Tijdens een uitrol kent een oude pod de nieuwe KEK nog niet, en een verkeerd gezette KEK zou
+            // anders elke openstaande notificatie op technisch-mislukt zetten.
             Log.errorf("%s; verzendtaak voor notificatie %s uitgesteld", e.getMessage(), taak.getNotificatieId());
 
             return uitgesteld();

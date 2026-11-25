@@ -45,6 +45,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 
 import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.laatstePoging;
 import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
@@ -99,6 +100,9 @@ class HerverzendingTest {
 
     @Inject
     VerzendTaakHandler verzendTaakHandler;
+
+    @Inject
+    NotificatieRepository notificatieRepository;
 
     @InjectSpy
     Verzendbeleid verzendbeleid;
@@ -327,6 +331,42 @@ class HerverzendingTest {
 
         assertEquals(NotificatieStatus.VERZONDEN, notificatie(id).getStatus());
         assertEquals(TaakSoort.VERZENDEN, enigeTaak().getTaakSoort(), "één herverzendtaak; de oude is vervangen");
+    }
+
+    // Een notificatie kan een eindstatus verlaten nadat haar sleutel gewist is. Een herverzending is dan
+    // niet meer te versturen, dus de fout geeft de eindstatus van een laatste poging.
+    @Test
+    void tijdelijkeFoutNaBezorgingMetGewisteSleutel_geeftNietBezorgbaarZonderHerverzending() {
+        UUID id = verzonden();
+        Poging eerste = laatstePoging(id);
+        OffsetDateTime bezorgdOp = clock.nu().minusDays(2);
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "delivered", bezorgdOp);
+        QuarkusTransaction.requiringNew().run(() -> notificatieRepository.wisSleutel(id));
+
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure", bezorgdOp.plusDays(1));
+
+        assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(id).getStatus());
+        assertEquals(Reden.ONBEREIKBAAR, notificatie(id).getReden());
+        assertEquals(List.of(TaakSoort.WISSEN), taken().stream().map(Taak::getTaakSoort).toList(), "alleen de wistaak van de eindstatus");
+    }
+
+    // De controletaak plant een ontbrekende herverzending zonder naar de sleutel te kijken; de verzendtaak
+    // geeft de notificatie dan in de eerste ronde een eindstatus, zonder een tweede poging te starten.
+    @Test
+    void herverzendtaakMetGewisteSleutel_eindigtMeteenInTechnischMislukt() {
+        UUID id = verzonden();
+        Poging eerste = laatstePoging(id);
+        receiptVerwerker.verwerk(eerste.getNotifyId(), eerste.getId().toString(), "temporary-failure", clock.nu());
+        QuarkusTransaction.requiringNew().run(() -> notificatieRepository.wisSleutel(id));
+        maakDue();
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        assertEquals(NotificatieStatus.TECHNISCH_MISLUKT, notificatie(id).getStatus());
+        assertEquals(Reden.TECHNISCH, notificatie(id).getReden());
+        assertEquals(1, laatstePoging(id).getNummer());
+        assertEquals(List.of(TaakSoort.WISSEN), taken().stream().map(Taak::getTaakSoort).toList(), "alleen de wistaak van de eindstatus");
+        verify(sendAMessageApi, times(1)).sendEmail(any());
     }
 
     @Test

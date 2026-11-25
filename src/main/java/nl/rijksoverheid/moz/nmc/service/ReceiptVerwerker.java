@@ -160,8 +160,10 @@ public class ReceiptVerwerker {
         }
 
         OffsetDateTime nu = OffsetDateTime.now(clock).truncatedTo(ChronoUnit.MICROS);
-        Overgang overgang = Overgang.bij(uitkomst.get(),
-                verzendbeleid.magHerverzenden(poging, notificatie.getBerichtType()), notificatie.isVerlopen(nu));
+        // Zonder sleutel is er niets meer te verzenden: de fout telt dan als die op de laatste poging.
+        boolean herverzendbaar = verzendbeleid.magHerverzenden(poging, notificatie.getBerichtType())
+                && !notificatie.isSleutelGewist();
+        Overgang overgang = Overgang.bij(uitkomst.get(), herverzendbaar, notificatie.isVerlopen(nu));
 
         if (overgang.herverzending()) {
             // Een eerdere faalreceipt op deze poging heeft de herverzending al gepland.
