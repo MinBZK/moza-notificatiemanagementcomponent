@@ -43,6 +43,20 @@ feed:
 
 logboekdataverwerking:
   enabled: false
+  # Wat de NMC doet als het Logboek een schrijfactie weigert: fail-closed (de verwerking faalt; zo vraagt de
+  # standaard het) of fail-open (fout loggen en doorgaan).
+  writeFailurePolicy: fail-closed
+  # Een eigen CloudNativePG-Cluster als Logboek (backend postgresql van de LDV-wrapper), los van de database
+  # van de NMC: het Logboek heeft een eigen bewaartermijn. Catalogus, versie en storageClass als bij postgres.
+  # De wrapper maakt de tabel zelf aan.
+  postgres:
+    create: false
+    name: nmc-ldv
+    database: ldv
+    owner: ldv
+    table: spans
+    storage:
+      size: 1Gi
 
 # Extra env-vars, bijvoorbeeld NMC_AFLEVERBEWIJS_BEWAARTERMIJN.
 extraEnv: []

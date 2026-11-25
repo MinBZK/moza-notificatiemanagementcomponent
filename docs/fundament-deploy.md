@@ -292,7 +292,7 @@ projecten van het fieldlab), project `notificatiedienst`. Het FBS zit in een eig
 
 ```text
 project notificatiedienst
-├─ nmc                  NMC + nmc-db (CNPG, PG 18); testnet-peer nmc (inway + outway)
+├─ nmc                  NMC + nmc-db en nmc-ldv (CNPG, PG 18); testnet-peer nmc (inway + outway)
 ├─ mock-profielservice  moza-mock, als Profielservice; testnet-peer profielservice-mock (inway)
 ├─ mock-notifynl        moza-mock, als NotifyNL; geen FSC (ook de echte NotifyNL is een publieke API)
 ├─ fsc-fieldlab         fsc-fieldlab-peer van de NMC (19000000000000000010, inway + outway)
@@ -534,6 +534,38 @@ unset K
 - Terug naar Worth: `notify.url` op `https://api.notifynl.nl`, `trustCertsFile` leeg, Worths team-key in
   het Secret en `NMC_BELEID_DEMO_TEMPLATE_TEMPLATE_ID=a1f49022-846c-420d-b7f7-dd7b328f1474` in `extraEnv`.
   Terug naar de mock: `notify.url` op `http://moza-mock.tnt-notificatiedienst--mock-notifynl.svc:8080/notifynl/lokaal`.
+
+### Logboek Dataverwerkingen (LDV)
+
+Op het fieldlab staat LDV aan, met de PostgreSQL-backend van de LDV-wrapper (1.1.0) in een eigen
+CNPG-Cluster `nmc-ldv` (database `ldv`, tabel `spans`), los van `nmc-db`: het Logboek heeft een eigen
+bewaartermijn. In de chart: `logboekdataverwerking.enabled` en `logboekdataverwerking.postgres.create`;
+de NMC krijgt url, gebruiker en wachtwoord uit het Secret `nmc-ldv-app`. De wrapper maakt de tabel zelf
+aan. Geen ClickHouse nodig, en geen nieuw image: de PostgreSQL-driver zit al in de NMC.
+
+- **`writeFailurePolicy: fail-open`** op het fieldlab: weigert het Logboek een schrijfactie, dan logt de
+  NMC dat (SEVERE) en neemt hij de notificatie toch aan. Met `fail-closed` (de standaard, en wat de
+  standaard vraagt) faalt dan de aanname met een 500. Na het fieldlab terug naar `fail-closed`.
+- **Wat er gelogd wordt:** de aanname van een centrale (`notificatieAannemen`) en een decentrale
+  notificatie (`decentraleNotificatieAannemen`), en het lezen van de eventfeed (`eventsLezen`). De
+  betrokkene staat er als sleutel-hash in (`HashHelper`), nooit als BSN/KVK/RSIN of e-mailadres.
+- **Nog niet:** de verzending zelf (Profielservice en NotifyNL) en een echte verwerkingsactiviteit; die
+  staat nog op `…/verwerkingsactiviteiten/TODO-NMC` (#754).
+- Op 25 november 2026 getest: beide aannames gaven een rij met status `UNSET` (afgerond zonder
+  systeemfout) en een hash van 44 tekens als betrokkene; de mail kwam gewoon aan.
+
+Bekijken:
+
+```bash
+D=$(kubectl -n tnt-notificatiedienst--nmc get pod -l cnpg.io/cluster=nmc-ldv,cnpg.io/instanceRole=primary -o name)
+kubectl -n tnt-notificatiedienst--nmc exec $D -c postgres -- psql -d ldv -c \
+  "select name as verwerking, status, attributes->>'dpl.core.processing_activity_id' as activiteit,
+          left(attributes->>'dpl.core.data_subject_id', 12) || '…' as betrokkene_gepseudonimiseerd
+   from spans order by start_time desc limit 5"
+```
+
+Uitzetten: `logboekdataverwerking.enabled: false` en `helm upgrade`; `nmc-ldv` blijft staan
+(`helm.sh/resource-policy: keep`).
 
 ### Een nieuw image en Flyway
 

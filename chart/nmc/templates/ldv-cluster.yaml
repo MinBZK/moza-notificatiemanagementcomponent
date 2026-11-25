@@ -1,0 +1,31 @@
+{{- with .Values.logboekdataverwerking.postgres }}
+{{- if .create }}
+# Het Logboek Dataverwerkingen van de NMC; CNPG maakt hierbij het Secret <name>-app aan.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "nmc.labels" $ | nindent 4 }}
+  annotations:
+    # helm uninstall laat het Logboek staan; weggooien gaat bewust met kubectl delete cluster.
+    helm.sh/resource-policy: keep
+spec:
+  instances: 1
+  enablePDB: false
+  imageCatalogRef:
+    apiGroup: postgresql.cnpg.io
+    kind: ClusterImageCatalog
+    name: {{ $.Values.postgres.imageCatalog }}
+    major: {{ $.Values.postgres.majorVersion }}
+  bootstrap:
+    initdb:
+      database: {{ .database }}
+      owner: {{ .owner }}
+  storage:
+    size: {{ .storage.size }}
+    {{- with $.Values.postgres.storage.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+{{- end }}
+{{- end }}
