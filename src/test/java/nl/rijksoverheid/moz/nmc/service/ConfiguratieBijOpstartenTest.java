@@ -2,6 +2,10 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.runtime.Startup;
 import nl.rijksoverheid.moz.nmc.config.ConfigValidatie;
+import nl.rijksoverheid.moz.nmc.service.aanname.AannameService;
+import nl.rijksoverheid.moz.nmc.service.onderhoud.EventlogPartitiebeheer;
+import nl.rijksoverheid.moz.nmc.service.verzending.NotifyNLNavraagmomenten;
+import nl.rijksoverheid.moz.nmc.service.verzending.Verzendbeleid;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 

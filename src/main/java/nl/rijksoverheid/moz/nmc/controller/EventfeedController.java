@@ -11,11 +11,11 @@ import nl.rijksoverheid.moz.nmc.client.webhook.NotificatieStatusEvent;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.domain.OngeldigeCursorException;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
-import nl.rijksoverheid.moz.nmc.service.Aanroeplimiet;
-import nl.rijksoverheid.moz.nmc.service.CursorVervallenException;
+import nl.rijksoverheid.moz.nmc.service.feed.Aanroeplimiet;
+import nl.rijksoverheid.moz.nmc.service.feed.CursorVervallenException;
 import nl.rijksoverheid.moz.nmc.service.DvProvider;
-import nl.rijksoverheid.moz.nmc.service.EventPagina;
-import nl.rijksoverheid.moz.nmc.service.Eventfeed;
+import nl.rijksoverheid.moz.nmc.service.feed.EventPagina;
+import nl.rijksoverheid.moz.nmc.service.feed.Eventfeed;
 
 import java.util.List;
 import java.util.UUID;

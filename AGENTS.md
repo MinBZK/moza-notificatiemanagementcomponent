@@ -131,8 +131,11 @@ Haal die override pas weg als de Quarkus-BOM zelf een veilige versie levert.
   eigen contract komt.
 - **`service/` is per domein onderverdeeld**: `aanname/`, `feed/`, `onderhoud/`, `receipt/`,
   `sleutel/`, `taak/`, `verzending/` en `webhook/`, elk met de eigen exceptions. Direct in
-  `service/` staat wat elk domein gebruikt: `Overgangsfunctie` en `DvProvider`. Wat een ander
-  domein niet nodig heeft, blijft package-private.
+  `service/` staat wat meerdere domeinen delen en zelf van geen domein afhangt:
+  `Overgangsfunctie`, `Opruimtermijnen`, `DvProvider`, `BerichtType` en `Regie`. `taak/`,
+  `sleutel/` en `feed/` hangen van geen ander domein af; de handlers staan bij hun domein en
+  importeren `taak/`. Een methode of veld dat een ander domein niet nodig heeft, blijft
+  package-private.
 - **Constructor-injectie, geen field-injectie.** Dit wijkt bewust af van andere repo's.
 - **Repositories implementeren `PanacheRepositoryBase<T, Id>`**, niet `PanacheRepository<T>`:
   die legt het id-type vast op `Long`, en methodes als `deleteById` gaan dan stil verkeerd.

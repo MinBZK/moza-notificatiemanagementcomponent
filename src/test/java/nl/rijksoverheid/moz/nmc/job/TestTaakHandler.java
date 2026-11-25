@@ -2,8 +2,8 @@ package nl.rijksoverheid.moz.nmc.job;
 
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.service.TaakHandler;
-import nl.rijksoverheid.moz.nmc.service.TaakUitkomst;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
 
 import java.util.function.BiFunction;
 import java.util.function.Predicate;

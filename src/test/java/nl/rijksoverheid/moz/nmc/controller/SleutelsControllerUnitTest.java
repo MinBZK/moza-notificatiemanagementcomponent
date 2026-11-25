@@ -5,7 +5,7 @@ import jakarta.ws.rs.core.Response;
 import nl.rijksoverheid.moz.nmc.api.model.JsonWebKey;
 import nl.rijksoverheid.moz.nmc.api.model.JsonWebKeySet;
 import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
-import nl.rijksoverheid.moz.nmc.service.WebhookSleutel;
+import nl.rijksoverheid.moz.nmc.service.webhook.WebhookSleutel;
 import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import org.junit.jupiter.api.Test;
 

@@ -3,8 +3,8 @@ package nl.rijksoverheid.moz.nmc.testhelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.smallrye.config.PropertiesConfigSource;
 import io.smallrye.config.SmallRyeConfigBuilder;
-import nl.rijksoverheid.moz.nmc.service.ConfigKekProvider;
-import nl.rijksoverheid.moz.nmc.service.Sleutelbeheer;
+import nl.rijksoverheid.moz.nmc.service.sleutel.ConfigKekProvider;
+import nl.rijksoverheid.moz.nmc.service.sleutel.Sleutelbeheer;
 
 import java.util.HashMap;
 import java.util.Map;
