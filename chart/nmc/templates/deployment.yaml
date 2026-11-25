@@ -88,6 +88,13 @@ spec:
               value: {{ .table | quote }}
             {{- end }}
             {{- end }}
+            {{- if .Values.logboekdataverwerking.inzage }}
+            {{- if not .Values.logboekdataverwerking.postgres.create }}
+            {{- fail "logboekdataverwerking.inzage vraagt logboekdataverwerking.postgres.create" }}
+            {{- end }}
+            - name: NMC_LOGBOEK_INZAGE_ENABLED
+              value: "true"
+            {{- end }}
             {{- range list "NOTIFY_API_KEY" "NOTIFY_CALLBACK_BEARER_TOKEN" "HASH_PEPPER" "NMC_WEBHOOK_JWT_PRIVATE_KEY" }}
             {{- include "nmc.geheim" (dict "naam" . "secret" $.Values.secretName) | nindent 12 }}
             {{- end }}

@@ -64,6 +64,8 @@ logboekdataverwerking:
   writeFailurePolicy: fail-open
   postgres:
     create: true
+  # Voor de demo: de inzage per betrokkene, open via nmc.cluster-c.fieldlab2026.nl, naast die van het FBS.
+  inzage: true
 
 postgres:
   # De CloudNativePG-operator op dit cluster komt van Haven+, met deze catalogus (PG 15 tot en met 18).
