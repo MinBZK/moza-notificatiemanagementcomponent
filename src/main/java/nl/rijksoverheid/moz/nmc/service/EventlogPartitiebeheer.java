@@ -32,7 +32,8 @@ public class EventlogPartitiebeheer {
     // Het aanhangen leest de default-partitie door; met de timeouts van de databaserol (V15) zou dat bij een
     // volle default-partitie elke ronde mislukken en er nooit meer een partitie bij komen. Zolang het duurt,
     // staat de feed stil op het watermerk van deze transactie.
-    private static final Duration AANHANG_TIMEOUT = Duration.ofMinutes(5);
+    // De lease van de onderhoudstaak moet langer zijn dan deze stap.
+    static final Duration AANHANG_TIMEOUT = Duration.ofMinutes(5);
 
     private final EventPartitieRepository repository;
     private final Opruimtermijnen opruimtermijnen;

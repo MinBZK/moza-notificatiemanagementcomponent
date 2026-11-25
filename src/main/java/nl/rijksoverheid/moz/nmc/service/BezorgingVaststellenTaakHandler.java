@@ -9,6 +9,8 @@ import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 
+import java.util.Optional;
+
 /**
  * Brengt een notificatie na de vaststellingstermijn van {@code bezorgd} naar {@code definitief-bezorgd}.
  * Vraagt niets na bij NotifyNL: een faalreceipt binnen de termijn heeft de taak al afgerond.
@@ -35,12 +37,7 @@ public class BezorgingVaststellenTaakHandler implements TaakHandler {
     @Override
     public TaakUitkomst voerUit(Taak taak, Lease lease) {
         QuarkusTransaction.requiringNew().run(() -> {
-            if (notificatieRepository.findById(taak.getNotificatieId()) == null) {
-                Log.infof("Vaststeltaak %s voor een notificatie die niet meer bestaat; afgerond", taak.getId());
-            } else {
-                stelVast(taak);
-            }
-
+            stelVast(taak);
             taakClaimer.rondAf(taak);
         });
 
@@ -48,7 +45,17 @@ public class BezorgingVaststellenTaakHandler implements TaakHandler {
     }
 
     private void stelVast(Taak taak) {
-        Notificatie notificatie = overgangsfunctie.vergrendel(taak.getNotificatieId());
+        // Eerst vergrendelen en dan pas lezen: een rij die al zonder lock geladen is, weigert Hibernate te
+        // vergrendelen als een receipt de versie intussen ophoogde, en dat kost de taak een poging.
+        Optional<Notificatie> vergrendeld = notificatieRepository.vergrendel(taak.getNotificatieId());
+
+        if (vergrendeld.isEmpty()) {
+            Log.infof("Vaststeltaak %s voor een notificatie die niet meer bestaat; afgerond", taak.getId());
+
+            return;
+        }
+
+        Notificatie notificatie = vergrendeld.get();
 
         if (notificatie.getStatus() != NotificatieStatus.BEZORGD) {
             Log.infof("Notificatie %s staat op %s; vaststeltaak %s afgerond zonder overgang",

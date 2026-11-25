@@ -191,7 +191,10 @@ aan de versie van de notificatie.
 `taak` (per soort gepartitioneerd) draagt de bijwerkingen met `due` als timer;
 `TaakClaimer` claimt per ronde met `PESSIMISTIC_WRITE` en de skip-locked-hint
 (`FOR NO KEY UPDATE SKIP LOCKED`), verdeeld over de dienstverleners met werk en voor het
-verzenden en de navraag binnen het `verzendbudget` per minuut.
+verzenden en de navraag binnen het `verzendbudget` per minuut. De tokens nemen, de taken
+claimen en de ongebruikte tokens teruggeven zijn drie transacties, zodat de budgetrij die alle
+pods delen niet vergrendeld is tijdens het claimen. Mislukt het teruggeven, dan vervallen die
+tokens met het tijdvak.
 `TaakWorker` draait per soort een `@Scheduled`-ronde en geeft elke taak aan de
 `TaakHandler` van die soort. Handlers: `VerzendTaakHandler`, `ReceiptTaakHandler`,
 `NotifyNLNavraagTaakHandler`, `BezorgingVaststellenTaakHandler`, `ControleTaakHandler`,
@@ -304,8 +307,10 @@ transactie (`pg_snapshot_xmax`) geeft 410. `PUT .../events/bevestiging` schrijft
 
 Het opruimen van het eventlog spaart alleen partities waar een bevestiging of leverpositie in
 wijst; een nog niet bevestigde cursor kan dus vervallen en krijgt bij de volgende aanroep
-410. Dat is bewust niet afgedekt. De aanroeplimiet (`Aanroeplimiet`) telt lezen en bevestigen
-samen in één teller per dienstverlener, telt per pod en geeft bij 429 een `Retry-After`.
+410. Dat is bewust niet afgedekt. De cursorleeftijd telt vanaf het moment dat de bevestigde
+positie voor het laatst vooruitging: dezelfde cursor opnieuw bevestigen ververst hem niet. De
+aanroeplimiet (`Aanroeplimiet`) telt lezen en bevestigen samen in één teller per
+dienstverlener, telt per pod en geeft bij 429 een `Retry-After`.
 
 ### Webhook
 
@@ -376,6 +381,8 @@ de gewrapte sleutel met native SQL in `NotificatieRepository`, zonder versie en 
 plant. Hij maakt eventpartities aan en ruimt ze op, herwrapt sleutels na een KEK-rotatie en
 verwijdert notificaties na `nmc.afleverbewijs.bewaartermijn`. Elke stap loopt in batches van
 `nmc.onderhoud.batch` met een eigen transactie, en een stap die faalt houdt de andere niet op.
+De lease van de onderhoudstaak is minstens 6 minuten, ook als `nmc.taak.lease` korter is: het
+aanhangen van een partitie mag 5 minuten duren.
 
 ### Partities van het eventlog
 

@@ -3,6 +3,7 @@ package nl.rijksoverheid.moz.nmc.service;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
@@ -43,6 +44,10 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 // %test: 20 tokens per minuut, 10 gereserveerd voor het verzenden en 5 voor de navraag, lease 2m.
@@ -58,7 +63,7 @@ class TaakClaimerTest {
     @Inject
     TaakClaimer taakClaimer;
 
-    @Inject
+    @InjectSpy
     TaakRepository taakRepository;
 
     @Inject
@@ -364,6 +369,57 @@ class TaakClaimerTest {
 
         int tokens = QuarkusTransaction.requiringNew().call(() -> TaakFixtures.tokens(entityManager));
         assertEquals(17, tokens);
+    }
+
+    // Alle pods delen de rij van het verzendbudget voor verzenden en navraag. Tijdens het claimen van de
+    // taken moet een andere pod hem kunnen vergrendelen; NOWAIT faalt direct als dat niet kan.
+    @Test
+    void claim_tijdensHetClaimenVanVerzendtaken_isHetVerzendbudgetNietVergrendeld() {
+        plan(TaakSoort.VERZENDEN, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        List<Integer> tokensTijdensClaim = new ArrayList<>();
+        doAnswer(aanroep -> {
+            tokensTijdensClaim.add(QuarkusTransaction.requiringNew().call(() -> (Integer) entityManager
+                    .createNativeQuery("SELECT tokens FROM verzendbudget FOR UPDATE NOWAIT").getSingleResult()));
+
+            return aanroep.callRealMethod();
+        }).when(taakRepository).claim(any(), any(), anyInt(), any(), any());
+
+        assertEquals(1, taakClaimer.claim(TaakSoort.VERZENDEN, 10).size());
+
+        assertEquals(List.of(10), tokensTijdensClaim, "de tien gevraagde tokens zijn al genomen en vastgelegd");
+        assertEquals(19, QuarkusTransaction.requiringNew().call(() -> TaakFixtures.tokens(entityManager)));
+    }
+
+    // De tokens zijn al vastgelegd voordat de taken geclaimd worden; mislukt het claimen, dan gaan ze terug.
+    @Test
+    void claim_claimenVanVerzendtakenFaalt_geeftDeTokensTerug() {
+        plan(TaakSoort.VERZENDEN, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        doThrow(new IllegalStateException("gesimuleerde fout")).when(taakRepository).claim(any(), any(), anyInt(), any(), any());
+
+        assertThrows(IllegalStateException.class, () -> taakClaimer.claim(TaakSoort.VERZENDEN, 10));
+
+        assertEquals(20, QuarkusTransaction.requiringNew().call(() -> TaakFixtures.tokens(entityManager)));
+    }
+
+    // Het aanhangen van een eventpartitie mag vijf minuten duren; met de gewone lease van 2m zou een
+    // tweede pod de onderhoudstaak intussen claimen.
+    @Test
+    void claim_onderhoud_krijgtEenLeaseLangerDanHetAanhangenVanEenPartitie() {
+        UUID onderhoud = plan(TaakSoort.ONDERHOUD, null, nu().minusMinutes(1));
+        UUID wissen = plan(TaakSoort.WISSEN, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+
+        Taak taak = taakClaimer.claim(TaakSoort.ONDERHOUD, 10).getFirst();
+        taakClaimer.claim(TaakSoort.WISSEN, 10);
+
+        assertEquals(nu().plusMinutes(6).toInstant(), zoek(onderhoud).getLeaseTot().toInstant());
+        assertEquals(nu().plusMinutes(2).toInstant(),
+                LeesHelper.taak(TaakSoort.WISSEN, wissen).orElseThrow().getLeaseTot().toInstant());
+
+        QuarkusTransaction.requiringNew().run(() ->
+                TaakFixtures.zetLeaseTot(entityManager, TaakSoort.ONDERHOUD, onderhoud, nu().plusSeconds(5)));
+        taakClaimer.verleng(taak);
+
+        assertEquals(nu().plusMinutes(6).toInstant(), zoek(onderhoud).getLeaseTot().toInstant());
     }
 
     private UUID plan(TaakSoort taakSoort, UUID dvId, OffsetDateTime due) {

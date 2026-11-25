@@ -27,6 +27,11 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
 import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.poging;
@@ -169,6 +174,40 @@ class BezorgingVaststellenTest {
         TaakRonde.draai(taakWorker, TaakSoort.BEZORGING_VASTSTELLEN);
 
         assertTrue(taken().isEmpty());
+    }
+
+    // Een andere transactie brengt de notificatie naar een andere status terwijl de vaststeltaak op de
+    // rijvergrendeling wacht. De taak leest de rij pas na het vergrendelen en ziet de nieuwe status; las
+    // hij eerder, dan weigert Hibernate de vergrendeling op de verouderde versie en kost dat een poging.
+    @Test
+    void vaststeltaak_statusWijzigtTerwijlDeTaakOpDeVergrendelingWacht_rondtAfZonderPoging() throws Exception {
+        Bezorgd bezorgd = bezorgd(OffsetDateTime.now(ZoneOffset.UTC).minusDays(9));
+        maakVaststeltaakDue(bezorgd.notificatieId());
+        CountDownLatch vergrendeld = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        try {
+            Future<?> andere = executor.submit(() -> QuarkusTransaction.requiringNew().run(() -> {
+                overgangsfunctie.voerUit(bezorgd.notificatieId(), NotificatieStatus.VERLOPEN, Reden.VERLOPEN);
+                vergrendeld.countDown();
+
+                try {
+                    NotificatieFixtures.wachtTotEenTransactieOpDeLockWacht(notificatieRepository.getEntityManager());
+                } catch (InterruptedException e) {
+                    throw new IllegalStateException(e);
+                }
+            }));
+            assertTrue(vergrendeld.await(10, TimeUnit.SECONDS), "de andere transactie vergrendelde de notificatie niet");
+
+            TaakRonde.draai(taakWorker, TaakSoort.BEZORGING_VASTSTELLEN);
+
+            andere.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertEquals(NotificatieStatus.VERLOPEN, notificatie(bezorgd.notificatieId()).getStatus());
+        assertTrue(taken().isEmpty(), "de vaststeltaak is afgerond en niet met een poging uitgesteld");
     }
 
     // De overgang en het afronden van de taak gaan in één transactie: een worker die zijn claim kwijt is,

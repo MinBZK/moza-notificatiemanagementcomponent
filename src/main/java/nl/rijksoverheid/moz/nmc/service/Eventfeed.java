@@ -123,9 +123,9 @@ public class Eventfeed {
     }
 
     /**
-     * Legt de cursor vast als bevestiging; een cursor die achter de bewaarde ligt verandert niets. Dezelfde
-     * cursor opnieuw ververst het tijdstip, zodat een dienstverlener zonder nieuwe events zijn cursor
-     * binnen de maximale cursorleeftijd houdt.
+     * Legt de cursor vast als bevestiging; een cursor die niet verder ligt dan de bewaarde verandert niets.
+     * Dezelfde cursor opnieuw ververst het tijdstip dus niet: een dienstverlener die blijft hangen op een
+     * oude cursor houdt het eventlog niet langer vast dan de maximale cursorleeftijd.
      *
      * @return of de bevestiging is gewijzigd
      * @throws CursorVervallenException als de cursor uit een ander epoch komt, onder het oudste

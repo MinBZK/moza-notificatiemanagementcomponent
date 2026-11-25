@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.logging.Log;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import nl.rijksoverheid.moz.nmc.config.TaakConfig;
@@ -23,12 +24,18 @@ import java.util.UUID;
  * één dienstverlener de andere niet blokkeert; voor het verzenden en de navraag komen de tokens uit
  * het verzendbudget.
  * <p>
- * De claim is een eigen transactie die committet vóór de uitvoering. Elke wijziging daarna toetst
- * het claim-epoch en gooit {@link TaakVerlorenException} als een andere worker de taak inmiddels
- * heeft, zodat de transactie van de aanroeper terugrolt.
+ * De claim committet vóór de uitvoering. De tokens nemen, de taken claimen en de ongebruikte tokens
+ * teruggeven zijn drie transacties, zodat de rij van het verzendbudget, die alle pods delen, niet
+ * vergrendeld is tijdens het claimen. Elke wijziging daarna toetst het claim-epoch en gooit
+ * {@link TaakVerlorenException} als een andere worker de taak inmiddels heeft, zodat de transactie van
+ * de aanroeper terugrolt.
  */
 @ApplicationScoped
 public class TaakClaimer {
+
+    // Het aanhangen van een eventpartitie mag langer duren dan de gewone lease; de marge voorkomt dat de
+    // lease afloopt op het moment dat de database die stap afbreekt.
+    private static final Duration ONDERHOUD_LEASE = EventlogPartitiebeheer.AANHANG_TIMEOUT.plusMinutes(1);
 
     private final TaakRepository taakRepository;
     private final Verzendbudget verzendbudget;
@@ -48,17 +55,21 @@ public class TaakClaimer {
      * dienstverleners met werk. Levert een lege lijst als er geen werk is of het budget op is; in dat
      * laatste geval blijft elke taak onaangeraakt en komt hij in een volgende ronde weer aan de beurt.
      */
-    @Transactional(Transactional.TxType.REQUIRES_NEW)
     public List<Taak> claim(TaakSoort taakSoort, int batch) {
         OffsetDateTime nu = OffsetDateTime.now(clock);
-        List<UUID> dienstverleners = taakRepository.dienstverlenersMetOpenWerk(taakSoort, nu);
+        Optional<BudgetDoel> doel = taakSoort.budgetDoel();
+        Voorbereiding voorbereiding = QuarkusTransaction.requiringNew().call(() -> {
+            List<UUID> metWerk = taakRepository.dienstverlenersMetOpenWerk(taakSoort, nu);
+
+            return new Voorbereiding(metWerk, metWerk.isEmpty() ? Optional.empty() : doel.map(d -> verzendbudget.neem(d, batch)));
+        });
+        List<UUID> dienstverleners = voorbereiding.dienstverleners();
 
         if (dienstverleners.isEmpty()) {
             return List.of();
         }
 
-        Optional<BudgetDoel> doel = taakSoort.budgetDoel();
-        Optional<Verzendbudget.Genomen> genomen = doel.map(d -> verzendbudget.neem(d, batch));
+        Optional<Verzendbudget.Genomen> genomen = voorbereiding.genomen();
         int budget = genomen.map(Verzendbudget.Genomen::aantal).orElse(batch);
 
         if (budget == 0) {
@@ -67,9 +78,43 @@ public class TaakClaimer {
             return List.of();
         }
 
+        List<Taak> geclaimd;
+
+        try {
+            geclaimd = QuarkusTransaction.requiringNew().call(() -> claimTaken(taakSoort, dienstverleners, budget, nu));
+        } catch (RuntimeException e) {
+            geefTerug(genomen, budget);
+
+            throw e;
+        }
+
+        geefTerug(genomen, budget - geclaimd.size());
+
+        return geclaimd;
+    }
+
+    private record Voorbereiding(List<UUID> dienstverleners, Optional<Verzendbudget.Genomen> genomen) {
+    }
+
+    // De taken zijn al geclaimd of de claim is al mislukt; een teruggave die niet lukt verandert daar
+    // niets aan. De tokens vervallen dan met het tijdvak.
+    private void geefTerug(Optional<Verzendbudget.Genomen> genomen, int aantal) {
+        if (genomen.isEmpty() || aantal <= 0) {
+            return;
+        }
+
+        try {
+            QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(genomen.get(), aantal));
+        } catch (RuntimeException e) {
+            Log.warnf(e, "%d ongebruikte token(s) voor %s niet teruggegeven aan het verzendbudget", aantal,
+                    genomen.get().doel());
+        }
+    }
+
+    private List<Taak> claimTaken(TaakSoort taakSoort, List<UUID> dienstverleners, int budget, OffsetDateTime nu) {
         // Ceiling, zodat een kleine batch over veel dienstverleners toch iedereen aan bod laat komen.
         int perDienstverlener = Math.max(1, (budget + dienstverleners.size() - 1) / dienstverleners.size());
-        OffsetDateTime leaseTot = nu.plus(lease);
+        OffsetDateTime leaseTot = nu.plus(leaseVoor(taakSoort));
         List<Taak> geclaimd = new ArrayList<>();
 
         List<UUID> metMeerWerk = new ArrayList<>();
@@ -102,15 +147,17 @@ public class TaakClaimer {
             geclaimd.addAll(taakRepository.claim(taakSoort, dvId, ruimte, nu, leaseTot));
         }
 
-        genomen.ifPresent(g -> verzendbudget.geefTerug(g, budget - geclaimd.size()));
-
         return geclaimd;
     }
 
-    /** Verlengt de lease met de geconfigureerde duur, gerekend vanaf nu. */
+    private Duration leaseVoor(TaakSoort taakSoort) {
+        return taakSoort == TaakSoort.ONDERHOUD && lease.compareTo(ONDERHOUD_LEASE) < 0 ? ONDERHOUD_LEASE : lease;
+    }
+
+    /** Verlengt de lease met de duur voor deze soort, gerekend vanaf nu. */
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public void verleng(Taak taak) {
-        eis(taakRepository.verlengLease(taak, OffsetDateTime.now(clock).plus(lease)), taak);
+        eis(taakRepository.verlengLease(taak, OffsetDateTime.now(clock).plus(leaseVoor(taak.getTaakSoort()))), taak);
     }
 
     /**
@@ -119,7 +166,7 @@ public class TaakClaimer {
      */
     @Transactional(Transactional.TxType.MANDATORY)
     public void eisClaim(Taak taak) {
-        eis(taakRepository.verlengLease(taak, OffsetDateTime.now(clock).plus(lease)), taak);
+        eis(taakRepository.verlengLease(taak, OffsetDateTime.now(clock).plus(leaseVoor(taak.getTaakSoort()))), taak);
     }
 
     /** Rondt de taak af in de transactie van de aanroeper, of een eigen als die er niet is. */

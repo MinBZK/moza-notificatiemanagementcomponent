@@ -13,8 +13,8 @@ import java.util.UUID;
 public class BevestigingRepository implements PanacheRepositoryBase<Bevestiging, UUID> {
 
     /**
-     * Schrijft de cursor als hij minstens even ver ligt als de bewaarde, zodat een herhaalde bevestiging
-     * het tijdstip ververst; false als de bewaarde verder was.
+     * Schrijft de cursor met het tijdstip als hij verder ligt dan de bewaarde; false als de bewaarde even
+     * ver of verder was, en dan blijft ook het tijdstip staan.
      * Eén statement, zodat twee gelijktijdige bevestigingen elkaar niet terugzetten.
      */
     public boolean updateCursorPositie(UUID dvId, Cursor cursor, OffsetDateTime bevestigdOp) {
@@ -28,7 +28,7 @@ public class BevestigingRepository implements PanacheRepositoryBase<Bevestiging,
                         + Bevestiging_.TRANSACTIE_ID + " = excluded." + Bevestiging_.TRANSACTIE_ID + ", "
                         + Bevestiging_.EVENT_ID + " = excluded." + Bevestiging_.EVENT_ID + ", "
                         + Bevestiging_.BEVESTIGD_OP + " = excluded." + Bevestiging_.BEVESTIGD_OP
-                        + " WHERE " + positie + " <= (excluded." + Bevestiging_.EPOCH + ", excluded."
+                        + " WHERE " + positie + " < (excluded." + Bevestiging_.EPOCH + ", excluded."
                         + Bevestiging_.TRANSACTIE_ID + ", excluded." + Bevestiging_.EVENT_ID + ")")
                 .setParameter("dvId", dvId)
                 .setParameter("epoch", cursor.epoch())

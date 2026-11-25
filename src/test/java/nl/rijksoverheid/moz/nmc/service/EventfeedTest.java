@@ -239,19 +239,37 @@ class EventfeedTest {
         assertTrue(eventfeed.bevestiging(TWEEDE_DV).isEmpty());
     }
 
-    // Zonder nieuwe events bevestigt een dienstverlener dezelfde cursor; die mag niet verlopen.
+    // Het opruimen van het eventlog rekent de cursorleeftijd vanaf dit tijdstip. Een consument die blijft
+    // hangen en steeds dezelfde cursor bevestigt, mag het log niet voor altijd vasthouden.
     @Test
-    void bevestig_dezelfdeCursorOpnieuw_ververstHetTijdstip() {
+    void bevestig_dezelfdeCursorOpnieuw_laatHetTijdstipStaan() {
         schrijfEvent(NotificatieFixtures.DV_ID);
         Cursor cursor = eventfeed.lees(NotificatieFixtures.DV_ID, null, null).cursor();
-        java.time.OffsetDateTime eerste = java.time.OffsetDateTime.parse("2030-01-01T10:00:00Z");
-        java.time.OffsetDateTime later = eerste.plusMinutes(1);
+        OffsetDateTime eerste = OffsetDateTime.parse("2030-01-01T10:00:00Z");
+        OffsetDateTime later = eerste.plusMinutes(1);
 
         QuarkusTransaction.requiringNew().run(() -> bevestigingRepository.updateCursorPositie(NotificatieFixtures.DV_ID, cursor, eerste));
-        boolean ververst = QuarkusTransaction.requiringNew()
+        boolean gewijzigd = QuarkusTransaction.requiringNew()
                 .call(() -> bevestigingRepository.updateCursorPositie(NotificatieFixtures.DV_ID, cursor, later));
 
-        assertTrue(ververst);
+        assertFalse(gewijzigd);
+        assertEquals(eerste.toInstant(), eventfeed.bevestiging(NotificatieFixtures.DV_ID).orElseThrow().getBevestigdOp().toInstant());
+    }
+
+    @Test
+    void bevestig_cursorVerderDanDeBewaarde_zetHetTijdstip() {
+        schrijfEvent(NotificatieFixtures.DV_ID);
+        Cursor eersteCursor = eventfeed.lees(NotificatieFixtures.DV_ID, null, null).cursor();
+        schrijfEvent(NotificatieFixtures.DV_ID);
+        Cursor tweedeCursor = eventfeed.lees(NotificatieFixtures.DV_ID, eersteCursor, null).cursor();
+        OffsetDateTime eerste = OffsetDateTime.parse("2030-01-01T10:00:00Z");
+        OffsetDateTime later = eerste.plusMinutes(1);
+
+        QuarkusTransaction.requiringNew().run(() -> bevestigingRepository.updateCursorPositie(NotificatieFixtures.DV_ID, eersteCursor, eerste));
+        boolean gewijzigd = QuarkusTransaction.requiringNew()
+                .call(() -> bevestigingRepository.updateCursorPositie(NotificatieFixtures.DV_ID, tweedeCursor, later));
+
+        assertTrue(gewijzigd);
         assertEquals(later.toInstant(), eventfeed.bevestiging(NotificatieFixtures.DV_ID).orElseThrow().getBevestigdOp().toInstant());
     }
 
