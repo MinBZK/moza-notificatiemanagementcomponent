@@ -35,29 +35,27 @@ public class HashHelper {
      * @param waarde de waarde om te hashen
      */
     public byte[] hmac(String doel, String waarde) {
-        try {
-            Mac afleiding = Mac.getInstance(HMAC_ALGORITHM);
-            afleiding.init(pepperKey);
-            Mac mac = Mac.getInstance(HMAC_ALGORITHM);
-            mac.init(new SecretKeySpec(afleiding.doFinal(doel.getBytes(StandardCharsets.UTF_8)), HMAC_ALGORITHM));
+        Mac mac = mac(new SecretKeySpec(mac(pepperKey).doFinal(doel.getBytes(StandardCharsets.UTF_8)), HMAC_ALGORITHM));
 
-            return mac.doFinal(waarde.getBytes(StandardCharsets.UTF_8));
-        } catch (NoSuchAlgorithmException | InvalidKeyException e) { // onbereikbaar: elke JVM levert HmacSHA256 en de constructor weigert een lege sleutel
-            throw new IllegalStateException("HmacSHA256 kon niet worden geïnitialiseerd", e);
-        }
+        return mac.doFinal(waarde.getBytes(StandardCharsets.UTF_8));
     }
 
     public String hashIdentifier(String identifier) {
         if (identifier == null) {
             return null;
         }
+
+        return Base64.getEncoder().encodeToString(mac(pepperKey).doFinal(identifier.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private static Mac mac(SecretKeySpec sleutel) {
         try {
             Mac mac = Mac.getInstance(HMAC_ALGORITHM);
-            mac.init(pepperKey);
-            byte[] hash = mac.doFinal(identifier.getBytes(StandardCharsets.UTF_8));
-            return Base64.getEncoder().encodeToString(hash);
+            mac.init(sleutel);
+
+            return mac;
         } catch (NoSuchAlgorithmException | InvalidKeyException e) { // onbereikbaar: elke JVM levert HmacSHA256 en de constructor weigert een lege sleutel
-            throw new RuntimeException("HmacSHA256 kon niet worden geïnitialiseerd", e);
+            throw new IllegalStateException("HmacSHA256 kon niet worden geïnitialiseerd", e);
         }
     }
 }
