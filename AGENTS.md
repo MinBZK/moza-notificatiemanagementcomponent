@@ -120,8 +120,8 @@ Ook `quarkus.rest-client.profielservice.url` en `quarkus.rest-client.notify.url`
 `%test` geen default. Prod-config loopt via env-vars: zie `docs/zad-deploy.md`. Waarden met een
 default staan in `docs/architectuur.md`.
 
-Jackson is in `pom.xml` bewust boven de Quarkus-BOM getild vanwege twee databind-advisories.
-Haal die override pas weg als de Quarkus-BOM zelf een veilige versie levert.
+Jackson en OpenTelemetry zijn in `pom.xml` bewust boven de Quarkus-BOM getild vanwege
+security-advisories. Haal zo'n override pas weg als de Quarkus-BOM zelf een veilige versie levert.
 
 ## Codestijl
 
