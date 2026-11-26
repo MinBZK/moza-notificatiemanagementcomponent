@@ -358,7 +358,7 @@
                             <goal>report</goal>
                         </goals>
                     </execution>
-                    <!-- Ondergrens (huidig: 99,7% instructie, 99,5% branch). Wat ongedekt blijft, is
+                    <!-- Ondergrens (huidig: 99,76% instructie, 99,67% branch). Wat ongedekt blijft, is
                          gemarkeerd met '// onbereikbaar:'. Trek de drempels op als de dekking stijgt,
                          tot net onder de werkelijke waarde. -->
                     <execution>
@@ -375,12 +375,12 @@
                                         <limit>
                                             <counter>INSTRUCTION</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.99</minimum>
+                                            <minimum>0.997</minimum>
                                         </limit>
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.99</minimum>
+                                            <minimum>0.995</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
