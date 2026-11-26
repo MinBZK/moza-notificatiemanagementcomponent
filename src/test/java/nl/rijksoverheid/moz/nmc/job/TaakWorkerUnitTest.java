@@ -11,6 +11,7 @@ import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
 import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import io.quarkus.scheduler.Scheduled;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -47,6 +48,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 // Zonder Quarkus: in de applicatie heeft inmiddels elke soort een handler.
+@Tag("unit")
 class TaakWorkerUnitTest {
 
     private static final OffsetDateTime NU = OffsetDateTime.of(2026, 3, 1, 12, 0, 0, 0, ZoneOffset.UTC);

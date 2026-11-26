@@ -81,6 +81,7 @@ podman compose up -d                    # PostgreSQL voor dev-mode (docker compo
 ./mvnw quarkus:dev                      # live reload op http://localhost:8080
 ./mvnw verify                           # volledige suite + coverage-gate
 ./mvnw test -Dtest=NaamVanDeTest        # één testklasse, zonder coverage-gate
+./mvnw test-compile org.pitest:pitest-maven:mutationCoverage   # mutation testing op de unittests
 ```
 
 - **Tests hebben geen containers nodig**: ze draaien op een embedded PostgreSQL 18 (Zonky).
@@ -89,6 +90,10 @@ podman compose up -d                    # PostgreSQL voor dev-mode (docker compo
 - **De coverage-gate hangt aan `verify`, niet aan `package` of `test`.** Draai lokaal
   `./mvnw verify` voor je een PR opent. CI-job `Maven verify` is een verplichte check op `main`;
   hernoem hem niet zonder de branch protection mee aan te passen.
+- **Mutation testing (PIT)** draait alleen de tests met `@Tag("unit")`, over alle eigen code behalve
+  de gegenereerde; rapport in `target/pit-reports`. Lokaal enkele minuten. In
+  CI is het de workflow `Mutation testing`: informatief, geen verplichte check en geen drempel.
+  De overlevende mutanten staan in de samenvatting van de run.
 - **JaCoCo-drempels en excludes staan in `pom.xml`.** De excludes staan ook als
   `%test.quarkus.jacoco.excludes` in `application.properties`; `ConfiguratiePariteitTest`
   bewaakt dat ze gelijk blijven.
@@ -121,8 +126,8 @@ Ook `quarkus.rest-client.profielservice.url` en `quarkus.rest-client.notify.url`
 `%test` geen default. Prod-config loopt via env-vars: zie `docs/zad-deploy.md`. Waarden met een
 default staan in `docs/architectuur.md`.
 
-Jackson is in `pom.xml` bewust boven de Quarkus-BOM getild vanwege twee databind-advisories.
-Haal die override pas weg als de Quarkus-BOM zelf een veilige versie levert.
+Jackson, OpenTelemetry en Guava zijn in `pom.xml` bewust boven de Quarkus-BOM getild vanwege
+security-advisories. Haal zo'n override pas weg als de Quarkus-BOM zelf een veilige versie levert.
 
 ## Codestijl
 
