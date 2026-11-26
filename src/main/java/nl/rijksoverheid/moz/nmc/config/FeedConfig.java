@@ -3,9 +3,8 @@ package nl.rijksoverheid.moz.nmc.config;
 import io.smallrye.config.ConfigMapping;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
-import org.hibernate.validator.constraints.time.DurationMin;
-
 import java.time.Duration;
+import org.hibernate.validator.constraints.time.DurationMin;
 
 /**
  * De instellingen van de eventfeed onder {@code nmc.feed}. Een ongeldige waarde laat de applicatie

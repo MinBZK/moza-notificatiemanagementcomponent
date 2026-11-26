@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,8 +20,7 @@ final class NotifyNLFoutmelding {
     private static final int MAX_FOUTEN = 5;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    private NotifyNLFoutmelding() {
-    }
+    private NotifyNLFoutmelding() {}
 
     /** Beschrijft de foutrespons met een body die de aanroeper al met {@link #body(Response)} gelezen heeft. */
     static String beschrijf(Response response, String body) {
@@ -57,7 +55,8 @@ final class NotifyNLFoutmelding {
                     break;
                 }
 
-                fouten.add(schoon(fout.path("error").asText()) + ": " + schoon(fout.path("message").asText()));
+                fouten.add(schoon(fout.path("error").asText()) + ": "
+                        + schoon(fout.path("message").asText()));
             }
         } catch (JsonProcessingException e) {
             fouten.clear();
@@ -79,6 +78,8 @@ final class NotifyNLFoutmelding {
     private static String schoon(String tekst) {
         String zonderStuurtekens = tekst.replaceAll("\\p{Cntrl}", " ");
 
-        return zonderStuurtekens.length() > MAX_LENGTE ? zonderStuurtekens.substring(0, MAX_LENGTE) + "…" : zonderStuurtekens;
+        return zonderStuurtekens.length() > MAX_LENGTE
+                ? zonderStuurtekens.substring(0, MAX_LENGTE) + "…"
+                : zonderStuurtekens;
     }
 }

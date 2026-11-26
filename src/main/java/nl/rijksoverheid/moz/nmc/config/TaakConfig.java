@@ -2,9 +2,8 @@ package nl.rijksoverheid.moz.nmc.config;
 
 import io.smallrye.config.ConfigMapping;
 import jakarta.validation.constraints.Min;
-import org.hibernate.validator.constraints.time.DurationMin;
-
 import java.time.Duration;
+import org.hibernate.validator.constraints.time.DurationMin;
 
 /**
  * De instellingen van de taken onder {@code nmc.taak}: de worker, de claim en het uitstel. Een

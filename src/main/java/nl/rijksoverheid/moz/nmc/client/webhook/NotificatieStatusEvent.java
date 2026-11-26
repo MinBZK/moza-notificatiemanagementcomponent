@@ -1,11 +1,10 @@
 package nl.rijksoverheid.moz.nmc.client.webhook;
 
+import java.time.OffsetDateTime;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
-
-import java.time.OffsetDateTime;
-import java.util.UUID;
 
 /**
  * Eén statusovergang als CloudEvent (NL GOV profiel), gelijk in de webhook en in de feed. {@code id}
@@ -38,13 +37,26 @@ public record NotificatieStatusEvent(
     private static final String DATACONTENTTYPE = "application/json";
 
     public static NotificatieStatusEvent of(Event event, String source) {
-        return of(source, event.getCloudEventId(), event.getNotificatieId(), event.getVolgnummer(), event.getVan(), event.getNaar(),
-                event.getReden(), event.getGeregistreerd());
+        return of(
+                source,
+                event.getCloudEventId(),
+                event.getNotificatieId(),
+                event.getVolgnummer(),
+                event.getVan(),
+                event.getNaar(),
+                event.getReden(),
+                event.getGeregistreerd());
     }
 
-    public static NotificatieStatusEvent of(String source, UUID eventUuid, UUID notificatieId, long versie,
-                                            NotificatieStatus vorigeStatus, NotificatieStatus nieuweStatus, Reden reden,
-                                            OffsetDateTime tijdstip) {
+    public static NotificatieStatusEvent of(
+            String source,
+            UUID eventUuid,
+            UUID notificatieId,
+            long versie,
+            NotificatieStatus vorigeStatus,
+            NotificatieStatus nieuweStatus,
+            Reden reden,
+            OffsetDateTime tijdstip) {
         return new NotificatieStatusEvent(
                 SPECVERSION,
                 eventUuid.toString(),

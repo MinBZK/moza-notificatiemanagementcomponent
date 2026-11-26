@@ -1,16 +1,18 @@
 package nl.rijksoverheid.moz.nmc.client.webhook;
 
-import jakarta.ws.rs.WebApplicationException;
-import jakarta.ws.rs.core.MultivaluedHashMap;
-import jakarta.ws.rs.core.Response;
-import org.eclipse.microprofile.rest.client.ext.ResponseExceptionMapper;
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.MultivaluedHashMap;
+import jakarta.ws.rs.core.Response;
+import org.eclipse.microprofile.rest.client.ext.ResponseExceptionMapper;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+@Tag("unit")
 class GeenSuccesAntwoordMapperTest {
 
     private final GeenSuccesAntwoordMapper mapper = new GeenSuccesAntwoordMapper();

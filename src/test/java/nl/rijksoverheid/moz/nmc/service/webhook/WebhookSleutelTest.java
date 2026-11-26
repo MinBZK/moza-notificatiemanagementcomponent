@@ -1,10 +1,10 @@
 package nl.rijksoverheid.moz.nmc.service.webhook;
 
-import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
-import org.jose4j.jwk.RsaJsonWebKey;
-import org.jose4j.jwt.JwtClaims;
-import org.jose4j.jwt.consumer.JwtConsumerBuilder;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigInteger;
 import java.security.KeyFactory;
@@ -21,14 +21,15 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
+import org.jose4j.jwk.RsaJsonWebKey;
 import org.jose4j.jws.JsonWebSignature;
+import org.jose4j.jwt.JwtClaims;
+import org.jose4j.jwt.consumer.JwtConsumerBuilder;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
+@Tag("unit")
 class WebhookSleutelTest {
 
     private static final String URL = "https://dv.example.nl/webhook";
@@ -39,8 +40,8 @@ class WebhookSleutelTest {
         WebhookSleutel sleutel = sleutel(pem(paar), "sleutel-1");
 
         WebhookSleutel.PubliekeSleutel gepubliceerd = sleutel.publiekeSleutels().getFirst();
-        RSAPublicKey publiek = (RSAPublicKey) KeyFactory.getInstance("RSA").generatePublic(
-                new RSAPublicKeySpec(getal(gepubliceerd.modulus()), getal(gepubliceerd.exponent())));
+        RSAPublicKey publiek = (RSAPublicKey) KeyFactory.getInstance("RSA")
+                .generatePublic(new RSAPublicKeySpec(getal(gepubliceerd.modulus()), getal(gepubliceerd.exponent())));
         assertEquals(paar.getPublic(), publiek);
 
         RsaJsonWebKey jwk = new RsaJsonWebKey(publiek);
@@ -50,7 +51,9 @@ class WebhookSleutelTest {
                 .setExpectedAudience(URL)
                 .build()
                 .processToClaims(sleutel.onderteken(URL, "hash-van-de-body", "cursor-1"));
-        assertEquals(120, claims.getExpirationTime().getValue() - claims.getIssuedAt().getValue());
+        assertEquals(
+                120,
+                claims.getExpirationTime().getValue() - claims.getIssuedAt().getValue());
         assertEquals("hash-van-de-body", claims.getStringClaimValue(WebhookSleutel.BODY_HASH_CLAIM));
         assertEquals("cursor-1", claims.getStringClaimValue(WebhookSleutel.CURSOR_CLAIM));
         assertEquals("sleutel-1", gepubliceerd.keyId());
@@ -81,8 +84,13 @@ class WebhookSleutelTest {
     }
 
     private static String jti(String token) throws Exception {
-        return new JwtConsumerBuilder().setSkipAllValidators().setDisableRequireSignature().setSkipSignatureVerification()
-                .build().processToClaims(token).getJwtId();
+        return new JwtConsumerBuilder()
+                .setSkipAllValidators()
+                .setDisableRequireSignature()
+                .setSkipSignatureVerification()
+                .build()
+                .processToClaims(token)
+                .getJwtId();
     }
 
     // Een env-var draagt de PEM vaak op één regel, zonder kop en voet.
@@ -91,20 +99,23 @@ class WebhookSleutelTest {
         String pem = pem(rsa(2048));
         String kaal = pem.replaceAll("-----[A-Z ]+-----", "").replaceAll("\\s", "");
 
-        assertEquals(WebhookSleutel.leesSleutel(pem).getModulus(), WebhookSleutel.leesSleutel(kaal).getModulus());
+        assertEquals(
+                WebhookSleutel.leesSleutel(pem).getModulus(),
+                WebhookSleutel.leesSleutel(kaal).getModulus());
     }
 
     @Test
     void leesSleutel_ongeldigeInhoud_weigert() throws Exception {
         KeyPairGenerator ec = KeyPairGenerator.getInstance("EC");
         ec.initialize(256);
-        String ecPem = Base64.getEncoder().encodeToString(ec.generateKeyPair().getPrivate().getEncoded());
+        String ecPem = Base64.getEncoder()
+                .encodeToString(ec.generateKeyPair().getPrivate().getEncoded());
 
         assertThrows(IllegalStateException.class, () -> WebhookSleutel.leesSleutel("geen base64 !"));
         assertThrows(IllegalStateException.class, () -> WebhookSleutel.leesSleutel("AAAA"));
         assertThrows(IllegalStateException.class, () -> WebhookSleutel.leesSleutel(ecPem));
-        IllegalStateException kort = assertThrows(IllegalStateException.class,
-                () -> WebhookSleutel.leesSleutel(pem(rsa(1024))));
+        IllegalStateException kort =
+                assertThrows(IllegalStateException.class, () -> WebhookSleutel.leesSleutel(pem(rsa(1024))));
         assertTrue(kort.getMessage().contains("2048"));
     }
 
@@ -117,8 +128,12 @@ class WebhookSleutelTest {
 
         assertEquals(1, sleutels.size());
         assertEquals("sleutel-1", sleutels.getFirst().keyId());
-        assertEquals(((RSAPublicKey) paar.getPublic()).getModulus(), getal(sleutels.getFirst().modulus()));
-        assertEquals(((RSAPublicKey) paar.getPublic()).getPublicExponent(), getal(sleutels.getFirst().exponent()));
+        assertEquals(
+                ((RSAPublicKey) paar.getPublic()).getModulus(),
+                getal(sleutels.getFirst().modulus()));
+        assertEquals(
+                ((RSAPublicKey) paar.getPublic()).getPublicExponent(),
+                getal(sleutels.getFirst().exponent()));
     }
 
     // Lege waarden uit een env-var tellen als afwezig.
@@ -137,10 +152,18 @@ class WebhookSleutelTest {
 
         List<WebhookSleutel.PubliekeSleutel> sleutels = sleutel.publiekeSleutels();
 
-        assertEquals(List.of("sleutel-1", "sleutel-2"), sleutels.stream().map(WebhookSleutel.PubliekeSleutel::keyId).toList());
-        assertEquals(((RSAPublicKey) eigen.getPublic()).getModulus(), getal(sleutels.get(0).modulus()));
-        assertEquals(((RSAPublicKey) extra.getPublic()).getModulus(), getal(sleutels.get(1).modulus()));
-        assertEquals(((RSAPublicKey) extra.getPublic()).getPublicExponent(), getal(sleutels.get(1).exponent()));
+        assertEquals(
+                List.of("sleutel-1", "sleutel-2"),
+                sleutels.stream().map(WebhookSleutel.PubliekeSleutel::keyId).toList());
+        assertEquals(
+                ((RSAPublicKey) eigen.getPublic()).getModulus(),
+                getal(sleutels.get(0).modulus()));
+        assertEquals(
+                ((RSAPublicKey) extra.getPublic()).getModulus(),
+                getal(sleutels.get(1).modulus()));
+        assertEquals(
+                ((RSAPublicKey) extra.getPublic()).getPublicExponent(),
+                getal(sleutels.get(1).exponent()));
     }
 
     @Test
@@ -158,8 +181,8 @@ class WebhookSleutelTest {
         String eigen = pem(rsa(2048));
         String extra = publiekePem(rsa(2048));
 
-        IllegalStateException fout = assertThrows(IllegalStateException.class,
-                () -> metExtraSleutel(eigen, "sleutel-1", extra, "sleutel-1"));
+        IllegalStateException fout = assertThrows(
+                IllegalStateException.class, () -> metExtraSleutel(eigen, "sleutel-1", extra, "sleutel-1"));
 
         assertTrue(fout.getMessage().contains("extra-key-id"));
     }
@@ -169,7 +192,8 @@ class WebhookSleutelTest {
     void extraSleutel_dezelfdeSleutelAlsDeEigenSleutel_weigert() throws Exception {
         KeyPair paar = rsa(2048);
 
-        IllegalStateException fout = assertThrows(IllegalStateException.class,
+        IllegalStateException fout = assertThrows(
+                IllegalStateException.class,
                 () -> metExtraSleutel(pem(paar), "sleutel-2", publiekePem(paar), "sleutel-1"));
 
         assertTrue(fout.getMessage().contains("dezelfde sleutel"));
@@ -180,33 +204,38 @@ class WebhookSleutelTest {
         String pem = publiekePem(rsa(2048));
         String kaal = pem.replaceAll("-----[A-Z ]+-----", "").replaceAll("\\s", "");
 
-        assertEquals(WebhookSleutel.leesPubliekeSleutel(pem).getModulus(), WebhookSleutel.leesPubliekeSleutel(kaal).getModulus());
+        assertEquals(
+                WebhookSleutel.leesPubliekeSleutel(pem).getModulus(),
+                WebhookSleutel.leesPubliekeSleutel(kaal).getModulus());
     }
 
     @Test
     void leesPubliekeSleutel_ongeldigeInhoud_weigert() throws Exception {
         KeyPairGenerator ec = KeyPairGenerator.getInstance("EC");
         ec.initialize(256);
-        String ecPem = Base64.getEncoder().encodeToString(ec.generateKeyPair().getPublic().getEncoded());
+        String ecPem = Base64.getEncoder()
+                .encodeToString(ec.generateKeyPair().getPublic().getEncoded());
         String priveSleutel = pem(rsa(2048));
 
         assertThrows(IllegalStateException.class, () -> WebhookSleutel.leesPubliekeSleutel("geen base64 !"));
         assertThrows(IllegalStateException.class, () -> WebhookSleutel.leesPubliekeSleutel("AAAA"));
         assertThrows(IllegalStateException.class, () -> WebhookSleutel.leesPubliekeSleutel(ecPem));
         assertThrows(IllegalStateException.class, () -> WebhookSleutel.leesPubliekeSleutel(priveSleutel));
-        IllegalStateException kort = assertThrows(IllegalStateException.class,
-                () -> WebhookSleutel.leesPubliekeSleutel(publiekePem(rsa(1024))));
+        IllegalStateException kort = assertThrows(
+                IllegalStateException.class, () -> WebhookSleutel.leesPubliekeSleutel(publiekePem(rsa(1024))));
         assertTrue(kort.getMessage().contains("2048"));
     }
 
     private static WebhookSleutel metExtraSleutel(String pem, String keyId, String extraPem, String extraKeyId) {
-        return new WebhookSleutel(Clock.systemUTC(),
+        return new WebhookSleutel(
+                Clock.systemUTC(),
                 TestConfig.webhookJwtMetExtraSleutel(pem, keyId, extraPem, extraKeyId, Duration.ofHours(1)));
     }
 
     private static String publiekePem(KeyPair paar) {
         return "-----BEGIN PUBLIC KEY-----\n"
-                + Base64.getMimeEncoder(64, "\n".getBytes()).encodeToString(paar.getPublic().getEncoded())
+                + Base64.getMimeEncoder(64, "\n".getBytes())
+                        .encodeToString(paar.getPublic().getEncoded())
                 + "\n-----END PUBLIC KEY-----\n";
     }
 
@@ -214,8 +243,8 @@ class WebhookSleutelTest {
     @Test
     void leesSleutel_rsaSleutelZonderCrtComponenten_weigert() throws Exception {
         RSAPrivateCrtKey volledig = (RSAPrivateCrtKey) rsa(2048).getPrivate();
-        PrivateKey zonderCrt = KeyFactory.getInstance("RSA").generatePrivate(
-                new RSAPrivateKeySpec(volledig.getModulus(), volledig.getPrivateExponent()));
+        PrivateKey zonderCrt = KeyFactory.getInstance("RSA")
+                .generatePrivate(new RSAPrivateKeySpec(volledig.getModulus(), volledig.getPrivateExponent()));
         String pem = Base64.getEncoder().encodeToString(zonderCrt.getEncoded());
 
         IllegalStateException fout = assertThrows(IllegalStateException.class, () -> WebhookSleutel.leesSleutel(pem));
@@ -236,8 +265,8 @@ class WebhookSleutelTest {
     }
 
     private static WebhookSleutel sleutel(String pem, String keyId) {
-        return new WebhookSleutel(Clock.systemUTC(),
-                TestConfig.webhookJwt(pem, keyId, "https://nmc.example.nl", Duration.ofMinutes(2)));
+        return new WebhookSleutel(
+                Clock.systemUTC(), TestConfig.webhookJwt(pem, keyId, "https://nmc.example.nl", Duration.ofMinutes(2)));
     }
 
     private static KeyPair rsa(int bits) throws Exception {
@@ -249,7 +278,8 @@ class WebhookSleutelTest {
 
     private static String pem(KeyPair paar) {
         return "-----BEGIN PRIVATE KEY-----\n"
-                + Base64.getMimeEncoder(64, "\n".getBytes()).encodeToString(paar.getPrivate().getEncoded())
+                + Base64.getMimeEncoder(64, "\n".getBytes())
+                        .encodeToString(paar.getPrivate().getEncoded())
                 + "\n-----END PRIVATE KEY-----\n";
     }
 

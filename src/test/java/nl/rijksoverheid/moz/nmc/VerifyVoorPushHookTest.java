@@ -1,11 +1,11 @@
 package nl.rijksoverheid.moz.nmc;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -19,11 +19,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Test van de Claude Code-hook {@code .claude/hooks/verify-voor-push.sh}, die vóór een git push
@@ -33,7 +32,8 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
  */
 class VerifyVoorPushHookTest {
 
-    private static final Path HOOK = Path.of(".claude/hooks/verify-voor-push.sh").toAbsolutePath();
+    private static final Path HOOK =
+            Path.of(".claude/hooks/verify-voor-push.sh").toAbsolutePath();
     private static final ObjectMapper JSON = new ObjectMapper();
 
     @TempDir
@@ -46,7 +46,8 @@ class VerifyVoorPushHookTest {
     // Zonder jq slaat de hook alles over en falen de tests met een onduidelijke melding.
     @BeforeAll
     static void jqIsGeinstalleerd() {
-        assertTrue(zoek("jq").isPresent(),
+        assertTrue(
+                zoek("jq").isPresent(),
                 "jq is verplicht voor de build; installeer het met brew, dnf of apt install jq");
     }
 
@@ -58,6 +59,12 @@ class VerifyVoorPushHookTest {
 
         uitvoerbaar(repo.resolve("mvnw"), """
                 #!/bin/sh
+                case "$*" in
+                    *spotless:check*)
+                        echo spotless >> "$VERIFY_TELLER"
+                        exit "${SPOTLESS_EXIT:-0}"
+                        ;;
+                esac
                 echo verify >> "$VERIFY_TELLER"
                 exit "${VERIFY_EXIT:-0}"
                 """);
@@ -103,6 +110,63 @@ class VerifyVoorPushHookTest {
         Uitkomst uitkomst = draai("git push origin HEAD");
 
         assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertEquals(1, verifyAanroepen());
+    }
+
+    @Test
+    void kalePush_zonderSpotlessInPom_slaatOpmaakcontroleOver() throws Exception {
+        Uitkomst uitkomst = draai("git push");
+
+        assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertEquals(0, aanroepen("spotless"));
+        assertEquals(1, verifyAanroepen());
+    }
+
+    @Test
+    void kalePush_metSpotless_controleertOpmaakEnDraaitDaarnaVerify() throws Exception {
+        metSpotlessInPom();
+
+        Uitkomst uitkomst = draai("git push");
+
+        assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertEquals(List.of("spotless", "verify"), Files.readAllLines(teller));
+    }
+
+    @Test
+    void kalePush_opmaakKloptNiet_blokkeertZonderVerify() throws Exception {
+        metSpotlessInPom();
+
+        Uitkomst uitkomst = draai("git push", Map.of("SPOTLESS_EXIT", "1"));
+
+        assertEquals(2, uitkomst.exitcode());
+        assertTrue(uitkomst.stderr().contains("./mvnw spotless:apply"), uitkomst.stderr());
+        assertEquals(1, aanroepen("spotless"));
+        assertEquals(0, verifyAanroepen());
+    }
+
+    @Test
+    void kalePush_naMislukteOpmaakcontrole_controleertOpnieuw() throws Exception {
+        metSpotlessInPom();
+
+        draai("git push", Map.of("SPOTLESS_EXIT", "1"));
+        Uitkomst tweede = draai("git push");
+
+        assertEquals(0, tweede.exitcode(), tweede.stderr());
+        assertEquals(2, aanroepen("spotless"));
+        assertEquals(1, verifyAanroepen());
+    }
+
+    // De hook leest de pom van de gepushte commit, niet die van HEAD: hier kent alleen HEAD Spotless.
+    @Test
+    void pushVanCommitZonderSpotless_vanafHeadMetSpotless_slaatOpmaakcontroleOver() throws Exception {
+        String zonderSpotless = git("rev-parse", "HEAD").strip();
+        metSpotlessInPom();
+
+        Uitkomst uitkomst =
+                draai("git push origin " + zonderSpotless + ":refs/heads/oud", Map.of("SPOTLESS_EXIT", "1"));
+
+        assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertEquals(0, aanroepen("spotless"));
         assertEquals(1, verifyAanroepen());
     }
 
@@ -366,8 +430,9 @@ class VerifyVoorPushHookTest {
         Path map = Files.createDirectory(tijdelijk.resolve(naam));
 
         for (String programma : programmas) {
-            maakLink(map.resolve(programma), zoek(programma).orElseThrow(
-                    () -> new IllegalStateException(programma + " staat niet op PATH")));
+            maakLink(
+                    map.resolve(programma),
+                    zoek(programma).orElseThrow(() -> new IllegalStateException(programma + " staat niet op PATH")));
         }
 
         return map;
@@ -393,8 +458,8 @@ class VerifyVoorPushHookTest {
                 "tool_input", Map.of("command", commando),
                 "cwd", cwd.toString()));
 
-        ProcessBuilder builder = new ProcessBuilder(zoek("bash").orElseThrow().toString(), HOOK.toString())
-                .directory(cwd.toFile());
+        ProcessBuilder builder =
+                new ProcessBuilder(zoek("bash").orElseThrow().toString(), HOOK.toString()).directory(cwd.toFile());
         Map<String, String> omgeving = builder.environment();
         omgeving.put("PATH", pad);
         // Een lege HOME, zodat de hook geen echte SDKMAN-Java laadt.
@@ -412,13 +477,28 @@ class VerifyVoorPushHookTest {
             fail("De hook liep niet binnen 60 seconden af");
         }
 
-        return new Uitkomst(proces.exitValue(),
+        return new Uitkomst(
+                proces.exitValue(),
                 new String(proces.getInputStream().readAllBytes(), StandardCharsets.UTF_8),
                 new String(proces.getErrorStream().readAllBytes(), StandardCharsets.UTF_8));
     }
 
     private int verifyAanroepen() throws IOException {
-        return Files.exists(teller) ? Files.readAllLines(teller).size() : 0;
+        return aanroepen("verify");
+    }
+
+    // De nep-mvnw schrijft per aanroep het goal (spotless of verify) als regel in de teller.
+    private int aanroepen(String goal) throws IOException {
+        return Files.exists(teller)
+                ? (int) Files.readAllLines(teller).stream().filter(goal::equals).count()
+                : 0;
+    }
+
+    // De hook controleert de opmaak alleen als de pom van de commit Spotless kent.
+    private void metSpotlessInPom() throws Exception {
+        Files.writeString(repo.resolve("pom.xml"), "<artifactId>spotless-maven-plugin</artifactId>\n");
+        git("add", "pom.xml");
+        git("commit", "-q", "-m", "spotless");
     }
 
     private String git(String... argumenten) throws Exception {
@@ -460,6 +540,5 @@ class VerifyVoorPushHookTest {
         Files.setPosixFilePermissions(bestand, PosixFilePermissions.fromString("rwxr-xr-x"));
     }
 
-    private record Uitkomst(int exitcode, String stdout, String stderr) {
-    }
+    private record Uitkomst(int exitcode, String stdout, String stderr) {}
 }

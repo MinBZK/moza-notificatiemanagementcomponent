@@ -1,29 +1,30 @@
 package nl.rijksoverheid.moz.nmc.client.profielservice;
 
-import jakarta.ws.rs.ProcessingException;
-import jakarta.ws.rs.WebApplicationException;
-import jakarta.ws.rs.core.Response;
-import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
-import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ApiProfielserviceV1VoorkeurPost201ResponseScopesInner;
-import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
-import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
-import nl.rijksoverheid.moz.nmc.controller.IdentificatieType;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.Mockito;
-
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 
+import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
+import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ApiProfielserviceV1VoorkeurPost201ResponseScopesInner;
+import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.ContactgegevenResponse;
+import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
+import nl.rijksoverheid.moz.nmc.controller.IdentificatieType;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.Mockito;
+
+@Tag("unit")
 class ProfielServiceAdapterTest {
 
     private ProfielApi profielApi;
@@ -37,8 +38,8 @@ class ProfielServiceAdapterTest {
 
     @Test
     void zoekEmailAdres_exacteScope_wordtGekozen() {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(
-                partijMet(gescopedeEmail("scoped@example.nl", "Gemeente Voorbeeld", "Parkeervergunning")));
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenReturn(partijMet(gescopedeEmail("scoped@example.nl", "Gemeente Voorbeeld", "Parkeervergunning")));
 
         String email = adapter.zoekEmailAdres(standaardIdentificatie());
 
@@ -47,8 +48,8 @@ class ProfielServiceAdapterTest {
 
     @Test
     void zoekEmailAdres_dienstverlenerScopeZonderDienst_wordtGekozen() {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(
-                partijMet(gescopedeEmail("dv-scoped@example.nl", "Gemeente Voorbeeld", null)));
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenReturn(partijMet(gescopedeEmail("dv-scoped@example.nl", "Gemeente Voorbeeld", null)));
 
         String email = adapter.zoekEmailAdres(standaardIdentificatie());
 
@@ -57,9 +58,10 @@ class ProfielServiceAdapterTest {
 
     @Test
     void zoekEmailAdres_verkeerdeScope_valtTerugOpDefault() {
-        PartijResponse partij = new PartijResponse().contactgegevens(List.of(
-                gescopedeEmail("wrong-scoped@example.nl", "Andere Dienstverlener", "Parkeervergunning"),
-                ongescopedeEmail("default@example.nl", true)));
+        PartijResponse partij = new PartijResponse()
+                .contactgegevens(List.of(
+                        gescopedeEmail("wrong-scoped@example.nl", "Andere Dienstverlener", "Parkeervergunning"),
+                        ongescopedeEmail("default@example.nl", true)));
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partij);
 
         String email = adapter.zoekEmailAdres(standaardIdentificatie());
@@ -70,8 +72,8 @@ class ProfielServiceAdapterTest {
     @Test
     void zoekEmailAdres_geenScopeOfDefault_valtTerugOpOngescopedeEmail() {
         // Geen exacte/dienstverlener-scope en geen isDefault: laatste redmiddel is een volledig ongescopede email
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(
-                partijMet(ongescopedeEmail("fallback@example.nl", false)));
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenReturn(partijMet(ongescopedeEmail("fallback@example.nl", false)));
 
         String email = adapter.zoekEmailAdres(standaardIdentificatie());
 
@@ -80,8 +82,8 @@ class ProfielServiceAdapterTest {
 
     @Test
     void zoekEmailAdres_geenEmail_gooitGeenEmailadresGevondenException() {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(
-                new PartijResponse().contactgegevens(List.of()));
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenReturn(new PartijResponse().contactgegevens(List.of()));
 
         assertThrows(GeenEmailadresGevondenException.class, () -> adapter.zoekEmailAdres(standaardIdentificatie()));
     }
@@ -89,7 +91,8 @@ class ProfielServiceAdapterTest {
     @Test
     void zoekEmailAdres_profielserviceFout_gooitProfielServiceException() {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.INTERNAL_SERVER_ERROR).build()));
+                .thenThrow(new WebApplicationException(
+                        Response.status(Response.Status.INTERNAL_SERVER_ERROR).build()));
 
         assertThrows(ProfielServiceException.class, () -> adapter.zoekEmailAdres(standaardIdentificatie()));
     }
@@ -98,10 +101,11 @@ class ProfielServiceAdapterTest {
     @Test
     void zoekEmailAdres_400_gooitProfielServiceExceptionMetStatus() {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).build()));
+                .thenThrow(new WebApplicationException(
+                        Response.status(Response.Status.BAD_REQUEST).build()));
 
-        ProfielServiceException e = assertThrows(ProfielServiceException.class,
-                () -> adapter.zoekEmailAdres(standaardIdentificatie()));
+        ProfielServiceException e =
+                assertThrows(ProfielServiceException.class, () -> adapter.zoekEmailAdres(standaardIdentificatie()));
 
         assertEquals(Optional.of(400), e.status());
     }
@@ -109,10 +113,11 @@ class ProfielServiceAdapterTest {
     @Test
     void zoekEmailAdres_403_gooitProfielServiceExceptionMetStatus() {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
-                .thenThrow(new WebApplicationException(Response.status(Response.Status.FORBIDDEN).build()));
+                .thenThrow(new WebApplicationException(
+                        Response.status(Response.Status.FORBIDDEN).build()));
 
-        ProfielServiceException e = assertThrows(ProfielServiceException.class,
-                () -> adapter.zoekEmailAdres(standaardIdentificatie()));
+        ProfielServiceException e =
+                assertThrows(ProfielServiceException.class, () -> adapter.zoekEmailAdres(standaardIdentificatie()));
 
         assertEquals(Optional.of(403), e.status());
     }
@@ -121,8 +126,8 @@ class ProfielServiceAdapterTest {
     @Test
     void zoekEmailAdres_legeScopes_valtTerugOpDieEmail() {
         ContactgegevenResponse leeg = ongescopedeEmail("leeg@example.nl", false).scopes(List.of());
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(
-                partijMet(gescopedeEmail("ander@example.nl", "Andere Dienstverlener", null), leeg));
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenReturn(partijMet(gescopedeEmail("ander@example.nl", "Andere Dienstverlener", null), leeg));
 
         assertEquals("leeg@example.nl", adapter.zoekEmailAdres(standaardIdentificatie()));
     }
@@ -130,9 +135,10 @@ class ProfielServiceAdapterTest {
     // Een lege dienstnaam is een scope op de hele dienstverlener; die gaat vóór de default.
     @Test
     void zoekEmailAdres_dienstverlenerScopeMetLegeDienst_gaatVoorDefault() {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMet(
-                ongescopedeEmail("default@example.nl", true),
-                gescopedeEmail("dv-scoped@example.nl", "Gemeente Voorbeeld", " ")));
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenReturn(partijMet(
+                        ongescopedeEmail("default@example.nl", true),
+                        gescopedeEmail("dv-scoped@example.nl", "Gemeente Voorbeeld", " ")));
 
         assertEquals("dv-scoped@example.nl", adapter.zoekEmailAdres(standaardIdentificatie()));
     }
@@ -140,9 +146,10 @@ class ProfielServiceAdapterTest {
     // Een scope op een andere dienst van dezelfde dienstverlener is geen scope op de hele dienstverlener.
     @Test
     void zoekEmailAdres_scopeOpAndereDienst_valtTerugOpDefault() {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMet(
-                gescopedeEmail("andere-dienst@example.nl", "Gemeente Voorbeeld", "Hondenbelasting"),
-                ongescopedeEmail("default@example.nl", true)));
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenReturn(partijMet(
+                        gescopedeEmail("andere-dienst@example.nl", "Gemeente Voorbeeld", "Hondenbelasting"),
+                        ongescopedeEmail("default@example.nl", true)));
 
         assertEquals("default@example.nl", adapter.zoekEmailAdres(standaardIdentificatie()));
     }
@@ -150,9 +157,10 @@ class ProfielServiceAdapterTest {
     // Zonder dienst in het verzoek bestaat er geen exacte scope; de scope op de dienstverlener wint.
     @Test
     void zoekEmailAdres_zonderDienst_kiestDienstverlenerScopeBovenScopeOpEenDienst() {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(partijMet(
-                gescopedeEmail("dienst@example.nl", "Gemeente Voorbeeld", "Parkeervergunning"),
-                gescopedeEmail("dv-scoped@example.nl", "Gemeente Voorbeeld", null)));
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenReturn(partijMet(
+                        gescopedeEmail("dienst@example.nl", "Gemeente Voorbeeld", "Parkeervergunning"),
+                        gescopedeEmail("dv-scoped@example.nl", "Gemeente Voorbeeld", null)));
 
         String email = adapter.zoekEmailAdres(
                 new PartijIdentificatie(IdentificatieType.KVK, "12345678", "Gemeente Voorbeeld", null));
@@ -185,8 +193,8 @@ class ProfielServiceAdapterTest {
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
                 .thenThrow(new WebApplicationException(Response.status(status).build()));
 
-        PartijNietGevondenException e = assertThrows(PartijNietGevondenException.class,
-                () -> adapter.zoekEmailAdres(standaardIdentificatie()));
+        PartijNietGevondenException e =
+                assertThrows(PartijNietGevondenException.class, () -> adapter.zoekEmailAdres(standaardIdentificatie()));
 
         assertTrue(e.getMessage().contains("status " + status), e.getMessage());
     }
@@ -196,8 +204,8 @@ class ProfielServiceAdapterTest {
         ProcessingException storing = new ProcessingException("time-out");
         Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenThrow(storing);
 
-        ProfielServiceException e = assertThrows(ProfielServiceException.class,
-                () -> adapter.zoekEmailAdres(standaardIdentificatie()));
+        ProfielServiceException e =
+                assertThrows(ProfielServiceException.class, () -> adapter.zoekEmailAdres(standaardIdentificatie()));
 
         assertSame(storing, e.getCause());
         assertEquals(Optional.empty(), e.status());
@@ -212,9 +220,10 @@ class ProfielServiceAdapterTest {
     }
 
     private ContactgegevenResponse gescopedeEmail(String email, String dienstverlenerNaam, String dienstNaam) {
-        ApiProfielserviceV1VoorkeurPost201ResponseScopesInner scope = new ApiProfielserviceV1VoorkeurPost201ResponseScopesInner()
-                .dienstverlenerNaam(dienstverlenerNaam)
-                .dienstNaam(dienstNaam);
+        ApiProfielserviceV1VoorkeurPost201ResponseScopesInner scope =
+                new ApiProfielserviceV1VoorkeurPost201ResponseScopesInner()
+                        .dienstverlenerNaam(dienstverlenerNaam)
+                        .dienstNaam(dienstNaam);
 
         return new ContactgegevenResponse()
                 .type(ContactgegevenResponse.TypeEnum.EMAIL)

@@ -7,14 +7,13 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Eén verzending van een notificatie bij NotifyNL. Een receipt wordt via het NotifyNL-id aan de
@@ -147,7 +146,8 @@ public class Poging {
         Objects.requireNonNull(notifyId, "notifyId is verplicht");
 
         if (this.notifyId == null) {
-            throw new IllegalStateException("Poging " + id + " heeft nog geen NotifyNL-id; een duplicaat kan pas daarna");
+            throw new IllegalStateException(
+                    "Poging " + id + " heeft nog geen NotifyNL-id; een duplicaat kan pas daarna");
         }
 
         if (!hoortBij(notifyId)) {

@@ -1,14 +1,14 @@
 package nl.rijksoverheid.moz.nmc.client.notifynl;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.quarkiverse.openapi.generator.providers.CredentialsContext;
 import io.quarkiverse.openapi.generator.providers.CredentialsProvider;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @QuarkusTest
 class NotifyNLCredentialsProviderTest {

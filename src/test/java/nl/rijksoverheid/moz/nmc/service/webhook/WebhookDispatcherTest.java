@@ -1,14 +1,5 @@
 package nl.rijksoverheid.moz.nmc.service.webhook;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import nl.rijksoverheid.moz.nmc.client.webhook.WebhookAdapter;
-import nl.rijksoverheid.moz.nmc.domain.Cursor;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -18,6 +9,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
+import nl.rijksoverheid.moz.nmc.client.webhook.WebhookAdapter;
+import nl.rijksoverheid.moz.nmc.domain.Cursor;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+@Tag("unit")
 class WebhookDispatcherTest {
 
     private static final String URL = "https://dv.example.nl/webhook";
@@ -47,7 +48,8 @@ class WebhookDispatcherTest {
             }
         };
 
-        IllegalStateException fout = assertThrows(IllegalStateException.class,
+        IllegalStateException fout = assertThrows(
+                IllegalStateException.class,
                 () -> new WebhookDispatcher(webhookAdapter, webhookSleutel, kapot).lever(URL, List.of(), CURSOR));
 
         assertInstanceOf(JsonProcessingException.class, fout.getCause());

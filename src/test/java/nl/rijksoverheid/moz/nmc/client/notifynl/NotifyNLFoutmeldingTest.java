@@ -1,13 +1,15 @@
 package nl.rijksoverheid.moz.nmc.client.notifynl;
 
-import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.Response;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.Response;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
+@Tag("unit")
 class NotifyNLFoutmeldingTest {
 
     @Test
@@ -15,7 +17,8 @@ class NotifyNLFoutmeldingTest {
         String body = "{\"errors\":[{\"error\":\"BadRequestError\",\"message\":\"Missing personalisation: naam\"},"
                 + "{\"error\":\"ValidationError\",\"message\":\"template_id is not a valid UUID\"}],\"status_code\":400}";
 
-        assertEquals("BadRequestError: Missing personalisation: naam; ValidationError: template_id is not a valid UUID",
+        assertEquals(
+                "BadRequestError: Missing personalisation: naam; ValidationError: template_id is not a valid UUID",
                 NotifyNLFoutmelding.beschrijf(antwoord("application/json"), body));
     }
 
@@ -27,7 +30,8 @@ class NotifyNLFoutmeldingTest {
             fouten.append(i == 1 ? "" : ",").append("{\"error\":\"E").append(i).append("\",\"message\":\"m\"}");
         }
 
-        assertEquals("E1: m; E2: m; E3: m; E4: m; E5: m",
+        assertEquals(
+                "E1: m; E2: m; E3: m; E4: m; E5: m",
                 NotifyNLFoutmelding.beschrijf(antwoord("application/json"), "{\"errors\":[" + fouten + "]}"));
     }
 
@@ -37,7 +41,8 @@ class NotifyNLFoutmeldingTest {
         String lang = "x".repeat(NotifyNLFoutmelding.MAX_LENGTE + 1);
         String body = "{\"errors\":[{\"error\":\"Fout\\nNEP\",\"message\":\"" + lang + "\"}]}";
 
-        assertEquals("Fout NEP: " + "x".repeat(NotifyNLFoutmelding.MAX_LENGTE) + "…",
+        assertEquals(
+                "Fout NEP: " + "x".repeat(NotifyNLFoutmelding.MAX_LENGTE) + "…",
                 NotifyNLFoutmelding.beschrijf(antwoord("application/json"), body));
     }
 
@@ -45,41 +50,53 @@ class NotifyNLFoutmeldingTest {
     void beschrijf_meldingVanPreciesDeMaximaleLengte_blijftHeel() {
         String precies = "x".repeat(NotifyNLFoutmelding.MAX_LENGTE);
 
-        assertEquals("Fout: " + precies, NotifyNLFoutmelding.beschrijf(antwoord("application/json"),
-                "{\"errors\":[{\"error\":\"Fout\",\"message\":\"" + precies + "\"}]}"));
+        assertEquals(
+                "Fout: " + precies,
+                NotifyNLFoutmelding.beschrijf(
+                        antwoord("application/json"),
+                        "{\"errors\":[{\"error\":\"Fout\",\"message\":\"" + precies + "\"}]}"));
     }
 
     @Test
     void beschrijf_kortePlatteTekst_gaatMeeAlsMeldingVanEenTussenliggendeServer() {
-        assertEquals("melding van een tussenliggende server: \"Bad Gateway\"",
+        assertEquals(
+                "melding van een tussenliggende server: \"Bad Gateway\"",
                 NotifyNLFoutmelding.beschrijf(antwoord("text/plain; charset=utf-8"), "Bad Gateway"));
-        assertEquals("melding van een tussenliggende server: \"" + "x".repeat(100) + "\"",
+        assertEquals(
+                "melding van een tussenliggende server: \"" + "x".repeat(100) + "\"",
                 NotifyNLFoutmelding.beschrijf(antwoord("text/plain"), "x".repeat(100)));
     }
 
     @Test
     void beschrijf_langePlatteTekst_noemtAlleenTypeOmvangEnServer() {
-        assertEquals("geen foutformaat van NotifyNL (type text/plain, 101 tekens, server nginx)",
+        assertEquals(
+                "geen foutformaat van NotifyNL (type text/plain, 101 tekens, server nginx)",
                 NotifyNLFoutmelding.beschrijf(antwoord("text/plain"), "x".repeat(101)));
     }
 
     @Test
     void beschrijf_andereBody_noemtAlleenTypeOmvangEnServer() {
-        assertEquals("geen foutformaat van NotifyNL (type text/html, 13 tekens, server nginx)",
+        assertEquals(
+                "geen foutformaat van NotifyNL (type text/html, 13 tekens, server nginx)",
                 NotifyNLFoutmelding.beschrijf(antwoord("text/html"), "<h1>fout</h1>"));
-        assertEquals("geen foutformaat van NotifyNL (type null, 11 tekens, server nginx)",
+        assertEquals(
+                "geen foutformaat van NotifyNL (type null, 11 tekens, server nginx)",
                 NotifyNLFoutmelding.beschrijf(antwoord(null), "Bad Gateway"));
-        assertEquals("geen foutformaat van NotifyNL (type application/json, 7 tekens, server nginx)",
+        assertEquals(
+                "geen foutformaat van NotifyNL (type application/json, 7 tekens, server nginx)",
                 NotifyNLFoutmelding.beschrijf(antwoord("application/json"), "{\"a\":1}"));
-        assertEquals("geen foutformaat van NotifyNL (type application/json, 7 tekens, server nginx)",
+        assertEquals(
+                "geen foutformaat van NotifyNL (type application/json, 7 tekens, server nginx)",
                 NotifyNLFoutmelding.beschrijf(antwoord("application/json"), "{kapot}"));
     }
 
     @Test
     void beschrijf_zonderOfMetLegeBody_noemtAlleenTypeOmvangEnServer() {
-        assertEquals("geen foutformaat van NotifyNL (type text/plain, 0 tekens, server nginx)",
+        assertEquals(
+                "geen foutformaat van NotifyNL (type text/plain, 0 tekens, server nginx)",
                 NotifyNLFoutmelding.beschrijf(antwoord("text/plain"), null));
-        assertEquals("geen foutformaat van NotifyNL (type application/json, 2 tekens, server nginx)",
+        assertEquals(
+                "geen foutformaat van NotifyNL (type application/json, 2 tekens, server nginx)",
                 NotifyNLFoutmelding.beschrijf(antwoord("application/json"), "  "));
     }
 
@@ -94,7 +111,10 @@ class NotifyNLFoutmeldingTest {
     }
 
     private static Response antwoord(String contentType) {
-        return Response.status(502).header(HttpHeaders.CONTENT_TYPE, contentType).header("Server", "nginx").build();
+        return Response.status(502)
+                .header(HttpHeaders.CONTENT_TYPE, contentType)
+                .header("Server", "nginx")
+                .build();
     }
 
     private static Response onleesbaar(Object entity) {

@@ -1,12 +1,5 @@
 package nl.rijksoverheid.moz.nmc.validation;
 
-import jakarta.validation.ConstraintValidatorContext;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
-import java.util.HashMap;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
@@ -14,6 +7,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import jakarta.validation.ConstraintValidatorContext;
+import java.util.HashMap;
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+@Tag("unit")
 class BerichtgegevensConstraintValidatorTest {
 
     private final BerichtgegevensConstraintValidator validator = new BerichtgegevensConstraintValidator();
@@ -68,7 +69,8 @@ class BerichtgegevensConstraintValidatorTest {
         assertFalse(validator.isValid(Map.of("a", "kort", "b", "${x}".repeat(500) + "x"), context));
 
         verify(context).disableDefaultConstraintViolation();
-        verify(context).buildConstraintViolationWithTemplate("Een waarde in de berichtgegevens is langer dan 2000 tekens.");
+        verify(context)
+                .buildConstraintViolationWithTemplate("Een waarde in de berichtgegevens is langer dan 2000 tekens.");
     }
 
     private static Map<String, String> variabelen(int aantal) {

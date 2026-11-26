@@ -1,7 +1,6 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
 import com.fasterxml.jackson.annotation.JsonValue;
-
 import java.util.Locale;
 
 /**
@@ -28,7 +27,8 @@ public enum NotificatieStatus {
      */
     public boolean isEindstatus() {
         return switch (this) {
-            case DEFINITIEF_BEZORGD, NIET_BEZORGBAAR, TECHNISCH_MISLUKT, BEZORGSTATUS_ONBEKEND, VERLOPEN, GEANNULEERD -> true;
+            case DEFINITIEF_BEZORGD, NIET_BEZORGBAAR, TECHNISCH_MISLUKT, BEZORGSTATUS_ONBEKEND, VERLOPEN, GEANNULEERD ->
+                true;
             case AANGENOMEN, IN_VERZENDING, VERZONDEN, BEZORGD -> false;
         };
     }

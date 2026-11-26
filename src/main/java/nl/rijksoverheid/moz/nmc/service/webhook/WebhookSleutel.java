@@ -4,8 +4,6 @@ import io.quarkus.runtime.Startup;
 import io.smallrye.jwt.algorithm.SignatureAlgorithm;
 import io.smallrye.jwt.build.Jwt;
 import jakarta.enterprise.context.ApplicationScoped;
-import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
-
 import java.math.BigInteger;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
@@ -21,6 +19,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
 import org.eclipse.microprofile.jwt.Claims;
 
 /**
@@ -56,8 +55,8 @@ public class WebhookSleutel {
         this.issuer = jwt.issuer();
         this.geldigheid = jwt.geldigheid();
         this.clock = clock;
-        this.extraSleutel = leesExtraSleutel(jwt.extraPublicKey(), jwt.extraKeyId(), this.keyId,
-                this.privateSleutel.getModulus());
+        this.extraSleutel =
+                leesExtraSleutel(jwt.extraPublicKey(), jwt.extraKeyId(), this.keyId, this.privateSleutel.getModulus());
     }
 
     /**
@@ -67,16 +66,15 @@ public class WebhookSleutel {
      * @param modulus  de modulus, base64url zonder voorloopnul
      * @param exponent de publieke exponent, base64url zonder voorloopnul
      */
-    public record PubliekeSleutel(String keyId, String modulus, String exponent) {
-    }
+    public record PubliekeSleutel(String keyId, String modulus, String exponent) {}
 
     /**
      * De sleutels voor de JWKS: de sleutel waarmee het NMC ondertekent, en tijdens een rotatie de
      * extra sleutel.
      */
     public List<PubliekeSleutel> publiekeSleutels() {
-        PubliekeSleutel eigen = new PubliekeSleutel(keyId, base64url(privateSleutel.getModulus()),
-                base64url(privateSleutel.getPublicExponent()));
+        PubliekeSleutel eigen = new PubliekeSleutel(
+                keyId, base64url(privateSleutel.getModulus()), base64url(privateSleutel.getPublicExponent()));
 
         return extraSleutel.map(extra -> List.of(eigen, extra)).orElseGet(() -> List.of(eigen));
     }
@@ -111,7 +109,8 @@ public class WebhookSleutel {
         try {
             byte[] der = Base64.getDecoder().decode(base64);
 
-            if (!(KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(der)) instanceof RSAPrivateCrtKey sleutel)) {
+            if (!(KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(der))
+                    instanceof RSAPrivateCrtKey sleutel)) {
                 throw new IllegalStateException("nmc.webhook.jwt.private-key bevat geen volledige RSA-sleutel");
             }
 
@@ -127,8 +126,8 @@ public class WebhookSleutel {
 
     // De extra sleutel is er alleen tijdens een rotatie; een halve of dubbele configuratie zou de
     // JWKS stil onbruikbaar maken en laat de applicatie daarom niet starten.
-    private static Optional<PubliekeSleutel> leesExtraSleutel(Optional<String> pem, Optional<String> keyId, String eigenKeyId,
-                                                              BigInteger eigenModulus) {
+    private static Optional<PubliekeSleutel> leesExtraSleutel(
+            Optional<String> pem, Optional<String> keyId, String eigenKeyId, BigInteger eigenModulus) {
         Optional<String> sleutel = pem.filter(waarde -> !waarde.isBlank());
         Optional<String> id = keyId.map(String::strip).filter(waarde -> !waarde.isEmpty());
 
@@ -153,7 +152,8 @@ public class WebhookSleutel {
                     "nmc.webhook.jwt.extra-public-key is dezelfde sleutel als nmc.webhook.jwt.private-key");
         }
 
-        return Optional.of(new PubliekeSleutel(id.get(), base64url(publiek.getModulus()), base64url(publiek.getPublicExponent())));
+        return Optional.of(
+                new PubliekeSleutel(id.get(), base64url(publiek.getModulus()), base64url(publiek.getPublicExponent())));
     }
 
     // X.509 (SubjectPublicKeyInfo) als PEM, met of zonder kop- en voetregel en regelafbrekingen.
@@ -164,15 +164,18 @@ public class WebhookSleutel {
         try {
             byte[] der = Base64.getDecoder().decode(base64);
             // Een sleutel van een ander soort weigert de RSA-KeyFactory met een InvalidKeySpecException.
-            RSAPublicKey sleutel = (RSAPublicKey) KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(der));
+            RSAPublicKey sleutel =
+                    (RSAPublicKey) KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(der));
 
             if (sleutel.getModulus().bitLength() < MIN_BITS) {
-                throw new IllegalStateException("nmc.webhook.jwt.extra-public-key moet minstens " + MIN_BITS + " bits zijn");
+                throw new IllegalStateException(
+                        "nmc.webhook.jwt.extra-public-key moet minstens " + MIN_BITS + " bits zijn");
             }
 
             return sleutel;
         } catch (IllegalArgumentException | GeneralSecurityException e) {
-            throw new IllegalStateException("nmc.webhook.jwt.extra-public-key is geen publieke RSA-sleutel in X.509-PEM", e);
+            throw new IllegalStateException(
+                    "nmc.webhook.jwt.extra-public-key is geen publieke RSA-sleutel in X.509-PEM", e);
         }
     }
 

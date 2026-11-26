@@ -1,9 +1,15 @@
 package nl.rijksoverheid.moz.nmc.repository;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.time.OffsetDateTime;
+import java.util.Optional;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
@@ -11,13 +17,6 @@ import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.time.OffsetDateTime;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // Een receipt noemt de poging via de reference; zonder bruikbare reference telt het NotifyNL-id.
 @QuarkusTest
@@ -41,13 +40,16 @@ class PogingRepositoryTest {
             NotificatieFixtures.voegNotificatieToe(entityManager, notificatieId, NotificatieStatus.VERZONDEN, null);
             NotificatieFixtures.voegPogingToe(entityManager, notificatieId, 1, notifyId, PogingStatus.VERZONDEN, T1);
 
-            return NotificatieFixtures.pogingen(entityManager, notificatieId).getFirst().getId();
+            return NotificatieFixtures.pogingen(entityManager, notificatieId)
+                    .getFirst()
+                    .getId();
         });
     }
 
     @AfterEach
     void ruimOp() {
-        QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.verwijderNotificatie(entityManager, notificatieId));
+        QuarkusTransaction.requiringNew()
+                .run(() -> NotificatieFixtures.verwijderNotificatie(entityManager, notificatieId));
     }
 
     @Test
@@ -76,6 +78,7 @@ class PogingRepositoryTest {
     }
 
     private Optional<UUID> zoek(UUID notifyId, String reference) {
-        return QuarkusTransaction.requiringNew().call(() -> repository.zoekVoorReceipt(notifyId, reference).map(Poging::getId));
+        return QuarkusTransaction.requiringNew()
+                .call(() -> repository.zoekVoorReceipt(notifyId, reference).map(Poging::getId));
     }
 }

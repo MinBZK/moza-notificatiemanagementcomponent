@@ -1,12 +1,23 @@
 package nl.rijksoverheid.moz.nmc.notifynlcallback.controller;
 
+import static io.restassured.RestAssured.given;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+
+import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
@@ -16,35 +27,23 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResp
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
+import nl.rijksoverheid.moz.nmc.domain.Taak;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.job.TaakRonde;
+import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.service.receipt.ReceiptVerwerker;
-import org.eclipse.microprofile.rest.client.inject.RestClient;
-import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.job.TaakRonde;
-import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.NotifyNLFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.UUID;
-
-import static io.restassured.RestAssured.given;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 
 @QuarkusTest
 class NotifyNLCallbackControllerTest {
@@ -52,7 +51,8 @@ class NotifyNLCallbackControllerTest {
     // Een vast tijdstip in het verleden: moet herkenbaar verschillen van het moment waarop de test
     // de callback verwerkt, anders bewijst de assertie op het receipttijdstip niets.
     // Rond het moment van verzenden: een tijdstip van vóór het verzenden wordt het moment van ontvangst.
-    private static final OffsetDateTime CREATED_AT = OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS);
+    private static final OffsetDateTime CREATED_AT =
+            OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS);
     private static final OffsetDateTime SENT_AT = CREATED_AT.plusSeconds(1);
     private static final OffsetDateTime COMPLETED_AT = CREATED_AT.plusSeconds(2);
 
@@ -126,7 +126,8 @@ class NotifyNLCallbackControllerTest {
 
         stuurDeliveryReceiptZonderVerwerking(deliveryReceipt(UUID.randomUUID(), "delivered"));
 
-        assertEquals(voor + 1, meterRegistry.get("nmc.receipts.afgewezen").counter().count());
+        assertEquals(
+                voor + 1, meterRegistry.get("nmc.receipts.afgewezen").counter().count());
         assertEquals(0L, LeesHelper.aantalTaken(TaakSoort.RECEIPT_VERWERKEN));
     }
 
@@ -139,7 +140,8 @@ class NotifyNLCallbackControllerTest {
 
         Taak taak = LeesHelper.enigeTaak(TaakSoort.RECEIPT_VERWERKEN);
         assertEquals("delivered", taak.getPayload().get("status"));
-        assertTrue(taak.getPayload().values().stream().noneMatch(waarde -> waarde.contains("@")),
+        assertTrue(
+                taak.getPayload().values().stream().noneMatch(waarde -> waarde.contains("@")),
                 "het e-mailadres staat niet in de payload: " + taak.getPayload());
         assertEquals(NotificatieStatus.VERZONDEN, status(notifyNlId), "verwerking volgt pas in de taak");
     }
@@ -170,7 +172,9 @@ class NotifyNLCallbackControllerTest {
 
         assertEquals(NotificatieStatus.BEZORGD, status(notifyNlId));
         assertEquals(events, aantalEvents(notificatieId), "een herhaalde receipt schrijft geen tweede event");
-        assertEquals(0L, LeesHelper.aantalTaken(TaakSoort.RECEIPT_VERWERKEN),
+        assertEquals(
+                0L,
+                LeesHelper.aantalTaken(TaakSoort.RECEIPT_VERWERKEN),
                 "de tweede receipttaak is verwerkt en opgeruimd");
     }
 
@@ -179,14 +183,20 @@ class NotifyNLCallbackControllerTest {
     void verwerkAfleverstatus_foutInDeVerwerking_verliestDeReceiptNiet() {
         UUID notifyNlId = verstuurNotificatie();
         stuurDeliveryReceiptZonderVerwerking(deliveryReceipt(notifyNlId, "delivered"));
-        Mockito.doThrow(new IllegalStateException("gesimuleerde storing")).doCallRealMethod()
-                .when(receiptVerwerker).verwerk(any(), any(), any(), any());
+        Mockito.doThrow(new IllegalStateException("gesimuleerde storing"))
+                .doCallRealMethod()
+                .when(receiptVerwerker)
+                .verwerk(any(), any(), any(), any());
 
         TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
         assertEquals(NotificatieStatus.VERZONDEN, status(notifyNlId));
         Taak taak = LeesHelper.enigeTaak(TaakSoort.RECEIPT_VERWERKEN);
-        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetDue(taakRepository.getEntityManager(),
-                TaakSoort.RECEIPT_VERWERKEN, taak.getId(), OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1)));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.zetDue(
+                        taakRepository.getEntityManager(),
+                        TaakSoort.RECEIPT_VERWERKEN,
+                        taak.getId(),
+                        OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1)));
 
         TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
 
@@ -196,11 +206,11 @@ class NotifyNLCallbackControllerTest {
 
     @Test
     void verwerkAfleverstatus_ongeldigBearerToken_retourneert401() {
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .header("Authorization", "Bearer ongeldig-token")
                 .body(deliveryReceipt(UUID.randomUUID(), "delivered"))
-                .when().post("/api/nmc/v1/notifynl-callback")
+                .when()
+                .post("/api/nmc/v1/notifynl-callback")
                 .then()
                 .statusCode(401)
                 .contentType("application/problem+json");
@@ -208,10 +218,10 @@ class NotifyNLCallbackControllerTest {
 
     @Test
     void verwerkAfleverstatus_geenBearerToken_retourneert401() {
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(deliveryReceipt(UUID.randomUUID(), "delivered"))
-                .when().post("/api/nmc/v1/notifynl-callback")
+                .when()
+                .post("/api/nmc/v1/notifynl-callback")
                 .then()
                 .statusCode(401)
                 .contentType("application/problem+json");
@@ -297,11 +307,12 @@ class NotifyNLCallbackControllerTest {
         UUID notifyNlId = UUID.randomUUID();
         Mockito.when(sendAMessageApi.sendEmail(any())).thenReturn(new SendEmailResponse().id(notifyNlId.toString()));
 
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(AANVRAAG)
-                .when().post("/api/nmc/v1/centraal/notificaties")
-                .then().statusCode(202);
+                .when()
+                .post("/api/nmc/v1/centraal/notificaties")
+                .then()
+                .statusCode(202);
         // De verzending is asynchroon: de verzendtaak zet de poging op het NotifyNL-id uit de mock.
         TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
 
@@ -315,11 +326,11 @@ class NotifyNLCallbackControllerTest {
     }
 
     private static void stuurDeliveryReceiptZonderVerwerking(String body) {
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .header("Authorization", "Bearer " + CALLBACK_BEARER_TOKEN)
                 .body(body)
-                .when().post("/api/nmc/v1/notifynl-callback")
+                .when()
+                .post("/api/nmc/v1/notifynl-callback")
                 .then()
                 .statusCode(204);
     }
@@ -329,12 +340,17 @@ class NotifyNLCallbackControllerTest {
     }
 
     private int aantalEvents(UUID notificatieId) {
-        return QuarkusTransaction.requiringNew().call(() -> eventRepository.findByNotificatie(notificatieId).size());
+        return QuarkusTransaction.requiringNew()
+                .call(() -> eventRepository.findByNotificatie(notificatieId).size());
     }
 
     private NotificatieStatus status(UUID notifyNlId) {
-        return QuarkusTransaction.requiringNew().call(() ->
-                notificatieRepository.findById(pogingRepository.findByNotifyId(notifyNlId).orElseThrow().getNotificatieId())
+        return QuarkusTransaction.requiringNew()
+                .call(() -> notificatieRepository
+                        .findById(pogingRepository
+                                .findByNotifyId(notifyNlId)
+                                .orElseThrow()
+                                .getNotificatieId())
                         .getStatus());
     }
 
@@ -358,8 +374,6 @@ class NotifyNLCallbackControllerTest {
                 .waarde(email)
                 .isDefault(true);
 
-        return new PartijResponse()
-                .partijId(UUID.randomUUID())
-                .contactgegevens(List.of(contactgegeven));
+        return new PartijResponse().partijId(UUID.randomUUID()).contactgegevens(List.of(contactgegeven));
     }
 }

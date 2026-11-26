@@ -3,7 +3,6 @@ package nl.rijksoverheid.moz.nmc.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-
 import java.util.Optional;
 import java.util.UUID;
 

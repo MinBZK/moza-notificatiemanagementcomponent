@@ -3,6 +3,11 @@ package nl.rijksoverheid.moz.nmc.service.verzending;
 import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.util.Optional;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLAfleverstatus;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLConfiguratieException;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLVerzendAdapter;
@@ -20,12 +25,6 @@ import nl.rijksoverheid.moz.nmc.service.receipt.ReceiptVerwerker;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakClaimer;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
-
-import java.time.Clock;
-import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.util.Optional;
-import java.util.UUID;
 
 /**
  * De afleverstatus-navraag: vraagt bij NotifyNL de status op van een poging waarvoor de receipt
@@ -45,9 +44,15 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
     private final Duration uitstel;
     private final Clock clock;
 
-    public NotifyNLNavraagTaakHandler(PogingRepository pogingRepository, Overgangsfunctie overgangsfunctie, ReceiptVerwerker receiptVerwerker,
-                      TaakClaimer taakClaimer, NotifyNLVerzendAdapter verzendAdapter, NotifyNLNavraagmomenten notifyNLNavraagmomenten,
-                      Clock clock, TaakConfig config) {
+    public NotifyNLNavraagTaakHandler(
+            PogingRepository pogingRepository,
+            Overgangsfunctie overgangsfunctie,
+            ReceiptVerwerker receiptVerwerker,
+            TaakClaimer taakClaimer,
+            NotifyNLVerzendAdapter verzendAdapter,
+            NotifyNLNavraagmomenten notifyNLNavraagmomenten,
+            Clock clock,
+            TaakConfig config) {
         this.pogingRepository = pogingRepository;
         this.overgangsfunctie = overgangsfunctie;
         this.receiptVerwerker = receiptVerwerker;
@@ -79,9 +84,15 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
             afleverstatus = verzendAdapter.vraagStatusOp(navraag.notifyId());
         } catch (NotifyNLConfiguratieException | NotifyNLVerzendException e) {
             // Ook een navraag die blijft mislukken houdt op bij het einde van de bewaartermijn van NotifyNL.
-            if (notifyNLNavraagmomenten.volgende(navraag.verzondenOp(), OffsetDateTime.now(clock)).isEmpty()) {
-                Log.warnf(e, "Navraag voor poging %s (NotifyNL-id %s) blijft mislukken en de bewaartermijn is "
-                        + "verstreken; bezorgstatus onbekend", navraag.pogingId(), navraag.notifyId());
+            if (notifyNLNavraagmomenten
+                    .volgende(navraag.verzondenOp(), OffsetDateTime.now(clock))
+                    .isEmpty()) {
+                Log.warnf(
+                        e,
+                        "Navraag voor poging %s (NotifyNL-id %s) blijft mislukken en de bewaartermijn is "
+                                + "verstreken; bezorgstatus onbekend",
+                        navraag.pogingId(),
+                        navraag.notifyId());
 
                 return sluitAf(taak, navraag);
             }
@@ -92,14 +103,18 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
         }
 
         // Een tussenstatus of een status die het NMC niet kent is geen uitkomst; de navraag loopt dan door.
-        if (afleverstatus.isPresent() && afleverstatus.get().uitkomst(navraag.notifyId()).isPresent()) {
+        if (afleverstatus.isPresent()
+                && afleverstatus.get().uitkomst(navraag.notifyId()).isPresent()) {
             // Eerst de notificatierij, dan de taakrij: dezelfde volgorde als een receipt die de navraagtaak
             // verwijdert, anders wachten beide op elkaar. Daarna afronden, want de verwerking ruimt open
             // navraagtaken op en zou deze anders ook raken.
             QuarkusTransaction.requiringNew().run(() -> {
                 overgangsfunctie.vergrendel(navraag.notificatieId());
                 taakClaimer.rondAf(taak);
-                receiptVerwerker.verwerk(navraag.notifyId(), navraag.pogingId().toString(), afleverstatus.get().status(),
+                receiptVerwerker.verwerk(
+                        navraag.notifyId(),
+                        navraag.pogingId().toString(),
+                        afleverstatus.get().status(),
                         afleverstatus.get().tijdstip());
             });
 
@@ -114,8 +129,11 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
             return TaakUitkomst.uitgesteld(volgende.get(), false);
         }
 
-        Log.warnf("Geen afleverstatus voor poging %s (NotifyNL-id %s): %s; bezorgstatus onbekend", navraag.pogingId(),
-                navraag.notifyId(), afleverstatus.isEmpty() ? "NotifyNL kent de verzending niet" : "bewaartermijn verstreken");
+        Log.warnf(
+                "Geen afleverstatus voor poging %s (NotifyNL-id %s): %s; bezorgstatus onbekend",
+                navraag.pogingId(),
+                navraag.notifyId(),
+                afleverstatus.isEmpty() ? "NotifyNL kent de verzending niet" : "bewaartermijn verstreken");
 
         return sluitAf(taak, navraag);
     }
@@ -137,7 +155,9 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
         Poging poging = pogingId == null ? null : pogingRepository.findById(UUID.fromString(pogingId));
 
         if (poging == null || poging.getStatus() != PogingStatus.VERZONDEN) {
-            Log.infof("Navraagtaak %s: poging %s bestaat niet meer of heeft een uitkomst; afgerond", taak.getId(), pogingId);
+            Log.infof(
+                    "Navraagtaak %s: poging %s bestaat niet meer of heeft een uitkomst; afgerond",
+                    taak.getId(), pogingId);
             taakClaimer.rondAf(taak);
 
             return null;
@@ -153,7 +173,8 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
         pogingRepository.herlaad(poging);
 
         if (poging.getStatus() != PogingStatus.VERZONDEN) {
-            // onbereikbaar: een receipt die de poging een uitkomst geeft, verwijdert ook deze navraagtaak, en dan faalt rondAf hierboven al
+            // onbereikbaar: een receipt die de poging een uitkomst geeft, verwijdert ook deze navraagtaak, en dan faalt
+            // rondAf hierboven al
             return;
         }
 
@@ -166,6 +187,5 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
         overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.BEZORGSTATUS_ONBEKEND, null);
     }
 
-    private record Navraag(UUID pogingId, UUID notificatieId, UUID notifyId, OffsetDateTime verzondenOp) {
-    }
+    private record Navraag(UUID pogingId, UUID notificatieId, UUID notifyId, OffsetDateTime verzondenOp) {}
 }

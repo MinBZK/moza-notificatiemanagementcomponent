@@ -1,10 +1,35 @@
 package nl.rijksoverheid.moz.nmc.service.aanname;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.Mockito.verifyNoInteractions;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
+import javax.sql.DataSource;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.api.ProfielApi;
 import nl.rijksoverheid.moz.nmc.domain.Event;
@@ -24,39 +49,13 @@ import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
-import java.nio.charset.StandardCharsets;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.time.Clock;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
-import javax.sql.DataSource;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.params.provider.Arguments.arguments;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 @QuarkusTest
 class AannameServiceTest {
@@ -113,9 +112,11 @@ class AannameServiceTest {
             assertEquals(0, notificatie.getVersie());
             assertEquals(NotificatieFixtures.DV_ID, notificatie.getDvId());
             assertFalse(notificatie.getAangenomenOp().isAfter(clock.nu()));
-            assertEquals(new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
+            assertEquals(
+                    new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
                     sleutelbeheer.ontsleutelOntvanger(id, notificatie.getVersleuteldeGegevens()));
-            assertEquals(Map.of("naam", "Voorbeeld BV"),
+            assertEquals(
+                    Map.of("naam", "Voorbeeld BV"),
                     sleutelbeheer.ontsleutelPersonalisation(id, notificatie.getVersleuteldeGegevens()));
 
             List<Event> events = eventRepository.findByNotificatie(id);
@@ -139,12 +140,13 @@ class AannameServiceTest {
 
     @Test
     void neemAan_decentraal_bewaartHetAdresVersleuteldEnLaatDienstverlenerUitDePayload() {
-        UUID id = aannameService.neemAan(new AannameOpdracht(Regie.DECENTRAAL, Ontvanger.email("burger@example.nl"),
-                null, null, BerichtType.DEMO_TEMPLATE, null));
+        UUID id = aannameService.neemAan(new AannameOpdracht(
+                Regie.DECENTRAAL, Ontvanger.email("burger@example.nl"), null, null, BerichtType.DEMO_TEMPLATE, null));
 
         QuarkusTransaction.requiringNew().run(() -> {
             Notificatie notificatie = notificatieRepository.findById(id);
-            assertEquals(Ontvanger.email("burger@example.nl"),
+            assertEquals(
+                    Ontvanger.email("burger@example.nl"),
                     sleutelbeheer.ontsleutelOntvanger(id, notificatie.getVersleuteldeGegevens()));
             assertEquals(Map.of(), sleutelbeheer.ontsleutelPersonalisation(id, notificatie.getVersleuteldeGegevens()));
 
@@ -172,15 +174,30 @@ class AannameServiceTest {
     @Test
     void neemAan_andereInhoudOfAndereDvRef_maaktEenNieuweNotificatie() {
         UUID eerste = aannameService.neemAan(centraal(), "order-1");
-        UUID andereGegevens = aannameService.neemAan(new AannameOpdracht(Regie.CENTRAAL,
-                new Ontvanger(Ontvanger.Soort.KVK, "12345678"), "Gemeente Voorbeeld", "Parkeervergunning",
-                BerichtType.DEMO_TEMPLATE, Map.of("naam", "Ander BV")), "order-1");
-        UUID andereOntvanger = aannameService.neemAan(new AannameOpdracht(Regie.CENTRAAL,
-                new Ontvanger(Ontvanger.Soort.KVK, "87654321"), "Gemeente Voorbeeld", "Parkeervergunning",
-                BerichtType.DEMO_TEMPLATE, Map.of("naam", "Voorbeeld BV")), "order-1");
+        UUID andereGegevens = aannameService.neemAan(
+                new AannameOpdracht(
+                        Regie.CENTRAAL,
+                        new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
+                        "Gemeente Voorbeeld",
+                        "Parkeervergunning",
+                        BerichtType.DEMO_TEMPLATE,
+                        Map.of("naam", "Ander BV")),
+                "order-1");
+        UUID andereOntvanger = aannameService.neemAan(
+                new AannameOpdracht(
+                        Regie.CENTRAAL,
+                        new Ontvanger(Ontvanger.Soort.KVK, "87654321"),
+                        "Gemeente Voorbeeld",
+                        "Parkeervergunning",
+                        BerichtType.DEMO_TEMPLATE,
+                        Map.of("naam", "Voorbeeld BV")),
+                "order-1");
         UUID andereReferentie = aannameService.neemAan(centraal(), "order-2");
 
-        assertEquals(4, Set.of(eerste, andereGegevens, andereOntvanger, andereReferentie).size());
+        assertEquals(
+                4,
+                Set.of(eerste, andereGegevens, andereOntvanger, andereReferentie)
+                        .size());
         assertEquals(4, LeesHelper.aantalNotificaties());
     }
 
@@ -191,31 +208,110 @@ class AannameServiceTest {
         Map<String, String> gegevens = Map.of("naam", "Voorbeeld BV");
 
         return Stream.of(
-                arguments("regie", new AannameOpdracht(Regie.DECENTRAAL, kvk, "Gemeente Voorbeeld", "Parkeervergunning",
-                        BerichtType.DEMO_TEMPLATE, gegevens)),
-                arguments("soort ontvanger", new AannameOpdracht(Regie.CENTRAAL, new Ontvanger(Ontvanger.Soort.RSIN, "12345678"),
-                        "Gemeente Voorbeeld", "Parkeervergunning", BerichtType.DEMO_TEMPLATE, gegevens)),
-                arguments("ontvanger", new AannameOpdracht(Regie.CENTRAAL, new Ontvanger(Ontvanger.Soort.KVK, "87654321"),
-                        "Gemeente Voorbeeld", "Parkeervergunning", BerichtType.DEMO_TEMPLATE, gegevens)),
-                arguments("dienstverlener", new AannameOpdracht(Regie.CENTRAAL, kvk, "Gemeente Elders", "Parkeervergunning",
-                        BerichtType.DEMO_TEMPLATE, gegevens)),
-                arguments("dienst", new AannameOpdracht(Regie.CENTRAAL, kvk, "Gemeente Voorbeeld", "Subsidie",
-                        BerichtType.DEMO_TEMPLATE, gegevens)),
-                arguments("geen dienst", new AannameOpdracht(Regie.CENTRAAL, kvk, "Gemeente Voorbeeld", null,
-                        BerichtType.DEMO_TEMPLATE, gegevens)),
-                arguments("berichttype", new AannameOpdracht(Regie.CENTRAAL, kvk, "Gemeente Voorbeeld", "Parkeervergunning",
-                        BerichtType.STUURGROEP_AGENDA, gegevens)),
-                arguments("waarde van een berichtgegeven", new AannameOpdracht(Regie.CENTRAAL, kvk, "Gemeente Voorbeeld",
-                        "Parkeervergunning", BerichtType.DEMO_TEMPLATE, Map.of("naam", "Ander BV"))),
-                arguments("naam van een berichtgegeven", new AannameOpdracht(Regie.CENTRAAL, kvk, "Gemeente Voorbeeld",
-                        "Parkeervergunning", BerichtType.DEMO_TEMPLATE, Map.of("bedrijf", "Voorbeeld BV"))),
-                arguments("extra berichtgegeven", new AannameOpdracht(Regie.CENTRAAL, kvk, "Gemeente Voorbeeld",
-                        "Parkeervergunning", BerichtType.DEMO_TEMPLATE, Map.of("naam", "Voorbeeld BV", "datum", "1 januari"))),
-                arguments("geen berichtgegevens", new AannameOpdracht(Regie.CENTRAAL, kvk, "Gemeente Voorbeeld",
-                        "Parkeervergunning", BerichtType.DEMO_TEMPLATE, null)),
+                arguments(
+                        "regie",
+                        new AannameOpdracht(
+                                Regie.DECENTRAAL,
+                                kvk,
+                                "Gemeente Voorbeeld",
+                                "Parkeervergunning",
+                                BerichtType.DEMO_TEMPLATE,
+                                gegevens)),
+                arguments(
+                        "soort ontvanger",
+                        new AannameOpdracht(
+                                Regie.CENTRAAL,
+                                new Ontvanger(Ontvanger.Soort.RSIN, "12345678"),
+                                "Gemeente Voorbeeld",
+                                "Parkeervergunning",
+                                BerichtType.DEMO_TEMPLATE,
+                                gegevens)),
+                arguments(
+                        "ontvanger",
+                        new AannameOpdracht(
+                                Regie.CENTRAAL,
+                                new Ontvanger(Ontvanger.Soort.KVK, "87654321"),
+                                "Gemeente Voorbeeld",
+                                "Parkeervergunning",
+                                BerichtType.DEMO_TEMPLATE,
+                                gegevens)),
+                arguments(
+                        "dienstverlener",
+                        new AannameOpdracht(
+                                Regie.CENTRAAL,
+                                kvk,
+                                "Gemeente Elders",
+                                "Parkeervergunning",
+                                BerichtType.DEMO_TEMPLATE,
+                                gegevens)),
+                arguments(
+                        "dienst",
+                        new AannameOpdracht(
+                                Regie.CENTRAAL,
+                                kvk,
+                                "Gemeente Voorbeeld",
+                                "Subsidie",
+                                BerichtType.DEMO_TEMPLATE,
+                                gegevens)),
+                arguments(
+                        "geen dienst",
+                        new AannameOpdracht(
+                                Regie.CENTRAAL, kvk, "Gemeente Voorbeeld", null, BerichtType.DEMO_TEMPLATE, gegevens)),
+                arguments(
+                        "berichttype",
+                        new AannameOpdracht(
+                                Regie.CENTRAAL,
+                                kvk,
+                                "Gemeente Voorbeeld",
+                                "Parkeervergunning",
+                                BerichtType.STUURGROEP_AGENDA,
+                                gegevens)),
+                arguments(
+                        "waarde van een berichtgegeven",
+                        new AannameOpdracht(
+                                Regie.CENTRAAL,
+                                kvk,
+                                "Gemeente Voorbeeld",
+                                "Parkeervergunning",
+                                BerichtType.DEMO_TEMPLATE,
+                                Map.of("naam", "Ander BV"))),
+                arguments(
+                        "naam van een berichtgegeven",
+                        new AannameOpdracht(
+                                Regie.CENTRAAL,
+                                kvk,
+                                "Gemeente Voorbeeld",
+                                "Parkeervergunning",
+                                BerichtType.DEMO_TEMPLATE,
+                                Map.of("bedrijf", "Voorbeeld BV"))),
+                arguments(
+                        "extra berichtgegeven",
+                        new AannameOpdracht(
+                                Regie.CENTRAAL,
+                                kvk,
+                                "Gemeente Voorbeeld",
+                                "Parkeervergunning",
+                                BerichtType.DEMO_TEMPLATE,
+                                Map.of("naam", "Voorbeeld BV", "datum", "1 januari"))),
+                arguments(
+                        "geen berichtgegevens",
+                        new AannameOpdracht(
+                                Regie.CENTRAAL,
+                                kvk,
+                                "Gemeente Voorbeeld",
+                                "Parkeervergunning",
+                                BerichtType.DEMO_TEMPLATE,
+                                null)),
                 // Dezelfde tekens, anders over twee velden verdeeld.
-                arguments("grens tussen dienstverlener en dienst", new AannameOpdracht(Regie.CENTRAAL, kvk,
-                        "Gemeente VoorbeeldP", "arkeervergunning", BerichtType.DEMO_TEMPLATE, gegevens)));
+                arguments(
+                        "grens tussen dienstverlener en dienst",
+                        new AannameOpdracht(
+                                Regie.CENTRAAL,
+                                kvk,
+                                "Gemeente VoorbeeldP",
+                                "arkeervergunning",
+                                BerichtType.DEMO_TEMPLATE,
+                                gegevens)));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -247,8 +343,13 @@ class AannameServiceTest {
     }
 
     private static AannameOpdracht metBerichtgegevens(Map<String, String> berichtgegevens) {
-        return new AannameOpdracht(Regie.CENTRAAL, new Ontvanger(Ontvanger.Soort.KVK, "12345678"), "Gemeente Voorbeeld",
-                "Parkeervergunning", BerichtType.DEMO_TEMPLATE, berichtgegevens);
+        return new AannameOpdracht(
+                Regie.CENTRAAL,
+                new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
+                "Gemeente Voorbeeld",
+                "Parkeervergunning",
+                BerichtType.DEMO_TEMPLATE,
+                berichtgegevens);
     }
 
     @Test
@@ -313,8 +414,8 @@ class AannameServiceTest {
         assertEquals(32, rij.get("dv_ref_hmac").length);
         assertEquals(32, rij.get("payload_hash").length);
         assertEquals("1", new String(rij.get("pepper_versie"), StandardCharsets.UTF_8));
-        rij.forEach((kolom, waarde) -> assertFalse(waarde != null
-                        && new String(waarde, StandardCharsets.ISO_8859_1).contains(dvRef),
+        rij.forEach((kolom, waarde) -> assertFalse(
+                waarde != null && new String(waarde, StandardCharsets.ISO_8859_1).contains(dvRef),
                 "kolom " + kolom + " bevat de referentie"));
     }
 
@@ -365,12 +466,18 @@ class AannameServiceTest {
 
     @Test
     void aannameOpdracht_zonderOntvanger_weigert() {
-        assertThrows(NullPointerException.class,
+        assertThrows(
+                NullPointerException.class,
                 () -> new AannameOpdracht(Regie.DECENTRAAL, null, null, null, BerichtType.DEMO_TEMPLATE, null));
     }
 
     private static AannameOpdracht centraal() {
-        return new AannameOpdracht(Regie.CENTRAAL, new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
-                "Gemeente Voorbeeld", "Parkeervergunning", BerichtType.DEMO_TEMPLATE, Map.of("naam", "Voorbeeld BV"));
+        return new AannameOpdracht(
+                Regie.CENTRAAL,
+                new Ontvanger(Ontvanger.Soort.KVK, "12345678"),
+                "Gemeente Voorbeeld",
+                "Parkeervergunning",
+                BerichtType.DEMO_TEMPLATE,
+                Map.of("naam", "Voorbeeld BV"));
     }
 }

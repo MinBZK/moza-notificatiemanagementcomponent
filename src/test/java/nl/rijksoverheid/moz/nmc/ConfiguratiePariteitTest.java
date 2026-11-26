@@ -1,12 +1,9 @@
 package nl.rijksoverheid.moz.nmc;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.NodeList;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.IOException;
 import java.io.Reader;
 import java.nio.file.Files;
@@ -15,10 +12,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
 /**
  * Bewaakt waarden die op twee plekken staan zonder dat de build een verschil opmerkt. Zonder deze
@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * Leest de bronbestanden en niet de gestarte applicatie: een afwijking moet hier falen, ook als
  * Quarkus de ene waarde over de andere heen legt.
  */
+@Tag("unit")
 class ConfiguratiePariteitTest {
 
     private static final Path POM = Path.of("pom.xml");
@@ -36,7 +37,8 @@ class ConfiguratiePariteitTest {
     // De gate leest de excludes uit pom.xml, de quarkus-jacoco-extensie uit application.properties.
     @Test
     void jacocoExcludes_inPomEnProperties_zijnGelijk() throws Exception {
-        List<String> uitProperties = Arrays.stream(property("%test.quarkus.jacoco.excludes").split(","))
+        List<String> uitProperties = Arrays.stream(
+                        property("%test.quarkus.jacoco.excludes").split(","))
                 .map(String::trim)
                 .toList();
 
@@ -140,7 +142,8 @@ class ConfiguratiePariteitTest {
     }
 
     private static Element jacocoPlugin(Path pom) throws Exception {
-        Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(pom.toFile());
+        Document document =
+                DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(pom.toFile());
         NodeList plugins = document.getElementsByTagName("plugin");
 
         for (int i = 0; i < plugins.getLength(); i++) {
@@ -169,7 +172,10 @@ class ConfiguratiePariteitTest {
             }
 
             if (inInfo && regel.matches("^ {2}version:.*")) {
-                return regel.substring(regel.indexOf(':') + 1).trim().replace("\"", "").replace("'", "");
+                return regel.substring(regel.indexOf(':') + 1)
+                        .trim()
+                        .replace("\"", "")
+                        .replace("'", "");
             }
         }
 
@@ -180,7 +186,8 @@ class ConfiguratiePariteitTest {
         NodeList kinderen = ouder.getChildNodes();
 
         for (int i = 0; i < kinderen.getLength(); i++) {
-            if (kinderen.item(i) instanceof Element element && element.getTagName().equals(naam)) {
+            if (kinderen.item(i) instanceof Element element
+                    && element.getTagName().equals(naam)) {
                 return element;
             }
         }

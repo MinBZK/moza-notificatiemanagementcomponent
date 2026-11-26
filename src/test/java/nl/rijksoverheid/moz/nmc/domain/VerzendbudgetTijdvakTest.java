@@ -1,12 +1,14 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+@Tag("unit")
 class VerzendbudgetTijdvakTest {
 
     private VerzendbudgetTijdvak tijdvak;
@@ -31,10 +33,11 @@ class VerzendbudgetTijdvakTest {
 
     @Test
     void neem_meerDanBeschikbaar_weigertEnLaatHetBudgetStaan() {
-        IllegalArgumentException fout = assertThrows(IllegalArgumentException.class,
-                () -> tijdvak.neem(BudgetDoel.VERZENDEN, 9));
+        IllegalArgumentException fout =
+                assertThrows(IllegalArgumentException.class, () -> tijdvak.neem(BudgetDoel.VERZENDEN, 9));
 
-        assertTrue(fout.getMessage().contains("Kan geen 9 tokens nemen voor VERZENDEN, er zijn er 8"), fout.getMessage());
+        assertTrue(
+                fout.getMessage().contains("Kan geen 9 tokens nemen voor VERZENDEN, er zijn er 8"), fout.getMessage());
         assertEquals(8, tijdvak.beschikbaar(BudgetDoel.VERZENDEN));
         assertEquals(7, tijdvak.beschikbaar(BudgetDoel.NAVRAAG));
     }

@@ -2,9 +2,8 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
-
 import java.util.UUID;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  * Eén vaste dienstverlener uit {@code nmc.dienstverlener.id}; de rij ervoor komt uit de migratie.

@@ -1,9 +1,13 @@
 package nl.rijksoverheid.moz.nmc.repository;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.time.OffsetDateTime;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.domain.Webhookpositie;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
@@ -11,11 +15,6 @@ import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.time.OffsetDateTime;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 // geleverd_op is de leeftijd van de leverpositie waarop het opruimen van het eventlog let.
 @QuarkusTest
@@ -65,6 +64,7 @@ class WebhookpositieRepositoryTest {
     }
 
     private OffsetDateTime geleverdOp() {
-        return QuarkusTransaction.requiringNew().call(() -> TaakFixtures.geleverdOp(entityManager, NotificatieFixtures.DV_ID));
+        return QuarkusTransaction.requiringNew()
+                .call(() -> TaakFixtures.geleverdOp(entityManager, NotificatieFixtures.DV_ID));
     }
 }

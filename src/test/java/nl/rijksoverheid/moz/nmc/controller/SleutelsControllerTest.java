@@ -1,22 +1,22 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
-import io.quarkus.test.junit.QuarkusTest;
-import nl.rijksoverheid.moz.nmc.WebhookSleutelTestResource;
-import org.junit.jupiter.api.Test;
-
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.emptyString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.emptyString;
+
+import io.quarkus.test.junit.QuarkusTest;
+import nl.rijksoverheid.moz.nmc.WebhookSleutelTestResource;
+import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 class SleutelsControllerTest {
 
     @Test
     void jwks_publiceertAlleenDePubliekeRsaSleutel() {
-        given()
-                .when().get("/api/nmc/v1/.well-known/jwks.json")
+        given().when()
+                .get("/api/nmc/v1/.well-known/jwks.json")
                 .then()
                 .statusCode(200)
                 .contentType("application/json")

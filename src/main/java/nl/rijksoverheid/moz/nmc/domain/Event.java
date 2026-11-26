@@ -7,14 +7,13 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import org.hibernate.annotations.Immutable;
-import org.hibernate.annotations.Type;
-
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
+import org.hibernate.annotations.Immutable;
+import org.hibernate.annotations.Type;
 
 /**
  * Eén event: een rij in het eventlog (tabel {@code event}) die één statusovergang van een
@@ -73,8 +72,14 @@ public class Event {
         // Voor JPA
     }
 
-    public Event(UUID dvId, UUID notificatieId, long volgnummer, NotificatieStatus van, NotificatieStatus naar, Reden reden,
-                 OffsetDateTime geregistreerd) {
+    public Event(
+            UUID dvId,
+            UUID notificatieId,
+            long volgnummer,
+            NotificatieStatus van,
+            NotificatieStatus naar,
+            Reden reden,
+            OffsetDateTime geregistreerd) {
         this.dvId = Objects.requireNonNull(dvId, "dvId is verplicht");
         this.notificatieId = Objects.requireNonNull(notificatieId, "notificatieId is verplicht");
         this.cloudEventId = UUID.randomUUID();

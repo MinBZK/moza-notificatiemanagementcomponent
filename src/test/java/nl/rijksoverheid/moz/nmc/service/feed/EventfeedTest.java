@@ -1,9 +1,26 @@
 package nl.rijksoverheid.moz.nmc.service.feed;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.time.Clock;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import nl.rijksoverheid.moz.nmc.domain.Bevestiging;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.domain.Event;
@@ -16,24 +33,6 @@ import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.time.Clock;
-import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // %test: nmc.feed.max-pagina=10, nmc.feed.cluster-epoch=1.
 @QuarkusTest
@@ -88,7 +87,8 @@ class EventfeedTest {
         assertEquals(List.of(derde), ids(vervolg));
         assertEquals(List.of(), leeg.events());
         assertEquals(vervolg.cursor(), leeg.cursor());
-        assertNull(eventfeed.lees(TWEEDE_DV, null, null).cursor(), "zonder events en zonder cursor blijft de cursor leeg");
+        assertNull(
+                eventfeed.lees(TWEEDE_DV, null, null).cursor(), "zonder events en zonder cursor blijft de cursor leeg");
     }
 
     @Test
@@ -111,18 +111,22 @@ class EventfeedTest {
         ExecutorService openTransactie = Executors.newSingleThreadExecutor();
 
         try {
-            Future<Long> laat = openTransactie.submit(() -> QuarkusTransaction.requiringNew().call(() -> {
-                long id = voegEventToe(NotificatieFixtures.DV_ID);
-                geschreven.countDown();
-                commit.await(20, TimeUnit.SECONDS);
+            Future<Long> laat = openTransactie.submit(() -> QuarkusTransaction.requiringNew()
+                    .call(() -> {
+                        long id = voegEventToe(NotificatieFixtures.DV_ID);
+                        geschreven.countDown();
+                        commit.await(20, TimeUnit.SECONDS);
 
-                return id;
-            }));
+                        return id;
+                    }));
             assertTrue(geschreven.await(10, TimeUnit.SECONDS));
             long na = schrijfEvent(NotificatieFixtures.DV_ID);
 
             EventPagina tijdensOpen = eventfeed.lees(NotificatieFixtures.DV_ID, null, null);
-            assertEquals(List.of(voor), ids(tijdensOpen), "het event na de open transactie committet al, maar valt buiten het watermerk");
+            assertEquals(
+                    List.of(voor),
+                    ids(tijdensOpen),
+                    "het event na de open transactie committet al, maar valt buiten het watermerk");
 
             commit.countDown();
             long laatGecommit = laat.get(20, TimeUnit.SECONDS);
@@ -141,8 +145,10 @@ class EventfeedTest {
             schrijfEvent(NotificatieFixtures.DV_ID);
         }
 
-        assertEquals(10, eventfeed.lees(NotificatieFixtures.DV_ID, null, 50).events().size());
-        assertEquals(3, eventfeed.lees(NotificatieFixtures.DV_ID, null, 3).events().size());
+        assertEquals(
+                10, eventfeed.lees(NotificatieFixtures.DV_ID, null, 50).events().size());
+        assertEquals(
+                3, eventfeed.lees(NotificatieFixtures.DV_ID, null, 3).events().size());
         assertThrows(IllegalArgumentException.class, () -> eventfeed.lees(NotificatieFixtures.DV_ID, null, 0));
     }
 
@@ -150,10 +156,11 @@ class EventfeedTest {
     // volgende lezing met de rest van die transactie verdergaan; op transactie-id alleen valt die weg.
     @Test
     void lees_paginagrensMiddenInEenTransactie_geeftElkEventPreciesEenKeer() {
-        List<Long> geschreven = QuarkusTransaction.requiringNew().call(() -> List.of(
-                voegEventToe(NotificatieFixtures.DV_ID),
-                voegEventToe(NotificatieFixtures.DV_ID),
-                voegEventToe(NotificatieFixtures.DV_ID)));
+        List<Long> geschreven = QuarkusTransaction.requiringNew()
+                .call(() -> List.of(
+                        voegEventToe(NotificatieFixtures.DV_ID),
+                        voegEventToe(NotificatieFixtures.DV_ID),
+                        voegEventToe(NotificatieFixtures.DV_ID)));
 
         EventPagina eerste = eventfeed.lees(NotificatieFixtures.DV_ID, null, 2);
         EventPagina tweede = eventfeed.lees(NotificatieFixtures.DV_ID, eerste.cursor(), 2);
@@ -168,7 +175,9 @@ class EventfeedTest {
     void lees_cursorUitEenAnderEpoch_isVervallen() {
         schrijfEvent(NotificatieFixtures.DV_ID);
 
-        assertThrows(CursorVervallenException.class, () -> eventfeed.lees(NotificatieFixtures.DV_ID, new Cursor(2, 1, 1), null));
+        assertThrows(
+                CursorVervallenException.class,
+                () -> eventfeed.lees(NotificatieFixtures.DV_ID, new Cursor(2, 1, 1), null));
     }
 
     // Het log wordt per partitie opgeruimd; een cursor onder het oudste event kan events gemist hebben.
@@ -176,7 +185,9 @@ class EventfeedTest {
     void lees_cursorOnderHetOudsteEvent_isVervallen() {
         schrijfEvent(NotificatieFixtures.DV_ID);
 
-        assertThrows(CursorVervallenException.class, () -> eventfeed.lees(NotificatieFixtures.DV_ID, new Cursor(1, 1, 1), null));
+        assertThrows(
+                CursorVervallenException.class,
+                () -> eventfeed.lees(NotificatieFixtures.DV_ID, new Cursor(1, 1, 1), null));
     }
 
     // Na een herstel uit back-up zegt een oude positie niets meer; de webhook begint opnieuw.
@@ -199,7 +210,9 @@ class EventfeedTest {
         Cursor na;
         List<String> waarschuwingen;
         try (LogVanger vanger = LogVanger.van(Eventfeed.class)) {
-            na = eventfeed.leesVoorWebhook(NotificatieFixtures.DV_ID, new Cursor(1, 1, 1), 1).cursor();
+            na = eventfeed
+                    .leesVoorWebhook(NotificatieFixtures.DV_ID, new Cursor(1, 1, 1), 1)
+                    .cursor();
             waarschuwingen = vanger.regelsOpNiveau(Level.WARNING);
         }
         long tweede = schrijfEvent(NotificatieFixtures.DV_ID);
@@ -220,7 +233,8 @@ class EventfeedTest {
 
         Cursor kop = eventfeed.kopVanHetLog();
         assertEquals(jongste, kop.eventId());
-        assertTrue(ids(eventfeed.leesVoorWebhook(NotificatieFixtures.DV_ID, kop, 50)).isEmpty());
+        assertTrue(ids(eventfeed.leesVoorWebhook(NotificatieFixtures.DV_ID, kop, 50))
+                .isEmpty());
     }
 
     @Test
@@ -234,7 +248,8 @@ class EventfeedTest {
         assertTrue(eventfeed.bevestig(NotificatieFixtures.DV_ID, tweede));
         assertFalse(eventfeed.bevestig(NotificatieFixtures.DV_ID, eerste), "een oudere cursor zet hem niet terug");
 
-        Bevestiging bevestiging = eventfeed.bevestiging(NotificatieFixtures.DV_ID).orElseThrow();
+        Bevestiging bevestiging =
+                eventfeed.bevestiging(NotificatieFixtures.DV_ID).orElseThrow();
         assertEquals(tweede, bevestiging.getCursor());
         assertTrue(eventfeed.bevestiging(TWEEDE_DV).isEmpty());
     }
@@ -248,29 +263,45 @@ class EventfeedTest {
         OffsetDateTime eerste = OffsetDateTime.parse("2030-01-01T10:00:00Z");
         OffsetDateTime later = eerste.plusMinutes(1);
 
-        QuarkusTransaction.requiringNew().run(() -> bevestigingRepository.updateCursorPositie(NotificatieFixtures.DV_ID, cursor, eerste));
+        QuarkusTransaction.requiringNew()
+                .run(() -> bevestigingRepository.updateCursorPositie(NotificatieFixtures.DV_ID, cursor, eerste));
         boolean gewijzigd = QuarkusTransaction.requiringNew()
                 .call(() -> bevestigingRepository.updateCursorPositie(NotificatieFixtures.DV_ID, cursor, later));
 
         assertFalse(gewijzigd);
-        assertEquals(eerste.toInstant(), eventfeed.bevestiging(NotificatieFixtures.DV_ID).orElseThrow().getBevestigdOp().toInstant());
+        assertEquals(
+                eerste.toInstant(),
+                eventfeed
+                        .bevestiging(NotificatieFixtures.DV_ID)
+                        .orElseThrow()
+                        .getBevestigdOp()
+                        .toInstant());
     }
 
     @Test
     void bevestig_cursorVerderDanDeBewaarde_zetHetTijdstip() {
         schrijfEvent(NotificatieFixtures.DV_ID);
-        Cursor eersteCursor = eventfeed.lees(NotificatieFixtures.DV_ID, null, null).cursor();
+        Cursor eersteCursor =
+                eventfeed.lees(NotificatieFixtures.DV_ID, null, null).cursor();
         schrijfEvent(NotificatieFixtures.DV_ID);
-        Cursor tweedeCursor = eventfeed.lees(NotificatieFixtures.DV_ID, eersteCursor, null).cursor();
+        Cursor tweedeCursor =
+                eventfeed.lees(NotificatieFixtures.DV_ID, eersteCursor, null).cursor();
         OffsetDateTime eerste = OffsetDateTime.parse("2030-01-01T10:00:00Z");
         OffsetDateTime later = eerste.plusMinutes(1);
 
-        QuarkusTransaction.requiringNew().run(() -> bevestigingRepository.updateCursorPositie(NotificatieFixtures.DV_ID, eersteCursor, eerste));
+        QuarkusTransaction.requiringNew()
+                .run(() -> bevestigingRepository.updateCursorPositie(NotificatieFixtures.DV_ID, eersteCursor, eerste));
         boolean gewijzigd = QuarkusTransaction.requiringNew()
                 .call(() -> bevestigingRepository.updateCursorPositie(NotificatieFixtures.DV_ID, tweedeCursor, later));
 
         assertTrue(gewijzigd);
-        assertEquals(later.toInstant(), eventfeed.bevestiging(NotificatieFixtures.DV_ID).orElseThrow().getBevestigdOp().toInstant());
+        assertEquals(
+                later.toInstant(),
+                eventfeed
+                        .bevestiging(NotificatieFixtures.DV_ID)
+                        .orElseThrow()
+                        .getBevestigdOp()
+                        .toInstant());
     }
 
     // Een cursor van vóór een herstel uit back-up zonder verhoogd epoch wijst boven elke nieuwe
@@ -279,7 +310,8 @@ class EventfeedTest {
     void lees_cursorBovenDeJongsteTransactie_isVervallen() {
         long event = schrijfEvent(NotificatieFixtures.DV_ID);
 
-        assertThrows(CursorVervallenException.class,
+        assertThrows(
+                CursorVervallenException.class,
                 () -> eventfeed.lees(NotificatieFixtures.DV_ID, new Cursor(1, 1L << 62, event), null));
     }
 
@@ -322,8 +354,12 @@ class EventfeedTest {
     void bevestig_vervallenCursor_weigert() {
         schrijfEvent(NotificatieFixtures.DV_ID);
 
-        assertThrows(CursorVervallenException.class, () -> eventfeed.bevestig(NotificatieFixtures.DV_ID, new Cursor(2, 1, 1)));
-        assertThrows(CursorVervallenException.class, () -> eventfeed.bevestig(NotificatieFixtures.DV_ID, new Cursor(1, 1L << 62, 1)));
+        assertThrows(
+                CursorVervallenException.class,
+                () -> eventfeed.bevestig(NotificatieFixtures.DV_ID, new Cursor(2, 1, 1)));
+        assertThrows(
+                CursorVervallenException.class,
+                () -> eventfeed.bevestig(NotificatieFixtures.DV_ID, new Cursor(1, 1L << 62, 1)));
     }
 
     private long schrijfEvent(UUID dvId) {
@@ -332,7 +368,8 @@ class EventfeedTest {
 
     // Het eventlog heeft geen foreign key naar notificatie, dus een los event volstaat.
     private long voegEventToe(UUID dvId) {
-        Event event = new Event(dvId, UUID.randomUUID(), 0, null, NotificatieStatus.AANGENOMEN, null, OffsetDateTime.now());
+        Event event =
+                new Event(dvId, UUID.randomUUID(), 0, null, NotificatieStatus.AANGENOMEN, null, OffsetDateTime.now());
         eventRepository.persist(event);
 
         return event.getId();

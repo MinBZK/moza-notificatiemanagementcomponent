@@ -1,15 +1,16 @@
 package nl.rijksoverheid.moz.nmc.service.taak;
 
-import nl.rijksoverheid.moz.nmc.domain.Taak;
-import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import nl.rijksoverheid.moz.nmc.domain.Taak;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 
 // De standaarden van een handler die uitputting en herplanning niet zelf regelt.
+@Tag("unit")
 class TaakHandlerTest {
 
     private final TaakHandler handler = new TaakHandler() {

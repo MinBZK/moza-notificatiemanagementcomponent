@@ -1,27 +1,5 @@
 package nl.rijksoverheid.moz.nmc.service.onderhoud;
 
-import io.quarkus.narayana.jta.QuarkusTransaction;
-import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
-import nl.rijksoverheid.moz.nmc.repository.EventPartitie;
-import nl.rijksoverheid.moz.nmc.repository.EventPartitieRepository;
-import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
-import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
-import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
-import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
-import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -32,6 +10,27 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.quarkus.test.junit.QuarkusTest;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.repository.EventPartitie;
+import nl.rijksoverheid.moz.nmc.repository.EventPartitieRepository;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 /**
  * Toetst {@link EventlogPartitiebeheer} tegen de database: het aanmaken van de volgende partitie en het
@@ -57,8 +56,8 @@ class EventlogPartitiebeheerIntegratieTest {
 
     @AfterEach
     void herstelRegister() {
-        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetMaxCursorleeftijd(entityManager,
-                NotificatieFixtures.DV_ID, null));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.zetMaxCursorleeftijd(entityManager, NotificatieFixtures.DV_ID, null));
     }
 
     @Test
@@ -71,7 +70,9 @@ class EventlogPartitiebeheerIntegratieTest {
         assertEquals(Optional.of(EventPartitie.vanaf(lopend.tot(), lopend.tot() + 50)), volgende);
         assertTrue(partities().contains(volgende.get()));
         assertEquals(Optional.empty(), eventlogPartitiebeheer.maakVolgendeAan(), "de nieuwe is nog leeg");
-        assertEquals(lopend.naam(), partitieVan(nieuwEvent(OffsetDateTime.now(ZoneOffset.UTC))),
+        assertEquals(
+                lopend.naam(),
+                partitieVan(nieuwEvent(OffsetDateTime.now(ZoneOffset.UTC))),
                 "een nieuw event landt in een bereikpartitie, niet in de default");
     }
 
@@ -93,7 +94,9 @@ class EventlogPartitiebeheerIntegratieTest {
     void ruimOp_oudePartitieZonderCursor_verwijdertHaar() {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
 
-        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
 
         assertFalse(partities().contains(oud.partitie()));
         assertEquals(0, events(oud.notificatieId()));
@@ -111,16 +114,22 @@ class EventlogPartitiebeheerIntegratieTest {
         verbruikTransactieIdsTot(partitie.van());
         UUID inPartitie = nieuwEvent(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         verbruikTransactieIdsTot(partitie.tot());
-        QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.verwijderEventsOnder(entityManager, lopend.tot()));
+        QuarkusTransaction.requiringNew()
+                .run(() -> NotificatieFixtures.verwijderEventsOnder(entityManager, lopend.tot()));
 
-        assertFalse(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(partitie),
+        assertFalse(
+                eventlogPartitiebeheer
+                        .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                        .contains(partitie),
                 "de partitie blijft zolang de default-partitie er oudere events onder heeft");
         assertEquals(1, events(tussen));
 
         eventlogPartitiebeheer.ruimStandaardpartitieOp(OffsetDateTime.now(ZoneOffset.UTC), 100);
         assertEquals(0, events(tussen));
 
-        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(partitie));
+        assertTrue(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(partitie));
         assertEquals(0, events(inPartitie));
     }
 
@@ -128,7 +137,9 @@ class EventlogPartitiebeheerIntegratieTest {
     void ruimOp_jongsteEventBinnenDeBewaartermijn_laatDePartitieStaan() {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(364));
 
-        assertFalse(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertFalse(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
 
         assertTrue(partities().contains(oud.partitie()));
     }
@@ -138,7 +149,9 @@ class EventlogPartitiebeheerIntegratieTest {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(1, oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC).minusDays(29));
 
-        assertFalse(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertFalse(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
 
         assertTrue(partities().contains(oud.partitie()));
     }
@@ -148,17 +161,22 @@ class EventlogPartitiebeheerIntegratieTest {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(1, oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
 
-        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
     }
 
     @Test
     void ruimOp_eigenCursorleeftijdInHetRegister_gaatVoorDeDefault() {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(1, oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC).minusDays(31));
-        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetMaxCursorleeftijd(entityManager,
-                NotificatieFixtures.DV_ID, Duration.ofDays(90)));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.zetMaxCursorleeftijd(
+                        entityManager, NotificatieFixtures.DV_ID, Duration.ofDays(90)));
 
-        assertFalse(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertFalse(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
 
         assertTrue(partities().contains(oud.partitie()));
     }
@@ -168,7 +186,9 @@ class EventlogPartitiebeheerIntegratieTest {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(0, oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC));
 
-        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
     }
 
     // Een cursor achter de partitie heeft haar events al gelezen.
@@ -177,15 +197,22 @@ class EventlogPartitiebeheerIntegratieTest {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
         bevestiging(1, oud.partitie().tot(), OffsetDateTime.now(ZoneOffset.UTC));
 
-        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
     }
 
     @Test
     void ruimOp_geldigeLeverpositieInDePartitie_laatHaarStaan() {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
-        leverpositie(oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC).minusDays(1), OffsetDateTime.now(ZoneOffset.UTC));
+        leverpositie(
+                oud.transactieId(),
+                OffsetDateTime.now(ZoneOffset.UTC).minusDays(1),
+                OffsetDateTime.now(ZoneOffset.UTC));
 
-        assertFalse(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertFalse(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
 
         assertTrue(partities().contains(oud.partitie()));
     }
@@ -194,9 +221,14 @@ class EventlogPartitiebeheerIntegratieTest {
     @Test
     void ruimOp_leverpositieLangNietVerschoven_houdtNietsTegen() {
         OudePartitie oud = oudePartitie(OffsetDateTime.now(ZoneOffset.UTC).minusDays(400));
-        leverpositie(oud.transactieId(), OffsetDateTime.now(ZoneOffset.UTC).minusDays(31), OffsetDateTime.now(ZoneOffset.UTC));
+        leverpositie(
+                oud.transactieId(),
+                OffsetDateTime.now(ZoneOffset.UTC).minusDays(31),
+                OffsetDateTime.now(ZoneOffset.UTC));
 
-        assertTrue(eventlogPartitiebeheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).contains(oud.partitie()));
+        assertTrue(eventlogPartitiebeheer
+                .ruimOp(OffsetDateTime.now(ZoneOffset.UTC))
+                .contains(oud.partitie()));
     }
 
     // Wat buiten de bereiken valt (de onderhoudstaak liep achter), gaat per rij weg uit de default-partitie.
@@ -253,9 +285,13 @@ class EventlogPartitiebeheerIntegratieTest {
         when(repository.oudsteBeschermdeTransactieId(anyInt(), any(), any()))
                 .thenReturn(Optional.empty(), Optional.of(10L));
         when(repository.registratieVanJongsteEvent(oudste)).thenReturn(Optional.empty());
-        EventlogPartitiebeheer beheer = new EventlogPartitiebeheer(repository,
+        EventlogPartitiebeheer beheer = new EventlogPartitiebeheer(
+                repository,
                 TestConfig.opruimtermijnen(Duration.ofDays(1), Duration.ofDays(2), Duration.ofDays(3)),
-                50, 5, Duration.ofMillis(500), TestConfig.feed());
+                50,
+                5,
+                Duration.ofMillis(500),
+                TestConfig.feed());
 
         assertTrue(beheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).isEmpty());
 
@@ -285,15 +321,17 @@ class EventlogPartitiebeheerIntegratieTest {
         UUID notificatieId = nieuwEvent(tijdstip);
         assertEquals(partitie.naam(), partitieVan(notificatieId));
         verbruikTransactieIdsTot(partitie.tot());
-        QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.verwijderEventsOnder(entityManager, partitie.van()));
+        QuarkusTransaction.requiringNew()
+                .run(() -> NotificatieFixtures.verwijderEventsOnder(entityManager, partitie.van()));
 
         return new OudePartitie(partitie, notificatieId, transactieIdVan(notificatieId));
     }
 
     private UUID nieuwEvent(OffsetDateTime tijdstip) {
         UUID notificatieId = UUID.randomUUID();
-        QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.voegEventToe(entityManager, notificatieId, 0,
-                null, NotificatieStatus.AANGENOMEN, tijdstip));
+        QuarkusTransaction.requiringNew()
+                .run(() -> NotificatieFixtures.voegEventToe(
+                        entityManager, notificatieId, 0, null, NotificatieStatus.AANGENOMEN, tijdstip));
 
         return notificatieId;
     }
@@ -303,8 +341,12 @@ class EventlogPartitiebeheerIntegratieTest {
         String sql = "SELECT count(*) FROM pg_index x WHERE x.indrelid = CAST(?1 AS regclass)"
                 + (aangehangen ? " AND EXISTS (SELECT 1 FROM pg_inherits i WHERE i.inhrelid = x.indexrelid)" : "");
 
-        return QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager.createNativeQuery(sql)
-                .setParameter(1, tabel).getSingleResult()).longValue());
+        return QuarkusTransaction.requiringNew()
+                .call(() -> ((Number) entityManager
+                                .createNativeQuery(sql)
+                                .setParameter(1, tabel)
+                                .getSingleResult())
+                        .longValue());
     }
 
     private void verbruikTransactieIdsTot(long transactieId) {
@@ -318,27 +360,31 @@ class EventlogPartitiebeheerIntegratieTest {
     }
 
     private String partitieVan(UUID notificatieId) {
-        return QuarkusTransaction.requiringNew().call(() -> NotificatieFixtures.partitieVan(entityManager, notificatieId));
+        return QuarkusTransaction.requiringNew()
+                .call(() -> NotificatieFixtures.partitieVan(entityManager, notificatieId));
     }
 
     private long transactieIdVan(UUID notificatieId) {
-        return QuarkusTransaction.requiringNew().call(() -> NotificatieFixtures.transactieIdVan(entityManager, notificatieId));
+        return QuarkusTransaction.requiringNew()
+                .call(() -> NotificatieFixtures.transactieIdVan(entityManager, notificatieId));
     }
 
     private void bevestiging(int epoch, long transactieId, OffsetDateTime bevestigdOp) {
-        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.voegBevestigingToe(entityManager, NotificatieFixtures.DV_ID,
-                epoch, transactieId, bevestigdOp));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.voegBevestigingToe(
+                        entityManager, NotificatieFixtures.DV_ID, epoch, transactieId, bevestigdOp));
     }
 
     private void leverpositie(long transactieId, OffsetDateTime geleverdOp, OffsetDateTime bijgewerktOp) {
-        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.voegWebhookpositieToe(entityManager,
-                NotificatieFixtures.DV_ID, transactieId, geleverdOp, bijgewerktOp));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.voegWebhookpositieToe(
+                        entityManager, NotificatieFixtures.DV_ID, transactieId, geleverdOp, bijgewerktOp));
     }
 
     private long events(UUID notificatieId) {
-        return QuarkusTransaction.requiringNew().call(() -> NotificatieFixtures.telEvents(entityManager, notificatieId));
+        return QuarkusTransaction.requiringNew()
+                .call(() -> NotificatieFixtures.telEvents(entityManager, notificatieId));
     }
 
-    private record OudePartitie(EventPartitie partitie, UUID notificatieId, long transactieId) {
-    }
+    private record OudePartitie(EventPartitie partitie, UUID notificatieId, long transactieId) {}
 }

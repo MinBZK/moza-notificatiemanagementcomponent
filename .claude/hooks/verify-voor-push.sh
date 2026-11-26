@@ -2,7 +2,8 @@
 # PreToolUse-hook voor Bash: draait ./mvnw verify vóór een git push en blokkeert de push als
 # dat faalt. Verifieert in een tijdelijke worktree de bron van elke refspec, of HEAD als de push
 # geen refspec noemt, en slaat een commit over waarop verify al slaagde. Bij --all of --mirror
-# verifieert hij alleen HEAD.
+# verifieert hij alleen HEAD. Vóór verify draait hij ./mvnw spotless:check, zodat een
+# opmaakfout de push binnen seconden tegenhoudt in plaats van na de hele testsuite.
 #
 # De herkenning is een benadering: tekst tussen aanhalingstekens en de inhoud van een heredoc
 # (zoals een commitmessage of PR-body) tellen niet mee. Een push die niet herkend wordt,
@@ -209,6 +210,17 @@ for sha in $te_verifieren; do
     if ! git -C "$root" worktree add --detach --quiet "$werkmap" "$sha" >/dev/null 2>&1; then
         printf '{"systemMessage": "verify-voor-push: kon geen tijdelijke worktree maken, ./mvnw verify is niet gedraaid. CI draait hem wel."}\n'
         exit 0
+    fi
+
+    # Eerst de opmaak: die controle duurt seconden, verify minuten. Een commit van vóór Spotless
+    # slaat hem over, anders blokkeert de onbekende plugin de push.
+    if grep -q "spotless-maven-plugin" "$werkmap/pom.xml" 2>/dev/null \
+        && ! (cd "$werkmap" && ./mvnw -B -q spotless:check) >"$log" 2>&1; then
+        {
+            echo "De opmaak klopt niet op $(git -C "$root" rev-parse --short "$sha") in $root; de push is tegengehouden. Draai ./mvnw spotless:apply en commit het resultaat. Laatste regels:"
+            tail -n 30 "$log"
+        } >&2
+        exit 2
     fi
 
     if ! (cd "$werkmap" && ./mvnw -B -q verify) >"$log" 2>&1; then

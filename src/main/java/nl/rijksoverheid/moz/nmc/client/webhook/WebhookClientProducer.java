@@ -4,13 +4,12 @@ import io.quarkus.rest.client.reactive.QuarkusRestClientBuilder;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Disposes;
 import jakarta.enterprise.inject.Produces;
-import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
-
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
+import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
 
 public class WebhookClientProducer {
 

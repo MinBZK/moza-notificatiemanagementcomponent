@@ -1,16 +1,17 @@
 package nl.rijksoverheid.moz.nmc.service.feed;
 
-import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
-import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
-import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
-import java.util.UUID;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Instant;
+import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
+import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+@Tag("unit")
 class AanroeplimietTest {
 
     private static final UUID DV_A = UUID.randomUUID();

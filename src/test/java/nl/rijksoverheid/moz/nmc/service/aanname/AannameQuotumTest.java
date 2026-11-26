@@ -1,5 +1,20 @@
 package nl.rijksoverheid.moz.nmc.service.aanname;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Optional;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.domain.Dienstverlener;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
@@ -9,27 +24,13 @@ import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.service.BerichtType;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.service.Regie;
-import nl.rijksoverheid.moz.nmc.service.sleutel.Sleutelbeheer;
 import nl.rijksoverheid.moz.nmc.service.Verzendbeleid;
+import nl.rijksoverheid.moz.nmc.service.sleutel.Sleutelbeheer;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 // Het standaardquotum komt uit de configuratie; AannameServiceTest draait zonder, dus hier zonder Quarkus.
+@Tag("unit")
 class AannameQuotumTest {
 
     private static final UUID DV_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
@@ -41,7 +42,8 @@ class AannameQuotumTest {
     void neemAan_geenQuotumInHetRegister_gebruiktHetStandaardquotum() {
         zetRegister(Optional.empty(), 2);
 
-        QuotumOverschredenException fout = assertThrows(QuotumOverschredenException.class,
+        QuotumOverschredenException fout = assertThrows(
+                QuotumOverschredenException.class,
                 () -> aannameService(Optional.of(2)).neemAan(opdracht()));
 
         assertEquals("Het quotum van 2 notificaties per dag is bereikt", fout.getMessage());
@@ -51,7 +53,8 @@ class AannameQuotumTest {
     void neemAan_quotumInHetRegister_gaatVoorHetStandaardquotum() {
         zetRegister(Optional.of(1), 1);
 
-        QuotumOverschredenException fout = assertThrows(QuotumOverschredenException.class,
+        QuotumOverschredenException fout = assertThrows(
+                QuotumOverschredenException.class,
                 () -> aannameService(Optional.of(100)).neemAan(opdracht()));
 
         assertEquals("Het quotum van 1 notificaties per dag is bereikt", fout.getMessage());
@@ -62,7 +65,8 @@ class AannameQuotumTest {
         zetRegister(Optional.of(1), 1);
         Clock vlakVoorMiddernacht = Clock.fixed(Instant.parse("2030-01-01T23:59:30Z"), ZoneOffset.UTC);
 
-        assertThrows(QuotumOverschredenException.class,
+        assertThrows(
+                QuotumOverschredenException.class,
                 () -> aannameService(Optional.empty(), vlakVoorMiddernacht).neemAan(opdracht()));
 
         verify(notificatieRepository).telAangenomenSinds(DV_ID, OffsetDateTime.parse("2030-01-01T00:00:00Z"));
@@ -72,8 +76,8 @@ class AannameQuotumTest {
     void neemAan_dienstverlenerNietInHetRegister_weigert() {
         AannameService aannameService = aannameService(Optional.of(1));
 
-        IllegalStateException fout = assertThrows(IllegalStateException.class,
-                () -> aannameService.neemAan(opdracht()));
+        IllegalStateException fout =
+                assertThrows(IllegalStateException.class, () -> aannameService.neemAan(opdracht()));
 
         assertEquals("Dienstverlener " + DV_ID + " staat niet in het register", fout.getMessage());
     }
@@ -87,7 +91,8 @@ class AannameQuotumTest {
         Dienstverlener dienstverlener = mock(Dienstverlener.class);
         when(dienstverlener.getQuotumPerDag()).thenReturn(quotum);
         when(dienstverlenerRepository.findById(DV_ID)).thenReturn(dienstverlener);
-        when(notificatieRepository.telAangenomenSinds(eq(DV_ID), any(OffsetDateTime.class))).thenReturn(vandaagAangenomen);
+        when(notificatieRepository.telAangenomenSinds(eq(DV_ID), any(OffsetDateTime.class)))
+                .thenReturn(vandaagAangenomen);
     }
 
     private AannameService aannameService(Optional<Integer> standaardQuotum) {
@@ -95,9 +100,17 @@ class AannameQuotumTest {
     }
 
     private AannameService aannameService(Optional<Integer> standaardQuotum, Clock clock) {
-        return new AannameService(mock(Overgangsfunctie.class), mock(Sleutelbeheer.class), () -> DV_ID,
-                dienstverlenerRepository, notificatieRepository, mock(TaakRepository.class), verzendbeleid(),
-                clock, mock(HashHelper.class), standaardQuotum);
+        return new AannameService(
+                mock(Overgangsfunctie.class),
+                mock(Sleutelbeheer.class),
+                () -> DV_ID,
+                dienstverlenerRepository,
+                notificatieRepository,
+                mock(TaakRepository.class),
+                verzendbeleid(),
+                clock,
+                mock(HashHelper.class),
+                standaardQuotum);
     }
 
     private static Verzendbeleid verzendbeleid() {
@@ -108,7 +121,7 @@ class AannameQuotumTest {
     }
 
     private static AannameOpdracht opdracht() {
-        return new AannameOpdracht(Regie.DECENTRAAL, Ontvanger.email("burger@example.nl"), null, null,
-                BerichtType.DEMO_TEMPLATE, null);
+        return new AannameOpdracht(
+                Regie.DECENTRAAL, Ontvanger.email("burger@example.nl"), null, null, BerichtType.DEMO_TEMPLATE, null);
     }
 }

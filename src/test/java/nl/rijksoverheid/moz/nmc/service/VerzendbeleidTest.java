@@ -1,28 +1,31 @@
 package nl.rijksoverheid.moz.nmc.service;
 
-import io.smallrye.config.PropertiesConfigSource;
-import io.smallrye.config.SmallRyeConfigBuilder;
-import nl.rijksoverheid.moz.nmc.domain.Poging;
-import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
-import org.junit.jupiter.api.Test;
-
-import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.Map;
-import java.util.UUID;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.smallrye.config.PropertiesConfigSource;
+import io.smallrye.config.SmallRyeConfigBuilder;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Map;
+import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.domain.Poging;
+import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+@Tag("unit")
 class VerzendbeleidTest {
 
-    private final Verzendbeleid beleid = beleid(1, Map.of(
-            "nmc.beleid.stuurgroep_agenda.geldigheid", "P1D",
-            "nmc.beleid.stuurgroep_agenda.herverzend-wachttijd", "PT10M",
-            "nmc.beleid.stuurgroep_agenda.max-herverzendingen", "3"));
+    private final Verzendbeleid beleid = beleid(
+            1,
+            Map.of(
+                    "nmc.beleid.stuurgroep_agenda.geldigheid", "P1D",
+                    "nmc.beleid.stuurgroep_agenda.herverzend-wachttijd", "PT10M",
+                    "nmc.beleid.stuurgroep_agenda.max-herverzendingen", "3"));
 
     @Test
     void geldigheid_perBerichttypeOfStandaard() {
@@ -68,7 +71,8 @@ class VerzendbeleidTest {
     @Test
     void negatiefAantalHerverzendingen_laatDeApplicatieNietStarten() {
         assertThrows(IllegalStateException.class, () -> beleid(-1, Map.of()));
-        assertThrows(IllegalStateException.class,
+        assertThrows(
+                IllegalStateException.class,
                 () -> beleid(1, Map.of("nmc.beleid.demo_template.max-herverzendingen", "-1")));
     }
 
@@ -77,9 +81,10 @@ class VerzendbeleidTest {
     void duurVanNulOfMinder_laatDeApplicatieNietStarten() {
         assertThrows(IllegalStateException.class, () -> beleid(Duration.ZERO, Duration.ofHours(1), Map.of()));
         assertThrows(IllegalStateException.class, () -> beleid(Duration.ofDays(7), Duration.ofSeconds(-1), Map.of()));
-        assertThrows(IllegalStateException.class,
-                () -> beleid(1, Map.of("nmc.beleid.demo_template.geldigheid", "PT0S")));
-        assertThrows(IllegalStateException.class,
+        assertThrows(
+                IllegalStateException.class, () -> beleid(1, Map.of("nmc.beleid.demo_template.geldigheid", "PT0S")));
+        assertThrows(
+                IllegalStateException.class,
                 () -> beleid(1, Map.of("nmc.beleid.demo_template.herverzend-wachttijd", "-PT1M")));
     }
 
@@ -98,8 +103,14 @@ class VerzendbeleidTest {
         return beleid(geldigheid, wachttijd, 1, config);
     }
 
-    private static Verzendbeleid beleid(Duration geldigheid, Duration wachttijd, int maxHerverzendingen, Map<String, String> config) {
-        return new Verzendbeleid(geldigheid, wachttijd, maxHerverzendingen,
-                new SmallRyeConfigBuilder().withSources(new PropertiesConfigSource(config, "test", 100)).build());
+    private static Verzendbeleid beleid(
+            Duration geldigheid, Duration wachttijd, int maxHerverzendingen, Map<String, String> config) {
+        return new Verzendbeleid(
+                geldigheid,
+                wachttijd,
+                maxHerverzendingen,
+                new SmallRyeConfigBuilder()
+                        .withSources(new PropertiesConfigSource(config, "test", 100))
+                        .build());
     }
 }

@@ -5,7 +5,6 @@ import io.quarkiverse.openapi.generator.providers.CredentialsProvider;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Alternative;
-
 import java.util.Optional;
 
 /**

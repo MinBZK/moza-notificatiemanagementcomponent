@@ -1,23 +1,21 @@
 package nl.rijksoverheid.moz.nmc;
 
+import static io.restassured.RestAssured.given;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.path.json.JsonPath;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-
-import static io.restassured.RestAssured.given;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * Bewaakt dat de statuswaarden en redenen die een Dienstverlener in de feed en op de webhook kan krijgen
@@ -33,25 +31,30 @@ class GepubliceerdeSpecTest {
 
     @BeforeEach
     void haalSpecOp() {
-        spec = given()
-                .queryParam("format", "JSON")
-                .when().get("/q/openapi")
-                .then().statusCode(200)
-                .extract().jsonPath();
+        spec = given().queryParam("format", "JSON")
+                .when()
+                .get("/q/openapi")
+                .then()
+                .statusCode(200)
+                .extract()
+                .jsonPath();
     }
 
     // Gesorteerd vergeleken: alleen het lidmaatschap telt, niet de volgorde.
     @Test
     void notificatieStatusEnum_inGepubliceerdeSpec_dektElkeNotificatieStatus() {
         List<String> verwacht = Arrays.stream(NotificatieStatus.values())
-                .map(NotificatieStatus::toApiValue).sorted().toList();
+                .map(NotificatieStatus::toApiValue)
+                .sorted()
+                .toList();
 
         assertEquals(verwacht, gepubliceerdeEnum("NotificatieStatus"));
     }
 
     @Test
     void redenEnum_inGepubliceerdeSpec_dektElkeReden() {
-        List<String> verwacht = Arrays.stream(Reden.values()).map(Reden::toApiValue).sorted().toList();
+        List<String> verwacht =
+                Arrays.stream(Reden.values()).map(Reden::toApiValue).sorted().toList();
 
         assertEquals(verwacht, gepubliceerdeEnum("Reden"));
     }
@@ -62,10 +65,12 @@ class GepubliceerdeSpecTest {
         Map<String, Object> paden = spec.getMap("paths");
 
         assertTrue(paden.containsKey("/api/nmc/v1/contactherstellen"), "POST contactherstellen ontbreekt");
-        assertTrue(paden.containsKey("/api/nmc/v1/contactherstellen/{contactherstelId}"),
+        assertTrue(
+                paden.containsKey("/api/nmc/v1/contactherstellen/{contactherstelId}"),
                 "GET en PATCH contactherstellen/{contactherstelId} ontbreken");
         assertTrue(paden.containsKey("/api/nmc/v1/centraal/notificaties"), "de notificaties zijn verdrongen");
-        assertEquals(List.of("gestart", "afgeleverd", "afgerond", "ingetrokken", "gefaald"),
+        assertEquals(
+                List.of("gestart", "afgeleverd", "afgerond", "ingetrokken", "gefaald"),
                 spec.getList("components.schemas.ContactherstelStatus.enum"));
         assertEquals("NotificatieManagementComponent API", spec.getString("info.title"));
     }

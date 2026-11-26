@@ -4,18 +4,17 @@ import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import nl.rijksoverheid.moz.nmc.config.FeedConfig;
 import nl.rijksoverheid.moz.nmc.repository.EventPartitie;
 import nl.rijksoverheid.moz.nmc.repository.EventPartitieRepository;
 import nl.rijksoverheid.moz.nmc.service.Opruimtermijnen;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakClaimer;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-
-import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
 
 /**
  * Houdt de bereikpartities van het eventlog bij. Een nieuwe partitie begint boven de transactie-ids die
@@ -44,11 +43,13 @@ public class EventlogPartitiebeheer {
     private final Duration lockTimeout;
     private final int epoch;
 
-    public EventlogPartitiebeheer(EventPartitieRepository repository, Opruimtermijnen opruimtermijnen,
-                          @ConfigProperty(name = "nmc.onderhoud.partitie-omvang") long omvang,
-                          @ConfigProperty(name = "nmc.onderhoud.partitie-marge") long marge,
-                          @ConfigProperty(name = "nmc.onderhoud.lock-timeout") Duration lockTimeout,
-                          FeedConfig feedConfig) {
+    public EventlogPartitiebeheer(
+            EventPartitieRepository repository,
+            Opruimtermijnen opruimtermijnen,
+            @ConfigProperty(name = "nmc.onderhoud.partitie-omvang") long omvang,
+            @ConfigProperty(name = "nmc.onderhoud.partitie-marge") long marge,
+            @ConfigProperty(name = "nmc.onderhoud.lock-timeout") Duration lockTimeout,
+            FeedConfig feedConfig) {
         if (omvang < 1) {
             throw new IllegalStateException("nmc.onderhoud.partitie-omvang moet 1 of hoger zijn, is " + omvang);
         }
@@ -85,9 +86,10 @@ public class EventlogPartitiebeheer {
 
             if (laatste.map(EventPartitie::tot).orElse(0L) <= volgendeTransactieId) {
                 // Het onderhoud liep achter: tot de nieuwe partitie er is, landen events in de default-partitie.
-                Log.errorf("Onderhoud: geen eventpartitie voor transactie-id %d (laatste bereik tot %d); "
-                        + "events landen in de default-partitie", volgendeTransactieId,
-                        laatste.map(EventPartitie::tot).orElse(0L));
+                Log.errorf(
+                        "Onderhoud: geen eventpartitie voor transactie-id %d (laatste bereik tot %d); "
+                                + "events landen in de default-partitie",
+                        volgendeTransactieId, laatste.map(EventPartitie::tot).orElse(0L));
             }
 
             if (volgende.isPresent()) {
@@ -112,7 +114,8 @@ public class EventlogPartitiebeheer {
 
         for (EventPartitie partitie : partities) {
             // Eerst zonder vergrendeling, zodat een partitie die nog moet blijven de feed niet ophoudt.
-            if (!QuarkusTransaction.requiringNew().call(() -> magWeg(partitie, nu)) || !verwijderOnderVergrendeling(partitie, nu)) {
+            if (!QuarkusTransaction.requiringNew().call(() -> magWeg(partitie, nu))
+                    || !verwijderOnderVergrendeling(partitie, nu)) {
                 break;
             }
 
@@ -150,12 +153,21 @@ public class EventlogPartitiebeheer {
         return QuarkusTransaction.requiringNew().call(() -> {
             // Onder de oudste bereikpartitie die er nog staat, zodat rijen daarboven niet verdwijnen
             // terwijl een oudere partitie blijft: een verlopen cursor zou dan over het gat heen lezen.
-            long onderTransactieId = Math.min(repository.watermerk(),
-                    repository.bereikpartities().stream().mapToLong(EventPartitie::van).min().orElse(Long.MAX_VALUE));
-            Optional<Long> beschermd = repository.oudsteBeschermdeTransactieId(epoch, nu, opruimtermijnen.maxCursorleeftijd());
+            long onderTransactieId = Math.min(
+                    repository.watermerk(),
+                    repository.bereikpartities().stream()
+                            .mapToLong(EventPartitie::van)
+                            .min()
+                            .orElse(Long.MAX_VALUE));
+            Optional<Long> beschermd =
+                    repository.oudsteBeschermdeTransactieId(epoch, nu, opruimtermijnen.maxCursorleeftijd());
 
-            return repository.verwijderUitStandaardpartitie(opruimtermijnen.bewaargrens(nu),
-                    beschermd.map(transactieId -> Math.min(transactieId, onderTransactieId)).orElse(onderTransactieId), maximum);
+            return repository.verwijderUitStandaardpartitie(
+                    opruimtermijnen.bewaargrens(nu),
+                    beschermd
+                            .map(transactieId -> Math.min(transactieId, onderTransactieId))
+                            .orElse(onderTransactieId),
+                    maximum);
         });
     }
 
@@ -164,7 +176,8 @@ public class EventlogPartitiebeheer {
             return false;
         }
 
-        Optional<Long> beschermd = repository.oudsteBeschermdeTransactieId(epoch, nu, opruimtermijnen.maxCursorleeftijd());
+        Optional<Long> beschermd =
+                repository.oudsteBeschermdeTransactieId(epoch, nu, opruimtermijnen.maxCursorleeftijd());
 
         if (beschermd.isPresent() && beschermd.get() < partitie.tot()) {
             return false;
@@ -176,7 +189,8 @@ public class EventlogPartitiebeheer {
             return false;
         }
 
-        return repository.registratieVanJongsteEvent(partitie)
+        return repository
+                .registratieVanJongsteEvent(partitie)
                 .map(tijdstip -> tijdstip.isBefore(opruimtermijnen.bewaargrens(nu)))
                 .orElse(true);
     }
