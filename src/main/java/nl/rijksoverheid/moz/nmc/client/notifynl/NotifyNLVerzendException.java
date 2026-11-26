@@ -1,7 +1,6 @@
 package nl.rijksoverheid.moz.nmc.client.notifynl;
 
 import jakarta.ws.rs.WebApplicationException;
-
 import java.util.Optional;
 
 /**
@@ -25,7 +24,8 @@ public class NotifyNLVerzendException extends Exception {
         this(message, cause, adresAfgewezen, false);
     }
 
-    private NotifyNLVerzendException(String message, Throwable cause, boolean adresAfgewezen, boolean onbruikbaarAntwoord) {
+    private NotifyNLVerzendException(
+            String message, Throwable cause, boolean adresAfgewezen, boolean onbruikbaarAntwoord) {
         super(message, cause);
         this.adresAfgewezen = adresAfgewezen;
         this.onbruikbaarAntwoord = onbruikbaarAntwoord;

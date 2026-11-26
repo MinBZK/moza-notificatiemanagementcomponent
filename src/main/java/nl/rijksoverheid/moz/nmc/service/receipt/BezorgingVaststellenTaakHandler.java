@@ -3,6 +3,7 @@ package nl.rijksoverheid.moz.nmc.service.receipt;
 import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.util.Optional;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
@@ -12,8 +13,6 @@ import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakClaimer;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
-
-import java.util.Optional;
 
 /**
  * Brengt een notificatie na de vaststellingstermijn van {@code bezorgd} naar {@code definitief-bezorgd}.
@@ -26,8 +25,8 @@ public class BezorgingVaststellenTaakHandler implements TaakHandler {
     private final NotificatieRepository notificatieRepository;
     private final TaakClaimer taakClaimer;
 
-    public BezorgingVaststellenTaakHandler(Overgangsfunctie overgangsfunctie, NotificatieRepository notificatieRepository,
-                                           TaakClaimer taakClaimer) {
+    public BezorgingVaststellenTaakHandler(
+            Overgangsfunctie overgangsfunctie, NotificatieRepository notificatieRepository, TaakClaimer taakClaimer) {
         this.overgangsfunctie = overgangsfunctie;
         this.notificatieRepository = notificatieRepository;
         this.taakClaimer = taakClaimer;
@@ -62,7 +61,8 @@ public class BezorgingVaststellenTaakHandler implements TaakHandler {
         Notificatie notificatie = vergrendeld.get();
 
         if (notificatie.getStatus() != NotificatieStatus.BEZORGD) {
-            Log.infof("Notificatie %s staat op %s; vaststeltaak %s afgerond zonder overgang",
+            Log.infof(
+                    "Notificatie %s staat op %s; vaststeltaak %s afgerond zonder overgang",
                     notificatie.getId(), notificatie.getStatus(), taak.getId());
 
             return;

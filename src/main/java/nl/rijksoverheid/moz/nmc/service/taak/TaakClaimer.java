@@ -4,12 +4,6 @@ import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
-import nl.rijksoverheid.moz.nmc.config.TaakConfig;
-import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
-import nl.rijksoverheid.moz.nmc.domain.Taak;
-import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-
 import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -17,6 +11,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.config.TaakConfig;
+import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
+import nl.rijksoverheid.moz.nmc.domain.Taak;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 
 /**
  * Claimt taken voor een worker en werkt geclaimde taken bij. Een claimronde kiest de dienstverleners
@@ -46,8 +45,7 @@ public class TaakClaimer {
     private final Clock clock;
     private final Duration lease;
 
-    public TaakClaimer(TaakRepository taakRepository, Verzendbudget verzendbudget, Clock clock,
-                       TaakConfig config) {
+    public TaakClaimer(TaakRepository taakRepository, Verzendbudget verzendbudget, Clock clock, TaakConfig config) {
         this.taakRepository = taakRepository;
         this.verzendbudget = verzendbudget;
         this.clock = clock;
@@ -65,7 +63,8 @@ public class TaakClaimer {
         Voorbereiding voorbereiding = QuarkusTransaction.requiringNew().call(() -> {
             List<UUID> metWerk = taakRepository.dienstverlenersMetOpenWerk(taakSoort, nu);
 
-            return new Voorbereiding(metWerk, metWerk.isEmpty() ? Optional.empty() : doel.map(d -> verzendbudget.neem(d, batch)));
+            return new Voorbereiding(
+                    metWerk, metWerk.isEmpty() ? Optional.empty() : doel.map(d -> verzendbudget.neem(d, batch)));
         });
         List<UUID> dienstverleners = voorbereiding.dienstverleners();
 
@@ -97,8 +96,7 @@ public class TaakClaimer {
         return geclaimd;
     }
 
-    private record Voorbereiding(List<UUID> dienstverleners, Optional<Verzendbudget.Genomen> genomen) {
-    }
+    private record Voorbereiding(List<UUID> dienstverleners, Optional<Verzendbudget.Genomen> genomen) {}
 
     // De taken zijn al geclaimd of de claim is al mislukt; een teruggave die niet lukt verandert daar
     // niets aan. De tokens vervallen dan met het tijdvak.
@@ -110,7 +108,10 @@ public class TaakClaimer {
         try {
             QuarkusTransaction.requiringNew().run(() -> verzendbudget.geefTerug(genomen.get(), aantal));
         } catch (RuntimeException e) {
-            Log.warnf(e, "%d ongebruikte token(s) voor %s niet teruggegeven aan het verzendbudget", aantal,
+            Log.warnf(
+                    e,
+                    "%d ongebruikte token(s) voor %s niet teruggegeven aan het verzendbudget",
+                    aantal,
                     genomen.get().doel());
         }
     }

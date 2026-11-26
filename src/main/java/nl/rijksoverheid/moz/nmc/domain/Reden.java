@@ -1,7 +1,6 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
 import com.fasterxml.jackson.annotation.JsonValue;
-
 import java.util.Locale;
 
 /**

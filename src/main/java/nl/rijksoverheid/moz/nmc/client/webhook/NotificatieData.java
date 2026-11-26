@@ -1,10 +1,9 @@
 package nl.rijksoverheid.moz.nmc.client.webhook;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.Objects;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
-
-import java.util.Objects;
 
 /**
  * Payload van het CloudEvent voor de Dienstverlener: één statusovergang. Statussen en reden gaan als
@@ -17,8 +16,8 @@ import java.util.Objects;
  * @param versie       het volgnummer van de overgang, gelijk aan {@code sequence} in de envelop
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public record NotificatieData(NotificatieStatus vorigeStatus, NotificatieStatus nieuweStatus, Reden reden,
-                              long versie) {
+public record NotificatieData(
+        NotificatieStatus vorigeStatus, NotificatieStatus nieuweStatus, Reden reden, long versie) {
 
     // nieuweStatus is verplicht in openapi.yaml; zo valt een null hier op en niet bij de Dienstverlener.
     public NotificatieData {

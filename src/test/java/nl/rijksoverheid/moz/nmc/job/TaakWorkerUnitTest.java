@@ -1,36 +1,5 @@
 package nl.rijksoverheid.moz.nmc.job;
 
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import jakarta.enterprise.inject.Instance;
-import nl.rijksoverheid.moz.nmc.config.TaakConfig;
-import nl.rijksoverheid.moz.nmc.domain.Taak;
-import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-import nl.rijksoverheid.moz.nmc.service.taak.TaakClaimer;
-import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
-import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
-import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
-import io.quarkus.scheduler.Scheduled;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.MethodSource;
-import org.mockito.ArgumentCaptor;
-
-import java.lang.reflect.Method;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.Arrays;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.UUID;
-import java.util.function.Consumer;
-import java.util.stream.Stream;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -46,6 +15,36 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
+
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.quarkus.scheduler.Scheduled;
+import jakarta.enterprise.inject.Instance;
+import java.lang.reflect.Method;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
+import nl.rijksoverheid.moz.nmc.config.TaakConfig;
+import nl.rijksoverheid.moz.nmc.domain.Taak;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakClaimer;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
+import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.ArgumentCaptor;
 
 // Zonder Quarkus: in de applicatie heeft inmiddels elke soort een handler.
 @Tag("unit")
@@ -80,16 +79,16 @@ class TaakWorkerUnitTest {
     // op de verdubbeling de Duration laten overlopen, en vanaf poging 65 begint de verdubbeling opnieuw.
     @ParameterizedTest
     @CsvSource({
-            "1, 30",
-            "2, 60",
-            "3, 120",
-            "4, 240",
-            "12, 61440",
-            "13, 86400",
-            "22, 86400",
-            "60, 86400",
-            "65, 86400",
-            "99, 86400"
+        "1, 30",
+        "2, 60",
+        "3, 120",
+        "4, 240",
+        "12, 61440",
+        "13, 86400",
+        "22, 86400",
+        "60, 86400",
+        "65, 86400",
+        "99, 86400"
     })
     void verwerk_handlerFaalt_steltUitMetEenWachttijdDieVerdubbeltTotEenDag(int poging, long verwachteSeconden) {
         TaakHandler handler = handler(TaakSoort.WISSEN);
@@ -197,7 +196,9 @@ class TaakWorkerUnitTest {
 
     // Zonder handler voor een soort claimt de worker die soort niet.
     private TaakWorker workerMetElkeHandler() {
-        return worker(Arrays.stream(TaakSoort.values()).map(TaakWorkerUnitTest::handler).toArray(TaakHandler[]::new));
+        return worker(Arrays.stream(TaakSoort.values())
+                .map(TaakWorkerUnitTest::handler)
+                .toArray(TaakHandler[]::new));
     }
 
     // De claim levert deze ene taak, die al een aantal keer mislukt is.

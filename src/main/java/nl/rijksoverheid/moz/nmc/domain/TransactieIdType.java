@@ -1,14 +1,13 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
-import org.hibernate.type.descriptor.WrapperOptions;
-import org.hibernate.usertype.UserType;
-
 import java.io.Serializable;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Objects;
+import org.hibernate.type.descriptor.WrapperOptions;
+import org.hibernate.usertype.UserType;
 
 /**
  * Hibernate-type voor een kolom met een PostgreSQL-transactie-id ({@code xid8}), in Java een

@@ -2,14 +2,13 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.time.Duration;
+import java.util.Locale;
+import java.util.Optional;
 import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-
-import java.time.Duration;
-import java.util.Locale;
-import java.util.Optional;
 
 /**
  * Het verzendbeleid per berichttype: hoe lang een notificatie na de aanname nog verstuurd mag worden
@@ -28,10 +27,11 @@ public class Verzendbeleid {
     private final int maxHerverzendingen;
     private final Config config;
 
-    public Verzendbeleid(@ConfigProperty(name = "nmc.beleid.geldigheid") Duration geldigheid,
-                         @ConfigProperty(name = "nmc.beleid.herverzend-wachttijd") Duration herverzendWachttijd,
-                         @ConfigProperty(name = "nmc.beleid.max-herverzendingen") int maxHerverzendingen,
-                         Config config) {
+    public Verzendbeleid(
+            @ConfigProperty(name = "nmc.beleid.geldigheid") Duration geldigheid,
+            @ConfigProperty(name = "nmc.beleid.herverzend-wachttijd") Duration herverzendWachttijd,
+            @ConfigProperty(name = "nmc.beleid.max-herverzendingen") int maxHerverzendingen,
+            Config config) {
         if (maxHerverzendingen < 0) {
             throw new IllegalStateException("nmc.beleid.max-herverzendingen mag niet negatief zijn");
         }
@@ -82,7 +82,8 @@ public class Verzendbeleid {
      * beleid van het berichttype er nog een toestaat. Poging 1 is de eerste verzending.
      */
     public boolean magHerverzenden(Poging poging, String berichtType) {
-        return (poging.getStatus() == PogingStatus.TIJDELIJK_MISLUKT || poging.getStatus() == PogingStatus.TECHNISCH_MISLUKT)
+        return (poging.getStatus() == PogingStatus.TIJDELIJK_MISLUKT
+                        || poging.getStatus() == PogingStatus.TECHNISCH_MISLUKT)
                 && poging.getNummer() <= maxHerverzendingen(berichtType);
     }
 

@@ -4,7 +4,6 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-
 import java.time.OffsetDateTime;
 
 /**
@@ -45,8 +44,8 @@ public class VerzendbudgetTijdvak {
      */
     public int neem(BudgetDoel doel, int aantal) {
         if (aantal < 0 || aantal > beschikbaar(doel)) {
-            throw new IllegalArgumentException("Kan geen " + aantal + " tokens nemen voor " + doel + ", er zijn er "
-                    + beschikbaar(doel));
+            throw new IllegalArgumentException(
+                    "Kan geen " + aantal + " tokens nemen voor " + doel + ", er zijn er " + beschikbaar(doel));
         }
 
         int uitReservering = Math.min(aantal, reservering(doel));

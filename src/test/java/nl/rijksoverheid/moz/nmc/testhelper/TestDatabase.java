@@ -3,7 +3,6 @@ package nl.rijksoverheid.moz.nmc.testhelper;
 import io.quarkus.arc.Arc;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.persistence.EntityManager;
-
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -29,20 +28,22 @@ public final class TestDatabase {
     // De naam komt in DDL; alleen de vorm die het partitiebeheer zelf maakt wordt verwijderd.
     private static final Pattern BEREIKPARTITIE = Pattern.compile("event_[0-9]+");
 
-    private TestDatabase() {
-    }
+    private TestDatabase() {}
 
     /** Leegt de database tot de begintoestand, in een eigen transactie. */
     public static void leeg() {
-        EntityManager entityManager = Arc.container().instance(EntityManager.class).get();
+        EntityManager entityManager =
+                Arc.container().instance(EntityManager.class).get();
 
         QuarkusTransaction.requiringNew().run(() -> {
             entityManager.createNativeQuery("TRUNCATE " + MUTEERBARE_TABELLEN).executeUpdate();
             verwijderPartitiesVanTests(entityManager);
-            entityManager.createNativeQuery("DELETE FROM dienstverlener WHERE id <> ?1")
+            entityManager
+                    .createNativeQuery("DELETE FROM dienstverlener WHERE id <> ?1")
                     .setParameter(1, NotificatieFixtures.DV_ID)
                     .executeUpdate();
-            entityManager.createNativeQuery("UPDATE dienstverlener SET webhook_url = NULL, webhook_max_mislukkingen = NULL,"
+            entityManager
+                    .createNativeQuery("UPDATE dienstverlener SET webhook_url = NULL, webhook_max_mislukkingen = NULL,"
                             + " webhook_bundel = NULL, quotum_per_dag = NULL, max_cursorleeftijd = NULL WHERE id = ?1")
                     .setParameter(1, NotificatieFixtures.DV_ID)
                     .executeUpdate();
@@ -51,12 +52,14 @@ public final class TestDatabase {
 
     @SuppressWarnings("unchecked")
     private static void verwijderPartitiesVanTests(EntityManager entityManager) {
-        List<String> partities = entityManager.createNativeQuery("SELECT c.relname FROM pg_inherits i"
+        List<String> partities = entityManager
+                .createNativeQuery("SELECT c.relname FROM pg_inherits i"
                         + " JOIN pg_class c ON c.oid = i.inhrelid WHERE i.inhparent = CAST('event' AS regclass)")
                 .getResultList();
 
         for (String partitie : partities) {
-            if (!PARTITIES_UIT_DE_MIGRATIES.contains(partitie) && BEREIKPARTITIE.matcher(partitie).matches()) {
+            if (!PARTITIES_UIT_DE_MIGRATIES.contains(partitie)
+                    && BEREIKPARTITIE.matcher(partitie).matches()) {
                 entityManager.createNativeQuery("DROP TABLE " + partitie).executeUpdate();
             }
         }

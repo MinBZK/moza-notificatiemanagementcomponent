@@ -2,13 +2,12 @@ package nl.rijksoverheid.moz.nmc.repository;
 
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
-import nl.rijksoverheid.moz.nmc.domain.Cursor;
-import nl.rijksoverheid.moz.nmc.domain.Webhookpositie;
-import nl.rijksoverheid.moz.nmc.domain.Webhookpositie_;
-
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.domain.Cursor;
+import nl.rijksoverheid.moz.nmc.domain.Webhookpositie;
+import nl.rijksoverheid.moz.nmc.domain.Webhookpositie_;
 
 /** De leverpositie van de webhook per dienstverlener. */
 @ApplicationScoped
@@ -24,10 +23,13 @@ public class WebhookpositieRepository implements PanacheRepositoryBase<Webhookpo
         // Hibernate leidt de parametertypen in een insert niet af uit de kolommen; met de types van de
         // attributen komen een lege positie of pauze als null van het juiste type aan. geleverdOp verschuift
         // alleen met de positie; het opruimen van het eventlog rekent daarmee de cursorleeftijd.
-        getSession().createMutationQuery("INSERT INTO Webhookpositie w (" + Webhookpositie_.DV_ID + ", "
-                        + Webhookpositie_.EPOCH + ", " + Webhookpositie_.TRANSACTIE_ID + ", " + Webhookpositie_.EVENT_ID + ", "
+        getSession()
+                .createMutationQuery("INSERT INTO Webhookpositie w (" + Webhookpositie_.DV_ID + ", "
+                        + Webhookpositie_.EPOCH + ", " + Webhookpositie_.TRANSACTIE_ID + ", " + Webhookpositie_.EVENT_ID
+                        + ", "
                         + Webhookpositie_.MISLUKKINGEN + ", " + Webhookpositie_.GEPAUZEERD_TOT + ", "
-                        + Webhookpositie_.BIJGEWERKT_OP + ", " + Webhookpositie_.GELEVERD_OP + ") VALUES (:dvId, :epoch,"
+                        + Webhookpositie_.BIJGEWERKT_OP + ", " + Webhookpositie_.GELEVERD_OP
+                        + ") VALUES (:dvId, :epoch,"
                         + " :transactieId, :eventId, :mislukkingen, :gepauzeerdTot, :bijgewerktOp, :geleverdOp) ON CONFLICT("
                         + Webhookpositie_.DV_ID + ") DO UPDATE SET "
                         + Webhookpositie_.EPOCH + " = excluded." + Webhookpositie_.EPOCH + ", "
@@ -43,7 +45,9 @@ public class WebhookpositieRepository implements PanacheRepositoryBase<Webhookpo
                         + Webhookpositie_.GELEVERD_OP + " END")
                 .setParameter("dvId", positie.getDvId())
                 .setParameter("epoch", cursor.map(Cursor::epoch).orElse(null), Webhookpositie_.epoch.getType())
-                .setParameter("transactieId", cursor.map(Cursor::transactieId).orElse(null),
+                .setParameter(
+                        "transactieId",
+                        cursor.map(Cursor::transactieId).orElse(null),
                         Webhookpositie_.transactieId.getType())
                 .setParameter("eventId", cursor.map(Cursor::eventId).orElse(null), Webhookpositie_.eventId.getType())
                 .setParameter("mislukkingen", positie.getMislukkingen())

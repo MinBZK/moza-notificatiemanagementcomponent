@@ -1,36 +1,35 @@
 package nl.rijksoverheid.moz.nmc.service.receipt;
 
-import io.quarkus.narayana.jta.QuarkusTransaction;
-import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
-import nl.rijksoverheid.moz.nmc.domain.Notificatie;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
-import nl.rijksoverheid.moz.nmc.domain.Poging;
-import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
-import nl.rijksoverheid.moz.nmc.repository.EventRepository;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
-import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
-import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
-import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
-import nl.rijksoverheid.moz.nmc.job.TaakRonde;
-import nl.rijksoverheid.moz.nmc.job.TaakWorker;
-import nl.rijksoverheid.moz.nmc.service.NotificatieNietGevondenException;
-import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
-import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
-import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.List;
-import java.util.UUID;
-
 import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
 import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.overgangen;
 import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.poging;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.quarkus.test.junit.QuarkusTest;
+import jakarta.inject.Inject;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.domain.Notificatie;
+import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
+import nl.rijksoverheid.moz.nmc.domain.Poging;
+import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
+import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.job.TaakRonde;
+import nl.rijksoverheid.moz.nmc.job.TaakWorker;
+import nl.rijksoverheid.moz.nmc.repository.EventRepository;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
+import nl.rijksoverheid.moz.nmc.service.NotificatieNietGevondenException;
+import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 /** De koppeling van een receipt aan de poging via {@code reference}, het poging-id. */
 @QuarkusTest
@@ -74,8 +73,13 @@ class ReceiptReferentieTest {
         Poging poging = poging(pogingId);
         assertEquals(notifyId, poging.getNotifyId());
         assertEquals(PogingStatus.BEZORGD, poging.getStatus());
-        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
-                NotificatieStatus.BEZORGD), overgangen(poging.getNotificatieId()));
+        assertEquals(
+                List.of(
+                        NotificatieStatus.AANGENOMEN,
+                        NotificatieStatus.IN_VERZENDING,
+                        NotificatieStatus.VERZONDEN,
+                        NotificatieStatus.BEZORGD),
+                overgangen(poging.getNotificatieId()));
     }
 
     // Een tweede verzending na een herclaim: het afwijkende id is een duplicaat van dezelfde poging.
@@ -92,7 +96,9 @@ class ReceiptReferentieTest {
         assertEquals(eerste, poging.getNotifyId());
         assertEquals(List.of(tweede), poging.getDuplicaatIds());
         assertEquals(PogingStatus.BEZORGD, poging.getStatus());
-        assertEquals(NotificatieStatus.BEZORGD, notificatie(poging.getNotificatieId()).getStatus());
+        assertEquals(
+                NotificatieStatus.BEZORGD,
+                notificatie(poging.getNotificatieId()).getStatus());
     }
 
     @Test
@@ -108,10 +114,13 @@ class ReceiptReferentieTest {
 
     @Test
     void verwerk_onbruikbareReferenceEnOnbekendNotifyId_gooitNietGevonden() {
-        assertThrows(NotificatieNietGevondenException.class,
+        assertThrows(
+                NotificatieNietGevondenException.class,
                 () -> receiptVerwerker.verwerk(UUID.randomUUID(), "geen-uuid", "delivered", null));
-        assertThrows(NotificatieNietGevondenException.class,
-                () -> receiptVerwerker.verwerk(UUID.randomUUID(), UUID.randomUUID().toString(), "delivered", null));
+        assertThrows(
+                NotificatieNietGevondenException.class,
+                () -> receiptVerwerker.verwerk(
+                        UUID.randomUUID(), UUID.randomUUID().toString(), "delivered", null));
     }
 
     // Via de opslag en de receipttaak: een receipt die er is voordat de worker zijn verzending
@@ -121,15 +130,21 @@ class ReceiptReferentieTest {
         UUID pogingId = geplandePoging();
         UUID notifyId = UUID.randomUUID();
 
-        assertEquals(ReceiptOpslag.Uitkomst.OPGESLAGEN,
+        assertEquals(
+                ReceiptOpslag.Uitkomst.OPGESLAGEN,
                 receiptOpslag.slaOp(notifyId, pogingId.toString(), "delivered", OffsetDateTime.now(ZoneOffset.UTC)));
         TaakRonde.draai(taakWorker, TaakSoort.RECEIPT_VERWERKEN);
 
         Poging poging = poging(pogingId);
         assertEquals(notifyId, poging.getNotifyId());
         assertEquals(PogingStatus.BEZORGD, poging.getStatus());
-        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
-                NotificatieStatus.BEZORGD), overgangen(poging.getNotificatieId()));
+        assertEquals(
+                List.of(
+                        NotificatieStatus.AANGENOMEN,
+                        NotificatieStatus.IN_VERZENDING,
+                        NotificatieStatus.VERZONDEN,
+                        NotificatieStatus.BEZORGD),
+                overgangen(poging.getNotificatieId()));
         assertEquals(0L, LeesHelper.aantalTaken(TaakSoort.RECEIPT_VERWERKEN));
     }
 

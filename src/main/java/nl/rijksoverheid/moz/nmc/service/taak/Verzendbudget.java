@@ -2,15 +2,14 @@ package nl.rijksoverheid.moz.nmc.service.taak;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
-import nl.rijksoverheid.moz.nmc.config.VerzendbudgetConfig;
-import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
-import nl.rijksoverheid.moz.nmc.domain.VerzendbudgetTijdvak;
-import nl.rijksoverheid.moz.nmc.repository.VerzendbudgetRepository;
-
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import nl.rijksoverheid.moz.nmc.config.VerzendbudgetConfig;
+import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
+import nl.rijksoverheid.moz.nmc.domain.VerzendbudgetTijdvak;
+import nl.rijksoverheid.moz.nmc.repository.VerzendbudgetRepository;
 
 /**
  * Tokens per tijdvak van een minuut, als rij in {@code verzendbudget}. De eerste
@@ -52,8 +51,8 @@ public class Verzendbudget {
             return new Genomen(0, tijdvak, doel, 0);
         }
 
-        VerzendbudgetTijdvak budget = verzendbudgetRepository.vergrendel(tijdvak, tokensPerMinuut,
-                verzendReservering, navraagReservering);
+        VerzendbudgetTijdvak budget =
+                verzendbudgetRepository.vergrendel(tijdvak, tokensPerMinuut, verzendReservering, navraagReservering);
         int genomen = Math.min(gevraagd, budget.beschikbaar(doel));
         int uitReservering = budget.neem(doel, genomen);
 
@@ -75,8 +74,8 @@ public class Verzendbudget {
 
         int uitGedeeld = genomen.aantal() - genomen.uitReservering();
         int reservering = genomen.doel() == BudgetDoel.NAVRAAG ? navraagReservering : verzendReservering;
-        verzendbudgetRepository.vergrendel(genomen.tijdvak(), tokensPerMinuut, verzendReservering,
-                        navraagReservering)
+        verzendbudgetRepository
+                .vergrendel(genomen.tijdvak(), tokensPerMinuut, verzendReservering, navraagReservering)
                 .geefTerug(genomen.doel(), terug, Math.max(0, terug - uitGedeeld), tokensPerMinuut, reservering);
     }
 
@@ -93,8 +92,7 @@ public class Verzendbudget {
      * Het aantal tokens dat een claim nam, uit welk tijdvak en voor welk doel, en hoeveel ervan uit de
      * eigen reservering kwam.
      */
-    public record Genomen(int aantal, OffsetDateTime tijdvak, BudgetDoel doel, int uitReservering) {
-    }
+    public record Genomen(int aantal, OffsetDateTime tijdvak, BudgetDoel doel, int uitReservering) {}
 
     private OffsetDateTime tijdvak() {
         return OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MINUTES);

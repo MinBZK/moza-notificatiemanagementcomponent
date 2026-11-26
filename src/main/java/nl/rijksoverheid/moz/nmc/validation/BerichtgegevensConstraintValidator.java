@@ -2,14 +2,14 @@ package nl.rijksoverheid.moz.nmc.validation;
 
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
-
 import java.util.Map;
 
 /**
  * Dezelfde grenzen als in het contract: ten hoogste 50 variabelen, met namen tot 100 tekens en
  * waarden tot 2000 tekens. Samen begrenzen die ook de totale omvang.
  */
-public class BerichtgegevensConstraintValidator implements ConstraintValidator<ValidBerichtgegevens, Map<String, String>> {
+public class BerichtgegevensConstraintValidator
+        implements ConstraintValidator<ValidBerichtgegevens, Map<String, String>> {
 
     private static final int MAX_AANTAL = 50;
     private static final int MAX_NAAM = 100;

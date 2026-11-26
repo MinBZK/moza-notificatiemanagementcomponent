@@ -1,5 +1,16 @@
 package nl.rijksoverheid.moz.nmc.service.verzending;
 
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.overgangen;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.poging;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.taken;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusMock;
@@ -7,6 +18,13 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.GetMessageDataApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.GetOneMessageResponse;
@@ -30,25 +48,6 @@ import nl.rijksoverheid.moz.nmc.testhelper.VerstelbareClock;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.time.Clock;
-import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
-import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.overgangen;
-import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.poging;
-import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.taken;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 // %test: 20 tokens per minuut, waarvan 5 voor de navraag.
 @QuarkusTest
@@ -95,12 +94,16 @@ class NotifyNLNavraagTaakHandlerTest {
 
         assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN));
 
-        assertEquals(NotificatieStatus.BEZORGD, notificatie(verzonden.notificatieId()).getStatus());
+        assertEquals(
+                NotificatieStatus.BEZORGD,
+                notificatie(verzonden.notificatieId()).getStatus());
         assertEquals(PogingStatus.BEZORGD, poging(verzonden.pogingId()).getStatus());
         List<Taak> taken = taken();
         assertEquals(1, taken.size(), "de navraag is af, de vaststeltaak staat");
         assertEquals(TaakSoort.BEZORGING_VASTSTELLEN, taken.getFirst().getTaakSoort());
-        assertEquals(afgeleverd.plusDays(8).toInstant(), taken.getFirst().getDue().toInstant(),
+        assertEquals(
+                afgeleverd.plusDays(8).toInstant(),
+                taken.getFirst().getDue().toInstant(),
                 "vaststellingstermijn plus callback-venster na het tijdstip uit NotifyNL");
     }
 
@@ -112,16 +115,25 @@ class NotifyNLNavraagTaakHandlerTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN);
 
-        assertEquals(NotificatieStatus.BEZORGSTATUS_ONBEKEND, notificatie(verzonden.notificatieId()).getStatus());
+        assertEquals(
+                NotificatieStatus.BEZORGSTATUS_ONBEKEND,
+                notificatie(verzonden.notificatieId()).getStatus());
         assertEquals(PogingStatus.ONBEKEND, poging(verzonden.pogingId()).getStatus());
         assertTrue(taken().isEmpty());
 
-        receiptVerwerker.verwerk(verzonden.notifyId(), verzonden.pogingId().toString(), "delivered",
-                clock.nu());
+        receiptVerwerker.verwerk(verzonden.notifyId(), verzonden.pogingId().toString(), "delivered", clock.nu());
 
-        assertEquals(NotificatieStatus.BEZORGD, notificatie(verzonden.notificatieId()).getStatus());
-        assertEquals(List.of(NotificatieStatus.AANGENOMEN, NotificatieStatus.IN_VERZENDING, NotificatieStatus.VERZONDEN,
-                NotificatieStatus.BEZORGSTATUS_ONBEKEND, NotificatieStatus.BEZORGD), overgangen(verzonden.notificatieId()));
+        assertEquals(
+                NotificatieStatus.BEZORGD,
+                notificatie(verzonden.notificatieId()).getStatus());
+        assertEquals(
+                List.of(
+                        NotificatieStatus.AANGENOMEN,
+                        NotificatieStatus.IN_VERZENDING,
+                        NotificatieStatus.VERZONDEN,
+                        NotificatieStatus.BEZORGSTATUS_ONBEKEND,
+                        NotificatieStatus.BEZORGD),
+                overgangen(verzonden.notificatieId()));
     }
 
     @Test
@@ -137,7 +149,9 @@ class NotifyNLNavraagTaakHandlerTest {
         assertEquals(TaakSoort.RECONCILIEREN, navraag.getTaakSoort());
         assertEquals(verzondenOp.plusHours(6).toInstant(), navraag.getDue().toInstant());
         assertEquals(0, navraag.getPogingen());
-        assertEquals(NotificatieStatus.VERZONDEN, notificatie(verzonden.notificatieId()).getStatus());
+        assertEquals(
+                NotificatieStatus.VERZONDEN,
+                notificatie(verzonden.notificatieId()).getStatus());
     }
 
     // Met de callback bij NotifyNL uitgeschakeld eindigt de notificatie toch in een eindstatus.
@@ -149,7 +163,9 @@ class NotifyNLNavraagTaakHandlerTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN);
 
-        assertEquals(NotificatieStatus.BEZORGSTATUS_ONBEKEND, notificatie(verzonden.notificatieId()).getStatus());
+        assertEquals(
+                NotificatieStatus.BEZORGSTATUS_ONBEKEND,
+                notificatie(verzonden.notificatieId()).getStatus());
         assertTrue(taken().isEmpty());
     }
 
@@ -164,7 +180,9 @@ class NotifyNLNavraagTaakHandlerTest {
         Taak navraag = taken().getFirst();
         assertEquals(0, navraag.getPogingen());
         assertEquals(clock.nu().plusMinutes(5).toInstant(), navraag.getDue().toInstant());
-        assertEquals(NotificatieStatus.VERZONDEN, notificatie(verzonden.notificatieId()).getStatus());
+        assertEquals(
+                NotificatieStatus.VERZONDEN,
+                notificatie(verzonden.notificatieId()).getStatus());
     }
 
     // Een navraag die blijft mislukken (hier een ingetrokken key) houdt ook op bij de bewaartermijn.
@@ -176,15 +194,19 @@ class NotifyNLNavraagTaakHandlerTest {
 
         TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN);
 
-        assertEquals(NotificatieStatus.BEZORGSTATUS_ONBEKEND, notificatie(verzonden.notificatieId()).getStatus());
+        assertEquals(
+                NotificatieStatus.BEZORGSTATUS_ONBEKEND,
+                notificatie(verzonden.notificatieId()).getStatus());
         assertTrue(taken().isEmpty());
     }
 
     @Test
     void navraag_pogingMetUitkomst_rondtAfZonderOpvraag() {
         Verzonden verzonden = verzonden(clock.nu().minusHours(2));
-        QuarkusTransaction.requiringNew().run(() -> pogingRepository.findById(verzonden.pogingId())
-                .verwerkReceipt(PogingStatus.BEZORGD, clock.nu()));
+        QuarkusTransaction.requiringNew()
+                .run(() -> pogingRepository
+                        .findById(verzonden.pogingId())
+                        .verwerkReceipt(PogingStatus.BEZORGD, clock.nu()));
 
         TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN);
 
@@ -196,11 +218,13 @@ class NotifyNLNavraagTaakHandlerTest {
     void receipt_rondtDeOpenNavraagAf() {
         Verzonden verzonden = verzonden(clock.nu().minusHours(2));
 
-        receiptVerwerker.verwerk(verzonden.notifyId(), verzonden.pogingId().toString(), "permanent-failure",
-                clock.nu());
+        receiptVerwerker.verwerk(
+                verzonden.notifyId(), verzonden.pogingId().toString(), "permanent-failure", clock.nu());
 
         assertTrue(taken().isEmpty());
-        assertEquals(NotificatieStatus.NIET_BEZORGBAAR, notificatie(verzonden.notificatieId()).getStatus());
+        assertEquals(
+                NotificatieStatus.NIET_BEZORGBAAR,
+                notificatie(verzonden.notificatieId()).getStatus());
     }
 
     // %test: 20 tokens, 10 gereserveerd voor het verzenden; de navraag krijgt haar 5 plus de gedeelde 5.
@@ -223,22 +247,28 @@ class NotifyNLNavraagTaakHandlerTest {
         Verzonden verzonden = verzonden(clock.nu().minusHours(2));
         UUID taakId = taken().getFirst().getId();
         when(getMessageDataApi.getMessageData(verzonden.notifyId().toString())).thenAnswer(aanroep -> {
-            QuarkusTransaction.requiringNew().run(() -> TaakFixtures.claimDoorAndereWorker(
-                    taakRepository.getEntityManager(), TaakSoort.RECONCILIEREN, taakId));
+            QuarkusTransaction.requiringNew()
+                    .run(() -> TaakFixtures.claimDoorAndereWorker(
+                            taakRepository.getEntityManager(), TaakSoort.RECONCILIEREN, taakId));
 
-            return new GetOneMessageResponse().status("delivered").completedAt(clock.nu().minusHours(1).toString());
+            return new GetOneMessageResponse()
+                    .status("delivered")
+                    .completedAt(clock.nu().minusHours(1).toString());
         });
 
         TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN);
 
-        assertEquals(NotificatieStatus.VERZONDEN, notificatie(verzonden.notificatieId()).getStatus());
+        assertEquals(
+                NotificatieStatus.VERZONDEN,
+                notificatie(verzonden.notificatieId()).getStatus());
         assertEquals(PogingStatus.VERZONDEN, poging(verzonden.pogingId()).getStatus());
-        assertEquals(List.of(TaakSoort.RECONCILIEREN), taken().stream().map(Taak::getTaakSoort).toList(),
+        assertEquals(
+                List.of(TaakSoort.RECONCILIEREN),
+                taken().stream().map(Taak::getTaakSoort).toList(),
                 "de navraagtaak blijft staan en er komt geen vaststeltaak");
     }
 
-    private record Verzonden(UUID notificatieId, UUID pogingId, UUID notifyId) {
-    }
+    private record Verzonden(UUID notificatieId, UUID pogingId, UUID notifyId) {}
 
     // Een verzonden notificatie met een lopende poging en een navraagtaak die aan de beurt is.
     private Verzonden verzonden(OffsetDateTime verzondenOp) {
@@ -252,8 +282,12 @@ class NotifyNLNavraagTaakHandlerTest {
             pogingRepository.persist(poging);
             poging.markeerVerzonden(notifyId, verzondenOp.truncatedTo(ChronoUnit.MICROS));
             overgangsfunctie.voerUit(notificatie.getId(), NotificatieStatus.VERZONDEN, null);
-            taakRepository.persist(new Taak(TaakSoort.RECONCILIEREN, NotificatieFixtures.DV_ID, notificatie.getId(),
-                    clock.nu().minus(Duration.ofSeconds(1)), null,
+            taakRepository.persist(new Taak(
+                    TaakSoort.RECONCILIEREN,
+                    NotificatieFixtures.DV_ID,
+                    notificatie.getId(),
+                    clock.nu().minus(Duration.ofSeconds(1)),
+                    null,
                     Map.of(VerzendTaakHandler.PAYLOAD_POGING_ID, poging.getId().toString())));
 
             return new Verzonden(notificatie.getId(), poging.getId(), notifyId);

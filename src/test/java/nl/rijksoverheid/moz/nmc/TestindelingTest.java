@@ -1,7 +1,7 @@
 package nl.rijksoverheid.moz.nmc;
 
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -11,9 +11,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 
 /**
  * Bewaakt dat elke testklasse óf een {@code @QuarkusTest} is, óf de tag {@code unit} heeft, óf
@@ -45,7 +44,8 @@ class TestindelingTest {
         for (Path bestand : testklassen()) {
             String bron = Files.readString(bestand);
             String naam = relatief(bestand);
-            int indelingen = (QUARKUS.matcher(bron).find() ? 1 : 0) + (UNIT.matcher(bron).find() ? 1 : 0)
+            int indelingen = (QUARKUS.matcher(bron).find() ? 1 : 0)
+                    + (UNIT.matcher(bron).find() ? 1 : 0)
                     + (UITGEZONDERD.containsKey(naam) ? 1 : 0);
 
             if (indelingen != 1) {
@@ -53,7 +53,9 @@ class TestindelingTest {
             }
         }
 
-        assertEquals(List.of(), zonderIndeling,
+        assertEquals(
+                List.of(),
+                zonderIndeling,
                 "Geef elke testklasse precies één van: @QuarkusTest, @Tag(\"unit\") of een uitzondering hier");
     }
 
@@ -71,7 +73,8 @@ class TestindelingTest {
         List<Path> resultaat = new ArrayList<>();
 
         try (Stream<Path> bestanden = Files.walk(TESTBRONNEN)) {
-            for (Path bestand : bestanden.filter(p -> p.toString().endsWith(".java")).toList()) {
+            for (Path bestand :
+                    bestanden.filter(p -> p.toString().endsWith(".java")).toList()) {
                 if (TESTMETHODE.matcher(Files.readString(bestand)).find()) {
                     resultaat.add(bestand);
                 }

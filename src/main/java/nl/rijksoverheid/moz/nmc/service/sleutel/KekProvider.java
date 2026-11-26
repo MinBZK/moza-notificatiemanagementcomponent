@@ -1,7 +1,7 @@
 package nl.rijksoverheid.moz.nmc.service.sleutel;
 
-import javax.crypto.SecretKey;
 import java.util.Optional;
+import javax.crypto.SecretKey;
 
 /**
  * Levert de key encryption keys (KEK) waarmee {@link Sleutelbeheer} de sleutel per notificatie wrapt.

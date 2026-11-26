@@ -2,6 +2,10 @@ package nl.rijksoverheid.moz.nmc.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
+import java.time.Clock;
+import java.time.OffsetDateTime;
+import java.util.Objects;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.domain.Event;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
@@ -12,11 +16,6 @@ import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
-
-import java.time.Clock;
-import java.time.OffsetDateTime;
-import java.util.Objects;
-import java.util.UUID;
 
 /**
  * De enige schrijver van de notificatiestatus. Elke overgang vergrendelt de notificatierij, toetst
@@ -38,8 +37,12 @@ public class Overgangsfunctie {
     private final Opruimtermijnen opruimtermijnen;
     private final Clock clock;
 
-    public Overgangsfunctie(NotificatieRepository notificatieRepository, EventRepository eventRepository,
-                            TaakRepository taakRepository, Opruimtermijnen opruimtermijnen, Clock clock) {
+    public Overgangsfunctie(
+            NotificatieRepository notificatieRepository,
+            EventRepository eventRepository,
+            TaakRepository taakRepository,
+            Opruimtermijnen opruimtermijnen,
+            Clock clock) {
         this.notificatieRepository = notificatieRepository;
         this.eventRepository = eventRepository;
         this.taakRepository = taakRepository;
@@ -97,7 +100,9 @@ public class Overgangsfunctie {
         notificatieRepository.flush();
 
         if (naar.isEindstatus()) {
-            taakRepository.planWistaak(notificatie.getDvId(), notificatie.getId(),
+            taakRepository.planWistaak(
+                    notificatie.getDvId(),
+                    notificatie.getId(),
                     opruimtermijnen.wissenOp(notificatie.getEindstatusOp()));
         } else if (van.isEindstatus()) {
             taakRepository.verwijderOpen(TaakSoort.WISSEN, notificatie.getId());
@@ -113,15 +118,23 @@ public class Overgangsfunctie {
      * @throws NotificatieNietGevondenException als de notificatie niet bestaat
      */
     public Notificatie vergrendel(UUID notificatieId) {
-        return notificatieRepository.vergrendel(notificatieId)
-                .orElseThrow(() -> new NotificatieNietGevondenException("Geen notificatie gevonden met id " + notificatieId));
+        return notificatieRepository
+                .vergrendel(notificatieId)
+                .orElseThrow(() ->
+                        new NotificatieNietGevondenException("Geen notificatie gevonden met id " + notificatieId));
     }
 
     // Status en reden komen van de rij, zodat het event nooit afwijkt van wat er vastligt; bij een
     // herverzending wordt de reden van de aanroeper niet op de rij gezet.
     private Event schrijfEvent(Notificatie notificatie, NotificatieStatus van, OffsetDateTime nu) {
-        Event event = new Event(notificatie.getDvId(), notificatie.getId(), notificatie.getVersie(), van,
-                notificatie.getStatus(), notificatie.getReden(), nu);
+        Event event = new Event(
+                notificatie.getDvId(),
+                notificatie.getId(),
+                notificatie.getVersie(),
+                van,
+                notificatie.getStatus(),
+                notificatie.getReden(),
+                nu);
         eventRepository.persist(event);
 
         return event;

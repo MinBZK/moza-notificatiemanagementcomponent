@@ -1,25 +1,5 @@
 package nl.rijksoverheid.moz.nmc.client.webhook;
 
-import com.fasterxml.jackson.databind.JsonMappingException;
-import io.smallrye.mutiny.Uni;
-import jakarta.ws.rs.ProcessingException;
-import jakarta.ws.rs.WebApplicationException;
-import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
-import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.ConnectException;
-import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.TimeoutException;
-
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -29,6 +9,21 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
+
+import com.fasterxml.jackson.databind.JsonMappingException;
+import io.smallrye.mutiny.Uni;
+import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.WebApplicationException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.ConnectException;
+import java.time.Duration;
+import java.util.concurrent.TimeoutException;
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 @Tag("unit")
 class WebhookAdapterTest {
@@ -40,7 +35,8 @@ class WebhookAdapterTest {
     @BeforeEach
     void setUp() {
         client = Mockito.mock(WebhookClient.class);
-        when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().nullItem());
+        when(client.lever(any(), any(), any(), any()))
+                .thenReturn(Uni.createFrom().nullItem());
         adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(5)));
     }
 
@@ -55,7 +51,8 @@ class WebhookAdapterTest {
     @Test
     void lever_2xxMetBody_sluitHetAntwoordZonderHetTeLezen() throws Exception {
         InputStream antwoord = Mockito.mock(InputStream.class);
-        when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().item(antwoord));
+        when(client.lever(any(), any(), any(), any()))
+                .thenReturn(Uni.createFrom().item(antwoord));
 
         adapter.lever(URL, "Bearer jwt", "cursor", body());
 
@@ -68,7 +65,8 @@ class WebhookAdapterTest {
     void lever_sluitenVanHetAntwoordFaalt_teltAlsAfgeleverd() throws Exception {
         InputStream antwoord = Mockito.mock(InputStream.class);
         Mockito.doThrow(new IOException("verbinding weg")).when(antwoord).close();
-        when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().item(antwoord));
+        when(client.lever(any(), any(), any(), any()))
+                .thenReturn(Uni.createFrom().item(antwoord));
 
         assertDoesNotThrow(() -> adapter.lever(URL, "Bearer jwt", "cursor", body()));
     }
@@ -78,8 +76,8 @@ class WebhookAdapterTest {
     void lever_geen2xx_gooitLeveringExceptionNaEenAanroep() {
         geeftFout(new WebApplicationException(503));
 
-        WebhookLeveringException fout = assertThrows(WebhookLeveringException.class,
-                () -> adapter.lever(URL, "Bearer jwt", "cursor", body()));
+        WebhookLeveringException fout =
+                assertThrows(WebhookLeveringException.class, () -> adapter.lever(URL, "Bearer jwt", "cursor", body()));
 
         assertTrue(fout.getMessage().contains("503"));
         verify(client, times(1)).lever(any(), any(), any(), any());
@@ -105,7 +103,9 @@ class WebhookAdapterTest {
         ProcessingException fout = new ProcessingException(new JsonMappingException(null, "kapot"));
         geeftFout(fout);
 
-        assertSame(fout, assertThrows(ProcessingException.class, () -> adapter.lever(URL, "Bearer jwt", "cursor", body())));
+        assertSame(
+                fout,
+                assertThrows(ProcessingException.class, () -> adapter.lever(URL, "Bearer jwt", "cursor", body())));
     }
 
     @Test
@@ -113,7 +113,9 @@ class WebhookAdapterTest {
         ProcessingException fout = new ProcessingException(new IllegalStateException("in het NMC"));
         geeftFout(fout);
 
-        assertSame(fout, assertThrows(ProcessingException.class, () -> adapter.lever(URL, "Bearer jwt", "cursor", body())));
+        assertSame(
+                fout,
+                assertThrows(ProcessingException.class, () -> adapter.lever(URL, "Bearer jwt", "cursor", body())));
     }
 
     @Test
@@ -131,11 +133,12 @@ class WebhookAdapterTest {
     // De read-time-out van de client vangt een webhook die blijft druppelen niet; de totale termijn wel.
     @Test
     void lever_geenAntwoordBinnenDeTermijn_gooitLeveringException() {
-        when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().nothing());
+        when(client.lever(any(), any(), any(), any()))
+                .thenReturn(Uni.createFrom().nothing());
         WebhookAdapter kort = new WebhookAdapter(client, TestConfig.webhook(Duration.ofMillis(100)));
 
-        WebhookLeveringException fout = assertThrows(WebhookLeveringException.class,
-                () -> kort.lever(URL, "Bearer jwt", "cursor", body()));
+        WebhookLeveringException fout =
+                assertThrows(WebhookLeveringException.class, () -> kort.lever(URL, "Bearer jwt", "cursor", body()));
 
         assertTrue(fout.getMessage().contains("niet binnen"));
     }
@@ -146,7 +149,8 @@ class WebhookAdapterTest {
     }
 
     private void geeftFout(RuntimeException fout) {
-        when(client.lever(any(), any(), any(), any())).thenReturn(Uni.createFrom().failure(fout));
+        when(client.lever(any(), any(), any(), any()))
+                .thenReturn(Uni.createFrom().failure(fout));
     }
 
     private static String body() {

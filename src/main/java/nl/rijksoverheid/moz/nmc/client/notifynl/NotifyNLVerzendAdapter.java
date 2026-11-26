@@ -9,6 +9,11 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.GetMessageDataApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.GetMultipleMessagesResponse;
@@ -18,12 +23,6 @@ import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailRequest
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
-
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeParseException;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
 
 /**
  * De adapter naar NotifyNL: verstuurt een e-mail, zoekt een eerdere verzending op de eigen referentie
@@ -44,20 +43,24 @@ public class NotifyNLVerzendAdapter {
     private final NotifyNLAuthorizationHolder notifyNLAuthorizationHolder;
     private final String notifyApiKey;
 
-    public NotifyNLVerzendAdapter(@RestClient SendAMessageApi sendAMessageApi,
-                           @RestClient GetMessageDataApi getMessageDataApi,
-                           NotifyNLJwtFactory notifyNLJwtFactory,
-                           NotifyNLAuthorizationHolder notifyNLAuthorizationHolder,
-                           @ConfigProperty(name = "notify.api-key") Optional<String> notifyApiKey) {
+    public NotifyNLVerzendAdapter(
+            @RestClient SendAMessageApi sendAMessageApi,
+            @RestClient GetMessageDataApi getMessageDataApi,
+            NotifyNLJwtFactory notifyNLJwtFactory,
+            NotifyNLAuthorizationHolder notifyNLAuthorizationHolder,
+            @ConfigProperty(name = "notify.api-key") Optional<String> notifyApiKey) {
         this.sendAMessageApi = sendAMessageApi;
         this.getMessageDataApi = getMessageDataApi;
         this.notifyNLJwtFactory = notifyNLJwtFactory;
         this.notifyNLAuthorizationHolder = notifyNLAuthorizationHolder;
-        this.notifyApiKey = notifyApiKey.filter(s -> !s.isBlank())
+        this.notifyApiKey = notifyApiKey
+                .filter(s -> !s.isBlank())
                 .orElseThrow(() -> new IllegalStateException("notify.api-key is niet geconfigureerd"));
     }
 
-    public UUID verstuurEmail(@NotNull String emailAdres, @NotNull String templateId, Map<String, String> berichtgegevens) throws NotifyNLConfiguratieException, NotifyNLVerzendException {
+    public UUID verstuurEmail(
+            @NotNull String emailAdres, @NotNull String templateId, Map<String, String> berichtgegevens)
+            throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         return verstuurEmail(emailAdres, templateId, berichtgegevens, null);
     }
 
@@ -69,10 +72,15 @@ public class NotifyNLVerzendAdapter {
      *                        is; het NMC geeft het poging-id mee
      * @return het id dat NotifyNL aan de verzending geeft
      */
-    public UUID verstuurEmail(@NotNull String emailAdres, @NotNull String templateId, Map<String, String> berichtgegevens,
-                              String reference) throws NotifyNLConfiguratieException, NotifyNLVerzendException {
+    public UUID verstuurEmail(
+            @NotNull String emailAdres,
+            @NotNull String templateId,
+            Map<String, String> berichtgegevens,
+            String reference)
+            throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         autoriseer();
-        SendEmailRequest notifyRequest = bouwVerzoek(emailAdres, templateId, berichtgegevens).reference(reference);
+        SendEmailRequest notifyRequest =
+                bouwVerzoek(emailAdres, templateId, berichtgegevens).reference(reference);
         SendEmailResponse notifyResponse = verstuur(notifyRequest);
         return extraheerNotificatieId(notifyResponse);
     }
@@ -83,11 +91,13 @@ public class NotifyNLVerzendAdapter {
      *
      * @return het NotifyNL-id van de gevonden verzending
      */
-    public Optional<UUID> zoekOpReference(@NotNull String reference) throws NotifyNLConfiguratieException, NotifyNLVerzendException {
+    public Optional<UUID> zoekOpReference(@NotNull String reference)
+            throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         autoriseer();
 
         try {
-            GetMultipleMessagesResponse antwoord = getMessageDataApi.getMultipleMessagesStatus(null, null, reference, null, null);
+            GetMultipleMessagesResponse antwoord =
+                    getMessageDataApi.getMultipleMessagesStatus(null, null, reference, null, null);
 
             return antwoord == null || antwoord.getNotifications() == null
                     ? Optional.empty()
@@ -96,11 +106,13 @@ public class NotifyNLVerzendAdapter {
                             .map(n -> UUID.fromString(n.getId()))
                             .findFirst();
         } catch (WebApplicationException e) {
-            throw new NotifyNLVerzendException("NotifyNL gaf status " + e.getResponse().getStatus() + " terug bij het zoeken op referentie", e);
+            throw new NotifyNLVerzendException(
+                    "NotifyNL gaf status " + e.getResponse().getStatus() + " terug bij het zoeken op referentie", e);
         } catch (ProcessingException e) {
             throw new NotifyNLVerzendException("NotifyNL was niet bereikbaar bij het zoeken op referentie", e);
         } catch (IllegalArgumentException e) {
-            throw NotifyNLVerzendException.onbruikbaarAntwoord("NotifyNL gaf een ongeldig notificatie-ID terug bij het zoeken op referentie", e);
+            throw NotifyNLVerzendException.onbruikbaarAntwoord(
+                    "NotifyNL gaf een ongeldig notificatie-ID terug bij het zoeken op referentie", e);
         }
     }
 
@@ -109,7 +121,8 @@ public class NotifyNLVerzendAdapter {
      *
      * @return leeg als NotifyNL de verzending niet (meer) kent (404)
      */
-    public Optional<NotifyNLAfleverstatus> vraagStatusOp(@NotNull UUID notifyId) throws NotifyNLConfiguratieException, NotifyNLVerzendException {
+    public Optional<NotifyNLAfleverstatus> vraagStatusOp(@NotNull UUID notifyId)
+            throws NotifyNLConfiguratieException, NotifyNLVerzendException {
         autoriseer();
 
         try {
@@ -119,14 +132,16 @@ public class NotifyNLVerzendAdapter {
                 throw new NotifyNLVerzendException("NotifyNL gaf geen status terug voor " + notifyId);
             }
 
-            return Optional.of(new NotifyNLAfleverstatus(antwoord.getStatus(),
+            return Optional.of(new NotifyNLAfleverstatus(
+                    antwoord.getStatus(),
                     tijdstip(antwoord.getCompletedAt(), antwoord.getSentAt(), antwoord.getCreatedAt())));
         } catch (WebApplicationException e) {
             if (e.getResponse().getStatus() == 404) {
                 return Optional.empty();
             }
 
-            throw new NotifyNLVerzendException("NotifyNL gaf status " + e.getResponse().getStatus() + " terug bij de navraag", e);
+            throw new NotifyNLVerzendException(
+                    "NotifyNL gaf status " + e.getResponse().getStatus() + " terug bij de navraag", e);
         } catch (ProcessingException e) {
             throw new NotifyNLVerzendException("NotifyNL was niet bereikbaar bij de navraag", e);
         }
@@ -177,8 +192,11 @@ public class NotifyNLVerzendAdapter {
         } catch (WebApplicationException e) {
             Response response = e.getResponse();
             String body = NotifyNLFoutmelding.body(response);
-            throw new NotifyNLVerzendException("NotifyNL gaf status " + response.getStatus() + " terug: "
-                    + NotifyNLFoutmelding.beschrijf(response, body), e, isAdresAfwijzing(response.getStatus(), body));
+            throw new NotifyNLVerzendException(
+                    "NotifyNL gaf status " + response.getStatus() + " terug: "
+                            + NotifyNLFoutmelding.beschrijf(response, body),
+                    e,
+                    isAdresAfwijzing(response.getStatus(), body));
         } catch (ProcessingException e) {
             // Verbindingsfout of time-out: geen antwoord, dus ook geen status.
             throw new NotifyNLVerzendException("NotifyNL was niet bereikbaar", e);
@@ -214,13 +232,15 @@ public class NotifyNLVerzendAdapter {
 
     private UUID extraheerNotificatieId(SendEmailResponse notifyResponse) throws NotifyNLVerzendException {
         if (notifyResponse == null || notifyResponse.getId() == null) {
-            throw NotifyNLVerzendException.onbruikbaarAntwoord("NotifyNL gaf geen notificatie-ID terug in de respons", null);
+            throw NotifyNLVerzendException.onbruikbaarAntwoord(
+                    "NotifyNL gaf geen notificatie-ID terug in de respons", null);
         }
 
         try {
             return UUID.fromString(notifyResponse.getId());
         } catch (IllegalArgumentException e) {
-            throw NotifyNLVerzendException.onbruikbaarAntwoord("NotifyNL gaf een ongeldig notificatie-ID terug in de respons", e);
+            throw NotifyNLVerzendException.onbruikbaarAntwoord(
+                    "NotifyNL gaf een ongeldig notificatie-ID terug in de respons", e);
         }
     }
 }

@@ -3,10 +3,9 @@ package nl.rijksoverheid.moz.nmc.repository;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.LockModeType;
+import java.time.OffsetDateTime;
 import nl.rijksoverheid.moz.nmc.domain.VerzendbudgetTijdvak;
 import nl.rijksoverheid.moz.nmc.domain.VerzendbudgetTijdvak_;
-
-import java.time.OffsetDateTime;
 
 @ApplicationScoped
 public class VerzendbudgetRepository implements PanacheRepositoryBase<VerzendbudgetTijdvak, OffsetDateTime> {
@@ -18,9 +17,14 @@ public class VerzendbudgetRepository implements PanacheRepositoryBase<Verzendbud
      * de rij met wat de eerste er al uit nam.
      */
     public VerzendbudgetTijdvak vergrendel(OffsetDateTime tijdvak, int tokens, int verzendTokens, int navraagTokens) {
-        getSession().createMutationQuery("INSERT INTO VerzendbudgetTijdvak ("
-                        + String.join(", ", VerzendbudgetTijdvak_.TIJDVAK, VerzendbudgetTijdvak_.TOKENS,
-                                VerzendbudgetTijdvak_.VERZEND_TOKENS, VerzendbudgetTijdvak_.NAVRAAG_TOKENS)
+        getSession()
+                .createMutationQuery("INSERT INTO VerzendbudgetTijdvak ("
+                        + String.join(
+                                ", ",
+                                VerzendbudgetTijdvak_.TIJDVAK,
+                                VerzendbudgetTijdvak_.TOKENS,
+                                VerzendbudgetTijdvak_.VERZEND_TOKENS,
+                                VerzendbudgetTijdvak_.NAVRAAG_TOKENS)
                         + ") VALUES (:tijdvak, :tokens, :verzendTokens, :navraagTokens) ON CONFLICT DO NOTHING")
                 .setParameter("tijdvak", tijdvak)
                 .setParameter("tokens", tokens)

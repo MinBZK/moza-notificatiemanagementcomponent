@@ -2,7 +2,6 @@ package nl.rijksoverheid.moz.nmc;
 
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Map;

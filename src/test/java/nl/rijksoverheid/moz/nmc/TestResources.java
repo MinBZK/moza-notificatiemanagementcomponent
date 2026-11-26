@@ -10,6 +10,5 @@ import io.quarkus.test.common.QuarkusTestResource;
 @QuarkusTestResource(WebhookSleutelTestResource.class)
 public final class TestResources {
 
-    private TestResources() {
-    }
+    private TestResources() {}
 }

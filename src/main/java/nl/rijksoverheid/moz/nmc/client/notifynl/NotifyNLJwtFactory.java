@@ -2,7 +2,6 @@ package nl.rijksoverheid.moz.nmc.client.notifynl;
 
 import io.smallrye.jwt.build.Jwt;
 import jakarta.enterprise.context.ApplicationScoped;
-
 import java.time.Clock;
 
 @ApplicationScoped
@@ -26,12 +25,11 @@ public class NotifyNLJwtFactory {
         }
 
         int keyLength = apiKey.length();
-        String serviceId = apiKey.substring(keyLength - SERVICE_ID_START_OFFSET, keyLength - SERVICE_ID_START_OFFSET + SERVICE_ID_LENGTH);
+        String serviceId = apiKey.substring(
+                keyLength - SERVICE_ID_START_OFFSET, keyLength - SERVICE_ID_START_OFFSET + SERVICE_ID_LENGTH);
         String secret = apiKey.substring(keyLength - SECRET_LENGTH);
 
-        String token = Jwt.issuer(serviceId)
-                .issuedAt(clock.instant())
-                .signWithSecret(secret);
+        String token = Jwt.issuer(serviceId).issuedAt(clock.instant()).signWithSecret(secret);
 
         return "Bearer " + token;
     }

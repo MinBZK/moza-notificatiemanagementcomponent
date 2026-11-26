@@ -1,10 +1,10 @@
 package nl.rijksoverheid.moz.nmc.client.notifynl;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.time.Clock;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 @Tag("unit")
 class NotifyNLJwtFactoryTest {

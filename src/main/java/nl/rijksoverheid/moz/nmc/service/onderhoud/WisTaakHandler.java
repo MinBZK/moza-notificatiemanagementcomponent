@@ -3,6 +3,8 @@ package nl.rijksoverheid.moz.nmc.service.onderhoud;
 import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.time.Clock;
+import java.time.OffsetDateTime;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
@@ -12,9 +14,6 @@ import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakClaimer;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
-
-import java.time.Clock;
-import java.time.OffsetDateTime;
 
 /**
  * Wist de gewrapte sleutel van een notificatie de wistermijn na haar eindstatus. Daarna zijn
@@ -33,8 +32,12 @@ public class WisTaakHandler implements TaakHandler {
     private final Opruimtermijnen opruimtermijnen;
     private final Clock clock;
 
-    public WisTaakHandler(Overgangsfunctie overgangsfunctie, NotificatieRepository notificatieRepository,
-                          TaakClaimer taakClaimer, Opruimtermijnen opruimtermijnen, Clock clock) {
+    public WisTaakHandler(
+            Overgangsfunctie overgangsfunctie,
+            NotificatieRepository notificatieRepository,
+            TaakClaimer taakClaimer,
+            Opruimtermijnen opruimtermijnen,
+            Clock clock) {
         this.overgangsfunctie = overgangsfunctie;
         this.notificatieRepository = notificatieRepository;
         this.taakClaimer = taakClaimer;
@@ -58,7 +61,8 @@ public class WisTaakHandler implements TaakHandler {
         Notificatie notificatie = overgangsfunctie.vergrendel(taak.getNotificatieId());
 
         if (!notificatie.getStatus().isEindstatus()) {
-            Log.infof("Notificatie %s staat op %s; wistaak %s afgerond zonder te wissen",
+            Log.infof(
+                    "Notificatie %s staat op %s; wistaak %s afgerond zonder te wissen",
                     notificatie.getId(), notificatie.getStatus(), taak.getId());
             taakClaimer.rondAf(taak);
 

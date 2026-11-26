@@ -3,11 +3,10 @@ package nl.rijksoverheid.moz.nmc.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import org.hibernate.annotations.Type;
-
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
+import org.hibernate.annotations.Type;
 
 /**
  * Tot waar de terugkoppeltaak de events van een dienstverlener aan zijn webhook heeft geleverd, met

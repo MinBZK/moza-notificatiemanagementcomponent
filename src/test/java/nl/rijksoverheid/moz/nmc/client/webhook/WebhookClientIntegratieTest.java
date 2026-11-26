@@ -1,12 +1,23 @@
 package nl.rijksoverheid.moz.nmc.client.webhook;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import static io.restassured.RestAssured.given;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
+import java.net.URL;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Reden;
 import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
@@ -15,18 +26,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-
-import java.net.URL;
-import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.UUID;
-
-import static io.restassured.RestAssured.given;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * De echte rest-client tegen een echt HTTP-endpoint: welke antwoorden als mislukt tellen, en wat de
@@ -51,8 +50,10 @@ class WebhookClientIntegratieTest {
 
     @Test
     void antwoord2xx_teltAlsAfgeleverdMetHeaders() {
-        assertDoesNotThrow(() -> client.lever(ontvanger + "/204", "Bearer jwt", "cursor-1", json(event(UUID.randomUUID())))
-                .await().indefinitely());
+        assertDoesNotThrow(
+                () -> client.lever(ontvanger + "/204", "Bearer jwt", "cursor-1", json(event(UUID.randomUUID())))
+                        .await()
+                        .indefinitely());
 
         WebhookOntvanger.Aanroep aanroep = WebhookOntvanger.AANROEPEN.getFirst();
         assertEquals("Bearer jwt", aanroep.autorisatie());
@@ -64,9 +65,11 @@ class WebhookClientIntegratieTest {
     @ParameterizedTest
     @ValueSource(ints = {301, 302, 307, 400, 500})
     void antwoordBuiten2xx_gooitWebApplicationException(int status) {
-        WebApplicationException fout = assertThrows(WebApplicationException.class,
+        WebApplicationException fout = assertThrows(
+                WebApplicationException.class,
                 () -> client.lever(ontvanger + "/" + status, "Bearer jwt", "cursor", json(event(UUID.randomUUID())))
-                        .await().indefinitely());
+                        .await()
+                        .indefinitely());
 
         assertEquals(status, fout.getResponse().getStatus());
         assertEquals(1, WebhookOntvanger.AANROEPEN.size());
@@ -74,14 +77,27 @@ class WebhookClientIntegratieTest {
 
     @Test
     void contentType_isWatDeGepubliceerdeSpecBelooft() throws Exception {
-        client.lever(ontvanger + "/204", "Bearer jwt", "cursor", json(event(UUID.randomUUID()))).await().indefinitely();
+        client.lever(ontvanger + "/204", "Bearer jwt", "cursor", json(event(UUID.randomUUID())))
+                .await()
+                .indefinitely();
 
-        JsonNode content = objectMapper.readTree(given().queryParam("format", "JSON")
-                        .when().get("/q/openapi")
-                        .then().statusCode(200)
-                        .extract().asString())
-                .path("paths").path("/api/nmc/v1/notificaties/events").path("get").path("callbacks")
-                .path("webhook").path("{webhookUrl}").path("post").path("requestBody").path("content");
+        JsonNode content = objectMapper
+                .readTree(given().queryParam("format", "JSON")
+                        .when()
+                        .get("/q/openapi")
+                        .then()
+                        .statusCode(200)
+                        .extract()
+                        .asString())
+                .path("paths")
+                .path("/api/nmc/v1/notificaties/events")
+                .path("get")
+                .path("callbacks")
+                .path("webhook")
+                .path("{webhookUrl}")
+                .path("post")
+                .path("requestBody")
+                .path("content");
         assertEquals(1, content.size(), "precies één mediatype verwacht voor de webhook");
         String verzonden = WebhookOntvanger.AANROEPEN.getFirst().contentType();
         assertEquals(content.fieldNames().next(), verzonden.split(";")[0].trim());
@@ -92,9 +108,11 @@ class WebhookClientIntegratieTest {
     void verzondenBody_isEenArrayVanCloudEventsUitDeSpec() throws Exception {
         UUID notificatieId = UUID.randomUUID();
         client.lever(ontvanger + "/204", "Bearer jwt", "cursor", json(event(notificatieId), event(UUID.randomUUID())))
-                .await().indefinitely();
+                .await()
+                .indefinitely();
 
-        JsonNode body = objectMapper.readTree(WebhookOntvanger.AANROEPEN.getFirst().body());
+        JsonNode body =
+                objectMapper.readTree(WebhookOntvanger.AANROEPEN.getFirst().body());
         assertTrue(body.isArray());
         assertEquals(2, body.size());
         JsonNode eerste = body.get(0);
@@ -105,7 +123,8 @@ class WebhookClientIntegratieTest {
         assertTrue(eerste.path("sequence").isTextual(), "sequence hoort een string te zijn");
         assertEquals("0000000000000000003", eerste.path("sequence").asText());
         assertEquals("verzonden", eerste.path("data").path("vorigeStatus").asText());
-        assertEquals("technisch-mislukt", eerste.path("data").path("nieuweStatus").asText());
+        assertEquals(
+                "technisch-mislukt", eerste.path("data").path("nieuweStatus").asText());
         assertEquals("technisch", eerste.path("data").path("reden").asText());
     }
 
@@ -114,8 +133,10 @@ class WebhookClientIntegratieTest {
     void geweigerdeVerbinding_wordtEenLeveringException() {
         WebhookAdapter adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(5)));
 
-        assertThrows(WebhookLeveringException.class,
-                () -> adapter.lever("http://localhost:1/webhook", "Bearer jwt", "cursor", json(event(UUID.randomUUID()))));
+        assertThrows(
+                WebhookLeveringException.class,
+                () -> adapter.lever(
+                        "http://localhost:1/webhook", "Bearer jwt", "cursor", json(event(UUID.randomUUID()))));
     }
 
     // De webhook antwoordt 200 en blijft daarna tien seconden body sturen. De levering telt zodra de status
@@ -125,9 +146,11 @@ class WebhookClientIntegratieTest {
         WebhookAdapter adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(5)));
         long start = System.nanoTime();
 
-        assertDoesNotThrow(() -> adapter.lever(ontvanger + "/druppel", "Bearer jwt", "cursor", json(event(UUID.randomUUID()))));
+        assertDoesNotThrow(
+                () -> adapter.lever(ontvanger + "/druppel", "Bearer jwt", "cursor", json(event(UUID.randomUUID()))));
 
-        assertTrue(Duration.ofNanos(System.nanoTime() - start).compareTo(Duration.ofSeconds(3)) < 0,
+        assertTrue(
+                Duration.ofNanos(System.nanoTime() - start).compareTo(Duration.ofSeconds(3)) < 0,
                 "klaar vóór de webhook klaar was met zijn body");
     }
 
@@ -136,7 +159,8 @@ class WebhookClientIntegratieTest {
     void antwoordBuiten2xx_viaDeAdapter_wordtEenLeveringExceptionMetDeStatus() {
         WebhookAdapter adapter = new WebhookAdapter(client, TestConfig.webhook(Duration.ofSeconds(5)));
 
-        WebhookLeveringException fout = assertThrows(WebhookLeveringException.class,
+        WebhookLeveringException fout = assertThrows(
+                WebhookLeveringException.class,
                 () -> adapter.lever(ontvanger + "/500", "Bearer jwt", "cursor", json(event(UUID.randomUUID()))));
 
         assertTrue(fout.getMessage().contains("500"), fout.getMessage());
@@ -151,7 +175,14 @@ class WebhookClientIntegratieTest {
     }
 
     private static NotificatieStatusEvent event(UUID id) {
-        return NotificatieStatusEvent.of("urn:nld:oin:00000000000000000000:systeem:nmc", UUID.randomUUID(), id, 3L, NotificatieStatus.VERZONDEN, NotificatieStatus.TECHNISCH_MISLUKT,
-                Reden.TECHNISCH, OffsetDateTime.parse("2026-01-15T10:00:00Z"));
+        return NotificatieStatusEvent.of(
+                "urn:nld:oin:00000000000000000000:systeem:nmc",
+                UUID.randomUUID(),
+                id,
+                3L,
+                NotificatieStatus.VERZONDEN,
+                NotificatieStatus.TECHNISCH_MISLUKT,
+                Reden.TECHNISCH,
+                OffsetDateTime.parse("2026-01-15T10:00:00Z"));
     }
 }

@@ -3,13 +3,6 @@ package nl.rijksoverheid.moz.nmc.service.feed;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
-import nl.rijksoverheid.moz.nmc.config.FeedConfig;
-import nl.rijksoverheid.moz.nmc.domain.Bevestiging;
-import nl.rijksoverheid.moz.nmc.domain.Cursor;
-import nl.rijksoverheid.moz.nmc.domain.Event;
-import nl.rijksoverheid.moz.nmc.repository.BevestigingRepository;
-import nl.rijksoverheid.moz.nmc.repository.EventRepository;
-
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -18,6 +11,12 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.config.FeedConfig;
+import nl.rijksoverheid.moz.nmc.domain.Bevestiging;
+import nl.rijksoverheid.moz.nmc.domain.Cursor;
+import nl.rijksoverheid.moz.nmc.domain.Event;
+import nl.rijksoverheid.moz.nmc.repository.BevestigingRepository;
+import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 
 /**
  * Leest het eventlog per dienstverlener op (transactie-id, event-id) onder het watermerk van de
@@ -40,8 +39,11 @@ public class Eventfeed {
     private final int maxPagina;
     private final String source;
 
-    public Eventfeed(EventRepository eventRepository, BevestigingRepository bevestigingRepository, Clock clock,
-                     FeedConfig config) {
+    public Eventfeed(
+            EventRepository eventRepository,
+            BevestigingRepository bevestigingRepository,
+            Clock clock,
+            FeedConfig config) {
         this.eventRepository = eventRepository;
         this.bevestigingRepository = bevestigingRepository;
         this.clock = clock;
@@ -89,15 +91,23 @@ public class Eventfeed {
     @Transactional
     public EventPagina leesVoorWebhook(UUID dvId, Cursor positie, int limiet) {
         if (positie != null && positie.epoch() != epoch) {
-            Log.warnf("Webhookpositie van dienstverlener %s komt uit cluster-epoch %d; het huidige is %d. "
-                    + "De levering begint opnieuw bij het oudste beschikbare event", dvId, positie.epoch(), epoch);
+            Log.warnf(
+                    "Webhookpositie van dienstverlener %s komt uit cluster-epoch %d; het huidige is %d. "
+                            + "De levering begint opnieuw bij het oudste beschikbare event",
+                    dvId, positie.epoch(), epoch);
 
             return leesVanaf(dvId, null, Math.min(limiet, maxPagina));
         }
 
-        if (positie != null && eventRepository.oudsteTransactieId().filter(oudste -> positie.transactieId() < oudste).isPresent()) {
-            Log.warnf("Webhookpositie van dienstverlener %s ligt onder het oudste beschikbare event; wat daartussen is "
-                    + "opgeruimd bereikt de webhook niet", dvId);
+        if (positie != null
+                && eventRepository
+                        .oudsteTransactieId()
+                        .filter(oudste -> positie.transactieId() < oudste)
+                        .isPresent()) {
+            Log.warnf(
+                    "Webhookpositie van dienstverlener %s ligt onder het oudste beschikbare event; wat daartussen is "
+                            + "opgeruimd bereikt de webhook niet",
+                    dvId);
         }
 
         return leesVanaf(dvId, positie, Math.min(limiet, maxPagina));
@@ -110,7 +120,8 @@ public class Eventfeed {
      */
     @Transactional
     public Cursor kopVanHetLog() {
-        return eventRepository.jongsteOnderWatermerk()
+        return eventRepository
+                .jongsteOnderWatermerk()
                 .map(event -> new Cursor(epoch, event.getTransactieId(), event.getId()))
                 .orElseGet(() -> new Cursor(epoch, 0, 0));
     }
@@ -143,7 +154,8 @@ public class Eventfeed {
         Objects.requireNonNull(cursor, "cursor is verplicht");
         valideer(cursor);
 
-        OffsetDateTime nu = OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+        OffsetDateTime nu =
+                OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
 
         return bevestigingRepository.updateCursorPositie(dvId, cursor, nu);
     }
@@ -162,8 +174,8 @@ public class Eventfeed {
         }
 
         if (cursor.epoch() != epoch) {
-            throw new CursorVervallenException("De cursor komt uit cluster-epoch " + cursor.epoch()
-                    + "; het huidige epoch is " + epoch);
+            throw new CursorVervallenException(
+                    "De cursor komt uit cluster-epoch " + cursor.epoch() + "; het huidige epoch is " + epoch);
         }
 
         Optional<Long> oudste = eventRepository.oudsteTransactieId();

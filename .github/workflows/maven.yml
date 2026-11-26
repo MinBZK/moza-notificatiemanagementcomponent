@@ -30,6 +30,9 @@ jobs:
           java-version: '25'
           distribution: 'temurin'
           cache: maven
+      - name: Controleer opmaak
+        # Vóór verify: een opmaakfout faalt zo binnen seconden in plaats van na de hele testsuite.
+        run: mvn -B spotless:check --file pom.xml
       - name: Build with Maven
         # verify i.p.v. package: de JaCoCo-coverage-gate hangt aan fase verify.
         run: mvn -B verify --file pom.xml

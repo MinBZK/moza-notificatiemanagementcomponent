@@ -1,9 +1,23 @@
 package nl.rijksoverheid.moz.nmc.service.onderhoud;
 
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
+import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.taken;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
@@ -27,21 +41,6 @@ import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.notificatie;
-import static nl.rijksoverheid.moz.nmc.testhelper.LeesHelper.taken;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // %test: wistermijn 7 dagen.
 @QuarkusTest
@@ -86,7 +85,9 @@ class WisTaakHandlerTest {
         UUID id = metEindstatus(NotificatieStatus.GEANNULEERD);
 
         Taak wistaak = wistaak(id);
-        assertEquals(notificatie(id).getEindstatusOp().plusDays(7).toInstant(), wistaak.getDue().toInstant());
+        assertEquals(
+                notificatie(id).getEindstatusOp().plusDays(7).toInstant(),
+                wistaak.getDue().toInstant());
     }
 
     @Test
@@ -123,8 +124,12 @@ class WisTaakHandlerTest {
 
         OffsetDateTime eindstatusOp = notificatie(id).getEindstatusOp();
         assertTrue(eindstatusOp.isAfter(eerder.plusDays(2)));
-        assertEquals(List.of(eindstatusOp.plusDays(7).toInstant()),
-                taken(TaakSoort.WISSEN).stream().map(t -> t.getDue().toInstant()).toList(), "één wistaak, verzet");
+        assertEquals(
+                List.of(eindstatusOp.plusDays(7).toInstant()),
+                taken(TaakSoort.WISSEN).stream()
+                        .map(t -> t.getDue().toInstant())
+                        .toList(),
+                "één wistaak, verzet");
     }
 
     @Test
@@ -140,7 +145,9 @@ class WisTaakHandlerTest {
         VersleuteldeGegevens gegevens = na.getVersleuteldeGegevens();
         assertNull(gegevens.sleutelGewrapt());
         assertNull(gegevens.kekVersie());
-        assertArrayEquals(voor.getVersleuteldeGegevens().ontvangerVersleuteld(), gegevens.ontvangerVersleuteld(),
+        assertArrayEquals(
+                voor.getVersleuteldeGegevens().ontvangerVersleuteld(),
+                gegevens.ontvangerVersleuteld(),
                 "alleen de sleutel gaat weg; de rij is daarna pseudoniem");
         assertEquals(voor.getVersie(), na.getVersie());
         assertEquals(eventsVoor, eventRepository.findByNotificatie(id).size());
@@ -157,17 +164,26 @@ class WisTaakHandlerTest {
         assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.WISSEN));
 
         Taak wistaak = wistaak(id);
-        assertEquals(notificatie(id).getEindstatusOp().plusDays(7).toInstant(), wistaak.getDue().toInstant());
+        assertEquals(
+                notificatie(id).getEindstatusOp().plusDays(7).toInstant(),
+                wistaak.getDue().toInstant());
         assertEquals(0, wistaak.getPogingen());
         assertNull(wistaak.getLeaseTot());
-        assertEquals(ONTVANGER, sleutelbeheer.ontsleutelOntvanger(id, notificatie(id).getVersleuteldeGegevens()));
+        assertEquals(
+                ONTVANGER, sleutelbeheer.ontsleutelOntvanger(id, notificatie(id).getVersleuteldeGegevens()));
     }
 
     @Test
     void wistaak_notificatieZonderEindstatus_rondtAfZonderTeWissen() {
         UUID id = aangenomen();
-        QuarkusTransaction.requiringNew().run(() -> taakRepository.persist(new Taak(TaakSoort.WISSEN,
-                NotificatieFixtures.DV_ID, id, OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1), null, null)));
+        QuarkusTransaction.requiringNew()
+                .run(() -> taakRepository.persist(new Taak(
+                        TaakSoort.WISSEN,
+                        NotificatieFixtures.DV_ID,
+                        id,
+                        OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1),
+                        null,
+                        null)));
 
         assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.WISSEN));
 
@@ -182,7 +198,8 @@ class WisTaakHandlerTest {
         UUID id = bezorgstatusOnbekend();
 
         QuarkusTransaction.requiringNew().run(() -> {
-            assertNotNull(notificatieRepository.findById(id).getVersleuteldeGegevens().sleutelGewrapt());
+            assertNotNull(
+                    notificatieRepository.findById(id).getVersleuteldeGegevens().sleutelGewrapt());
             QuarkusTransaction.requiringNew().run(() -> notificatieRepository.wisSleutel(id));
             overgangsfunctie.voerUit(id, NotificatieStatus.NIET_BEZORGBAAR, Reden.ONBEREIKBAAR);
         });
@@ -199,7 +216,7 @@ class WisTaakHandlerTest {
         verzetNaarVerleden(id, 8);
         Taak taak = TaakFixtures.geclaimdEnVerloren(taakClaimer, entityManager, TaakSoort.WISSEN);
 
-        assertThrows(TaakVerlorenException.class, () -> wisTaakHandler.voerUit(taak, () -> { }));
+        assertThrows(TaakVerlorenException.class, () -> wisTaakHandler.voerUit(taak, () -> {}));
 
         assertNotNull(notificatie(id).getVersleuteldeGegevens().sleutelGewrapt());
         assertEquals(taak.getId(), wistaak(id).getId());
@@ -208,8 +225,8 @@ class WisTaakHandlerTest {
     private UUID aangenomen() {
         return QuarkusTransaction.requiringNew().call(() -> {
             Notificatie notificatie = new Notificatie(NotificatieFixtures.DV_ID, OffsetDateTime.now());
-            notificatie.bewaarVersleuteldeGegevens(sleutelbeheer.versleutel(notificatie.getId(), ONTVANGER,
-                    Map.of("naam", "Voorbeeld BV")));
+            notificatie.bewaarVersleuteldeGegevens(
+                    sleutelbeheer.versleutel(notificatie.getId(), ONTVANGER, Map.of("naam", "Voorbeeld BV")));
             overgangsfunctie.neemAan(notificatie);
 
             return notificatie.getId();
@@ -251,14 +268,18 @@ class WisTaakHandlerTest {
     }
 
     private void verzetNaarVerleden(UUID id, int dagen) {
-        QuarkusTransaction.requiringNew().run(() -> NotificatieFixtures.verzetEindstatusOp(entityManager, id,
-                OffsetDateTime.now(ZoneOffset.UTC).minusDays(dagen)));
+        QuarkusTransaction.requiringNew()
+                .run(() -> NotificatieFixtures.verzetEindstatusOp(
+                        entityManager, id, OffsetDateTime.now(ZoneOffset.UTC).minusDays(dagen)));
         zetDueInVerleden();
     }
 
     private void zetDueInVerleden() {
-        QuarkusTransaction.requiringNew().run(() -> TaakFixtures.zetDue(entityManager, TaakSoort.WISSEN,
-                OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1)));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.zetDue(
+                        entityManager,
+                        TaakSoort.WISSEN,
+                        OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1)));
     }
 
     private Taak wistaak(UUID id) {

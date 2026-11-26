@@ -4,6 +4,13 @@ import io.quarkus.logging.Log;
 import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Optional;
+import java.util.TreeMap;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.domain.Dienstverlener;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
@@ -14,17 +21,9 @@ import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
 import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
 import nl.rijksoverheid.moz.nmc.service.DvProvider;
 import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
-import nl.rijksoverheid.moz.nmc.service.sleutel.Sleutelbeheer;
 import nl.rijksoverheid.moz.nmc.service.Verzendbeleid;
+import nl.rijksoverheid.moz.nmc.service.sleutel.Sleutelbeheer;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-
-import java.time.Clock;
-import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.Optional;
-import java.util.TreeMap;
-import java.util.UUID;
 
 /**
  * Neemt een notificatie aan: notificatie op {@code aangenomen} met event 0, de versleutelde payload en
@@ -54,11 +53,17 @@ public class AannameService {
     private final Clock clock;
     private final HashHelper hashHelper;
 
-    public AannameService(Overgangsfunctie overgangsfunctie, Sleutelbeheer sleutelbeheer, DvProvider dvProvider,
-                          DienstverlenerRepository dienstverlenerRepository, NotificatieRepository notificatieRepository,
-                          TaakRepository taakRepository, Verzendbeleid verzendbeleid,
-                          Clock clock, HashHelper hashHelper,
-                          @ConfigProperty(name = "nmc.aanname.quotum-per-dag") Optional<Integer> standaardQuotumPerDag) {
+    public AannameService(
+            Overgangsfunctie overgangsfunctie,
+            Sleutelbeheer sleutelbeheer,
+            DvProvider dvProvider,
+            DienstverlenerRepository dienstverlenerRepository,
+            NotificatieRepository notificatieRepository,
+            TaakRepository taakRepository,
+            Verzendbeleid verzendbeleid,
+            Clock clock,
+            HashHelper hashHelper,
+            @ConfigProperty(name = "nmc.aanname.quotum-per-dag") Optional<Integer> standaardQuotumPerDag) {
         if (standaardQuotumPerDag.isPresent() && standaardQuotumPerDag.get() < 1) {
             throw new IllegalStateException("nmc.aanname.quotum-per-dag moet leeg of 1 of hoger zijn");
         }
@@ -119,14 +124,23 @@ public class AannameService {
         notificatie.bewaarVersleuteldeGegevens(
                 sleutelbeheer.versleutel(notificatie.getId(), opdracht.ontvanger(), opdracht.berichtgegevens()));
         // Op de notificatie en niet in de taak, zodat ook een later geplande verzendtaak kan versturen.
-        notificatie.bewaarVerzendgegevens(opdracht.berichtType().getTemplateId(), opdracht.regie().name(),
-                opdracht.dienstverlener(), opdracht.dienst());
-        notificatie.bewaarVerzendbeleid(opdracht.berichtType().name(),
+        notificatie.bewaarVerzendgegevens(
+                opdracht.berichtType().getTemplateId(),
+                opdracht.regie().name(),
+                opdracht.dienstverlener(),
+                opdracht.dienst());
+        notificatie.bewaarVerzendbeleid(
+                opdracht.berichtType().name(),
                 notificatie.getAangenomenOp().plus(verzendbeleid.geldigheid(opdracht.berichtType())));
         overgangsfunctie.neemAan(notificatie);
 
-        taakRepository.persist(new Taak(TaakSoort.VERZENDEN, dvId, notificatie.getId(),
-                OffsetDateTime.now(clock), UUID.randomUUID().toString(), null));
+        taakRepository.persist(new Taak(
+                TaakSoort.VERZENDEN,
+                dvId,
+                notificatie.getId(),
+                OffsetDateTime.now(clock),
+                UUID.randomUUID().toString(),
+                null));
 
         return notificatie.getId();
     }

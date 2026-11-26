@@ -1,26 +1,24 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
-import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
-import io.quarkus.narayana.jta.QuarkusTransaction;
-import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
-
-import java.time.OffsetDateTime;
-import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
-import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
-import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
-import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
-import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
-import java.util.UUID;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.quarkus.test.junit.QuarkusTest;
+import jakarta.inject.Inject;
+import java.time.OffsetDateTime;
+import java.util.UUID;
+import nl.rijksoverheid.moz.nmc.repository.NotificatieRepository;
+import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
+import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
+import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
+import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 class PogingPersistentieTest {
@@ -82,10 +80,12 @@ class PogingPersistentieTest {
         UUID notificatieId = nieuweNotificatie();
         QuarkusTransaction.requiringNew().run(() -> pogingRepository.persist(new Poging(notificatieId, 1)));
 
-        assertThrows(RuntimeException.class, () -> QuarkusTransaction.requiringNew().run(() -> {
-            pogingRepository.persist(new Poging(notificatieId, 1));
-            pogingRepository.flush();
-        }));
+        assertThrows(
+                RuntimeException.class,
+                () -> QuarkusTransaction.requiringNew().run(() -> {
+                    pogingRepository.persist(new Poging(notificatieId, 1));
+                    pogingRepository.flush();
+                }));
     }
 
     @Test

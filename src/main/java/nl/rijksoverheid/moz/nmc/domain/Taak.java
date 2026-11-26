@@ -6,17 +6,16 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Version;
-import org.hibernate.annotations.DynamicUpdate;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.PartitionKey;
-import org.hibernate.type.SqlTypes;
-
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import org.hibernate.annotations.DynamicUpdate;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.PartitionKey;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Eén bijwerking die een worker moet uitvoeren, met {@code due} als timer. Een claim zet een lease en
@@ -81,13 +80,19 @@ public class Taak {
         // Voor JPA
     }
 
-    public Taak(TaakSoort taakSoort, UUID dvId, UUID notificatieId, OffsetDateTime due, String traceId,
-                Map<String, String> payload) {
+    public Taak(
+            TaakSoort taakSoort,
+            UUID dvId,
+            UUID notificatieId,
+            OffsetDateTime due,
+            String traceId,
+            Map<String, String> payload) {
         this.id = UUID.randomUUID();
         this.taakSoort = Objects.requireNonNull(taakSoort, "taakSoort is verplicht");
         this.dvId = dvId;
         this.notificatieId = notificatieId;
-        this.due = Objects.requireNonNull(due, "due is verplicht").withOffsetSameInstant(ZoneOffset.UTC)
+        this.due = Objects.requireNonNull(due, "due is verplicht")
+                .withOffsetSameInstant(ZoneOffset.UTC)
                 .truncatedTo(ChronoUnit.MICROS);
         this.traceId = traceId;
         this.payload = payload;
