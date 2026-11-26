@@ -158,7 +158,10 @@ Haal die override pas weg als de Quarkus-BOM zelf een veilige versie levert.
 ## Commentaar en documentatie
 
 - **Compact**: één of twee zinnen die zeggen wát er niet vanzelf spreekt en waaróm. De afweging
-  en de alternatieven horen in de commitmessage of het issue.
+  en de alternatieven horen in de commitmessage of het issue. Uitzondering: de javadoc van een
+  klasse die een mechanisme uitvoert, beschrijft hoe dat werkt (stappen, grenzen, foutafhandeling),
+  omdat `docs/architectuur.md` daarvoor naar die javadoc verwijst. Kort die niet in zonder de
+  details elders onder te brengen.
 - **Schrijf alleen op wat je hebt gecontroleerd.** Een verkeerde verklaring van een mechanisme
   is schadelijker dan geen commentaar. Weet je het niet zeker, laat het weg of noteer het als
   aanname.
