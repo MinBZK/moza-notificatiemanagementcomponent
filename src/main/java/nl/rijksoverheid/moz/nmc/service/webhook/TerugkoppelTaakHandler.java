@@ -38,7 +38,7 @@ import java.util.UUID;
  * <p>
  * De controletaak plant de eerste terugkoppeltaak, dus een nieuwe webhook-URL gaat binnen
  * {@code nmc.controle.interval} leveren. Een unieke index houdt het op één taak per dienstverlener,
- * zodat nooit twee pods tegelijk aan dezelfde webhook leveren. Een bundel bevat ten hoogste
+ * en met de claim levert normaal maar één pod tegelijk aan dezelfde webhook. Een bundel bevat ten hoogste
  * {@code webhook_bundel} uit het register, anders {@code nmc.webhook.bundel}, en nooit meer dan
  * {@code nmc.feed.max-pagina} events.
  * <p>
