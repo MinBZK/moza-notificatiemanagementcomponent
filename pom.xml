@@ -54,6 +54,15 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Security-override op de Quarkus-BOM: de BOM levert guava 33.6.0, dat kwetsbaar is voor
+                 GHSA-xxph-c9ww-hj94 (deserialisatie van CompactHashMap/CompactHashSet/MapMakerInternalMap
+                 alloceert onbegrensd geheugen). Guava komt alleen test-scoped binnen via quarkus-junit.
+                 Weghalen zodra de Quarkus-BOM zelf >= 33.7.2 levert. -->
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>33.8.0-jre</version>
+            </dependency>
             <dependency>
                 <groupId>${quarkus.platform.group-id}</groupId>
                 <artifactId>${quarkus.platform.artifact-id}</artifactId>
