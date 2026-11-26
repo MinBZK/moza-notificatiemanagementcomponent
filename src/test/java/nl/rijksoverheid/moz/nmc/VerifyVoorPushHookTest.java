@@ -156,6 +156,20 @@ class VerifyVoorPushHookTest {
         assertEquals(1, verifyAanroepen());
     }
 
+    // De hook leest de pom van de gepushte commit, niet die van HEAD: hier kent alleen HEAD Spotless.
+    @Test
+    void pushVanCommitZonderSpotless_vanafHeadMetSpotless_slaatOpmaakcontroleOver() throws Exception {
+        String zonderSpotless = git("rev-parse", "HEAD").strip();
+        metSpotlessInPom();
+
+        Uitkomst uitkomst =
+                draai("git push origin " + zonderSpotless + ":refs/heads/oud", Map.of("SPOTLESS_EXIT", "1"));
+
+        assertEquals(0, uitkomst.exitcode(), uitkomst.stderr());
+        assertEquals(0, aanroepen("spotless"));
+        assertEquals(1, verifyAanroepen());
+    }
+
     @Test
     void dryRun_draaitGeenVerify() throws Exception {
         Uitkomst uitkomst = draai("git push --dry-run");
