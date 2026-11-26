@@ -471,6 +471,17 @@ class TaakWorkerTest {
         assertEquals(0.0, achterstand.value());
     }
 
+    // %test zet de verversing op nul: elke scrape na de eerste telt opnieuw.
+    @Test
+    void achterstandmetriek_naDeVerversingstermijn_teltOpnieuw() {
+        Gauge achterstand = meterRegistry.get("nmc.taken.achterstand").tag("soort", "ONGELDIG_MELDEN").gauge();
+
+        assertEquals(0.0, achterstand.value());
+        plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+
+        assertEquals(1.0, achterstand.value());
+    }
+
     @SuppressWarnings("unchecked")
     private static Instance<TaakHandler> geenHandlers() {
         Instance<TaakHandler> beans = mock(Instance.class);

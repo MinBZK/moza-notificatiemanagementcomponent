@@ -6,6 +6,8 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import nl.rijksoverheid.moz.nmc.config.TaakConfig;
+import nl.rijksoverheid.moz.nmc.domain.BudgetDoel;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.domain.TaakStatus;
@@ -14,14 +16,17 @@ import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -46,8 +51,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 // %test: 20 tokens per minuut, 10 gereserveerd voor het verzenden en 5 voor de navraag, lease 2m.
@@ -62,6 +70,9 @@ class TaakClaimerTest {
 
     @Inject
     TaakClaimer taakClaimer;
+
+    @Inject
+    Verzendbudget verzendbudget;
 
     @InjectSpy
     TaakRepository taakRepository;
@@ -420,6 +431,57 @@ class TaakClaimerTest {
         taakClaimer.verleng(taak);
 
         assertEquals(nu().plusMinutes(6).toInstant(), zoek(onderhoud).getLeaseTot().toInstant());
+    }
+
+    // Een geconfigureerde lease die al minstens zo lang is als die van het onderhoud, blijft staan.
+    @ParameterizedTest
+    @ValueSource(ints = {6, 10})
+    void claim_onderhoudMetEenLangereLease_houdtDeGeconfigureerdeLease(int minuten) {
+        TaakConfig config = TestConfig.taak();
+        when(config.lease()).thenReturn(Duration.ofMinutes(minuten));
+        TaakClaimer claimer = new TaakClaimer(taakRepository, verzendbudget, clock, config);
+        UUID onderhoud = plan(TaakSoort.ONDERHOUD, null, nu().minusMinutes(1));
+
+        claimer.claim(TaakSoort.ONDERHOUD, 10);
+
+        assertEquals(nu().plusMinutes(minuten).toInstant(), zoek(onderhoud).getLeaseTot().toInstant());
+    }
+
+    // De taken zijn al geclaimd als het teruggeven van de ongebruikte tokens faalt; de claim gaat door.
+    @Test
+    void claim_teruggevenVanOngebruikteTokensFaalt_levertDeGeclaimdeTaken() {
+        Verzendbudget budget = budgetDatNietTerugneemt();
+        UUID id = plan(TaakSoort.VERZENDEN, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+
+        List<Taak> geclaimd = new TaakClaimer(taakRepository, budget, clock, TestConfig.taak())
+                .claim(TaakSoort.VERZENDEN, 10);
+
+        assertEquals(List.of(id), geclaimd.stream().map(Taak::getId).toList());
+        verify(budget).geefTerug(any(), eq(9));
+    }
+
+    // Faalt na een mislukte claim ook het teruggeven, dan komt de fout van de claim boven, niet die van het budget.
+    @Test
+    void claim_claimEnTeruggevenFalen_gooitDeFoutVanDeClaim() {
+        Verzendbudget budget = budgetDatNietTerugneemt();
+        plan(TaakSoort.VERZENDEN, NotificatieFixtures.DV_ID, nu().minusMinutes(1));
+        doThrow(new IllegalStateException("claim mislukt")).when(taakRepository).claim(any(), any(), anyInt(), any(), any());
+        TaakClaimer claimer = new TaakClaimer(taakRepository, budget, clock, TestConfig.taak());
+
+        IllegalStateException fout = assertThrows(IllegalStateException.class,
+                () -> claimer.claim(TaakSoort.VERZENDEN, 10));
+
+        assertEquals("claim mislukt", fout.getMessage());
+        verify(budget).geefTerug(any(), eq(10));
+    }
+
+    private Verzendbudget budgetDatNietTerugneemt() {
+        Verzendbudget budget = mock(Verzendbudget.class);
+        Verzendbudget.Genomen genomen = new Verzendbudget.Genomen(10, nu(), BudgetDoel.VERZENDEN, 0);
+        when(budget.neem(BudgetDoel.VERZENDEN, 10)).thenReturn(genomen);
+        doThrow(new IllegalStateException("budget weg")).when(budget).geefTerug(any(), anyInt());
+
+        return budget;
     }
 
     private UUID plan(TaakSoort taakSoort, UUID dvId, OffsetDateTime due) {

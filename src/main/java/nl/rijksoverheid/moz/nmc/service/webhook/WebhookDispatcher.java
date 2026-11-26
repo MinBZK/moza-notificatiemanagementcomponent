@@ -53,7 +53,7 @@ public class WebhookDispatcher {
     private String serialiseer(List<NotificatieStatusEvent> events) {
         try {
             return objectMapper.writeValueAsString(events);
-        } catch (JsonProcessingException e) { // onbereikbaar: records met strings en tijdstippen serialiseert de Quarkus-mapper altijd
+        } catch (JsonProcessingException e) {
             throw new IllegalStateException("De CloudEvents-bundel is niet te serialiseren", e);
         }
     }
