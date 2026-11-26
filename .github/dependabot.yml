@@ -16,6 +16,11 @@ updates:
       # De NMC compileert met --release 25; een nieuwere JDK-major kiezen we zelf.
       - dependency-name: "eclipse-temurin"
         update-types: ["version-update:semver-major"]
+  # diff-cover en zijn afhankelijkheden voor de dekkingscontrole in CI, vastgezet met hashes.
+  - package-ecosystem: "pip"
+    directory: "/.github/diff-dekking"
+    schedule:
+      interval: "weekly"
   - package-ecosystem: "github-actions"
     directory: /
     schedule:
