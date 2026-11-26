@@ -242,7 +242,6 @@ class EventlogPartitiebeheerIntegratieTest {
         assertEquals(1, events(oud));
     }
 
-    /** Een partitie die de volgende transactie-id bevat, zonder dat er een aansluitende nodig is. */
     // Een bevestiging die commit tussen de toets zonder vergrendeling en die eronder, houdt de partitie
     // alsnog tegen; de partities erboven komen dan niet meer aan de beurt.
     @Test
@@ -265,6 +264,7 @@ class EventlogPartitiebeheerIntegratieTest {
         verify(repository, never()).verwijder(any());
     }
 
+    /** Een partitie die de volgende transactie-id bevat, zonder dat er een aansluitende nodig is. */
     private EventPartitie zorgVoorLopendePartitie() {
         for (int i = 0; i < 5 && eventlogPartitiebeheer.maakVolgendeAan().isPresent(); i++) {
             // Tot er een partitie is die nog niet voor 80% gevuld is.

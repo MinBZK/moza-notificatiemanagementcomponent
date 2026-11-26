@@ -315,6 +315,19 @@ class VerzendTaakHandlerTest {
         assertEquals(1, taken().getFirst().getPogingen());
     }
 
+    // Elke andere 4xx, tot en met de bovengrens 499, ligt ook aan het NMC en kost een poging.
+    @ParameterizedTest
+    @ValueSource(ints = {402, 404, 422, 499})
+    void notifyWeigertHetVerzoekMetEenAndere4xx_kostEenPoging(int status) {
+        when(sendAMessageApi.sendEmail(any())).thenThrow(new WebApplicationException(Response.status(status).build()));
+        UUID id = aannameService.neemAan(decentraal());
+
+        TaakRonde.draai(taakWorker, TaakSoort.VERZENDEN);
+
+        assertEquals(NotificatieStatus.IN_VERZENDING, notificatie(id).getStatus());
+        assertEquals(1, taken().getFirst().getPogingen());
+    }
+
     // Een 401 of 403 betreft de key of de toegang van het NMC, niet de poging: anders eindigt elke
     // notificatie die tijdens zo'n storing aan de beurt is na het maximum op technisch-mislukt.
     @ParameterizedTest
@@ -445,9 +458,9 @@ class VerzendTaakHandlerTest {
     }
 
     // 429 en 5xx liggen aan NotifyNL en kosten geen poging; dit bewaakt dat een 429 niet met de andere
-    // 4xx meegaat.
+    // 4xx meegaat en dat de grens van de 4xx bij 400 en 499 ligt.
     @ParameterizedTest
-    @ValueSource(ints = {429, 500, 503})
+    @ValueSource(ints = {399, 429, 500, 503})
     void notifySysteemfout_steltUitZonderPoging(int status) {
         when(sendAMessageApi.sendEmail(any())).thenThrow(new WebApplicationException(Response.status(status).build()));
         UUID id = aannameService.neemAan(decentraal());

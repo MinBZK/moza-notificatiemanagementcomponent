@@ -25,6 +25,9 @@ import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 
 import java.time.Clock;
@@ -33,8 +36,13 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -43,8 +51,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -301,22 +313,41 @@ class TaakWorkerTest {
         assertEquals(0, zoek(TaakSoort.ONGELDIG_MELDEN, id).orElseThrow().getPogingen(), "het uitstel van de oude worker is geweigerd");
     }
 
-    // De geplande rondes delegeren elk aan verwerk voor hun eigen soort; zonder werk van die soort
-    // blijft een taak van een andere soort onaangeroerd.
-    @Test
-    void geplandeRondes_andereSoort_latenDeTaakStaan() {
-        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+    // Elke geplande ronde draait precies één ronde, voor haar eigen soort.
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("geplandeRondes")
+    void geplandeRonde_delegeertAanVerwerkVoorDeEigenSoort(TaakSoort soort, Consumer<TaakWorker> ronde) {
+        TaakWorker spy = spy(taakWorker);
+        doReturn(0).when(spy).verwerk(any());
 
-        taakWorker.verzenden();
-        taakWorker.receiptVerwerken();
-        taakWorker.reconcilieren();
-        taakWorker.bezorgingVaststellen();
-        taakWorker.terugkoppelen();
-        taakWorker.wissen();
-        taakWorker.controle();
-        taakWorker.onderhoud();
-        assertNull(zoek(TaakSoort.ONGELDIG_MELDEN, id).orElseThrow().getLeaseTot());
+        ronde.accept(spy);
+
+        verify(spy).verwerk(soort);
+        verify(spy, times(1)).verwerk(any());
     }
+
+    // Een taaksoort zonder geplande ronde blijft eeuwig open staan.
+    @Test
+    void geplandeRondes_elkeTaakSoort_heeftEenRonde() {
+        Set<TaakSoort> soorten = geplandeRondes().map(argumenten -> (TaakSoort) argumenten.get()[0])
+                .collect(Collectors.toSet());
+
+        assertEquals(EnumSet.allOf(TaakSoort.class), soorten);
+    }
+
+    static Stream<Arguments> geplandeRondes() {
+        return Stream.of(
+                Arguments.of(TaakSoort.VERZENDEN, (Consumer<TaakWorker>) TaakWorker::verzenden),
+                Arguments.of(TaakSoort.RECEIPT_VERWERKEN, (Consumer<TaakWorker>) TaakWorker::receiptVerwerken),
+                Arguments.of(TaakSoort.RECONCILIEREN, (Consumer<TaakWorker>) TaakWorker::reconcilieren),
+                Arguments.of(TaakSoort.BEZORGING_VASTSTELLEN, (Consumer<TaakWorker>) TaakWorker::bezorgingVaststellen),
+                Arguments.of(TaakSoort.TERUGKOPPELEN, (Consumer<TaakWorker>) TaakWorker::terugkoppelen),
+                Arguments.of(TaakSoort.ONGELDIG_MELDEN, (Consumer<TaakWorker>) TaakWorker::ongeldigMelden),
+                Arguments.of(TaakSoort.WISSEN, (Consumer<TaakWorker>) TaakWorker::wissen),
+                Arguments.of(TaakSoort.CONTROLE, (Consumer<TaakWorker>) TaakWorker::controle),
+                Arguments.of(TaakSoort.ONDERHOUD, (Consumer<TaakWorker>) TaakWorker::onderhoud));
+    }
+
     @Test
     void ongeldigMelden_taakAanDeBeurt_voertDeHandlerUit() {
         UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
