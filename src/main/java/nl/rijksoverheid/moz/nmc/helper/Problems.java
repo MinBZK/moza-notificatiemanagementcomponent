@@ -25,6 +25,15 @@ public final class Problems {
                 .withStatus(Response.Status.UNAUTHORIZED)
                 .withTitle(title)
                 .withDetail(detail)
+                .withHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
+                .build();
+    }
+
+    public static HttpProblem forbidden(String title, String detail) {
+        return HttpProblem.builder()
+                .withStatus(Response.Status.FORBIDDEN)
+                .withTitle(title)
+                .withDetail(detail)
                 .build();
     }
 
@@ -92,6 +101,14 @@ public final class Problems {
     public static HttpProblem serverError(String title, String detail) {
         return HttpProblem.builder()
                 .withStatus(Response.Status.INTERNAL_SERVER_ERROR)
+                .withTitle(title)
+                .withDetail(detail)
+                .build();
+    }
+
+    public static HttpProblem serviceUnavailable(String title, String detail) {
+        return HttpProblem.builder()
+                .withStatus(Response.Status.SERVICE_UNAVAILABLE)
                 .withTitle(title)
                 .withDetail(detail)
                 .build();

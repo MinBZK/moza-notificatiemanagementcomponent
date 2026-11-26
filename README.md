@@ -252,7 +252,11 @@ schrijftransactie het watermerk van de feed vasthoudt.
 
 ## API
 
-De huidige endpoints zitten onder `/api/nmc/v1`:
+De huidige endpoints zitten onder `/api/nmc/v1`. Een Dienstverlener roept ze aan over FSC, met
+het FSC-toegangstoken in de header `Fsc-Authorization`; het OIN in dat token bepaalt van welke
+Dienstverlener de notificaties en events zijn. Zonder geldig token is het antwoord `401`, met
+een OIN dat niet is aangesloten `403`. Lokaal en in de tests staat die controle uit
+(`nmc.fsc.ingeschakeld=false`).
 
 - **`POST /centraal/notificaties`**: neemt de notificatie aan op een identificerend
   nummer; de verzendtaak haalt later het adres op bij de Profielservice.

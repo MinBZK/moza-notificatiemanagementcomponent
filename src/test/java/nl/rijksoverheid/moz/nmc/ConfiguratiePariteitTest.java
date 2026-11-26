@@ -1,5 +1,7 @@
 package nl.rijksoverheid.moz.nmc;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.w3c.dom.Document;
@@ -19,6 +21,7 @@ import java.util.Properties;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Bewaakt waarden die op twee plekken staan zonder dat de build een verschil opmerkt. Zonder deze
@@ -32,6 +35,7 @@ class ConfiguratiePariteitTest {
     private static final Path POM = Path.of("pom.xml");
     private static final Path PROPERTIES = Path.of("src/main/resources/application.properties");
     private static final Path CONTRACT = Path.of("src/main/resources/META-INF/openapi.yaml");
+    private static final Path CONTACTHERSTELCONTRACT = Path.of("src/main/resources/META-INF/contactherstel-openapi.json");
 
     // De gate leest de excludes uit pom.xml, de quarkus-jacoco-extensie uit application.properties.
     @Test
@@ -83,6 +87,16 @@ class ConfiguratiePariteitTest {
     @Test
     void contractversie_inContractEnProperties_isGelijk() throws Exception {
         assertEquals(infoVersionUitContract(), property("mp.openapi.info.version"));
+    }
+
+    // Het filter stuurt bij elke 401 WWW-Authenticate mee. Op /q/openapi wint het antwoord uit
+    // openapi.yaml; de interface van contactherstel komt uit het eigen contract.
+    @Test
+    void nietGeautoriseerd_inHetContactherstelcontract_beschrijftWwwAuthenticate() throws Exception {
+        JsonNode headers = new ObjectMapper().readTree(CONTACTHERSTELCONTRACT.toFile())
+                .at("/components/responses/NietGeautoriseerd/headers");
+
+        assertTrue(headers.has("WWW-Authenticate"), "headers van NietGeautoriseerd in " + CONTACTHERSTELCONTRACT + ": " + headers);
     }
 
     private static String property(String sleutel) throws IOException {

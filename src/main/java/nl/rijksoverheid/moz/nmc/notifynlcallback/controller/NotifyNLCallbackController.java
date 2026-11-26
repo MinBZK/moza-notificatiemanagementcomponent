@@ -1,6 +1,7 @@
 package nl.rijksoverheid.moz.nmc.notifynlcallback.controller;
 
 import io.quarkus.logging.Log;
+import nl.rijksoverheid.moz.nmc.controller.BuitenFsc;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.NotifyNlCallbackApi;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.api.model.AfleverstatusRequest;
 import nl.rijksoverheid.moz.nmc.notifynlcallback.filter.NotifyNLCallbackBeveiligd;
@@ -14,6 +15,7 @@ import java.util.stream.Stream;
  * Ontvangt delivery receipts van NotifyNL en slaat ze op; de verwerking volgt als taak. Een receipt die
  * bij geen poging hoort krijgt ook een 2xx, zodat NotifyNL hem niet herhaalt; hij wordt geteld.
  */
+@BuitenFsc
 @NotifyNLCallbackBeveiligd
 public class NotifyNLCallbackController implements NotifyNlCallbackApi {
 

@@ -102,8 +102,8 @@ podman compose up -d                    # PostgreSQL voor dev-mode (docker compo
 ## Configuratie en secrets
 
 Deze waarden staan leeg in `application.properties` en zijn **verplicht**: zonder `nmc.kek.*`,
-`nmc.webhook.jwt.*` of `notify.callback.bearer-token` start de applicatie niet, `notify.api-key`
-en `hash.pepper` falen pas bij het eerste gebruik. Lokaal horen ze in een niet-ingecheckte
+`nmc.webhook.jwt.*`, `notify.callback.bearer-token` of (buiten dev en test) `nmc.fsc.*` start de
+applicatie niet, `notify.api-key` en `hash.pepper` falen pas bij het eerste gebruik. Lokaal horen ze in een niet-ingecheckte
 `src/main/resources/application-dev.properties`; onder `%test` staan dummywaarden.
 
 | Property | Gebruikt door |
@@ -115,6 +115,8 @@ en `hash.pepper` falen pas bij het eerste gebruik. Lokaal horen ze in een niet-i
 | `nmc.kek.versie.<n>` | `ConfigKekProvider`: KEK per versie, base64 van 32 bytes; oudere versies zolang er rijen mee bestaan |
 | `nmc.webhook.jwt.private-key` | `WebhookSleutel`: RSA-sleutel (PKCS#8-PEM, minstens 2048 bits) voor de webhook-JWT |
 | `nmc.webhook.jwt.key-id` | `WebhookSleutel`: `kid` in de JWT-header en de JWKS |
+| `nmc.fsc.jwks-url` | `FscTokenValidator`: de JWKS van de Manager die de FSC-toegangstokens uitgeeft |
+| `nmc.fsc.uitgever`, `nmc.fsc.inway-adres`, `nmc.fsc.groep`, `nmc.fsc.dienst` | `FscTokenValidator`: de verwachte `iss`, `aud`, `gid` en `svc` van het token |
 
 Ook `quarkus.rest-client.profielservice.url` en `quarkus.rest-client.notify.url` hebben buiten
 `%test` geen default. Prod-config loopt via env-vars: zie `docs/zad-deploy.md`. Waarden met een
@@ -130,7 +132,7 @@ Haal die override pas weg als de Quarkus-BOM zelf een veilige versie levert.
   Uitzondering: `notifynlcallback/` heeft een eigen `controller/` en `filter/`, omdat het uit een
   eigen contract komt.
 - **`service/` is per domein onderverdeeld**: `aanname/`, `feed/`, `onderhoud/`, `receipt/`,
-  `sleutel/`, `taak/`, `verzending/` en `webhook/`, elk met de eigen exceptions. Direct in
+  `sleutel/`, `taak/`, `toegang/`, `verzending/` en `webhook/`, elk met de eigen exceptions. Direct in
   `service/` staat wat meerdere domeinen delen en zelf van geen domein afhangt:
   `Overgangsfunctie`, `Opruimtermijnen`, `Verzendbeleid`, `DvProvider`, `BerichtType` en `Regie`. `taak/`,
   `sleutel/` en `feed/` hangen van geen ander domein af; de handlers staan bij hun domein en
@@ -151,6 +153,9 @@ Haal die override pas weg als de Quarkus-BOM zelf een veilige versie levert.
 - **Witregels rond `if`-blokken met accolades**: een lege regel ervóór (behalve als het het
   eerste statement is), een erna, en een vóór een afsluitende `return`. Een eenregelige guard
   clause staat juist tegen de regel erboven. Pas het toe op code die je schrijft of wijzigt.
+- **Een nieuwe controller is alleen met een FSC-toegangstoken te bereiken.** `FscToegangFilter`
+  geldt voor elke controller; alleen een controller die niet door een dienstverlener over FSC
+  wordt aangeroepen krijgt `@BuitenFsc`, en regelt dan zijn eigen toegang.
 - **Webhook-URL's** gaan vóór elke levering door `WebhookUrlValidator.controleer`. Die is een
   denylist op vorm, geen volledige SSRF-bescherming.
 

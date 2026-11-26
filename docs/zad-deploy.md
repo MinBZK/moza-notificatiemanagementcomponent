@@ -63,9 +63,20 @@ Benodigde env-vars op die deployment:
 | `NMC_WEBHOOK_JWT_EXTRA_PUBLIC_KEY`, `NMC_WEBHOOK_JWT_EXTRA_KEY_ID` | Optioneel, alleen tijdens een sleutelwissel: een tweede publieke RSA-sleutel (X.509-PEM, `openssl pkey -in sleutel.pem -pubout`) en zijn sleutel-id, die de JWKS naast de eigen sleutel publiceert. Zet beide of geen van beide; de stappen staan in `docs/architectuur.md` |
 | `NMC_WEBHOOK_JWT_JWKS_MAX_AGE` | Optioneel, default `1h`. Hoe lang een ontvanger de JWKS mag bewaren (`Cache-Control: max-age`) |
 | `NMC_FEED_SOURCE` | De `source` van elk CloudEvent: de URN van dit NMC volgens het NL GOV profiel, `urn:nld:oin:<OIN>:systeem:<naam>`. Ontbreekt hij of heeft hij een andere vorm, dan start de app niet |
+| `NMC_FSC_INGESCHAKELD` | Optioneel, default `true`. Met `true` eist de NMC op elke aanroep van een dienstverlener een geldig FSC-toegangstoken in de header `Fsc-Authorization`; de vijf waarden hieronder zijn dan verplicht en zonder start de app niet. Met `false` is er geen controle en telt elke aanroep voor de dienstverlener uit de migratie. De env-vars gelden voor het hele component: `stable`, `feature` en elke PR-preview krijgen dezelfde waarde, en een preview is met `true` alleen nog over FSC te bereiken |
+| `NMC_FSC_JWKS_URL` | Het adres van de JWKS van de Manager die de tokens uitgeeft: `https://<manager>/.well-known/jwks.json`. Alleen `https` |
+| `NMC_FSC_UITGEVER`, `NMC_FSC_GROEP`, `NMC_FSC_DIENST` | De verwachte `iss` (het PeerID van de peer die de NMC aanbiedt), `gid` (de FSC-groep) en `svc` (de naam waaronder de NMC op de inway staat) van het token |
+| `NMC_FSC_INWAY_ADRES` | De verwachte `aud` van het token: het adres van de inway waarop de NMC is gepubliceerd, letterlijk zoals de Manager het in het token zet (bijvoorbeeld `https://inway.example.nl:443`). Een token voor een andere inway wordt geweigerd |
+| `QUARKUS_TLS_FSC_TRUST_STORE_PEM_CERTS`, `QUARKUS_TLS_FSC_KEY_STORE_PEM_0_CERT`, `QUARKUS_TLS_FSC_KEY_STORE_PEM_0_KEY` | Optioneel. De CA waarmee het certificaat van de Manager is ondertekend, en een clientcertificaat met sleutel als de Manager mTLS eist, elk als pad naar een PEM-bestand. Zonder gelden de CA's van de JVM en gaat er geen clientcertificaat mee |
 | `NMC_FEED_CLUSTER_EPOCH` | Optioneel, default `1`. Epoch in de cursor van de eventfeed. Beheer verhoogt hem na een herstel uit back-up of een promotie waarbij de transactie-id-reeks niet doorloopt, op alle pods tegelijk; een cursor met een ander epoch krijgt 410 |
 | `LOGBOEKDATAVERWERKING_ENABLED` | Verwerkingenlogging (LDV). `%prod` laat 'm leeg, dus verplicht per deployomgeving. **Voorlopig `false`**; op `true` zetten zodra de ClickHouse-config hieronder werkt |
 | `LOGBOEKDATAVERWERKING_CLICKHOUSE_ENDPOINT`, `_USERNAME`, `_PASSWORD`, `_DATABASE`, `_TABLE` | ClickHouse-sink voor LDV. Alleen nodig zodra `LOGBOEKDATAVERWERKING_ENABLED=true`; nu leeg te laten |
+
+> **Eis aan de omgeving, nog niet ingericht of gecontroleerd:** met `NMC_FSC_INGESCHAKELD=true`
+> moeten de endpoints voor dienstverleners op netwerkniveau alleen vanaf de inway bereikbaar zijn.
+> De NMC toetst het token, maar niet of de aanroeper het certificaat heeft waaraan het token
+> gebonden is; dat doet alleen de inway. Publiek blijven alleen
+> `/api/nmc/v1/notifynl-callback` en `/api/nmc/v1/.well-known/jwks.json`.
 
 > De drie `QUARKUS_DATASOURCE_*` zijn geen env-vars maar **aliassen** op component `nmcapi`
 > (`zadctl alias list nmcapi`). Ze vertalen de variabelen die de `postgresql-database`-service

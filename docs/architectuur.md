@@ -167,9 +167,48 @@ variabelen, met namen tot 100 en waarden tot 2000 tekens (`BerichtgegevensConstr
 Een body boven `quarkus.http.limits.max-body-size` (1 MB) krijgt 413 voordat hij is ingelezen;
 die grens geldt voor elk endpoint.
 
-**Eén geconfigureerde dienstverlener.** `dienstverlener` heeft één rij uit de
-migratie; `DvProvider` levert die `dv_id`, die op elke notificatie en elk event
-staat. Tokenvalidatie per dienstverlener vervangt later alleen de provider.
+**De dienstverlener komt uit het FSC-toegangstoken.** Een dienstverlener roept het NMC aan
+over FSC; de inway geeft het toegangstoken door in de header `Fsc-Authorization`.
+`FscToegangFilter` eist dat token op elke controller zonder `@BuitenFsc` (de
+NotifyNL-callback en de JWKS van de webhook hebben die annotatie). `FscTokenValidator` toetst
+de handtekening aan de JWKS van de Manager (`nmc.fsc.jwks-url`), `exp` en `nbf`, en of `iss`,
+`aud`, `gid` en `svc` de geconfigureerde uitgever, inway, groep en dienst zijn; een token voor
+een gedelegeerde verbinding (`act`) wordt geweigerd. De binding aan het certificaat (`cnf`) kan
+alleen de inway toetsen. Wie een geldig token heeft en het NMC buiten de inway om bereikt, wordt
+dus tot `exp` op het token alleen beoordeeld. Deze endpoints moeten daarom op netwerkniveau
+alleen vanaf de inway bereikbaar zijn; alleen de NotifyNL-callback en de JWKS van de webhook
+horen publiek te zijn. Het NMC regelt en controleert dat niet zelf: het is een eis aan de
+omgeving (`docs/zad-deploy.md`). Het OIN in `sub` wijst de rij in `dienstverlener` aan;
+`DvProvider` levert de `dv_id` daarvan, die op elke notificatie en elk event staat. De feed, het
+quotum en de herkenning van een herhaalde aanvraag werken daarmee per dienstverlener.
+
+| Situatie | Antwoord |
+|----------|----------|
+| geen token, of een token dat niet geldig is | 401 met `WWW-Authenticate: Bearer` |
+| geldig token, OIN staat niet in het register | 403 |
+| de JWKS is niet op te halen of geen JWKS, en er zijn geen sleutels bewaard of de storing duurt langer dan de storingstolerantie | 503 |
+
+Het antwoord zegt niet waarom een token is afgekeurd; de reden staat in de log. De JWKS
+wordt `nmc.fsc.jwks-bewaartijd` bewaard, en eerder opnieuw opgehaald bij een token met een
+onbekende sleutel. De bewaartijd die de Manager in `Cache-Control` of `Expires` opgeeft, telt
+niet: een sleutel die de Manager intrekt, zou anders zo lang geldig blijven als de Manager of een
+proxy ervoor opgeeft. Tussen het einde
+van een ophaling en de volgende zit ten minste tien seconden (per pod), ook als de ophaling
+mislukte (`BegrensdeJwksGet`): zonder bewaarde sleutels krijgt een aanroep in die tijd direct
+503. Een aanroep die de sleutels nodig heeft terwijl een ophaling loopt, wacht daarop;
+`nmc.fsc.jwks-timeout` begrenst het verbinden en elke leesactie, niet de duur van de hele
+ophaling, en een mislukte poging wordt één keer herhaald: een ophaling die mislukt kan dus ruim
+twee keer de time-out voor het verbinden plus die voor het lezen duren. Bewaarde sleutels
+overbruggen een storing bij de Manager tot `nmc.fsc.jwks-storingstolerantie` na de eerste
+mislukte ophaling; daarna krijgt elke aanroep 503 tot het ophalen weer lukt. Een ingetrokken
+sleutel geldt daarmee nog ten hoogste de bewaartijd plus de storingstolerantie.
+
+Een dienstverlener aansluiten is een rij in `dienstverlener` met zijn OIN; daar is nog geen
+beheerfunctie voor. Notificaties en events van vóór het aanzetten van de controle staan op de
+rij uit de migratie en horen niet bij een rij die later is toegevoegd.
+
+Met `nmc.fsc.ingeschakeld=false` (de waarde in dev en test) is er geen controle en telt elke
+aanroep voor de dienstverlener uit `nmc.dienstverlener.id`, de rij uit de migratie.
 
 **Ontvanger en personalisation staan versleuteld op de rij** (`Sleutelbeheer`, een
 eigen sleutel per notificatie, gewrapt met de KEK): bij decentrale regie het
@@ -478,7 +517,8 @@ omgeving overschreven als dat nodig is. De verplichte waarden en secrets staan i
 
 | Prefix | Waarvoor |
 |--------|----------|
-| `nmc.dienstverlener.id` | de rij uit V8 |
+| `nmc.dienstverlener.id` | de rij uit V8; alleen in gebruik als `nmc.fsc.ingeschakeld` uit staat |
+| `nmc.fsc.klokmarge`, `nmc.fsc.jwks-timeout`, `nmc.fsc.jwks-bewaartijd`, `nmc.fsc.jwks-storingstolerantie` | klokverschil bij `exp` en `nbf`, time-out voor het verbinden met en elke leesactie op de JWKS, hoe lang een opgehaalde JWKS wordt bewaard, en hoe lang bewaarde sleutels na de eerste mislukte ophaling een storing bij de Manager overbruggen |
 | `nmc.taak.*` | interval, batch, lease en max-pogingen van de worker-lus, en het uitstel na een storing |
 | `nmc.navraag.*` | momenten en bewaartermijn van NotifyNL |
 | `nmc.vaststelling.*` | termijn en callback-venster |

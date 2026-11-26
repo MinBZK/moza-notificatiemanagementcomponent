@@ -82,6 +82,12 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-jwt-build</artifactId>
         </dependency>
+        <!-- Controle van het FSC-toegangstoken tegen de JWKS van de Manager. De versie komt uit de
+             Quarkus-BOM; smallrye-jwt-build brengt dezelfde bibliotheek al mee. -->
+        <dependency>
+            <groupId>org.bitbucket.b_c</groupId>
+            <artifactId>jose4j</artifactId>
+        </dependency>
         <dependency>
             <groupId>io.quarkiverse.httpproblem</groupId>
             <artifactId>quarkus-http-problem</artifactId>

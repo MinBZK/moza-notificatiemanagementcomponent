@@ -3,7 +3,11 @@ info:
   title: NotificatieManagementComponent API
   description: |
     API voor het versturen van notificaties namens een Dienstverlener.
-  version: 0.2.0
+
+    De Dienstverlener roept deze API aan over FSC. Elke aanroep draagt het FSC-toegangstoken in de
+    header `Fsc-Authorization`; het NMC herkent de Dienstverlener aan het OIN in dat token. Een
+    Dienstverlener ziet alleen zijn eigen notificaties en events.
+  version: 0.3.0
   contact:
     name: MijnOverheid Zakelijk Team
     email: moza@minbzk.nl
@@ -52,6 +56,8 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/NotificatieAanvraagRequest'
+      security:
+        - fscToegangstoken: []
       responses:
         '202':
           description: >-
@@ -74,6 +80,10 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '401':
+          $ref: '#/components/responses/NietGeautoriseerd'
+        '403':
+          $ref: '#/components/responses/GeenToegang'
         '413':
           description: De aanvraag is groter dan 1 MB
         '429':
@@ -90,6 +100,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '503':
+          $ref: '#/components/responses/TokenNietTeControleren'
 
   /api/nmc/v1/decentraal/notificaties:
     post:
@@ -108,6 +120,8 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DecentraleNotificatieAanvraagRequest'
+      security:
+        - fscToegangstoken: []
       responses:
         '202':
           description: >-
@@ -130,6 +144,10 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '401':
+          $ref: '#/components/responses/NietGeautoriseerd'
+        '403':
+          $ref: '#/components/responses/GeenToegang'
         '413':
           description: De aanvraag is groter dan 1 MB
         '429':
@@ -146,6 +164,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '503':
+          $ref: '#/components/responses/TokenNietTeControleren'
 
   /api/nmc/v1/notificaties/events:
     get:
@@ -232,6 +252,8 @@ paths:
               responses:
                 '2XX':
                   description: Levering ontvangen; de leverpositie gaat vooruit
+      security:
+        - fscToegangstoken: []
       responses:
         '200':
           description: Een pagina events met de cursor voor de volgende pagina
@@ -250,6 +272,10 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '401':
+          $ref: '#/components/responses/NietGeautoriseerd'
+        '403':
+          $ref: '#/components/responses/GeenToegang'
         '410':
           description: >-
             De cursor is vervallen: een ander cluster-epoch, onder het oudste beschikbare
@@ -269,6 +295,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/AanroeplimietProblem'
+        '503':
+          $ref: '#/components/responses/TokenNietTeControleren'
 
   /api/nmc/v1/notificaties/events/bevestiging:
     put:
@@ -288,6 +316,8 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/BevestigingRequest'
+      security:
+        - fscToegangstoken: []
       responses:
         '204':
           description: Bevestiging vastgelegd, of ouder dan de bewaarde bevestiging en daarom ongewijzigd
@@ -302,6 +332,10 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '401':
+          $ref: '#/components/responses/NietGeautoriseerd'
+        '403':
+          $ref: '#/components/responses/GeenToegang'
         '410':
           description: De cursor is vervallen; lees de feed opnieuw zonder cursor
           content:
@@ -319,6 +353,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/AanroeplimietProblem'
+        '503':
+          $ref: '#/components/responses/TokenNietTeControleren'
 
   /api/nmc/v1/.well-known/jwks.json:
     get:
@@ -354,6 +390,14 @@ paths:
 
 components:
   securitySchemes:
+    fscToegangstoken:
+      type: apiKey
+      in: header
+      name: Fsc-Authorization
+      description: >-
+        Het FSC-toegangstoken van de aanroep: een JWT die de Manager van de aanbieder uitgeeft op basis van
+        het contract en die de outway van de Dienstverlener in deze header meestuurt. Het NMC herkent de
+        Dienstverlener aan het OIN in `sub`.
     webhookJwt:
       type: http
       scheme: bearer
@@ -361,6 +405,46 @@ components:
       description: >-
         De door het NMC ondertekende JWT op een webhook-aanroep. Geldt alleen voor de
         aanroep van het NMC naar de webhook van de Dienstverlener.
+
+  responses:
+    NietGeautoriseerd:
+      description: Het FSC-toegangstoken in de header `Fsc-Authorization` ontbreekt, is verlopen of is niet geldig
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            example: Bearer
+          description: Het verwachte soort token
+        API-Version:
+          schema:
+            type: string
+          description: Versie van de API
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    GeenToegang:
+      description: De organisatie uit het FSC-toegangstoken is niet aangesloten op het NMC
+      headers:
+        API-Version:
+          schema:
+            type: string
+          description: Versie van de API
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TokenNietTeControleren:
+      description: Het FSC-toegangstoken kan tijdelijk niet worden gecontroleerd; probeer het later opnieuw
+      headers:
+        API-Version:
+          schema:
+            type: string
+          description: Versie van de API
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
 
   schemas:
     IdentificatieType:

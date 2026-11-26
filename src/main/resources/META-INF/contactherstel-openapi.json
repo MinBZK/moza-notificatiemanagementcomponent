@@ -2,9 +2,9 @@
   "openapi": "3.0.3",
   "info": {
     "title": "NMC Contactherstel API",
-    "description": "Powered by AI\n\nConcept-contract voor contactherstel binnen het Notificatie Management Component (NMC), op basis van MijnOverheidZakelijk #1424. Met deze API start een Dienstverlener contactherstel, rondt die het af of trekt die het in, en vraagt die de status op.\n\nContractversie 0.2.0 (concept), vastgelegd in x-contractversie. De contractversie staat los van de versie van de API zelf. De versie van de API staat in info.version en in de header API-Version van elk antwoord; de major-versie van de API staat in het adres.\n\nNog niet getoetst aan de functionele beschrijvingen (#1093 en #1094) en het contract met de Contactherstelservice (#1420). De NMC leidt de Dienstverlener af uit het token van de aanroep; de precieze authenticatie is nog niet in dit contract vastgelegd.",
-    "version": "0.2.0",
-    "x-contractversie": "0.2.0",
+    "description": "Powered by AI\n\nConcept-contract voor contactherstel binnen het Notificatie Management Component (NMC), op basis van MijnOverheidZakelijk #1424. Met deze API start een Dienstverlener contactherstel, rondt die het af of trekt die het in, en vraagt die de status op.\n\nContractversie 0.3.0 (concept), vastgelegd in x-contractversie. De contractversie staat los van de versie van de API zelf. De versie van de API staat in info.version en in de header API-Version van elk antwoord; de major-versie van de API staat in het adres.\n\nNog niet getoetst aan de functionele beschrijvingen (#1093 en #1094) en het contract met de Contactherstelservice (#1420). Elke aanroep draagt het FSC-toegangstoken in de header Fsc-Authorization; de NMC herkent de Dienstverlener aan het OIN in dat token.",
+    "version": "0.3.0",
+    "x-contractversie": "0.3.0",
     "contact": {
       "name": "MijnOverheid Zakelijk Team",
       "email": "moza@minbzk.nl",
@@ -34,6 +34,7 @@
             }
           }
         },
+        "security": [{"fscToegangstoken": []}],
         "responses": {
           "202": {
             "description": "Aanvraag aangenomen en opgeslagen; de uitvoering volgt asynchroon. Liep er al contactherstel voor dit e-mailadres, dan is alLopend true en is het bestaande contactherstelId teruggegeven.",
@@ -53,11 +54,20 @@
           "400": {
             "$ref": "#/components/responses/OngeldigeAanvraag"
           },
+          "401": {
+            "$ref": "#/components/responses/NietGeautoriseerd"
+          },
+          "403": {
+            "$ref": "#/components/responses/GeenToegang"
+          },
           "429": {
             "$ref": "#/components/responses/QuotumOverschreden"
           },
           "500": {
             "$ref": "#/components/responses/ServerFout"
+          },
+          "503": {
+            "$ref": "#/components/responses/TokenNietTeControleren"
           }
         }
       }
@@ -79,6 +89,7 @@
         "tags": ["Contactherstel"],
         "operationId": "contactherstelOpvragen",
         "summary": "Status van contactherstel opvragen",
+        "security": [{"fscToegangstoken": []}],
         "responses": {
           "200": {
             "description": "De huidige status van het contactherstel",
@@ -98,11 +109,20 @@
           "400": {
             "$ref": "#/components/responses/OngeldigeAanvraag"
           },
+          "401": {
+            "$ref": "#/components/responses/NietGeautoriseerd"
+          },
+          "403": {
+            "$ref": "#/components/responses/GeenToegang"
+          },
           "404": {
             "$ref": "#/components/responses/NietGevonden"
           },
           "500": {
             "$ref": "#/components/responses/ServerFout"
+          },
+          "503": {
+            "$ref": "#/components/responses/TokenNietTeControleren"
           }
         }
       },
@@ -121,6 +141,7 @@
             }
           }
         },
+        "security": [{"fscToegangstoken": []}],
         "responses": {
           "200": {
             "description": "Het contactherstel is bijgewerkt",
@@ -140,6 +161,12 @@
           "400": {
             "$ref": "#/components/responses/OngeldigeAanvraag"
           },
+          "401": {
+            "$ref": "#/components/responses/NietGeautoriseerd"
+          },
+          "403": {
+            "$ref": "#/components/responses/GeenToegang"
+          },
           "404": {
             "$ref": "#/components/responses/NietGevonden"
           },
@@ -148,6 +175,9 @@
           },
           "500": {
             "$ref": "#/components/responses/ServerFout"
+          },
+          "503": {
+            "$ref": "#/components/responses/TokenNietTeControleren"
           }
         }
       }
@@ -160,10 +190,70 @@
         "schema": {
           "type": "string"
         },
-        "example": "0.2.0"
+        "example": "0.3.0"
+      }
+    },
+    "securitySchemes": {
+      "fscToegangstoken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Fsc-Authorization",
+        "description": "Het FSC-toegangstoken van de aanroep: een JWT die de Manager van de aanbieder uitgeeft op basis van het contract en die de outway van de Dienstverlener in deze header meestuurt. De NMC herkent de Dienstverlener aan het OIN in sub."
       }
     },
     "responses": {
+      "NietGeautoriseerd": {
+        "description": "Het FSC-toegangstoken in de header Fsc-Authorization ontbreekt, is verlopen of is niet geldig",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string",
+              "example": "Bearer"
+            },
+            "description": "Het verwachte soort token"
+          },
+          "API-Version": {
+            "$ref": "#/components/headers/API-Version"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "GeenToegang": {
+        "description": "De organisatie uit het FSC-toegangstoken is niet aangesloten op de NMC",
+        "headers": {
+          "API-Version": {
+            "$ref": "#/components/headers/API-Version"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "TokenNietTeControleren": {
+        "description": "Het FSC-toegangstoken kan tijdelijk niet worden gecontroleerd; probeer het later opnieuw",
+        "headers": {
+          "API-Version": {
+            "$ref": "#/components/headers/API-Version"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
       "OngeldigeAanvraag": {
         "description": "Ongeldige aanvraag, bijvoorbeeld een onbekend notificatieId",
         "headers": {

@@ -4,6 +4,7 @@ import io.quarkus.runtime.Startup;
 import nl.rijksoverheid.moz.nmc.config.ConfigValidatie;
 import nl.rijksoverheid.moz.nmc.service.aanname.AannameService;
 import nl.rijksoverheid.moz.nmc.service.onderhoud.EventlogPartitiebeheer;
+import nl.rijksoverheid.moz.nmc.service.toegang.AanroeperDvProvider;
 import nl.rijksoverheid.moz.nmc.service.verzending.NotifyNLNavraagmomenten;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -16,7 +17,7 @@ class ConfiguratieBijOpstartenTest {
 
     @ParameterizedTest
     @ValueSource(classes = {AannameService.class, NotifyNLNavraagmomenten.class, Verzendbeleid.class,
-            EventlogPartitiebeheer.class, ConfigValidatie.class})
+            EventlogPartitiebeheer.class, ConfigValidatie.class, AanroeperDvProvider.class})
     void beanMetConfiguratiecontrole_wordtBijHetOpstartenGemaakt(Class<?> bean) {
         assertTrue(bean.isAnnotationPresent(Startup.class), bean.getSimpleName() + " mist @Startup");
     }

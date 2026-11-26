@@ -95,6 +95,39 @@ class GepubliceerdeSpecTest {
         assertNotNull(spec.get("paths.'/api/nmc/v1/.well-known/jwks.json'.get"));
     }
 
+    // Het filter eist het token op elke controller; het contract moet dat per operatie zeggen.
+    @Test
+    void elkeOperatieVanEenDienstverlener_vraagtHetFscToegangstoken() {
+        Map<String, Map<String, Map<String, Object>>> paden = spec.getMap("paths");
+        int operaties = 0;
+
+        for (Map.Entry<String, Map<String, Map<String, Object>>> pad : paden.entrySet()) {
+            for (Map.Entry<String, Map<String, Object>> operatie : pad.getValue().entrySet()) {
+                if (!HTTP_METHODES.contains(operatie.getKey())) {
+                    continue;
+                }
+
+                String naam = operatie.getKey() + " " + pad.getKey();
+                Object security = operatie.getValue().get("security");
+
+                if (pad.getKey().equals("/api/nmc/v1/.well-known/jwks.json")) {
+                    assertNull(security, naam + " is openbaar");
+                    continue;
+                }
+
+                assertEquals(List.of(Map.of("fscToegangstoken", List.of())), security, naam);
+                Map<?, ?> antwoorden = (Map<?, ?>) operatie.getValue().get("responses");
+                assertTrue(antwoorden.keySet().containsAll(List.of("401", "403", "503")), naam + ": " + antwoorden.keySet());
+                operaties++;
+            }
+        }
+
+        assertEquals(7, operaties, "elke operatie van het notificatie- en het contactherstelcontract");
+        assertEquals("Fsc-Authorization", spec.getString("components.securitySchemes.fscToegangstoken.name"));
+    }
+
+    private static final List<String> HTTP_METHODES = List.of("get", "post", "put", "patch", "delete");
+
     private List<String> gepubliceerdeEnum(String schema) {
         List<Object> ruw = spec.getList("components.schemas." + schema + ".enum");
         assertNotNull(ruw, "het schema " + schema + " of zijn enum ontbreekt in /q/openapi");

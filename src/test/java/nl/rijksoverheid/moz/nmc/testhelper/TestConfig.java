@@ -2,6 +2,7 @@ package nl.rijksoverheid.moz.nmc.testhelper;
 
 import nl.rijksoverheid.moz.nmc.config.AfleverbewijsConfig;
 import nl.rijksoverheid.moz.nmc.config.FeedConfig;
+import nl.rijksoverheid.moz.nmc.config.FscConfig;
 import nl.rijksoverheid.moz.nmc.config.TaakConfig;
 import nl.rijksoverheid.moz.nmc.config.VaststellingConfig;
 import nl.rijksoverheid.moz.nmc.config.VerzendbudgetConfig;
@@ -9,6 +10,7 @@ import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
 import nl.rijksoverheid.moz.nmc.config.WissenConfig;
 import nl.rijksoverheid.moz.nmc.service.Opruimtermijnen;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -113,6 +115,41 @@ public final class TestConfig {
         when(config.tokensPerMinuut()).thenReturn(tokensPerMinuut);
         when(config.verzendReservering()).thenReturn(verzendReservering);
         when(config.navraagReservering()).thenReturn(navraagReservering);
+
+        return config;
+    }
+
+    /** De controle van het FSC-toegangstoken uit, zoals in dev en test. */
+    public static FscConfig fscUit() {
+        FscConfig config = mock(FscConfig.class);
+        when(config.ingeschakeld()).thenReturn(false);
+        when(config.jwksUrl()).thenReturn(Optional.empty());
+        when(config.uitgever()).thenReturn(Optional.empty());
+        when(config.inwayAdres()).thenReturn(Optional.empty());
+        when(config.groep()).thenReturn(Optional.empty());
+        when(config.dienst()).thenReturn(Optional.empty());
+
+        return config;
+    }
+
+    /** De controle van het FSC-toegangstoken aan, met de waarden van {@link FscManagerStub}. */
+    public static FscConfig fsc(URI jwksUrl) {
+        return fsc(jwksUrl, Duration.ofHours(1));
+    }
+
+    /** Als {@link #fsc(URI)}, met een eigen bewaartijd voor de JWKS. */
+    public static FscConfig fsc(URI jwksUrl, Duration jwksBewaartijd) {
+        FscConfig config = mock(FscConfig.class);
+        when(config.jwksBewaartijd()).thenReturn(jwksBewaartijd);
+        when(config.ingeschakeld()).thenReturn(true);
+        when(config.jwksUrl()).thenReturn(Optional.ofNullable(jwksUrl));
+        when(config.uitgever()).thenReturn(Optional.of(FscManagerStub.UITGEVER));
+        when(config.inwayAdres()).thenReturn(Optional.of(FscManagerStub.INWAY_ADRES));
+        when(config.groep()).thenReturn(Optional.of(FscManagerStub.GROEP));
+        when(config.dienst()).thenReturn(Optional.of(FscManagerStub.DIENST));
+        when(config.klokmarge()).thenReturn(Duration.ofSeconds(30));
+        when(config.jwksTimeout()).thenReturn(Duration.ofSeconds(2));
+        when(config.jwksStoringstolerantie()).thenReturn(Duration.ofHours(1));
 
         return config;
     }

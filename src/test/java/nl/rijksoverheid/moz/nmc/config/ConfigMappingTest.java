@@ -102,7 +102,8 @@ class ConfigMappingTest {
             "nmc.verzendbudget.navraag-reservering, 0",
             "nmc.wissen.termijn, 0s",
             "nmc.afleverbewijs.bewaartermijn, -1d",
-            "nmc.afleverbewijs.bewaartermijn, 0s"
+            "nmc.afleverbewijs.bewaartermijn, 0s",
+            "nmc.fsc.jwks-bewaartijd, 0s"
     })
     void ongeldigeWaarde_weigertOpTeStarten(String sleutel, String waarde) {
         Map<String, String> waarden = new HashMap<>(SLEUTEL);
@@ -139,17 +140,52 @@ class ConfigMappingTest {
         assertDoesNotThrow(() -> bouw("test", waarden));
     }
 
-    // De waarden waarmee de applicatie buiten het testprofiel start.
+    // De waarden waarmee de applicatie buiten het testprofiel start; die van FSC komen uit de omgeving.
     @Test
     void standaardwaarden_voldoenAanDeRegelsOverMeerdereProperties() {
+        Map<String, String> waarden = new HashMap<>(SLEUTEL);
+        waarden.put("nmc.fsc.jwks-url", "https://manager.example.nl/.well-known/jwks.json");
+        waarden.put("nmc.fsc.uitgever", "00000000000000001000");
+        waarden.put("nmc.fsc.inway-adres", "https://inway.example.nl:443");
+        waarden.put("nmc.fsc.groep", "fsc-groep");
+        waarden.put("nmc.fsc.dienst", "nmc");
+        SmallRyeConfig config = bouw("prod", waarden);
+
+        FscConfig fsc = config.getConfigMapping(FscConfig.class);
+        assertTrue(fsc.ingeschakeld(), "buiten dev en test staat de controle van het token aan");
+        assertEquals(Duration.ofSeconds(30), fsc.klokmarge());
+        assertEquals(Duration.ofSeconds(5), fsc.jwksTimeout());
+        assertEquals(Duration.ofHours(1), fsc.jwksBewaartijd());
+        assertEquals(Duration.ofHours(1), fsc.jwksStoringstolerantie());
+        assertDoesNotThrow(() -> validatie(config));
+    }
+
+    @Test
+    void prodZonderFscWaarden_weigertOpTeStarten() {
         SmallRyeConfig config = bouw("prod", SLEUTEL);
 
-        assertDoesNotThrow(() -> new ConfigValidatie(
+        IllegalStateException fout = assertThrows(IllegalStateException.class, () -> validatie(config));
+
+        assertTrue(fout.getMessage().contains("nmc.fsc.jwks-url"), fout.getMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"dev", "test"})
+    void devEnTest_startenZonderFscWaarden(String profiel) {
+        SmallRyeConfig config = bouw(profiel, SLEUTEL);
+
+        assertEquals(false, config.getConfigMapping(FscConfig.class).ingeschakeld());
+        assertDoesNotThrow(() -> validatie(config));
+    }
+
+    private static ConfigValidatie validatie(SmallRyeConfig config) {
+        return new ConfigValidatie(
                 config.getConfigMapping(TaakConfig.class),
                 config.getConfigMapping(WebhookConfig.class),
                 config.getConfigMapping(VerzendbudgetConfig.class),
                 config.getConfigMapping(WissenConfig.class),
-                config.getConfigMapping(AfleverbewijsConfig.class)));
+                config.getConfigMapping(AfleverbewijsConfig.class),
+                config.getConfigMapping(FscConfig.class));
     }
 
     @Test
@@ -178,6 +214,7 @@ class ConfigMappingTest {
                     .withMapping(VerzendbudgetConfig.class)
                     .withMapping(WissenConfig.class)
                     .withMapping(AfleverbewijsConfig.class)
+                    .withMapping(FscConfig.class)
                     .withValidator(new BeanValidationConfigValidatorImpl())
                     .withSources(new PropertiesConfigSource(
                             ConfigMappingTest.class.getResource("/application.properties")))
