@@ -3,7 +3,7 @@
 # Ubuntu 20.04 heeft geen openjdk-25 pakket, daarom nemen we Temurin 25 over
 # uit het officiële image. Het platform staat vast op amd64, net als de
 # gepinde base-builder-jvm.
-FROM --platform=linux/amd64 eclipse-temurin:25.0.5_8-jdk@sha256:83f4a7fc27df94dcc7b8de04d14cbbba8da14406f921e966969c3b09000aa507 AS jdk
+FROM --platform=linux/amd64 eclipse-temurin:25.0.5.1_2-jdk@sha256:ce2ef9d2d67a68de5e196d4de9d743327c44a10b57fe02ec39f572c652cacfd3 AS jdk
 
 FROM gcr.io/oss-fuzz-base/base-builder-jvm:v1@sha256:f34c2b102970b3c048d9ce77ee21cc16c627747e2c3b05f2dfbf3da221047496
 
