@@ -3,10 +3,9 @@ package nl.rijksoverheid.moz.nmc.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import org.hibernate.annotations.Type;
-
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import org.hibernate.annotations.Type;
 
 /**
  * De bevestigde leespositie van één Dienstverlener in de eventfeed. De Dienstverlener leest de feed

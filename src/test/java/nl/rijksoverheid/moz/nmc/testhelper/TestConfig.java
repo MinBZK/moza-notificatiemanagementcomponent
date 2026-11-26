@@ -1,5 +1,10 @@
 package nl.rijksoverheid.moz.nmc.testhelper;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.time.Duration;
+import java.util.Optional;
 import nl.rijksoverheid.moz.nmc.config.AfleverbewijsConfig;
 import nl.rijksoverheid.moz.nmc.config.FeedConfig;
 import nl.rijksoverheid.moz.nmc.config.TaakConfig;
@@ -9,12 +14,6 @@ import nl.rijksoverheid.moz.nmc.config.WebhookConfig;
 import nl.rijksoverheid.moz.nmc.config.WissenConfig;
 import nl.rijksoverheid.moz.nmc.service.Opruimtermijnen;
 
-import java.time.Duration;
-import java.util.Optional;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 /**
  * Configuratie voor tests die een klasse zelf aanmaken, buiten de container om.
  */
@@ -22,8 +21,7 @@ public final class TestConfig {
 
     public static final Duration LEASE = Duration.ofMinutes(2);
 
-    private TestConfig() {
-    }
+    private TestConfig() {}
 
     public static TaakConfig taak() {
         return taak(2);
@@ -64,8 +62,8 @@ public final class TestConfig {
     /**
      * Een webhook-configuratie met de extra sleutel van een rotatie; {@code null} laat een waarde weg.
      */
-    public static WebhookConfig webhookJwtMetExtraSleutel(String privateKey, String keyId, String extraPublicKey,
-                                                          String extraKeyId, Duration jwksMaxAge) {
+    public static WebhookConfig webhookJwtMetExtraSleutel(
+            String privateKey, String keyId, String extraPublicKey, String extraKeyId, Duration jwksMaxAge) {
         WebhookConfig config = webhookJwt(privateKey, keyId, "https://nmc.example.nl", Duration.ofMinutes(2));
         WebhookConfig.Jwt jwt = config.jwt();
         when(jwt.extraPublicKey()).thenReturn(Optional.ofNullable(extraPublicKey));
@@ -108,7 +106,8 @@ public final class TestConfig {
         return config;
     }
 
-    public static VerzendbudgetConfig verzendbudget(int tokensPerMinuut, int verzendReservering, int navraagReservering) {
+    public static VerzendbudgetConfig verzendbudget(
+            int tokensPerMinuut, int verzendReservering, int navraagReservering) {
         VerzendbudgetConfig config = mock(VerzendbudgetConfig.class);
         when(config.tokensPerMinuut()).thenReturn(tokensPerMinuut);
         when(config.verzendReservering()).thenReturn(verzendReservering);
@@ -131,7 +130,9 @@ public final class TestConfig {
         return config;
     }
 
-    public static Opruimtermijnen opruimtermijnen(Duration wistermijn, Duration bewaartermijn, Duration maxCursorleeftijd) {
-        return new Opruimtermijnen(wissen(wistermijn), afleverbewijs(bewaartermijn), feedMetCursorleeftijd(maxCursorleeftijd));
+    public static Opruimtermijnen opruimtermijnen(
+            Duration wistermijn, Duration bewaartermijn, Duration maxCursorleeftijd) {
+        return new Opruimtermijnen(
+                wissen(wistermijn), afleverbewijs(bewaartermijn), feedMetCursorleeftijd(maxCursorleeftijd));
     }
 }

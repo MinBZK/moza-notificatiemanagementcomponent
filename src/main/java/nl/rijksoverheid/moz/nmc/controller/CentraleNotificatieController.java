@@ -10,13 +10,12 @@ import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.helper.AannameResponse;
 import nl.rijksoverheid.moz.nmc.helper.HashHelper;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
-import nl.rijksoverheid.moz.nmc.service.aanname.AannameOpdracht;
-import nl.rijksoverheid.moz.nmc.service.aanname.AannameService;
 import nl.rijksoverheid.moz.nmc.service.BerichtType;
 import nl.rijksoverheid.moz.nmc.service.OnbekendBerichtTypeException;
-import nl.rijksoverheid.moz.nmc.service.aanname.QuotumOverschredenException;
 import nl.rijksoverheid.moz.nmc.service.Regie;
-
+import nl.rijksoverheid.moz.nmc.service.aanname.AannameOpdracht;
+import nl.rijksoverheid.moz.nmc.service.aanname.AannameService;
+import nl.rijksoverheid.moz.nmc.service.aanname.QuotumOverschredenException;
 
 /**
  * Intake bij centrale regie: de aanroeper levert een identificerend nummer, het NMC haalt het adres
@@ -29,7 +28,8 @@ public class CentraleNotificatieController implements CentraleNotificatiesApi {
     private final LogboekContext logboekContext;
     private final HashHelper hashHelper;
 
-    public CentraleNotificatieController(AannameService aannameService, LogboekContext logboekContext, HashHelper hashHelper) {
+    public CentraleNotificatieController(
+            AannameService aannameService, LogboekContext logboekContext, HashHelper hashHelper) {
         this.aannameService = aannameService;
         this.logboekContext = logboekContext;
         this.hashHelper = hashHelper;
@@ -38,15 +38,17 @@ public class CentraleNotificatieController implements CentraleNotificatiesApi {
     @Override
     // TODO #754 (LDV Logboek annotaties hebben placeholder URL)
     // processingActivityId is een placeholder, vervang door de echte URL uit het privacy-register.
-    @Logboek(name = "notificatieAannemen", processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
+    @Logboek(
+            name = "notificatieAannemen",
+            processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
     public Response notificatieVersturen(NotificatieAanvraagRequest notificatieAanvraagRequest) {
         // TODO #758 (Logboek context setten via annotatie ipv in method body)
         logboekContext.setDataSubjectId(hashHelper.hashIdentifier(notificatieAanvraagRequest.getIdentificatieNummer()));
         logboekContext.setDataSubjectType(String.valueOf(notificatieAanvraagRequest.getIdentificatieType()));
 
         try {
-            return AannameResponse.notificatieAangenomen(aannameService.neemAan(opdracht(notificatieAanvraagRequest),
-                    notificatieAanvraagRequest.getDvRef()));
+            return AannameResponse.notificatieAangenomen(aannameService.neemAan(
+                    opdracht(notificatieAanvraagRequest), notificatieAanvraagRequest.getDvRef()));
         } catch (OnbekendBerichtTypeException e) {
             throw Problems.badRequest("Notificatie niet aangenomen.", e.getMessage());
         } catch (QuotumOverschredenException e) {

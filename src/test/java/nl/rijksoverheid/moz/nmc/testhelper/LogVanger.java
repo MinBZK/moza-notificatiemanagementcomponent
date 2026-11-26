@@ -1,7 +1,5 @@
 package nl.rijksoverheid.moz.nmc.testhelper;
 
-import org.jboss.logmanager.ExtLogRecord;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -9,6 +7,7 @@ import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
+import org.jboss.logmanager.ExtLogRecord;
 
 /**
  * Vangt logregels van één categorie op, zodat een test kan asserteren dát er gelogd is en op welk

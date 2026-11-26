@@ -20,7 +20,8 @@ public record Cursor(int epoch, long transactieId, long eventId) {
 
     public Cursor {
         if (epoch < 0 || transactieId < 0 || eventId < 0) {
-            throw new IllegalArgumentException("Een cursor heeft geen negatieve delen: " + epoch + ":" + transactieId + ":" + eventId);
+            throw new IllegalArgumentException(
+                    "Een cursor heeft geen negatieve delen: " + epoch + ":" + transactieId + ":" + eventId);
         }
     }
 
@@ -48,7 +49,8 @@ public record Cursor(int epoch, long transactieId, long eventId) {
         }
 
         try {
-            return new Cursor(Integer.parseInt(match.group(1)), Long.parseLong(match.group(2)), Long.parseLong(match.group(3)));
+            return new Cursor(
+                    Integer.parseInt(match.group(1)), Long.parseLong(match.group(2)), Long.parseLong(match.group(3)));
         } catch (NumberFormatException e) {
             throw new OngeldigeCursorException("Cursor bevat een getal buiten bereik");
         }

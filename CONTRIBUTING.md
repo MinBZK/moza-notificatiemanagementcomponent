@@ -20,6 +20,8 @@ Gebruik de [issue templates](.github/ISSUE_TEMPLATE/) voor het melden van bugs o
 
 - Java 25, Quarkus 3.x
 - Bestaande conventies in de codebase volgen
+- Opmaak via Spotless met palantir-java-format: `./mvnw spotless:apply` zet hem recht, `./mvnw verify`
+  faalt bij afwijkende opmaak
 - Nederlandstalige naamgeving voor domeinconcepten, Engels voor generieke technische concepten
 
 De volledige werkregels staan in [`AGENTS.md`](AGENTS.md), de regels per onderdeel in

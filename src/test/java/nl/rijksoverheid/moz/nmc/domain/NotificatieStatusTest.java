@@ -1,21 +1,24 @@
 package nl.rijksoverheid.moz.nmc.domain;
 
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.EnumSet;
 import java.util.Set;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 @Tag("unit")
 class NotificatieStatusTest {
 
     // Legt de volledige set vast, zodat een nieuwe status een bewuste keuze vraagt.
     private static final Set<NotificatieStatus> EINDSTATUSSEN = EnumSet.of(
-            NotificatieStatus.DEFINITIEF_BEZORGD, NotificatieStatus.NIET_BEZORGBAAR, NotificatieStatus.TECHNISCH_MISLUKT,
-            NotificatieStatus.BEZORGSTATUS_ONBEKEND, NotificatieStatus.VERLOPEN, NotificatieStatus.GEANNULEERD);
+            NotificatieStatus.DEFINITIEF_BEZORGD,
+            NotificatieStatus.NIET_BEZORGBAAR,
+            NotificatieStatus.TECHNISCH_MISLUKT,
+            NotificatieStatus.BEZORGSTATUS_ONBEKEND,
+            NotificatieStatus.VERLOPEN,
+            NotificatieStatus.GEANNULEERD);
 
     @ParameterizedTest
     @EnumSource(NotificatieStatus.class)

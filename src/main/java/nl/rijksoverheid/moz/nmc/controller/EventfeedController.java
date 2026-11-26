@@ -2,6 +2,8 @@ package nl.rijksoverheid.moz.nmc.controller;
 
 import io.quarkus.logging.Log;
 import jakarta.ws.rs.core.Response;
+import java.util.List;
+import java.util.UUID;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.Logboek;
 import nl.mijnoverheidzakelijk.ldv.logboekdataverwerking.LogboekContext;
 import nl.rijksoverheid.moz.nmc.api.EventsApi;
@@ -11,14 +13,11 @@ import nl.rijksoverheid.moz.nmc.client.webhook.NotificatieStatusEvent;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.domain.OngeldigeCursorException;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
+import nl.rijksoverheid.moz.nmc.service.DvProvider;
 import nl.rijksoverheid.moz.nmc.service.feed.Aanroeplimiet;
 import nl.rijksoverheid.moz.nmc.service.feed.CursorVervallenException;
-import nl.rijksoverheid.moz.nmc.service.DvProvider;
 import nl.rijksoverheid.moz.nmc.service.feed.EventPagina;
 import nl.rijksoverheid.moz.nmc.service.feed.Eventfeed;
-
-import java.util.List;
-import java.util.UUID;
 
 /**
  * De eventfeed en de bevestiging, binnen de dienstverlener uit {@link DvProvider}.
@@ -37,8 +36,8 @@ public class EventfeedController implements EventsApi {
     private final DvProvider dvProvider;
     private final LogboekContext logboekContext;
 
-    public EventfeedController(Eventfeed eventfeed, Aanroeplimiet aanroeplimiet, DvProvider dvProvider,
-                               LogboekContext logboekContext) {
+    public EventfeedController(
+            Eventfeed eventfeed, Aanroeplimiet aanroeplimiet, DvProvider dvProvider, LogboekContext logboekContext) {
         this.eventfeed = eventfeed;
         this.aanroeplimiet = aanroeplimiet;
         this.dvProvider = dvProvider;
@@ -48,7 +47,9 @@ public class EventfeedController implements EventsApi {
     @Override
     // TODO processingActivityId is een placeholder; vervang door de URL van de verwerkingsactiviteit uit
     // het register van verwerkingsactiviteiten zodra die er is.
-    @Logboek(name = "eventsLezen", processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
+    @Logboek(
+            name = "eventsLezen",
+            processingActivityId = "https://mijnoverheidzakelijk.nl/verwerkingsactiviteiten/TODO-NMC")
     public Response eventsLezen(String cursor, Integer limiet) {
         UUID dvId = dvProvider.huidigeDvId();
         logboekContext.setDataSubjectId(BETROKKENE_ONBEKEND);
@@ -103,7 +104,9 @@ public class EventfeedController implements EventsApi {
     // Lezen en bevestigen tellen samen voor dezelfde limiet per dienstverlener.
     private void eisBinnenAanroeplimiet(UUID dvId) {
         if (!aanroeplimiet.registreer(dvId)) {
-            throw Problems.tooManyRequests(Problems.TYPE_AANROEPLIMIET_OVERSCHREDEN, "Aanroeplimiet bereikt",
+            throw Problems.tooManyRequests(
+                    Problems.TYPE_AANROEPLIMIET_OVERSCHREDEN,
+                    "Aanroeplimiet bereikt",
                     "Het maximum aantal feedaanroepen per minuut is bereikt; probeer het in de volgende minuut opnieuw",
                     aanroeplimiet.secondenTotVolgendVenster());
         }

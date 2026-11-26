@@ -1,10 +1,21 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasSize;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.domain.Bevestiging;
 import nl.rijksoverheid.moz.nmc.domain.Cursor;
 import nl.rijksoverheid.moz.nmc.helper.Problems;
@@ -16,19 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.UUID;
 import org.junit.jupiter.params.provider.ValueSource;
-
-import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 
 @QuarkusTest
 class EventfeedControllerTest {
@@ -52,10 +51,20 @@ class EventfeedControllerTest {
     void events_metLimietEnCursor_leestVerder() {
         verzondenNotificatie();
 
-        String cursor = given().queryParam("limiet", 2).when().get(FEED)
-                .then().statusCode(200).body("events", hasSize(2)).extract().path("cursor");
-        given().queryParam("cursor", cursor).when().get(FEED)
-                .then().statusCode(200).body("events", hasSize(1));
+        String cursor = given().queryParam("limiet", 2)
+                .when()
+                .get(FEED)
+                .then()
+                .statusCode(200)
+                .body("events", hasSize(2))
+                .extract()
+                .path("cursor");
+        given().queryParam("cursor", cursor)
+                .when()
+                .get(FEED)
+                .then()
+                .statusCode(200)
+                .body("events", hasSize(1));
     }
 
     @Test
@@ -66,9 +75,7 @@ class EventfeedControllerTest {
     @ParameterizedTest
     @ValueSource(ints = {0, -1})
     void events_limietOnderEen_geeft400(int limiet) {
-        given().queryParam("limiet", limiet).when().get(FEED)
-                .then()
-                .statusCode(400);
+        given().queryParam("limiet", limiet).when().get(FEED).then().statusCode(400);
     }
 
     // %test: nmc.feed.max-pagina=10. Vier verzonden notificaties geven twaalf events.
@@ -78,7 +85,9 @@ class EventfeedControllerTest {
             verzondenNotificatie();
         }
 
-        given().queryParam("limiet", 999).when().get(FEED)
+        given().queryParam("limiet", 999)
+                .when()
+                .get(FEED)
                 .then()
                 .statusCode(200)
                 .body("events", hasSize(10));
@@ -86,7 +95,9 @@ class EventfeedControllerTest {
 
     @Test
     void events_cursorUitAnderEpoch_geeft410MetEigenType() {
-        given().queryParam("cursor", new Cursor(2, 1, 1).codeer()).when().get(FEED)
+        given().queryParam("cursor", new Cursor(2, 1, 1).codeer())
+                .when()
+                .get(FEED)
                 .then()
                 .statusCode(410)
                 .body("type", equalTo(Problems.TYPE_CURSOR_VERVALLEN.toString()));
@@ -97,7 +108,9 @@ class EventfeedControllerTest {
     @ParameterizedTest
     @CsvSource({"2, 1", "1, 9223372036854775806"})
     void events_vervallenCursor_noemtDeRedenNiet(int epoch, long transactieId) {
-        given().queryParam("cursor", new Cursor(epoch, transactieId, 1).codeer()).when().get(FEED)
+        given().queryParam("cursor", new Cursor(epoch, transactieId, 1).codeer())
+                .when()
+                .get(FEED)
                 .then()
                 .statusCode(410)
                 .body("detail", equalTo(EventfeedController.CURSOR_VERVALLEN_DETAIL));
@@ -108,7 +121,8 @@ class EventfeedControllerTest {
         when(aanroeplimiet.registreer(any())).thenReturn(false);
         when(aanroeplimiet.secondenTotVolgendVenster()).thenReturn(17);
 
-        given().when().get(FEED)
+        given().when()
+                .get(FEED)
                 .then()
                 .statusCode(429)
                 .header("Retry-After", "17")
@@ -118,13 +132,19 @@ class EventfeedControllerTest {
     @Test
     void bevestiging_schrijftDeCursor() {
         verzondenNotificatie();
-        String cursor = given().when().get(FEED).then().statusCode(200).extract().path("cursor");
+        String cursor =
+                given().when().get(FEED).then().statusCode(200).extract().path("cursor");
 
-        given().contentType(ContentType.JSON).body("{\"cursor\": \"" + cursor + "\"}")
-                .when().put(BEVESTIGING).then().statusCode(204);
+        given().contentType(ContentType.JSON)
+                .body("{\"cursor\": \"" + cursor + "\"}")
+                .when()
+                .put(BEVESTIGING)
+                .then()
+                .statusCode(204);
 
         Bevestiging bevestiging = QuarkusTransaction.requiringNew()
-                .call(() -> bevestigingRepository.findByIdOptional(NotificatieFixtures.DV_ID)).orElseThrow();
+                .call(() -> bevestigingRepository.findByIdOptional(NotificatieFixtures.DV_ID))
+                .orElseThrow();
         assertEquals(cursor, bevestiging.getCursor().codeer());
     }
 
@@ -133,25 +153,46 @@ class EventfeedControllerTest {
         when(aanroeplimiet.registreer(any())).thenReturn(false);
         when(aanroeplimiet.secondenTotVolgendVenster()).thenReturn(17);
 
-        given().contentType(ContentType.JSON).body("{\"cursor\": \"" + new Cursor(1, 1, 1).codeer() + "\"}")
-                .when().put(BEVESTIGING)
+        given().contentType(ContentType.JSON)
+                .body("{\"cursor\": \"" + new Cursor(1, 1, 1).codeer() + "\"}")
+                .when()
+                .put(BEVESTIGING)
                 .then()
                 .statusCode(429)
                 .header("Retry-After", "17")
                 .body("type", equalTo(Problems.TYPE_AANROEPLIMIET_OVERSCHREDEN.toString()));
 
         assertTrue(QuarkusTransaction.requiringNew()
-                .call(() -> bevestigingRepository.findByIdOptional(NotificatieFixtures.DV_ID).isEmpty()));
+                .call(() -> bevestigingRepository
+                        .findByIdOptional(NotificatieFixtures.DV_ID)
+                        .isEmpty()));
     }
 
     @Test
     void bevestiging_zonderOfMetOngeldigeCursor_geeft400_enVervallen_geeft410() {
-        given().contentType(ContentType.JSON).body("{\"cursor\": \" \"}").when().put(BEVESTIGING).then().statusCode(400);
+        given().contentType(ContentType.JSON)
+                .body("{\"cursor\": \" \"}")
+                .when()
+                .put(BEVESTIGING)
+                .then()
+                .statusCode(400);
         given().contentType(ContentType.JSON).when().put(BEVESTIGING).then().statusCode(400);
-        given().contentType(ContentType.JSON).body("null").when().put(BEVESTIGING).then().statusCode(400);
-        given().contentType(ContentType.JSON).body("{\"cursor\": \"geen cursor !\"}").when().put(BEVESTIGING).then().statusCode(400);
-        given().contentType(ContentType.JSON).body("{\"cursor\": \"" + new Cursor(2, 1, 1).codeer() + "\"}")
-                .when().put(BEVESTIGING)
+        given().contentType(ContentType.JSON)
+                .body("null")
+                .when()
+                .put(BEVESTIGING)
+                .then()
+                .statusCode(400);
+        given().contentType(ContentType.JSON)
+                .body("{\"cursor\": \"geen cursor !\"}")
+                .when()
+                .put(BEVESTIGING)
+                .then()
+                .statusCode(400);
+        given().contentType(ContentType.JSON)
+                .body("{\"cursor\": \"" + new Cursor(2, 1, 1).codeer() + "\"}")
+                .when()
+                .put(BEVESTIGING)
                 .then()
                 .statusCode(410)
                 .body("type", equalTo(Problems.TYPE_CURSOR_VERVALLEN.toString()))
@@ -159,7 +200,8 @@ class EventfeedControllerTest {
     }
 
     private UUID verzondenNotificatie() {
-        return NotificatieFixtures.verzondenNotificatie(UUID.randomUUID(),
-                OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1)).notifyId();
+        return NotificatieFixtures.verzondenNotificatie(
+                        UUID.randomUUID(), OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1))
+                .notifyId();
     }
 }

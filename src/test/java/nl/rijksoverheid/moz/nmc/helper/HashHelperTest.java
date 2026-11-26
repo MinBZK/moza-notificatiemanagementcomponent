@@ -1,18 +1,17 @@
 package nl.rijksoverheid.moz.nmc.helper;
 
-import java.util.Arrays;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import java.util.Arrays;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 
 @Tag("unit")
 class HashHelperTest {
@@ -59,7 +58,9 @@ class HashHelperTest {
 
         assertFalse(Arrays.equals(hmac, hashHelper.hmac("doel-b", "waarde")), "ander doel");
         assertFalse(Arrays.equals(hmac, hashHelper.hmac("doel-a", "andere waarde")), "andere waarde");
-        assertFalse(Arrays.equals(hmac, new HashHelper(Optional.of("ander-pepper")).hmac("doel-a", "waarde")), "andere pepper");
+        assertFalse(
+                Arrays.equals(hmac, new HashHelper(Optional.of("ander-pepper")).hmac("doel-a", "waarde")),
+                "andere pepper");
     }
 
     @Test

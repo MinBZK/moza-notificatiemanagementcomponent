@@ -7,7 +7,6 @@ import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 import java.io.InputStream;
 
-
 /**
  * REST-client voor de webhooks van de Dienstverleners. Eén client voor allemaal; de URL komt per
  * levering uit het register.
@@ -25,6 +24,9 @@ public interface WebhookClient {
      */
     @POST
     @Consumes("application/cloudevents-batch+json")
-    Uni<InputStream> lever(@Url String url, @HeaderParam("Authorization") String autorisatie,
-                    @HeaderParam(CURSOR_HEADER) String cursor, String body);
+    Uni<InputStream> lever(
+            @Url String url,
+            @HeaderParam("Authorization") String autorisatie,
+            @HeaderParam(CURSOR_HEADER) String cursor,
+            String body);
 }

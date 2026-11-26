@@ -3,6 +3,12 @@ package nl.rijksoverheid.moz.nmc.service.onderhoud;
 import io.quarkus.logging.Log;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.UUID;
+import java.util.function.IntSupplier;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.repository.EventPartitie;
@@ -16,13 +22,6 @@ import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakVerlorenException;
 import nl.rijksoverheid.moz.nmc.service.taak.Verzendbudget;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-
-import java.time.Clock;
-import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.UUID;
-import java.util.function.IntSupplier;
 
 /**
  * Het onderhoud per systeem: maakt de volgende partitie van het eventlog aan, herwrapt sleutels onder
@@ -51,12 +50,16 @@ public class OnderhoudTaakHandler implements TaakHandler {
     private final int maxBatches;
     private final Clock clock;
 
-    public OnderhoudTaakHandler(EventlogPartitiebeheer eventlogPartitiebeheer, NotificatieRepository notificatieRepository,
-                                Sleutelbeheer sleutelbeheer, Opruimtermijnen opruimtermijnen, Verzendbudget verzendbudget,
-                                Clock clock,
-                                @ConfigProperty(name = "nmc.onderhoud.interval") Duration interval,
-                                @ConfigProperty(name = "nmc.onderhoud.batch") int batch,
-                                @ConfigProperty(name = "nmc.onderhoud.max-batches") int maxBatches) {
+    public OnderhoudTaakHandler(
+            EventlogPartitiebeheer eventlogPartitiebeheer,
+            NotificatieRepository notificatieRepository,
+            Sleutelbeheer sleutelbeheer,
+            Opruimtermijnen opruimtermijnen,
+            Verzendbudget verzendbudget,
+            Clock clock,
+            @ConfigProperty(name = "nmc.onderhoud.interval") Duration interval,
+            @ConfigProperty(name = "nmc.onderhoud.batch") int batch,
+            @ConfigProperty(name = "nmc.onderhoud.max-batches") int maxBatches) {
         if (batch < 1 || maxBatches < 1) {
             throw new IllegalStateException("nmc.onderhoud.batch en nmc.onderhoud.max-batches moeten 1 of hoger zijn");
         }
@@ -86,21 +89,42 @@ public class OnderhoudTaakHandler implements TaakHandler {
     public TaakUitkomst voerUit(Taak taak, Lease lease) {
         OffsetDateTime nu = OffsetDateTime.now(clock);
 
-        voerStapUit("partitie aanmaken", () -> eventlogPartitiebeheer.maakVolgendeAan()
-                .ifPresent(p -> Log.infof("Onderhoud: eventpartitie %s aangemaakt (%d tot %d)", p.naam(), p.van(), p.tot())));
+        voerStapUit(
+                "partitie aanmaken",
+                () -> eventlogPartitiebeheer
+                        .maakVolgendeAan()
+                        .ifPresent(p -> Log.infof(
+                                "Onderhoud: eventpartitie %s aangemaakt (%d tot %d)", p.naam(), p.van(), p.tot())));
         lease.verleng();
         voerStapUit("sleutels herwrappen", () -> meld("sleutel(s) geherwrapt", herwrapSleutels(lease)));
-        voerStapUit("notificaties verwijderen", () -> meld("notificatie(s) na de bewaartermijn verwijderd",
-                inBatches(lease, () -> QuarkusTransaction.requiringNew()
-                        .call(() -> notificatieRepository.verwijderMetEindstatusOuderDan(opruimtermijnen.bewaargrens(nu), batch)))));
+        voerStapUit(
+                "notificaties verwijderen",
+                () -> meld(
+                        "notificatie(s) na de bewaartermijn verwijderd",
+                        inBatches(
+                                lease,
+                                () -> QuarkusTransaction.requiringNew()
+                                        .call(() -> notificatieRepository.verwijderMetEindstatusOuderDan(
+                                                opruimtermijnen.bewaargrens(nu), batch)))));
         lease.verleng();
-        voerStapUit("eventpartities verwijderen", () -> eventlogPartitiebeheer.ruimOp(nu).stream().map(EventPartitie::naam)
-                .forEach(naam -> Log.infof("Onderhoud: eventpartitie %s verwijderd", naam)));
+        voerStapUit(
+                "eventpartities verwijderen",
+                () -> eventlogPartitiebeheer.ruimOp(nu).stream()
+                        .map(EventPartitie::naam)
+                        .forEach(naam -> Log.infof("Onderhoud: eventpartitie %s verwijderd", naam)));
         lease.verleng();
-        voerStapUit("default-partitie opruimen", () -> meld("event(s) uit de default-partitie verwijderd",
-                inBatches(lease, () -> eventlogPartitiebeheer.ruimStandaardpartitieOp(nu, batch))));
-        voerStapUit("verzendbudget opruimen", () -> meld("tijdvak(ken) van het verzendbudget verwijderd",
-                QuarkusTransaction.requiringNew().call(() -> verzendbudget.verwijderTijdvakkenOuderDan(nu.minus(VERZENDBUDGET_BEWAARTERMIJN)))));
+        voerStapUit(
+                "default-partitie opruimen",
+                () -> meld(
+                        "event(s) uit de default-partitie verwijderd",
+                        inBatches(lease, () -> eventlogPartitiebeheer.ruimStandaardpartitieOp(nu, batch))));
+        voerStapUit(
+                "verzendbudget opruimen",
+                () -> meld(
+                        "tijdvak(ken) van het verzendbudget verwijderd",
+                        QuarkusTransaction.requiringNew()
+                                .call(() -> verzendbudget.verwijderTijdvakkenOuderDan(
+                                        nu.minus(VERZENDBUDGET_BEWAARTERMIJN)))));
 
         return TaakUitkomst.herpland(OffsetDateTime.now(clock).plus(interval));
     }
@@ -119,7 +143,8 @@ public class OnderhoudTaakHandler implements TaakHandler {
         for (int i = 0; i < maxBatches; i++) {
             UUID vanaf = naId;
             List<GewrapteSleutel> sleutels = QuarkusTransaction.requiringNew().call(() -> {
-                List<GewrapteSleutel> vergrendeld = notificatieRepository.vergrendelOudeSleutels(huidigeKekVersie, vanaf, batch);
+                List<GewrapteSleutel> vergrendeld =
+                        notificatieRepository.vergrendelOudeSleutels(huidigeKekVersie, vanaf, batch);
                 vergrendeld.forEach(sleutel -> herwrap(sleutel, huidigeKekVersie));
 
                 return vergrendeld;
@@ -139,10 +164,12 @@ public class OnderhoudTaakHandler implements TaakHandler {
 
     private void herwrap(GewrapteSleutel sleutel, int huidigeKekVersie) {
         try {
-            byte[] nieuw = sleutelbeheer.herwrap(sleutel.notificatieId(), sleutel.sleutelGewrapt(), sleutel.kekVersie());
+            byte[] nieuw =
+                    sleutelbeheer.herwrap(sleutel.notificatieId(), sleutel.sleutelGewrapt(), sleutel.kekVersie());
             notificatieRepository.zetSleutel(sleutel.notificatieId(), nieuw, huidigeKekVersie);
         } catch (OntsleutelenMisluktException e) {
-            Log.errorf("Onderhoud: sleutel van notificatie %s onder KEK-versie %d niet te herwrappen: %s",
+            Log.errorf(
+                    "Onderhoud: sleutel van notificatie %s onder KEK-versie %d niet te herwrappen: %s",
                     sleutel.notificatieId(), sleutel.kekVersie(), e.getMessage());
         }
     }

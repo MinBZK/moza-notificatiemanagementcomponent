@@ -1,10 +1,23 @@
 package nl.rijksoverheid.moz.nmc.service.sleutel;
 
+import static io.restassured.RestAssured.given;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import javax.sql.DataSource;
 import nl.rijksoverheid.moz.nmc.client.notifynl.NotifyNLJwtFactory;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.model.SendEmailResponse;
@@ -22,20 +35,6 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-
-import javax.sql.DataSource;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import static io.restassured.RestAssured.given;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 
 /**
  * Leest de notificatierij na een echte verzending buiten Hibernate om, zoals een {@code SELECT} van
@@ -98,7 +97,8 @@ class VersleuteldeOpslagIntegratieTest {
 
         for (Map.Entry<String, byte[]> kolom : rij.entrySet()) {
             for (String geheim : geheimen) {
-                assertFalse(bevat(kolom.getValue(), geheim.getBytes(StandardCharsets.UTF_8)),
+                assertFalse(
+                        bevat(kolom.getValue(), geheim.getBytes(StandardCharsets.UTF_8)),
                         "kolom " + kolom.getKey() + " bevat " + geheim + " leesbaar");
             }
         }
@@ -122,52 +122,58 @@ class VersleuteldeOpslagIntegratieTest {
     // identificerend nummer staat er alleen versleuteld.
     @Test
     void centraleNotificatieVersturen_rijBevatGeenAdresEnGeenLeesbaarNummer() throws Exception {
-        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any())).thenReturn(new PartijResponse()
-                .partijId(UUID.randomUUID())
-                .contactgegevens(List.of(new ContactgegevenResponse()
-                        .type(ContactgegevenResponse.TypeEnum.EMAIL).waarde(EMAIL).isDefault(true))));
+        Mockito.when(profielApi.apiProfielserviceV1PartijPost(any()))
+                .thenReturn(new PartijResponse()
+                        .partijId(UUID.randomUUID())
+                        .contactgegevens(List.of(new ContactgegevenResponse()
+                                .type(ContactgegevenResponse.TypeEnum.EMAIL)
+                                .waarde(EMAIL)
+                                .isDefault(true))));
 
-        String notificatieId = given()
-                .contentType(ContentType.JSON)
+        String notificatieId = given().contentType(ContentType.JSON)
                 .body(Map.of(
                         "identificatieType", "KVK",
                         "identificatieNummer", KVK_NUMMER,
                         "dienstverlener", "Gemeente Voorbeeld",
                         "berichtType", "Stuurgroep Agenda",
                         "berichtgegevens", PERSONALISATION))
-                .when().post("/api/nmc/v1/centraal/notificaties")
+                .when()
+                .post("/api/nmc/v1/centraal/notificaties")
                 .then()
                 .statusCode(202)
-                .extract().path("notificatieId");
+                .extract()
+                .path("notificatieId");
         UUID id = UUID.fromString(notificatieId);
 
-        for (Map.Entry<String, byte[]> kolom : NotificatieFixtures.leesRuweRij(dataSource, id).entrySet()) {
+        for (Map.Entry<String, byte[]> kolom :
+                NotificatieFixtures.leesRuweRij(dataSource, id).entrySet()) {
             for (String geheim : List.of(EMAIL, KVK_NUMMER)) {
-                assertFalse(bevat(kolom.getValue(), geheim.getBytes(StandardCharsets.UTF_8)),
+                assertFalse(
+                        bevat(kolom.getValue(), geheim.getBytes(StandardCharsets.UTF_8)),
                         "kolom " + kolom.getKey() + " bevat " + geheim + " leesbaar");
             }
         }
 
-        VersleuteldeGegevens gegevens = QuarkusTransaction.requiringNew().call(() ->
-                notificatieRepository.findById(id).getVersleuteldeGegevens());
+        VersleuteldeGegevens gegevens = QuarkusTransaction.requiringNew()
+                .call(() -> notificatieRepository.findById(id).getVersleuteldeGegevens());
         assertEquals(new Ontvanger(Ontvanger.Soort.KVK, KVK_NUMMER), sleutelbeheer.ontsleutelOntvanger(id, gegevens));
     }
 
     private UUID verstuur() {
-        String id = given()
-                .contentType(ContentType.JSON)
+        String id = given().contentType(ContentType.JSON)
                 .body(Map.of(
                         "emailAdres", EMAIL,
                         "berichtType", "Stuurgroep Agenda",
                         "berichtgegevens", PERSONALISATION))
-                .when().post("/api/nmc/v1/decentraal/notificaties")
+                .when()
+                .post("/api/nmc/v1/decentraal/notificaties")
                 .then()
                 .statusCode(202)
-                .extract().path("notificatieId");
+                .extract()
+                .path("notificatieId");
 
         return UUID.fromString(id);
     }
-
 
     private static boolean bevat(byte[] hooiberg, byte[] naald) {
         if (hooiberg == null) {

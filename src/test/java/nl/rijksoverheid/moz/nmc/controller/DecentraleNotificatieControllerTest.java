@@ -1,9 +1,17 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.verifyNoInteractions;
+
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import java.util.UUID;
 import nl.rijksoverheid.moz.nmc.client.notifynl.generated.api.SendAMessageApi;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
@@ -15,15 +23,6 @@ import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.UUID;
-
-import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 /** De intake is een aanname: 202 na de commit, zonder aanroep van NotifyNL. */
 @QuarkusTest
@@ -45,29 +44,32 @@ class DecentraleNotificatieControllerTest {
 
     @Test
     void decentraleNotificatieVersturen_happyFlow_retourneert202EnBewaartHetAdresVersleuteld() {
-        String id = given()
-                .contentType(ContentType.JSON)
+        String id = given().contentType(ContentType.JSON)
                 .body(aanvraag("burger@example.nl", "Stuurgroep Agenda", ""))
-                .when().post(PAD)
+                .when()
+                .post(PAD)
                 .then()
                 .statusCode(202)
                 .body("notificatieId", notNullValue())
-                .extract().path("notificatieId");
+                .extract()
+                .path("notificatieId");
 
         Notificatie notificatie = LeesHelper.notificatie(UUID.fromString(id));
         assertEquals(NotificatieStatus.AANGENOMEN, notificatie.getStatus());
-        assertEquals(Ontvanger.email("burger@example.nl"),
+        assertEquals(
+                Ontvanger.email("burger@example.nl"),
                 sleutelbeheer.ontsleutelOntvanger(notificatie.getId(), notificatie.getVersleuteldeGegevens()));
-        assertEquals(UUID.fromString(id), LeesHelper.enigeTaak(TaakSoort.VERZENDEN).getNotificatieId());
+        assertEquals(
+                UUID.fromString(id), LeesHelper.enigeTaak(TaakSoort.VERZENDEN).getNotificatieId());
         verifyNoInteractions(sendAMessageApi);
     }
 
     @Test
     void decentraleNotificatieVersturen_ongeldigEmailAdres_retourneert400() {
-        given()
-                .contentType(ContentType.JSON)
+        given().contentType(ContentType.JSON)
                 .body(aanvraag("geen-adres", "Stuurgroep Agenda", ""))
-                .when().post(PAD)
+                .when()
+                .post(PAD)
                 .then()
                 .statusCode(400)
                 .contentType("application/problem+json")

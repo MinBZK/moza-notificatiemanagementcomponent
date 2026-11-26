@@ -1,12 +1,11 @@
 package nl.rijksoverheid.moz.nmc.job;
 
+import java.util.function.BiFunction;
+import java.util.function.Predicate;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakHandler;
 import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
-
-import java.util.function.BiFunction;
-import java.util.function.Predicate;
 
 /**
  * Handler waarvan een test het gedrag instelt. Geen bean: de test geeft hem via de constructor aan

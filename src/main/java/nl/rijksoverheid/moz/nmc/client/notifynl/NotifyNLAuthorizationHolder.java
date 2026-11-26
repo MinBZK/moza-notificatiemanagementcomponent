@@ -1,7 +1,6 @@
 package nl.rijksoverheid.moz.nmc.client.notifynl;
 
 import jakarta.enterprise.context.RequestScoped;
-
 import java.util.Optional;
 
 /**
