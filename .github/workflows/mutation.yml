@@ -1,0 +1,69 @@
+# Mutation testing met PIT: verandert de code en kijkt of een unittest dan faalt. Informatief en
+# geen verplichte check; er is geen drempel, de job faalt alleen als de unittests zelf falen.
+# Overlevende mutanten staan in de samenvatting van de run, het volledige rapport in het artifact.
+
+name: Mutation testing
+
+permissions: read-all
+
+on:
+  push:
+    branches: [ "main" ]
+  # Op elke PR, ook in een stack: de uitkomst is advies voor de reviewer, geen poort.
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pit:
+    name: PIT (unittests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up JDK 25
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+      - name: PIT op de tests met @Tag("unit")
+        run: mvn -B test-compile org.pitest:pitest-maven:mutationCoverage --file pom.xml
+      - name: Samenvatting
+        if: always()
+        shell: python3 {0}
+        run: |
+          import collections, os, pathlib, xml.etree.ElementTree as ET
+
+          rapport = pathlib.Path("target/pit-reports/mutations.xml")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as uit:
+              if not rapport.exists():
+                  uit.write("## Mutation testing\n\nGeen rapport: PIT is niet afgerond.\n")
+                  raise SystemExit(0)
+
+              status = collections.Counter()
+              overlevend = []
+              for m in ET.parse(rapport).getroot():
+                  status[m.get("status")] += 1
+                  if m.get("status") == "SURVIVED":
+                      klasse = m.findtext("mutatedClass").removeprefix("nl.rijksoverheid.moz.nmc.")
+                      overlevend.append((klasse, int(m.findtext("lineNumber")), m.findtext("description")))
+
+              gedekt = sum(status.values()) - status["NO_COVERAGE"]
+              # Dezelfde telling als PIT (DetectionStatus.isDetected): ook NON_VIABLE en RUN_ERROR.
+              gedood = sum(status[s] for s in ("KILLED", "TIMED_OUT", "MEMORY_ERROR", "NON_VIABLE", "RUN_ERROR"))
+              sterkte = f"{100 * gedood / gedekt:.0f}%" if gedekt else "n.v.t."
+              uit.write("## Mutation testing\n\n")
+              uit.write(f"Test strength **{sterkte}**: {gedood} van {gedekt} gedekte mutanten gedood. ")
+              uit.write(f"{status['NO_COVERAGE']} mutanten zonder unittest.\n\n")
+
+              if overlevend:
+                  uit.write(f"### Overlevende mutanten ({len(overlevend)})\n\n| Klasse | Regel | Mutatie |\n|---|---|---|\n")
+                  for klasse, regel, beschrijving in sorted(overlevend):
+                      uit.write(f"| `{klasse}` | {regel} | {beschrijving} |\n")
+      - name: Rapport bewaren
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pit-rapport
+          path: target/pit-reports
+          if-no-files-found: ignore

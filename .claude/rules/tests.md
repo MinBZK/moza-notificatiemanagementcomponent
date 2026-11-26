@@ -28,7 +28,12 @@ Beoordeel bij elke codewijziging of er tests bij of om moeten.
   diensten op clientniveau met `@InjectMock @RestClient` op de gegenereerde API (`ProfielApi`,
   `SendAMessageApi`) plus Mockito, niet over HTTP.
 - **Unittests zonder Quarkus** voor losse logica (`WebhookUrlValidator`, `HashHelper`, adapters
-  met gemockte afhankelijkheden). Ze tellen mee voor de coverage en zijn veel sneller.
+  met gemockte afhankelijkheden). Ze tellen mee voor de coverage en zijn veel sneller. Zet
+  `@Tag("unit")` op de klasse: alleen die tests draaien onder mutation testing (PIT).
+  `TestindelingTest` faalt als een testklasse geen `@QuarkusTest` is, geen tag heeft en niet
+  daar met reden is uitgezonderd.
+- **Mutation testing** vindt een assert die een codewijziging laat passeren. Overleeft een
+  mutant in code die je wijzigt, versterk dan de test in plaats van de mutant te negeren.
 - **De database**: `EmbeddedPostgresTestResource` start één PostgreSQL 18 (Zonky) per testrun;
   Flyway migreert en `validate` controleert het schema. Elke `@QuarkusTest` deelt die database,
   dus een test ruimt zijn eigen rijen op. Een `@TestProfile` herstart Quarkus en krijgt een eigen

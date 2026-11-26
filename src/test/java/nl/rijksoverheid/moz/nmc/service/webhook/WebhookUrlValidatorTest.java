@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service.webhook;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -10,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("unit")
 class WebhookUrlValidatorTest {
 
     private static final WebhookUrlValidator VALIDATOR = new WebhookUrlValidator();

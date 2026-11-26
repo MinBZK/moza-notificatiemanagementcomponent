@@ -11,6 +11,7 @@ import nl.rijksoverheid.moz.nmc.service.Overgangsfunctie;
 import nl.rijksoverheid.moz.nmc.service.Regie;
 import nl.rijksoverheid.moz.nmc.service.sleutel.Sleutelbeheer;
 import nl.rijksoverheid.moz.nmc.service.Verzendbeleid;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -30,6 +31,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 // Het standaardquotum komt uit de configuratie; AannameServiceTest draait zonder, dus hier zonder Quarkus.
+@Tag("unit")
 class AannameQuotumTest {
 
     private static final UUID DV_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");

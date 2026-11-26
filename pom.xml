@@ -18,6 +18,8 @@
         <surefire-plugin.version>3.6.1</surefire-plugin.version>
         <openapi-generator.version>7.27.0</openapi-generator.version>
         <jacoco-plugin.version>0.8.16</jacoco-plugin.version>
+        <pitest-plugin.version>1.30.2</pitest-plugin.version>
+        <pitest-junit5-plugin.version>1.2.3</pitest-junit5-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -396,6 +398,58 @@
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         <maven.home>${maven.home}</maven.home>
                     </systemPropertyVariables>
+                </configuration>
+            </plugin>
+            <!-- Mutation testing: verandert de code en kijkt of een test faalt. Niet gekoppeld aan een
+                 fase, dus geen onderdeel van verify; draai het met
+                 ./mvnw test-compile org.pitest:pitest-maven:mutationCoverage
+                 Alleen tests met @Tag("unit"): een @QuarkusTest start per mutant opnieuw en kost
+                 per testklasse bijna een minuut. Rapport in target/pit-reports. -->
+            <plugin>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-maven</artifactId>
+                <version>${pitest-plugin.version}</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.pitest</groupId>
+                        <artifactId>pitest-junit5-plugin</artifactId>
+                        <version>${pitest-junit5-plugin.version}</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <!-- Alle eigen code, behalve wat gegenereerd wordt. Een klasse zonder unittest kost
+                         geen looptijd: PIT meldt de mutanten als ongedekt en telt ze niet mee in de
+                         test strength. -->
+                    <targetClasses>
+                        <param>nl.rijksoverheid.moz.nmc.*</param>
+                    </targetClasses>
+                    <excludedClasses>
+                        <param>nl.rijksoverheid.moz.nmc.client.*.generated.*</param>
+                        <param>nl.rijksoverheid.moz.nmc.api.*</param>
+                        <param>nl.rijksoverheid.moz.nmc.notifynlcallback.api.*</param>
+                    </excludedClasses>
+                    <targetTests>
+                        <param>nl.rijksoverheid.moz.nmc.*</param>
+                    </targetTests>
+                    <!-- De JUnit-integratie van Quarkus bouwt de app al tijdens discovery op, voor elke
+                         @QuarkusTest, ook als de tagfilter die daarna wegfiltert. Zonder deze jar
+                         gebeurt dat niet; de unittests hebben hem niet nodig. -->
+                    <classpathDependencyExcludes>
+                        <param>io.quarkus:quarkus-junit</param>
+                    </classpathDependencyExcludes>
+                    <!-- Zoals bij Surefire: anders logt de JDK-logging buiten de JBoss LogManager om. -->
+                    <jvmArgs>
+                        <value>-Djava.util.logging.manager=org.jboss.logmanager.LogManager</value>
+                    </jvmArgs>
+                    <includedGroups>
+                        <includedGroup>unit</includedGroup>
+                    </includedGroups>
+                    <threads>4</threads>
+                    <timestampedReports>false</timestampedReports>
+                    <outputFormats>
+                        <outputFormat>HTML</outputFormat>
+                        <outputFormat>XML</outputFormat>
+                    </outputFormats>
                 </configuration>
             </plugin>
         </plugins>

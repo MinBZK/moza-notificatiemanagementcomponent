@@ -1,10 +1,12 @@
 package nl.rijksoverheid.moz.nmc.client.notifynl;
 
 import java.time.Clock;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@Tag("unit")
 class NotifyNLJwtFactoryTest {
 
     private final NotifyNLJwtFactory factory = new NotifyNLJwtFactory(Clock.systemUTC());
