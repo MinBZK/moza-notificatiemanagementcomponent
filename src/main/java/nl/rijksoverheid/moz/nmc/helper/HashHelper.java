@@ -42,7 +42,7 @@ public class HashHelper {
             mac.init(new SecretKeySpec(afleiding.doFinal(doel.getBytes(StandardCharsets.UTF_8)), HMAC_ALGORITHM));
 
             return mac.doFinal(waarde.getBytes(StandardCharsets.UTF_8));
-        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+        } catch (NoSuchAlgorithmException | InvalidKeyException e) { // onbereikbaar: elke JVM levert HmacSHA256 en de constructor weigert een lege sleutel
             throw new IllegalStateException("HmacSHA256 kon niet worden geïnitialiseerd", e);
         }
     }
