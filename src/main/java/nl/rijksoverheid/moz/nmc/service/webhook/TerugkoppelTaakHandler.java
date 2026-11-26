@@ -35,13 +35,21 @@ import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
  * de eerste ronde de kop van het log vast: de webhook krijgt alleen events van na zijn registratie.
  * Vervalt de webhook-URL, dan vervalt de taak en gaat de leverpositie weg.
  * <p>
+ * De controletaak plant de eerste terugkoppeltaak, dus een nieuwe webhook-URL gaat binnen
+ * {@code nmc.controle.interval} leveren. Een unieke index houdt het op één taak per dienstverlener,
+ * en met de claim levert normaal maar één pod tegelijk aan dezelfde webhook. Een bundel bevat ten hoogste
+ * {@code webhook_bundel} uit het register, anders {@code nmc.webhook.bundel}, en nooit meer dan
+ * {@code nmc.feed.max-pagina} events.
+ * <p>
  * Een geslaagde ronde zet de pogingen van de taak terug, zodat alleen een reeks onverwachte fouten
  * op rij hem op mislukt zet en niet fouten verspreid over zijn hele levensduur.
  * <p>
- * Een mislukte levering kost de taak geen poging: de wachttijd loopt op met het aantal mislukkingen
- * op rij, en na het afgesproken aantal pauzeert de webhook met een oplopende wachttijd tot ten
- * hoogste een dag. Een geslaagde levering zet de teller terug. Een ongeldige webhook-URL geldt als
- * mislukking die direct pauzeert, zonder aanroep.
+ * Een mislukte levering kost de taak geen poging. De wachttijd is {@code nmc.webhook.herpoging-wachttijd},
+ * verdubbeld per mislukking op rij; vanaf {@code webhook_max_mislukkingen} uit het register (anders
+ * {@code nmc.webhook.max-mislukkingen}) pauzeert de webhook met {@code nmc.webhook.pauze-wachttijd},
+ * verdubbeld per verdere mislukking. Beide wachttijden zijn begrensd op een dag. Een geslaagde levering
+ * zet de teller terug. Een ongeldige webhook-URL geldt als mislukking die direct pauzeert, zonder
+ * aanroep, en wordt als ERROR gelogd.
  */
 @ApplicationScoped
 public class TerugkoppelTaakHandler implements TaakHandler {

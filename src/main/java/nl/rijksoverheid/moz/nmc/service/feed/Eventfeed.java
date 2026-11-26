@@ -21,6 +21,13 @@ import nl.rijksoverheid.moz.nmc.repository.EventRepository;
 /**
  * Leest het eventlog per dienstverlener op (transactie-id, event-id) onder het watermerk van de
  * oudste lopende transactie, en bewaart de cursor die de Dienstverlener terugschrijft.
+ * <p>
+ * Het watermerk ({@code pg_snapshot_xmin(pg_current_snapshot())}) zorgt dat een cursor nooit een
+ * event overslaat dat later committet dan een event met een hogere transactie-id. De cursor is een
+ * {@link Cursor}; een cursor uit een ander cluster-epoch ({@code nmc.feed.cluster-epoch}), onder het
+ * oudste event of boven de jongste transactie ({@code pg_snapshot_xmax}) is vervallen. Het opruimen
+ * van het eventlog spaart alleen wat een bevestiging of leverpositie beschermt, dus ook een gelezen
+ * maar nog niet bevestigde cursor kan vervallen; dat is bewust niet afgedekt.
  */
 @ApplicationScoped
 public class Eventfeed {

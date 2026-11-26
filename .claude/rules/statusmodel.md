@@ -11,8 +11,8 @@ paths:
 
 # Statusmodel, taken en eventlog
 
-Hoe de mechanismen werken staat in `docs/architectuur.md`. Dit zijn de invarianten die je bij
-een wijziging niet mag breken.
+Het overzicht van de mechanismen staat in `docs/architectuur.md`, de details in de javadoc van
+de klassen. Dit zijn de invarianten die je bij een wijziging niet mag breken.
 
 ## Status en versie
 

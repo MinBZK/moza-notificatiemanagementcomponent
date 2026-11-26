@@ -13,6 +13,18 @@ import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijRequ
 import nl.rijksoverheid.moz.nmc.client.profielservice.generated.model.PartijResponse;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
+/**
+ * De adapter naar de Profielservice: zoekt bij centrale regie het e-mailadres van een partij op. Uit de
+ * contactgegevens kiest hij eerst een e-mailadres met exact de scope Dienstverlener plus dienst, dan een
+ * met alleen de Dienstverlener als scope, dan het default-adres en dan een adres zonder scopes. Is er
+ * geen, dan gooit hij een {@link GeenEmailadresGevondenException}.
+ * <p>
+ * Alleen een 404 of 422 gaat over de partij en wordt een {@link PartijNietGevondenException}. Elke
+ * andere status, ook een 400, en een verbindingsfout worden een {@link ProfielServiceException}: een
+ * 400 ligt aan het verzoek van het NMC, en een gewijzigd contract zou anders elke centrale notificatie
+ * op een eindstatus zetten. Daarom weigert de intake al een {@code dienstverlener} of {@code dienst}
+ * zonder leesbaar teken of met een regeleinde, die de Profielservice met een 400 afwijst.
+ */
 @ApplicationScoped
 public class ProfielServiceAdapter {
 

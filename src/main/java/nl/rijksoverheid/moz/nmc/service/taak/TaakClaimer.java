@@ -21,7 +21,8 @@ import nl.rijksoverheid.moz.nmc.repository.TaakRepository;
  * Claimt taken voor een worker en werkt geclaimde taken bij. Een claimronde kiest de dienstverleners
  * met werk dat aan de beurt is en claimt per dienstverlener een deel van de batch, zodat een piek van
  * één dienstverlener de andere niet blokkeert; voor het verzenden en de navraag komen de tokens uit
- * het verzendbudget.
+ * het verzendbudget. De claim vergrendelt met {@code PESSIMISTIC_WRITE} en de skip-locked-hint
+ * ({@code FOR NO KEY UPDATE SKIP LOCKED}), zodat workers op verschillende pods elkaars taken overslaan.
  * <p>
  * De claim committet vóór de uitvoering. De tokens nemen, de taken claimen en de ongebruikte tokens
  * teruggeven zijn drie transacties, zodat de rij van het verzendbudget, die alle pods delen, niet

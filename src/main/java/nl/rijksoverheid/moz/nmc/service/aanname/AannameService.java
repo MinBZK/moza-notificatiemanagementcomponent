@@ -29,7 +29,10 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  * Neemt een notificatie aan: notificatie op {@code aangenomen} met event 0, de versleutelde payload en
  * de verzendtaak, in één transactie. Het antwoord aan de aanroeper volgt op de commit; de verzending
  * doet de worker. De aanname roept de Profielservice en NotifyNL niet aan.
- * Eager bij het opstarten, zodat een ongeldig standaardquotum de applicatie niet laat starten.
+ * <p>
+ * Het quotum per dienstverlener per dag komt uit {@code dienstverlener.quotum_per_dag}, anders uit
+ * {@code nmc.aanname.quotum-per-dag}; zonder beide is er geen quotum. Eager bij het opstarten, zodat
+ * een ongeldig standaardquotum de applicatie niet laat starten.
  */
 @Startup
 @ApplicationScoped

@@ -4,7 +4,8 @@ Werkregels voor de NotificatieManagementComponent (NMC): wat je moet weten om
 wijzigingen aan te brengen zonder iets stilzwijgend te breken.
 
 - Overzicht, domeinmodel, API en lokaal draaien: [`README.md`](README.md).
-- Begrippen, de twee assen en hoe de mechanismen werken: [`docs/architectuur.md`](docs/architectuur.md).
+- Begrippen, de twee assen en een overzicht van de mechanismen: [`docs/architectuur.md`](docs/architectuur.md).
+  Hoe een mechanisme in detail werkt, staat in de javadoc van de klasse die het uitvoert.
 - Regels voor een deel van de code staan in `.claude/rules/`: migraties, contracten, tests en
   het statusmodel. Claude Code laadt ze vanzelf zodra je in die bestanden werkt; werk je met een
   ander hulpmiddel, lees ze dan zelf.
@@ -170,7 +171,10 @@ hieronder kan hij niet afdwingen.
 ## Commentaar en documentatie
 
 - **Compact**: één of twee zinnen die zeggen wát er niet vanzelf spreekt en waaróm. De afweging
-  en de alternatieven horen in de commitmessage of het issue.
+  en de alternatieven horen in de commitmessage of het issue. Uitzondering: de javadoc van een
+  klasse die een mechanisme uitvoert, beschrijft hoe dat werkt (stappen, grenzen, foutafhandeling),
+  omdat `docs/architectuur.md` daarvoor naar die javadoc verwijst. Kort die niet in zonder de
+  details elders onder te brengen.
 - **Schrijf alleen op wat je hebt gecontroleerd.** Een verkeerde verklaring van een mechanisme
   is schadelijker dan geen commentaar. Weet je het niet zeker, laat het weg of noteer het als
   aanname.
@@ -188,7 +192,7 @@ hieronder kan hij niet afdwingen.
   "beleveren", en niet "gooit" zonder te zeggen wat: "gooit een exception".
 - **Verwijs in commentaar niet naar dit bestand**; beschrijf de regel zelf.
 - **Houd documentatie bij in dezelfde PR.** Verander je het gedrag van een klasse, werk dan de
-  javadoc bij en, als het mechanisme daar beschreven staat, `docs/architectuur.md`. Verandert een
+  javadoc bij en, als het overzicht daar niet meer klopt, `docs/architectuur.md`. Verandert een
   regel hier of in `.claude/rules/`, pas die dan ook aan.
 
 ## Git-werkwijze
