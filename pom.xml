@@ -417,21 +417,30 @@
                     </dependency>
                 </dependencies>
                 <configuration>
-                    <!-- De pakketten met unittests. Controllers, filters en repositories hebben alleen
-                         @QuarkusTests, dus PIT zou daar elke mutant als ongedekt melden. -->
+                    <!-- Alle eigen code, behalve wat gegenereerd wordt. Een klasse zonder unittest kost
+                         geen looptijd: PIT meldt de mutanten als ongedekt en telt ze niet mee in de
+                         test strength. -->
                     <targetClasses>
-                        <param>nl.rijksoverheid.moz.nmc.client.*</param>
-                        <param>nl.rijksoverheid.moz.nmc.domain.*</param>
-                        <param>nl.rijksoverheid.moz.nmc.helper.*</param>
-                        <param>nl.rijksoverheid.moz.nmc.service.*</param>
-                        <param>nl.rijksoverheid.moz.nmc.validation.*</param>
+                        <param>nl.rijksoverheid.moz.nmc.*</param>
                     </targetClasses>
                     <excludedClasses>
                         <param>nl.rijksoverheid.moz.nmc.client.*.generated.*</param>
+                        <param>nl.rijksoverheid.moz.nmc.api.*</param>
+                        <param>nl.rijksoverheid.moz.nmc.notifynlcallback.api.*</param>
                     </excludedClasses>
                     <targetTests>
                         <param>nl.rijksoverheid.moz.nmc.*</param>
                     </targetTests>
+                    <!-- De JUnit-integratie van Quarkus bouwt de app al tijdens discovery op, voor elke
+                         @QuarkusTest, ook als de tagfilter die daarna wegfiltert. Zonder deze jar
+                         gebeurt dat niet; de unittests hebben hem niet nodig. -->
+                    <classpathDependencyExcludes>
+                        <param>io.quarkus:quarkus-junit</param>
+                    </classpathDependencyExcludes>
+                    <!-- Zoals bij Surefire: anders logt de JDK-logging buiten de JBoss LogManager om. -->
+                    <jvmArgs>
+                        <value>-Djava.util.logging.manager=org.jboss.logmanager.LogManager</value>
+                    </jvmArgs>
                     <includedGroups>
                         <includedGroup>unit</includedGroup>
                     </includedGroups>
