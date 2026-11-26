@@ -36,6 +36,24 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Security-override op de Quarkus-BOM: de BOM levert opentelemetry 1.62.0, dat kwetsbaar
+                 is voor GHSA-ccrj-gw8r-854m (kwadratisch CPU-gebruik bij het parsen van een
+                 W3C-tracestate). De alpha-BOM gaat mee, zodat opentelemetry-api-incubator dezelfde
+                 versie houdt als opentelemetry-api. Weghalen zodra de Quarkus-BOM zelf >= 1.67.0 levert. -->
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-bom</artifactId>
+                <version>1.67.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-bom-alpha</artifactId>
+                <version>1.67.0-alpha</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>${quarkus.platform.group-id}</groupId>
                 <artifactId>${quarkus.platform.artifact-id}</artifactId>
