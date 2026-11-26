@@ -2,8 +2,7 @@ package nl.rijksoverheid.moz.nmc.helper;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import java.nio.charset.StandardCharsets;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
+import java.security.GeneralSecurityException;
 import java.util.Base64;
 import java.util.Optional;
 import javax.crypto.Mac;
@@ -53,9 +52,7 @@ public class HashHelper {
             mac.init(sleutel);
 
             return mac;
-        } catch (NoSuchAlgorithmException
-                | InvalidKeyException
-                        e) { // onbereikbaar: elke JVM levert HmacSHA256 en de constructor weigert een lege sleutel
+        } catch (GeneralSecurityException e) { // onbereikbaar: elke JVM levert HmacSHA256 en de sleutel is nooit leeg
             throw new IllegalStateException("HmacSHA256 kon niet worden geïnitialiseerd", e);
         }
     }
