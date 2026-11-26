@@ -59,9 +59,12 @@ import java.util.UUID;
  * antwoord zonder bruikbaar notificatie-ID liggen aan het verzoek van het NMC en kosten een poging. Een
  * 401, 403, 429, 5xx of verbindingsfout bij NotifyNL, een ongeldige NotifyNL-configuratie, elke andere
  * fout van de Profielservice (ook een 400) en een ontbrekende of verkeerde KEK stellen de taak uit
- * zonder poging, begrensd door {@code geldig_tot}. Is de sleutel van de notificatie gewist, dan eindigt
- * ze direct in {@code technisch-mislukt}. Een herclaim na een verlopen lease hergebruikt de poging en
- * zoekt eerst op {@code reference}, zodat een al aangeboden e-mail niet nog eens gaat.
+ * zonder poging. Is {@code geldig_tot} dan voorbij, dan eindigt de notificatie bij een volgende claim in
+ * {@code verlopen}. Bij een herclaim komt die controle pas na het ontsleutelen en het opzoeken bij
+ * NotifyNL, dus daar loopt het uitstel door zolang de KEK of NotifyNL faalt. Is de sleutel van de
+ * notificatie gewist, dan eindigt ze direct in {@code technisch-mislukt}. Een herclaim na een verlopen
+ * lease hergebruikt de poging en zoekt eerst op {@code reference}, zodat een al aangeboden e-mail niet
+ * nog eens gaat.
  */
 @ApplicationScoped
 public class VerzendTaakHandler implements TaakHandler {
