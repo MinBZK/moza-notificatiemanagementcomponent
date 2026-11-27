@@ -1,0 +1,371 @@
+# Testverbeterplan NotificatieManagementComponent
+
+**Peildatum: 19 november 2026.** Vorige peildatums: 7 oktober, 30, 23 en 7 september, 12 augustus 2026.
+
+Dit document beschrijft de afstand tussen het **testplan** en de huidige werkelijkheid in
+**moza-notificatiemanagementcomponent (NMC)**. Het bevat eenmalige acties.
+
+Deze peildatum beschrijft de stand van branch `1150-event-driven-core` (PR #66) op commit `8dab766`
+(18 november), de event-driven core die `main` vervangt. Wat hieronder over de code staat, geldt voor
+die branch.
+
+De teststrategie en het testplan staan in
+[hoofdstuk 12 *Testen*](https://docs.mijnoverheidzakelijk.nl/workspace/documentation#testen) van de
+MOZA-architectuurdocumentatie. Dat hoofdstuk is leidend. Verwijzingen hieronder gaan naar sectienamen
+daarin, niet naar paragraafnummers.
+
+De Profielservice heeft haar [eigen plan](https://docs.rijksapp.nl/docs/23220aa3-e724-4356-986a-7ec5801f8dcf/).
+Een aantal items geldt voor beide services. Deze staan in beide documenten, toegespitst op de eigen
+situatie. Wie zo'n item oppakt, werkt beide documenten bij.
+
+De gapnummers zijn stabiel: een afgerond gap wordt niet verwijderd maar blijft als *vervallen* staan, zodat verwijzingen vanuit
+stories en het Profielservice-plan blijven kloppen. Elk open gap verwijst naar de story waarin het
+werk staat.
+
+Door de werkzaamheden aan de services veroudert dit document snel. Het is daarom verstandig het goed
+bij te houden.
+
+## Stand van zaken
+
+|                            | NMC                                                                                       |
+| -------------------------- | ----------------------------------------------------------------------------------------- |
+| Rol in het contract        | consumer (Profielservice, NotifyNL); provider (eventfeed en webhook naar Dienstverleners) |
+| Java                       | 25                                                                                        |
+| Coverage-gate              | 90/75 (INSTRUCTION/BRANCH), draait in CI                                                  |
+| Testdatabase               | embedded PostgreSQL (zonky, zonder Docker)                                                |
+| Flyway draait in tests     | ja, de volledige set op PostgreSQL; eigen migratietests voor V2, V5, V8, V14 en V16       |
+| Unitlaag (containervrij)   | 31 van 69 klassen (45%), zonder Quarkus en zonder database                                |
+| Externe services in tests  | mocks op de client-interface; webhook en NotifyNL-foutmelding wél over echt HTTP          |
+| OpenAPI-validatie in tests | nee (wel een eigen spec-controle op enums en het CloudEvent-schema)                       |
+| Fuzzing                    | ja (Jazzer + ClusterFuzzLite)                                                             |
+| Deployomgeving per PR      | ja (ZAD `pr-<nummer>`)                                                                    |
+
+De NMC loopt voor op testbaar ontwerp. Met de event-driven core zijn twee structurele gaps gedicht:
+de tests draaien op het productiedialect, en reflectie is uit de testopzet verdwenen. Zij mockt haar
+uitgaande calls naar de Profielservice en NotifyNL echter nog altijd op de Java-interface, en die
+mocks zitten nu in negen testklassen in plaats van twee.
+
+De teststrategie kent een doorlopend afrondingscriterium: elk risico uit het *Risicobeeld* moet
+aanwijsbaar zijn met minstens één test.
+
+Voor **R8** (onjuiste terugmelding over aflevering) is de componentlaag ruim gedekt. `OvergangsregelsTest`
+en `OvergangsfunctieTest` dekken de toegestane statusovergangen, `ReceiptVerwerkerTest` en
+`NotifyNLCallbackBotsingTest` de verwerking van at-least-once en ongeordend binnenkomende receipts,
+`NotifyNLNavraagTaakHandlerTest` en `BezorgingVaststellenTest` het vaststellen van een uitkomst
+zonder receipt. De terugmelding zelf loopt via de eventfeed (`EventfeedTest`) en de webhook
+(`TerugkoppelTaakHandlerTest`, `WebhookClientIntegratieTest`). `CloudEventContractTest` toetst per
+status of de velden aanwezig zijn en de enumwaarden kloppen, tegen het schema in het gepubliceerde
+`/q/openapi`; het `type` van het event toetst hij niet. Wat voor R8 nog ontbreekt is de contractlaag met
+een echte tegenpartij (gap 5) en een e2e-journey op het nieuwe model (gap 15).
+
+Voor **R9** (onterecht uitgebleven uitkomst) zijn de uitsluitingsregels veranderd. Een notificatie
+verdwijnt niet meer zodra de terugmelding slaagt. De wistaak wist de sleutel zeven dagen na de
+eindstatus (`nmc.wissen.termijn`), waarna de rij pseudoniem is; het onderhoud verwijdert de rij na de
+bewaartermijn van het afleverbewijs, 365 dagen (`nmc.afleverbewijs.bewaartermijn`). Beide regels zijn
+getest, ook op het geval dat er nog niet onder valt (`wistaak_voorDeWistermijn_…`). De
+productiecode gebruikt overal de geïnjecteerde `Clock`, maar `WisTaakHandlerTest` en
+`OnderhoudTaakHandlerTest` zetten hem niet vast: ze zijn `@QuarkusTest`, krijgen de systeemklok van
+de `ClockProducer` en rekenen zelf met `now()`. Die grensgevallen liggen dus niet vast op het moment
+zelf; zie gap 7.
+
+**De vorm van de piramide is stabiel, niet beter.** Het aantal testklassen ging van 30 naar 69, en de
+containervrije laag groeide mee van 13 naar 31. Het aandeel ging van 43% naar 45%. De drie migratietests die zelf
+een embedded PostgreSQL starten (V5, V14, V16) tellen hier niet als containervrij. De doorlooptijd van
+de PR-checks blijft een punt om op te volgen: de teststrategie noemt 15 minuten als streven.
+
+### Pipeline
+
+| Check                         | NMC                                                    |
+| ----------------------------- | ------------------------------------------------------ |
+| `verify` in CI                | ja, maar met de systeem-`mvn` in plaats van de wrapper |
+| Coverage-gate draait          | ja (gebonden aan `verify`)                             |
+| Testrapporten als CI-artifact | nee                                                    |
+| Diff-coverage per PR          | nee                                                    |
+| Echte PostgreSQL in tests     | ja (embedded)                                          |
+| Pact                          | geen                                                   |
+| Spectral / oasdiff            | nee                                                    |
+| Mutatietesten                 | nee                                                    |
+| ClusterFuzzLite               | ja (PR + wekelijks)                                    |
+| Scorecard                     | ja (wekelijks)                                         |
+| CodeQL                        | ja                                                     |
+| DAST                          | nee                                                    |
+| Deployomgeving per PR         | ja (ZAD `pr-<nummer>`)                                 |
+
+## Gewijzigd sinds 7 oktober 2026: de event-driven core
+
+De event-driven core verandert het testbeeld op vijf punten. De gaps hieronder zijn daarop bijgewerkt.
+
+- **Versturen loopt via een takentabel.** De aanname antwoordt 202 na één insert plus een verzendtaak;
+  een `TaakWorker` claimt taken met `FOR UPDATE SKIP LOCKED` en roept de Profielservice en NotifyNL
+  aan buiten elke transactie. De transactie- en connectiepoolkwestie uit de vorige versie van gap 16
+  bestaat daardoor niet meer.
+- **De terugmelding aan de Dienstverlener loopt via een eventfeed met cursor en een webhook**, niet
+  meer via een `callbackUrl` op het verzoek. De webhook-URL komt uit het dienstverlenerregister en
+  gaat door `WebhookUrlValidator`; de levering is ondertekend met een JWT, met de sleutels op
+  `/.well-known/jwks.json`.
+- **De tests draaien op embedded PostgreSQL** in plaats van H2 (#1151).
+- **Ontvanger en personalisatie staan versleuteld op de notificatierij**, met een sleutel per
+  notificatie onder een KEK met versienummer. `SleutelbeheerTest`, `ConfigKekProviderTest` en
+  `VersleuteldeOpslagIntegratieTest` dekken dat.
+- **De retentiejob is vervangen** door een wistaak en een onderhoudstaak (sleutels wissen,
+  notificaties en eventpartities opruimen, sleutels herwrappen).
+
+## Gaps en acties
+
+Genummerd op prioriteit. De pijl geeft de actie.
+
+### Afhankelijkheden tussen de acties
+
+- gap 2 (WireMock voor de uitgaande clients) → gap 5 (echte consumertests) → Pact Broker
+- gap 9 (containerscheiding afdwingen) → gap 12 (mutatietesten)
+- gap 7 (`Clock`) → vaste grensgevallen voor de uitsluitingsregels van R9
+
+### Hoog
+
+#### 1. De CI-build is nog niet af
+
+De workflow draait `verify`, dus de coveragegate gaat af. Drie dingen resteren. De workflow roept de
+systeem-`mvn` aan in plaats van `./mvnw`, waarmee de buildversie van de runner afhangt in plaats van
+van de repo. Er worden geen Surefire- of JaCoCo-rapporten als artifact gepubliceerd, wat het testplan
+onder *Pipeline-integratie* wel vraagt. En er is geen diff-coverage per pull request.
+
+→ `./mvnw` gebruiken, rapporten uploaden, diff-coverage toevoegen. Story: #1575, samen met gap 18.
+
+#### 2. Componenttests mocken de gegenereerde REST-clients
+
+`@InjectMock @RestClient` op `ProfielApi`, `SendAMessageApi` en `GetMessageDataApi`, in negen
+testklassen: de twee intakecontrollertests, `NotifyNLCallbackControllerTest`, `AannameServiceTest`,
+`VerzendTaakHandlerTest`, `HerverzendingTest`, `NotifyNLNavraagTaakHandlerTest`,
+`VersleuteldeOpslagIntegratieTest` en `EndpointFuzzTest`. Geen HTTP, geen serialisatie, geen
+foutafhandeling, geen contract. WireMock komt in de pom niet voor. Dit is een directe overtreding van
+de grondregel *"Stub op de transportgrens. Mock nooit een gegenereerde REST-client-interface in een
+componenttest."*
+
+De webhook (`WebhookClientIntegratieTest`) en het uitlezen van een NotifyNL-foutmelding
+(`NotifyNLFoutmeldingIntegratieTest`) lopen wél over echt HTTP, naar een testendpoint in de applicatie
+zelf. Dat is de transportgrens, maar geen nagebootste tegenpartij.
+
+→ Omzetten naar WireMock-stubs op HTTP-niveau, inclusief de unhappy paden (timeout, 5xx, misvormde
+body). Story: #1567.
+
+#### 3. ~~Tests draaien op H2~~ — *vervallen*
+
+Sinds #1151 draaien de tests op embedded PostgreSQL, en elke `@QuarkusTest` brengt de volledige
+migratieset aan op het productiedialect. De migraties die bestaande gegevens omzetten hebben een eigen
+test (V2, V5, V8, V14, V16). De keuze voor de embedded variant boven Testcontainers is gemaakt in
+#1151: geen Docker nodig, lokaal en in CI.
+
+Wat resteert hoort niet hier maar bij migratieveiligheid op releaseniveau (#1246): expand/contract
+over releases heen en een geteste rollback. Een migratie met `CREATE INDEX CONCURRENTLY` draait buiten
+een transactie en is er nu niet; komt die er, dan heeft zij een eigen test nodig.
+
+#### 4. Geen OpenAPI-conformiteitsvalidatie
+
+De spec wordt hier handmatig onderhouden (`mp.openapi.scan.disable=true`) en kan dus echt afdrijven
+van de implementatie, terwijl consumers er hun client uit genereren. Dat is precies het geval waarin
+het testplan deze validatie de enige bewaker van het verschil tussen spec en implementatie noemt. Met
+de eventfeed, de bevestiging en de JWKS-route is het oppervlak gegroeid. `GepubliceerdeSpecTest`
+controleert dat statussen en redenen als enum in het gepubliceerde document staan, en
+`CloudEventContractTest` toetst het CloudEvent aan het schema. Dat zijn twee schema's, geen
+conformiteitsvalidatie van alle requests en responses.
+
+→ `swagger-request-validator` plus de `OpenApiValidationTest`-basisklasse overnemen uit de
+Profielservice. Story: #1568.
+
+#### 5. Het "contract" is een gesloten lus — *(ook in het Profielservice-plan)*
+
+Het pactbestand van de Profielservice is door de provider zelf geschreven en wordt tegen zichzelf
+geverifieerd. De echte consumer, deze service, heeft geen pact-dependency. Dit is het enige gat dat
+risico R4 uit het *Risicobeeld* raakt.
+
+Aan de R8-kant is de NMC zelf provider: Dienstverleners lezen de eventfeed en ontvangen de webhook.
+`CloudEventContractTest` legt de vorm van het CloudEvent vast tegen het gepubliceerde schema. Dat is
+een eigen assertie, geen afspraak met een tegenpartij; een Dienstverlener die de feed of de webhook
+consumeert heeft nog geen contract.
+
+Dat die lus echt gesloten is, blijkt uit het `type` van het statusevent. Daarvan zijn drie waarden in
+omloop, en niets merkt het, omdat `CloudEventContractTest` het type niet toetst:
+
+| Bron                                          | `type`                                                   |
+| --------------------------------------------- | -------------------------------------------------------- |
+| ADR 0024 (zoals vastgelegd op `main`)         | `nl.overheid.moz.notificatie.status.<naar>`              |
+| `main` (`ConsumentCallbackAdapter`)           | `nl.rijksoverheid.moz.nmc.notificatie.status`            |
+| PR #66 (`NotificatieStatusEvent`)             | `nl.mijnoverheidzakelijk.nmc.notificatie.status.<status>` |
+
+In `data` hetzelfde: ADR 0024 schrijft `van` en `naar` voor, de branch stuurt `vorigeStatus` en
+`nieuweStatus`. Een Dienstverlener filtert op het type, dus drie domeinnamen voor hetzelfde event is
+geen stijlkwestie. De waarde van `main` verdwijnt met de merge van PR #66, en #1374 trekt ADR 0024
+gelijk met de branch (type en datavelden).
+
+→ Vóór de eerste Dienstverlener de feed of de webhook afneemt: #1374 mergen en het type asserten in
+`CloudEventContractTest`. Daarna, na gap 2: echte consumertests hier; daarna pas de broker. Story:
+#748 (verkenning).
+
+#### 6. Callback-auth is niet volledig negatief getest
+
+`NotifyNLCallbackAuthFilter` vergelijkt constant-time (`MessageDigest.isEqual`), maar heeft geen eigen
+testklasse. In `NotifyNLCallbackControllerTest` staan alleen een ontbrekend en een ongeldig token. Het
+testplan vraagt onder *Security- en robuustheidstesten* expliciet vier gevallen: ontbrekend, leeg,
+verkeerd en bijna-goed. Los daarvan ontbreekt de `WWW-Authenticate`-header op de 401 (#1543).
+
+→ De twee ontbrekende gevallen toevoegen, en de misbruikcases bij het filter zelf plaatsen in plaats
+van bij de controller. Story: #1569.
+
+#### 7. De tests zetten de `Clock` niet vast — *(ook in het Profielservice-plan)*
+
+De `Clock` is doorgevoerd in de productiecode: er staat in `src/main` geen klokloze `now()` meer, en
+ook `WisTaakHandler` en `OnderhoudTaakHandler`, de twee uitsluitingsregels van R9, krijgen hem in hun
+constructor. De tests zetten hem alleen niet overal vast. `AannameQuotumTest` gebruikt `Clock.fixed`,
+en een handvol tests gebruikt `VerstelbareClock`, maar `WisTaakHandlerTest` en
+`OnderhoudTaakHandlerTest` zijn `@QuarkusTest` en krijgen de systeemklok van de `ClockProducer`. Zo
+hangt `wistaak_voorDeWistermijn_…` nog aan de wandklok: het geval dat er nét niet onder valt ligt niet
+vast op het moment zelf, en R9 is formeel gedekt en feitelijk niet.
+
+→ De klok in de wis- en onderhoudstests vastzetten (`VerstelbareClock`), en per uitsluitingsregel een
+geval op de grens toevoegen, dat er níét onder valt en dus moet blijven staan. Story: #1566.
+
+### Middel
+
+#### 8. ~~Reflectie in de testopzet~~ — *vervallen*
+
+Er staat geen `java.lang.reflect` meer in de testmap. `NotificatieServiceTest` is met de event-driven
+core verdwenen; de vervangende tests bouwen hun toestand via `NotificatieFixtures` en `TaakFixtures`.
+
+#### 9. De containervrije laag is niet apart te draaien — *(ook in het Profielservice-plan)*
+
+Het testplan schrijft onder *Grondregels voor testautomatisering* voor dat de scheiding tussen
+container en geen container wordt afgedwongen, met een eigen ingang voor de snelle laag. Die is er
+niet: nul `@Tag` in de repo, en 35 van de 69 testklassen starten Quarkus in dezelfde surefire-run als
+de klassen die dat niet doen. Drie migratietests zonder Quarkus starten zelf een embedded PostgreSQL;
+ook die horen niet in de snelle laag.
+
+→ Drie stappen: `@Tag("unit")` op de 31 klassen zonder Quarkus en zonder database; surefire een tweede
+ingang geven met `<groups>${test.groups}</groups>` en een lege default; en een ArchUnit-test die de
+scheiding afdwingt in plaats van haar te benoemen, inclusief de omgekeerde regel dat een klasse met
+"Unit" in de naam geen container of database mag starten. Deze repo heeft nog geen ArchUnit, dus die
+dependency komt erbij. Story: #1570.
+
+#### 10. Bevroren spec-kopie als bron voor de gegenereerde client
+
+`src/main/resources/openapi/profielservice_api.json` is sinds 2 juli 2026 niet ververst, terwijl de
+Profielservice haar contract sindsdien meermaals heeft gewijzigd. De NMC gebruikt er één operatie uit,
+`POST /partij`. Daarvan is de vorm gelijk gebleven, maar de betekenis niet helemaal: het contract
+beschrijft nu dat de Profielservice zelf filtert op `dienstverlener` en `dienstNaam`, terwijl de NMC
+daarna ook zelf op scope selecteert. Verder zijn velden verplicht geworden en is `teVerwijderenOp`
+uit `ContactgegevenResponse` verdwenen. Er is nog geen drift-check, dus zo'n verschil valt nu alleen op
+als iemand de twee naast elkaar legt.
+
+→ Korte termijn: verversen plus een CI-check die drift signaleert. Structureel: vervangen door de
+broker-flow uit gap 5. Story: #1571.
+
+#### 11. De coverage-afspraak is niet één
+
+De Profielservice staat op LINE/BRANCH 85/80. De NMC meet op INSTRUCTION (90) plus BRANCH (75), en het
+testplan raadt INSTRUCTION af omdat het gevoelig is voor bytecode-details en niet vergelijkbaar is
+tussen services.
+
+→ De `check`-regel omzetten naar LINE + BRANCH en het huidige niveau vasthouden. Story: #1576.
+
+#### 12. Geen mutatietesten — *(ook in het Profielservice-plan)*
+
+Afhankelijk van gap 9: PIT draait de suite opnieuw per mutant en heeft een selectie nodig om op te
+mikken, namelijk de tests zonder Quarkus en zonder database. PIT is de enige bytecode-manipulerende
+tool die op JDK 25 nog onbewezen is.
+
+→ Na gap 9, en na verificatie dat PIT op JDK 25 draait. Story: #1460.
+
+#### 13. Geen ADR-/Spectral-lint of OpenAPI-breaking-change-check in CI — *(ook in het Profielservice-plan)*
+
+Afwezig in deze repo, en hier weegt het zwaarder dan bij de Profielservice: de spec wordt handmatig
+onderhouden en er is geen tegenhanger zoals `OpenApiContractDriftTest`. Met de eventfeed en de webhook
+is de NMC bovendien zelf provider geworden; een brekende wijziging raakt elke Dienstverlener die de
+feed leest.
+
+→ Spectral- en oasdiff-jobs toevoegen aan de PR-pipeline. Story: #1572.
+
+#### 14. Geen dekking op de LDV-verwerkingslogging — *(ook in het Profielservice-plan)*
+
+De aanname-endpoints en de eventfeed dragen `@Logboek`, maar geen enkele test controleert dat de
+registratie plaatsvindt, met welke betrokkene en met welke uitkomst. Daarnaast ontbreekt de registratie
+van de verzending zelf: die gebeurt in een worker, en de `@Logboek`-interceptor werkt alleen op een
+REST-aanroep. Het `processingActivityId` is nog een placeholder (#754).
+
+→ Vastleggen wat gelogd moet worden en dekking opbouwen. R3 (ontbrekende of onjuiste
+verwerkingslogging) is voor deze service nu niet aanwijsbaar gedekt. Story: #1359 (toetsen in de
+testsuite), onder #1526.
+
+#### 15. De e2e-suite dekt alleen de decentrale route, op het oude model — *(ook in het Profielservice-plan)*
+
+ADR 0023 kiest Bruno voor de nachtelijke run, met Playwright voor journeys met polling of tijdgebonden
+asserties en REST Assured als een journey liever in Java blijft. Met #1141 (loopt nog) draait er sinds
+16 november elke nacht groen een NMC-journey tegen ZAD `stable` (`moza-mock/bruno/e2e-nmc`, aangezet met
+`NMC_KETEN_ROND`): een decentrale notificatie versturen, de verzending in het journal van de
+NotifyNL-mock terugvinden, en wachten tot de bezorgstatus als CloudEvent op de `callbackUrl`
+binnenkomt. Dat is de asynchrone bezorgstatus over de hele keten, precies wat het toelatingscriterium
+vraagt.
+
+Die journey gaat uit van het model op `main`: een 200 op de aanname, synchroon versturen en een
+`callbackUrl` op het verzoek. Met de event-driven core vervallen alle drie. De aanname antwoordt 202,
+de verzending gebeurt later door een worker, en `callbackUrl` komt in de broncode niet meer voor. De
+status komt via de eventfeed of via de webhook, waarvan de URL op de Dienstverlener-rij in de database
+van de NMC staat, met een JWT-ondertekende levering en de sleutels op `/.well-known/jwks.json`. Zodra
+PR #66 op `stable` staat, breken drie asserties: de 200 op de aanname, het `callbackUrl`-veld in de
+body en het `type` van het event (zie gap 5).
+
+Er zijn twee routes om de status op te halen, en ze zijn niet gelijkwaardig:
+
+- de Dienstverlener-rij op ZAD `stable` naar de mock laten wijzen, en de mock een JWT-ondertekende
+  levering laten accepteren;
+- de eventfeed pollen met een cursor.
+
+De keuze staat nog open en hangt af van configuratie buiten `moza-mock`: de webhookroute vraagt een
+aangepaste rij en webhooksleutels op `stable`. Ze bepaalt ook of de omzetting een aanpassing in Bruno
+blijft of een Playwright-journey wordt: met de feed pollt de journey op twee plekken, en dat is volgens
+ADR 0023 het punt om over te stappen.
+
+#1141 levert daarnaast drie vervolgstories op: de centrale journey (via de Profielservice), de
+FSC-route naar de NMC (in september met Bruno handmatig doorlopen tegen ZAD) en Schemathesis.
+
+→ De bestaande journey omzetten naar de event-driven core, samen met of direct na de merge van PR #66.
+Story: #1578. De drie vervolgen: via #1141.
+
+#### 16. Geen performancetests — *(ook in het Profielservice-plan)*
+
+Sinds de event-driven core verschuift het risico onder load van de connectiepool naar de
+taakachterstand en het verzendbudget. Dat is het soort gedrag dat geen functionele test laat zien en
+een load- of soak-run wel.
+
+→ Leg eerst het workloadmodel en een budget per endpoint vast. Daarna een lichte, regelmatige run en
+een soak-scenario met een trage of niet-antwoordende Profielservice of NotifyNL. Story: #1248.
+
+### Laag
+
+#### 17. Geen DAST — *(ook in het Profielservice-plan)*
+
+→ ZAP API-scan toevoegen aan de nachtelijke build tegen de ZAD-omgeving. Story: #1171.
+
+#### 18. De buildjob draagt `contents: write`
+
+De hele `build`-job heeft schrijfrechten omdat de dependency-submission-stap die nodig heeft, ook op
+pull requests. De Profielservice heeft dit in een aparte job gezet die alleen op `main` draait.
+
+→ Dezelfde splitsing overnemen. Story: #1575, samen met gap 1.
+
+### Nieuw
+
+#### 19. Taakverdeling over meerdere pods is niet waargenomen
+
+In productie draaien minimaal drie pods tegen één database, en al het achtergrondwerk loopt via de
+takentabel. `TaakClaimerTest` toetst met twee threads in één JVM dat geen taak twee keer wordt
+uitgegeven; dat dekt de locksemantiek, niet losse pods met eigen connectiepools en schedulerticks. Gaat
+de verdeling mis, dan faalt er niets zichtbaar.
+
+→ Story: #1110.
+
+#### 20. De cursor van de eventfeed wordt niet gefuzzed
+
+De cursor komt van de Dienstverlener binnen en wordt door de NMC ontleed. Dat is input-parsing op een
+extern koppelvlak, het geval waarvoor de teststrategie fuzzing vraagt. `CursorTest` dekt de bekende
+gevallen; de bestaande fuzztargets raken de cursor niet.
+
+→ Een fuzztarget voor het ontleden van de cursor toevoegen. Story: #1579.
