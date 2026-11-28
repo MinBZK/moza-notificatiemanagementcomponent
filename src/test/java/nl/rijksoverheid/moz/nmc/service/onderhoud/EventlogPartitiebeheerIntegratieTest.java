@@ -3,6 +3,13 @@ package nl.rijksoverheid.moz.nmc.service.onderhoud;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -19,6 +26,7 @@ import nl.rijksoverheid.moz.nmc.repository.EventPartitie;
 import nl.rijksoverheid.moz.nmc.repository.EventPartitieRepository;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -264,6 +272,32 @@ class EventlogPartitiebeheerIntegratieTest {
         assertEquals(0, eventlogPartitiebeheer.ruimStandaardpartitieOp(OffsetDateTime.now(ZoneOffset.UTC), 100));
 
         assertEquals(1, events(oud));
+    }
+
+    // Een bevestiging die commit tussen de toets zonder vergrendeling en die eronder, houdt de partitie
+    // alsnog tegen; de partities erboven komen dan niet meer aan de beurt.
+    @Test
+    void ruimOp_bevestigingTussenDeToetsEnDeVergrendeling_laatDePartitieStaanEnStopt() {
+        EventPartitieRepository repository = mock(EventPartitieRepository.class);
+        EventPartitie oudste = new EventPartitie("event_1", 0, 50);
+        when(repository.bereikpartities()).thenReturn(List.of(oudste, new EventPartitie("event_2", 50, 100)));
+        when(repository.watermerk()).thenReturn(1000L);
+        when(repository.oudsteBeschermdeTransactieId(anyInt(), any(), any()))
+                .thenReturn(Optional.empty(), Optional.of(10L));
+        when(repository.registratieVanJongsteEvent(oudste)).thenReturn(Optional.empty());
+        EventlogPartitiebeheer beheer = new EventlogPartitiebeheer(
+                repository,
+                TestConfig.opruimtermijnen(Duration.ofDays(1), Duration.ofDays(2), Duration.ofDays(3)),
+                50,
+                5,
+                Duration.ofMillis(500),
+                TestConfig.feed());
+
+        assertTrue(beheer.ruimOp(OffsetDateTime.now(ZoneOffset.UTC)).isEmpty());
+
+        verify(repository).vergrendelEventlog();
+        verify(repository, times(2)).oudsteBeschermdeTransactieId(anyInt(), any(), any());
+        verify(repository, never()).verwijder(any());
     }
 
     /** Een partitie die de volgende transactie-id bevat, zonder dat er een aansluitende nodig is. */

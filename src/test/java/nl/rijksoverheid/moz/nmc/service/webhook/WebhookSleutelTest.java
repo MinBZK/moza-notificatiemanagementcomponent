@@ -10,7 +10,11 @@ import java.math.BigInteger;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.PrivateKey;
+import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.RSAKeyGenParameterSpec;
+import java.security.spec.RSAPrivateKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 import java.time.Clock;
 import java.time.Duration;
@@ -233,6 +237,31 @@ class WebhookSleutelTest {
                 + Base64.getMimeEncoder(64, "\n".getBytes())
                         .encodeToString(paar.getPublic().getEncoded())
                 + "\n-----END PUBLIC KEY-----\n";
+    }
+
+    // Een PKCS#8-sleutel zonder CRT-componenten levert de JDK als gewone RSAPrivateKey op.
+    @Test
+    void leesSleutel_rsaSleutelZonderCrtComponenten_weigert() throws Exception {
+        RSAPrivateCrtKey volledig = (RSAPrivateCrtKey) rsa(2048).getPrivate();
+        PrivateKey zonderCrt = KeyFactory.getInstance("RSA")
+                .generatePrivate(new RSAPrivateKeySpec(volledig.getModulus(), volledig.getPrivateExponent()));
+        String pem = Base64.getEncoder().encodeToString(zonderCrt.getEncoded());
+
+        IllegalStateException fout = assertThrows(IllegalStateException.class, () -> WebhookSleutel.leesSleutel(pem));
+        assertTrue(fout.getMessage().contains("geen volledige RSA-sleutel"));
+    }
+
+    // Een exponent van één byte heeft geen voorloopnul die eraf moet.
+    @Test
+    void publiekeSleutels_exponentVanEenByte_blijftOngewijzigd() throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(new RSAKeyGenParameterSpec(2048, BigInteger.valueOf(3)));
+        WebhookSleutel sleutel = sleutel(pem(generator.generateKeyPair()), "sleutel-1");
+
+        String exponent = sleutel.publiekeSleutels().getFirst().exponent();
+
+        assertEquals("Aw", exponent);
+        assertEquals(BigInteger.valueOf(3), getal(exponent));
     }
 
     private static WebhookSleutel sleutel(String pem, String keyId) {

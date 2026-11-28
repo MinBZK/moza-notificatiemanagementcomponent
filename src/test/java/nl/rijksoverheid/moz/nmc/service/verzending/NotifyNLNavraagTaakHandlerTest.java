@@ -34,6 +34,7 @@ import nl.rijksoverheid.moz.nmc.domain.Poging;
 import nl.rijksoverheid.moz.nmc.domain.PogingStatus;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.domain.Taak_;
 import nl.rijksoverheid.moz.nmc.job.TaakRonde;
 import nl.rijksoverheid.moz.nmc.job.TaakWorker;
 import nl.rijksoverheid.moz.nmc.repository.PogingRepository;
@@ -214,6 +215,64 @@ class NotifyNLNavraagTaakHandlerTest {
         assertTrue(taken().isEmpty());
     }
 
+    // Een navraagtaak zonder poging-id, bijvoorbeeld een met de hand of door een oudere versie aangemaakte.
+    @Test
+    void navraag_taakZonderPogingId_rondtAfZonderOpvraag() {
+        Verzonden verzonden = verzonden(clock.nu().minusHours(2));
+        vervangNavraagtaak(verzonden.notificatieId(), Map.of());
+
+        assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN));
+
+        verify(getMessageDataApi, never()).getMessageData(any());
+        assertTrue(taken().isEmpty());
+        assertEquals(PogingStatus.VERZONDEN, poging(verzonden.pogingId()).getStatus());
+        assertEquals(
+                NotificatieStatus.VERZONDEN,
+                notificatie(verzonden.notificatieId()).getStatus());
+    }
+
+    @Test
+    void navraag_pogingBestaatNiet_rondtAfZonderOpvraag() {
+        Verzonden verzonden = verzonden(clock.nu().minusHours(2));
+        vervangNavraagtaak(
+                verzonden.notificatieId(),
+                Map.of(VerzendTaakHandler.PAYLOAD_POGING_ID, UUID.randomUUID().toString()));
+
+        assertEquals(1, TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN));
+
+        verify(getMessageDataApi, never()).getMessageData(any());
+        assertTrue(taken().isEmpty());
+        assertEquals(
+                NotificatieStatus.VERZONDEN,
+                notificatie(verzonden.notificatieId()).getStatus());
+    }
+
+    // De notificatie kwam al verder, bijvoorbeeld door een late bezorging van een eerdere poging; alleen de
+    // lopende poging gaat naar onbekend.
+    @Test
+    void navraag_404OpEenAlBezorgdeNotificatie_zetAlleenDePogingOpOnbekend() {
+        Verzonden verzonden = verzonden(clock.nu().minusHours(2));
+        QuarkusTransaction.requiringNew()
+                .run(() -> overgangsfunctie.voerUit(verzonden.notificatieId(), NotificatieStatus.BEZORGD, null));
+        when(getMessageDataApi.getMessageData(verzonden.notifyId().toString()))
+                .thenThrow(new WebApplicationException(Response.status(404).build()));
+
+        TaakRonde.draai(taakWorker, TaakSoort.RECONCILIEREN);
+
+        assertEquals(PogingStatus.ONBEKEND, poging(verzonden.pogingId()).getStatus());
+        assertEquals(
+                NotificatieStatus.BEZORGD,
+                notificatie(verzonden.notificatieId()).getStatus());
+        assertEquals(
+                List.of(
+                        NotificatieStatus.AANGENOMEN,
+                        NotificatieStatus.IN_VERZENDING,
+                        NotificatieStatus.VERZONDEN,
+                        NotificatieStatus.BEZORGD),
+                overgangen(verzonden.notificatieId()));
+        assertTrue(taken().isEmpty());
+    }
+
     @Test
     void receipt_rondtDeOpenNavraagAf() {
         Verzonden verzonden = verzonden(clock.nu().minusHours(2));
@@ -291,6 +350,22 @@ class NotifyNLNavraagTaakHandlerTest {
                     Map.of(VerzendTaakHandler.PAYLOAD_POGING_ID, poging.getId().toString())));
 
             return new Verzonden(notificatie.getId(), poging.getId(), notifyId);
+        });
+    }
+
+    private void vervangNavraagtaak(UUID notificatieId, Map<String, String> payload) {
+        QuarkusTransaction.requiringNew().run(() -> {
+            taakRepository.delete(
+                    Taak_.TAAK_SOORT + " = ?1 AND " + Taak_.NOTIFICATIE_ID + " = ?2",
+                    TaakSoort.RECONCILIEREN,
+                    notificatieId);
+            taakRepository.persist(new Taak(
+                    TaakSoort.RECONCILIEREN,
+                    NotificatieFixtures.DV_ID,
+                    notificatieId,
+                    clock.nu().minus(Duration.ofSeconds(1)),
+                    null,
+                    payload));
         });
     }
 }

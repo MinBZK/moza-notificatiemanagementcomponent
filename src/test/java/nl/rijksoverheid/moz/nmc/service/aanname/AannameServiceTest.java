@@ -293,6 +293,15 @@ class AannameServiceTest {
                                 "Parkeervergunning",
                                 BerichtType.DEMO_TEMPLATE,
                                 Map.of("naam", "Voorbeeld BV", "datum", "1 januari"))),
+                arguments(
+                        "geen berichtgegevens",
+                        new AannameOpdracht(
+                                Regie.CENTRAAL,
+                                kvk,
+                                "Gemeente Voorbeeld",
+                                "Parkeervergunning",
+                                BerichtType.DEMO_TEMPLATE,
+                                null)),
                 // Dezelfde tekens, anders over twee velden verdeeld.
                 arguments(
                         "grens tussen dienstverlener en dienst",

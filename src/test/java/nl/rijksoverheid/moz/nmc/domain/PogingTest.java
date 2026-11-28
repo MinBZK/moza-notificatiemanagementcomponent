@@ -2,11 +2,13 @@ package nl.rijksoverheid.moz.nmc.domain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -120,6 +122,73 @@ class PogingTest {
         assertFalse(poging.verwerkReceiptZonderTijdstip(PogingStatus.PERMANENT_MISLUKT, NU.plusHours(1)));
         assertEquals(PogingStatus.BEZORGD, poging.getStatus());
         assertEquals(T1, poging.getReceiptTijdstip());
+    }
+
+    @Test
+    void verwerkReceiptZonderTijdstip_faalreceipt_legtGeenBezorgingVast() {
+        Poging poging = verzondenPoging();
+
+        assertTrue(poging.verwerkReceiptZonderTijdstip(PogingStatus.PERMANENT_MISLUKT, NU));
+        assertEquals(PogingStatus.PERMANENT_MISLUKT, poging.getStatus());
+        assertNull(poging.getBezorgdOp());
+    }
+
+    @Test
+    void hoortBij_eigenIdOfDuplicaat_isWaarEnAnderIdNiet() {
+        UUID eigen = UUID.randomUUID();
+        UUID duplicaat = UUID.randomUUID();
+        Poging poging = new Poging(UUID.randomUUID(), 1);
+        poging.markeerVerzonden(eigen, T1);
+        poging.registreerDuplicaat(duplicaat);
+
+        assertTrue(poging.hoortBij(eigen));
+        assertTrue(poging.hoortBij(duplicaat));
+        assertFalse(poging.hoortBij(UUID.randomUUID()));
+    }
+
+    // Een id dat al bij de poging hoort, komt er niet nog eens bij.
+    @Test
+    void registreerDuplicaat_alBekendId_voegtNietsToe() {
+        UUID eigen = UUID.randomUUID();
+        UUID duplicaat = UUID.randomUUID();
+        Poging poging = new Poging(UUID.randomUUID(), 1);
+        poging.markeerVerzonden(eigen, T1);
+
+        poging.registreerDuplicaat(duplicaat);
+        poging.registreerDuplicaat(duplicaat);
+        poging.registreerDuplicaat(eigen);
+
+        assertEquals(List.of(duplicaat), poging.getDuplicaatIds());
+        assertEquals(eigen, poging.getNotifyId());
+    }
+
+    @Test
+    void registreerDuplicaat_nogNietVerzonden_weigert() {
+        Poging poging = new Poging(UUID.randomUUID(), 1);
+
+        assertThrows(IllegalStateException.class, () -> poging.registreerDuplicaat(UUID.randomUUID()));
+        assertEquals(List.of(), poging.getDuplicaatIds());
+    }
+
+    @Test
+    void markeerOnbekend_verzonden_wordtOnbekend() {
+        Poging poging = verzondenPoging();
+
+        poging.markeerOnbekend();
+
+        assertEquals(PogingStatus.ONBEKEND, poging.getStatus());
+    }
+
+    @Test
+    void markeerOnbekend_nietVerzonden_weigertEnLaatDeStatusStaan() {
+        Poging gepland = new Poging(UUID.randomUUID(), 1);
+        Poging bezorgd = verzondenPoging();
+        bezorgd.verwerkReceipt(PogingStatus.BEZORGD, T1);
+
+        assertThrows(IllegalStateException.class, gepland::markeerOnbekend);
+        assertThrows(IllegalStateException.class, bezorgd::markeerOnbekend);
+        assertEquals(PogingStatus.GEPLAND, gepland.getStatus());
+        assertEquals(PogingStatus.BEZORGD, bezorgd.getStatus());
     }
 
     private static Poging verzondenPoging() {

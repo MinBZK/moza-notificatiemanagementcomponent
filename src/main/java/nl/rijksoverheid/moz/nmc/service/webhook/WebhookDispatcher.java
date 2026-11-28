@@ -62,7 +62,7 @@ public class WebhookDispatcher {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(body.getBytes(StandardCharsets.UTF_8));
 
             return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
-        } catch (NoSuchAlgorithmException e) {
+        } catch (NoSuchAlgorithmException e) { // onbereikbaar: elke JVM levert SHA-256
             throw new IllegalStateException(e);
         }
     }

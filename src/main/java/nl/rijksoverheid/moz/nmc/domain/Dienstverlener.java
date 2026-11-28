@@ -45,18 +45,6 @@ public class Dienstverlener {
         // Voor JPA
     }
 
-    public UUID getId() {
-        return id;
-    }
-
-    public String getOin() {
-        return oin;
-    }
-
-    public String getNaam() {
-        return naam;
-    }
-
     /** Het maximum aantal aannames per dag, als dat begrensd is. */
     public Optional<Integer> getQuotumPerDag() {
         return Optional.ofNullable(quotumPerDag);

@@ -1,5 +1,6 @@
 package nl.rijksoverheid.moz.nmc.service.receipt;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -9,6 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
@@ -57,6 +60,16 @@ class ReceiptVerwerkerTest {
     @BeforeEach
     void setUp() {
         TestDatabase.leeg();
+    }
+
+    @Test
+    void constructor_negatieveKlokmarge_gooitIllegalStateException() {
+        IllegalStateException fout = assertThrows(
+                IllegalStateException.class,
+                () -> new ReceiptVerwerker(null, null, null, null, null, Clock.systemUTC(), Duration.ofSeconds(-1)));
+
+        assertTrue(fout.getMessage().contains("nmc.receipt.klokmarge"));
+        assertDoesNotThrow(() -> new ReceiptVerwerker(null, null, null, null, null, Clock.systemUTC(), Duration.ZERO));
     }
 
     // Een tijdelijke of technische fout op de eerste poging plant een herverzending; zie HerverzendingTest.

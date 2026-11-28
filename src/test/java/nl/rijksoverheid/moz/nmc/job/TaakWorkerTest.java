@@ -5,11 +5,17 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -19,11 +25,18 @@ import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import nl.rijksoverheid.moz.nmc.config.TaakConfig;
 import nl.rijksoverheid.moz.nmc.domain.Taak;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
@@ -35,10 +48,14 @@ import nl.rijksoverheid.moz.nmc.service.taak.TaakUitkomst;
 import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.NotificatieFixtures;
 import nl.rijksoverheid.moz.nmc.testhelper.TaakFixtures;
+import nl.rijksoverheid.moz.nmc.testhelper.TestConfig;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 
 /**
@@ -312,6 +329,42 @@ class TaakWorkerTest {
                 "het uitstel van de oude worker is geweigerd");
     }
 
+    // Elke geplande ronde draait precies één ronde, voor haar eigen soort.
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("geplandeRondes")
+    void geplandeRonde_delegeertAanVerwerkVoorDeEigenSoort(TaakSoort soort, Consumer<TaakWorker> ronde) {
+        TaakWorker spy = spy(taakWorker);
+        doReturn(0).when(spy).verwerk(any());
+
+        ronde.accept(spy);
+
+        verify(spy).verwerk(soort);
+        verify(spy, times(1)).verwerk(any());
+    }
+
+    // Een taaksoort zonder geplande ronde blijft eeuwig open staan.
+    @Test
+    void geplandeRondes_elkeTaakSoort_heeftEenRonde() {
+        Set<TaakSoort> soorten = geplandeRondes()
+                .map(argumenten -> (TaakSoort) argumenten.get()[0])
+                .collect(Collectors.toSet());
+
+        assertEquals(EnumSet.allOf(TaakSoort.class), soorten);
+    }
+
+    static Stream<Arguments> geplandeRondes() {
+        return Stream.of(
+                Arguments.of(TaakSoort.VERZENDEN, (Consumer<TaakWorker>) TaakWorker::verzenden),
+                Arguments.of(TaakSoort.RECEIPT_VERWERKEN, (Consumer<TaakWorker>) TaakWorker::receiptVerwerken),
+                Arguments.of(TaakSoort.RECONCILIEREN, (Consumer<TaakWorker>) TaakWorker::reconcilieren),
+                Arguments.of(TaakSoort.BEZORGING_VASTSTELLEN, (Consumer<TaakWorker>) TaakWorker::bezorgingVaststellen),
+                Arguments.of(TaakSoort.TERUGKOPPELEN, (Consumer<TaakWorker>) TaakWorker::terugkoppelen),
+                Arguments.of(TaakSoort.ONGELDIG_MELDEN, (Consumer<TaakWorker>) TaakWorker::ongeldigMelden),
+                Arguments.of(TaakSoort.WISSEN, (Consumer<TaakWorker>) TaakWorker::wissen),
+                Arguments.of(TaakSoort.CONTROLE, (Consumer<TaakWorker>) TaakWorker::controle),
+                Arguments.of(TaakSoort.ONDERHOUD, (Consumer<TaakWorker>) TaakWorker::onderhoud));
+    }
+
     @Test
     void ongeldigMelden_taakAanDeBeurt_voertDeHandlerUit() {
         UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
@@ -391,6 +444,84 @@ class TaakWorkerTest {
         assertEquals(0, taak.getPogingen());
         assertEquals(TaakStatus.OPEN, taak.getStatus());
         assertNotNull(taak.getLeaseTot(), "de taak komt terug zodra zijn lease verloopt");
+    }
+
+    // Een storing bij het uitstellen na een fout kost geen poging; de taak komt terug zodra zijn lease verloopt.
+    @Test
+    void verwerk_uitstellenNaEenFoutFaalt_laatDeTaakStaanTotDeLeaseVerloopt() {
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        handler.zetGedrag((taak, lease) -> {
+            throw new IllegalStateException("gesimuleerde fout");
+        });
+        doThrow(new IllegalStateException("gesimuleerde databasefout"))
+                .when(taakClaimer)
+                .stelUit(any(), any(), anyBoolean());
+
+        assertEquals(1, taakWorker.verwerk(TaakSoort.ONGELDIG_MELDEN));
+
+        Taak taak = zoek(TaakSoort.ONGELDIG_MELDEN, id).orElseThrow();
+        assertEquals(0, taak.getPogingen());
+        assertEquals(TaakStatus.OPEN, taak.getStatus());
+        assertNotNull(taak.getLeaseTot());
+    }
+
+    // Een andere worker claimde de taak voordat deze hem na de laatste poging op mislukt kon zetten.
+    @Test
+    void verwerk_leaseVerlorenVoorDeUitputting_zetDeTaakNietOpMislukt() {
+        UUID id = plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+        QuarkusTransaction.requiringNew()
+                .run(() -> TaakFixtures.zetPogingen(entityManager, TaakSoort.ONGELDIG_MELDEN, id, 1));
+        handler.zetGedrag((taak, lease) -> {
+            QuarkusTransaction.requiringNew()
+                    .run(() -> TaakFixtures.claimDoorAndereWorker(entityManager, TaakSoort.ONGELDIG_MELDEN, id));
+
+            throw new IllegalStateException("gesimuleerde fout");
+        });
+
+        taakWorker.verwerk(TaakSoort.ONGELDIG_MELDEN);
+
+        Taak taak = zoek(TaakSoort.ONGELDIG_MELDEN, id).orElseThrow();
+        assertEquals(TaakStatus.OPEN, taak.getStatus());
+        assertEquals(1, taak.getPogingen());
+    }
+
+    // Binnen de verversingstermijn bedient één telling elke scrape; een nieuwe taak telt pas na de termijn.
+    @Test
+    void achterstandmetriek_binnenDeVerversingstermijn_hergebruiktDeTelling() {
+        TaakConfig config = TestConfig.taak();
+        when(config.metriekVerversing()).thenReturn(Duration.ofHours(1));
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        new TaakWorker(taakClaimer, taakRepository, geenHandlers(), registry, Clock.systemUTC(), config);
+        Gauge achterstand = registry.get("nmc.taken.achterstand")
+                .tag("soort", "ONGELDIG_MELDEN")
+                .gauge();
+
+        assertEquals(0.0, achterstand.value());
+        plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+
+        assertEquals(0.0, achterstand.value());
+    }
+
+    // %test zet de verversing op nul: elke scrape na de eerste telt opnieuw.
+    @Test
+    void achterstandmetriek_naDeVerversingstermijn_teltOpnieuw() {
+        Gauge achterstand = meterRegistry
+                .get("nmc.taken.achterstand")
+                .tag("soort", "ONGELDIG_MELDEN")
+                .gauge();
+
+        assertEquals(0.0, achterstand.value());
+        plan(TaakSoort.ONGELDIG_MELDEN, nu().minusMinutes(1));
+
+        assertEquals(1.0, achterstand.value());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Instance<TaakHandler> geenHandlers() {
+        Instance<TaakHandler> beans = mock(Instance.class);
+        when(beans.iterator()).thenReturn(Collections.emptyIterator());
+
+        return beans;
     }
 
     // Een storing bij het claimen is één waarschuwing, geen exceptie uit de geplande ronde.

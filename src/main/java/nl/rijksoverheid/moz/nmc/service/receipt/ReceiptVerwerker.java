@@ -141,7 +141,7 @@ public class ReceiptVerwerker {
         }
 
         // Met een uitkomst voor de lopende poging is de navraag klaar.
-        if (vorige == PogingStatus.VERZONDEN || vorige == PogingStatus.GEPLAND) {
+        if (vorige == PogingStatus.VERZONDEN) {
             taakRepository.verwijderOpen(TaakSoort.RECONCILIEREN, notificatie.getId());
         }
 
@@ -326,6 +326,7 @@ public class ReceiptVerwerker {
                     herverzendbaar
                             ? herverzendingOfVerlopen(verlopen)
                             : new Overgang(NotificatieStatus.TECHNISCH_MISLUKT, Reden.TECHNISCH, false);
+                // onbereikbaar: NotifyNLAfleverstatus.naarUitkomst levert alleen de vier uitkomsten hierboven
                 case GEPLAND, VERZONDEN, ONBEKEND ->
                     throw new IllegalArgumentException("Geen receiptuitkomst: " + uitkomst);
             };

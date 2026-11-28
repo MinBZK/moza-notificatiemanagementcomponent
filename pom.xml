@@ -361,8 +361,9 @@
             <!-- Testdekking. prepare-agent zet de jacoco-agent in de surefire-argLine (@{argLine}
                  hieronder), waardoor álle tests worden geïnstrumenteerd — zowel de plain-unittests
                  als de @QuarkusTests (die laatste via de quarkus-jacoco-extensie, gedeelde execdata).
-                 report bouwt target/site/jacoco (HTML + jacoco.xml voor CI). Gegenereerde
-                 OpenAPI-code valt buiten de cijfers. -->
+                 report bouwt target/site/jacoco (HTML + jacoco.xml voor CI). Gegenereerde code
+                 valt buiten de cijfers: de OpenAPI-interfaces en -modellen en de JPA-metamodellen
+                 (Notificatie_ en verwanten). -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -371,6 +372,7 @@
                     <excludes>
                         <exclude>**/api/**</exclude>
                         <exclude>**/generated/**</exclude>
+                        <exclude>**/domain/*_.class</exclude>
                     </excludes>
                 </configuration>
                 <executions>
@@ -387,9 +389,9 @@
                             <goal>report</goal>
                         </goals>
                     </execution>
-                    <!-- Ondergrens (huidig: ~97% instructie, ~90% branch). Drempels met marge
-                         eronder, zodat een echte regressie de build breekt maar kleine schommelingen
-                         niet. Verhogen naarmate de dekking groeit. -->
+                    <!-- Ondergrens (huidig: 99,76% instructie, 99,67% branch). Wat ongedekt blijft, is
+                         gemarkeerd met '// onbereikbaar:'. Trek de drempels op als de dekking stijgt,
+                         tot net onder de werkelijke waarde. -->
                     <execution>
                         <id>check</id>
                         <phase>verify</phase>
@@ -404,12 +406,12 @@
                                         <limit>
                                             <counter>INSTRUCTION</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.94</minimum>
+                                            <minimum>0.997</minimum>
                                         </limit>
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.85</minimum>
+                                            <minimum>0.995</minimum>
                                         </limit>
                                     </limits>
                                 </rule>

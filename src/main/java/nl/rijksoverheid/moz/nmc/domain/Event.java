@@ -98,10 +98,6 @@ public class Event {
         return id;
     }
 
-    public UUID getDvId() {
-        return dvId;
-    }
-
     public UUID getNotificatieId() {
         return notificatieId;
     }

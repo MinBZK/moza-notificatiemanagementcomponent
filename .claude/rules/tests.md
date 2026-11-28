@@ -21,6 +21,9 @@ Beoordeel bij elke codewijziging of er tests bij of om moeten.
 - **Zet de klok vast** met een vaste `Clock` in plaats van ruime marges rond `now()`. Een test
   die rond een minuut- of daggrens anders uitvalt, is flaky.
 - **Een verwijderde test vraagt een vervanger** voor elk gedrag dat hij dekte.
+- **Elke gewijzigde regel wordt door een test geraakt**; CI faalt anders. Dek een ongedekte
+  regel niet af met een kunstgreep (een mock van een static, reflectie): is hij onbereikbaar,
+  zet er dan `// onbereikbaar: <reden>` bij; is hij ongebruikt, haal hem weg.
 
 ## Hoe
 

@@ -173,6 +173,8 @@ public class NotifyNLNavraagTaakHandler implements TaakHandler {
         pogingRepository.herlaad(poging);
 
         if (poging.getStatus() != PogingStatus.VERZONDEN) {
+            // onbereikbaar: een receipt die de poging een uitkomst geeft, verwijdert ook deze navraagtaak, en dan faalt
+            // rondAf hierboven al
             return;
         }
 

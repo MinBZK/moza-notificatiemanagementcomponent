@@ -1,12 +1,16 @@
 package nl.rijksoverheid.moz.nmc.controller;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.mockito.InjectSpy;
 import io.restassured.RestAssured;
 import io.restassured.config.HttpClientConfig;
 import io.restassured.http.ContentType;
@@ -20,6 +24,7 @@ import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
 import nl.rijksoverheid.moz.nmc.domain.TaakSoort;
+import nl.rijksoverheid.moz.nmc.service.aanname.AannameService;
 import nl.rijksoverheid.moz.nmc.service.sleutel.Sleutelbeheer;
 import nl.rijksoverheid.moz.nmc.testhelper.LeesHelper;
 import nl.rijksoverheid.moz.nmc.testhelper.TestDatabase;
@@ -44,6 +49,10 @@ class CentraleNotificatieControllerTest {
     @InjectMock
     @RestClient
     SendAMessageApi sendAMessageApi;
+
+    // Zonder stubbing de echte service; één test laat hem een onverwachte fout gooien.
+    @InjectSpy
+    AannameService aannameService;
 
     @Inject
     Sleutelbeheer sleutelbeheer;
@@ -226,6 +235,24 @@ class CentraleNotificatieControllerTest {
                   "berichtgegevens": %s
                 }
                 """.formatted(berichtgegevens);
+    }
+
+    // Een onverwachte fout wordt een 500 zonder de interne melding.
+    @Test
+    void notificatieAannemen_onverwachteFout_retourneert500ZonderInterneMelding() {
+        doThrow(new IllegalStateException("interne melding"))
+                .when(aannameService)
+                .neemAan(any(), any());
+
+        given().contentType(ContentType.JSON)
+                .body(aanvraag("Stuurgroep Agenda", ""))
+                .when()
+                .post(PAD)
+                .then()
+                .statusCode(500)
+                .contentType("application/problem+json")
+                .body("title", equalTo("Aannamefout"))
+                .body("detail", equalTo("Er kan momenteel geen notificatie worden aangenomen"));
     }
 
     private static String aanvraag(String berichtType, String extraVeld) {

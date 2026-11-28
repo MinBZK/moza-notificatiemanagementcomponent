@@ -21,6 +21,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import nl.rijksoverheid.moz.nmc.domain.Notificatie;
 import nl.rijksoverheid.moz.nmc.domain.NotificatieStatus;
 import nl.rijksoverheid.moz.nmc.domain.Ontvanger;
@@ -194,6 +195,28 @@ class OnderhoudTaakHandlerTest {
         onderhoudTaakHandler.voerUit(onderhoudstaak(), verlengd::incrementAndGet);
 
         assertEquals(3, verlengd.get());
+    }
+
+    // Zeven sleutels bij batches van twee en hoogstens drie batches: zes in de eerste ronde, de zevende
+    // in de volgende.
+    @Test
+    void onderhoud_meerSleutelsDanEenRondeAankan_herwraptDeRestDeVolgendeRonde() {
+        Sleutelbeheer versie1 = SleutelFixtures.sleutelbeheer(1, Map.of(1, TEST_KEK_1));
+        List<UUID> ids =
+                IntStream.range(0, 7).mapToObj(i -> opgeslagen(versie1)).toList();
+
+        onderhoud();
+
+        assertEquals(
+                6,
+                ids.stream()
+                        .filter(id -> notificatie(id).getVersleuteldeGegevens().kekVersie() == 2)
+                        .count());
+
+        onderhoud();
+
+        assertTrue(ids.stream()
+                .allMatch(id -> notificatie(id).getVersleuteldeGegevens().kekVersie() == 2));
     }
 
     private void onderhoud() {

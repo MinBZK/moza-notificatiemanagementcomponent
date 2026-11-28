@@ -288,6 +288,15 @@ public final class NotificatieFixtures {
                 .executeUpdate();
     }
 
+    /** Wist de regie, zoals bij een notificatie met een template maar zonder volledige verzendgegevens. */
+    public static void wisRegie(EntityManager entityManager, UUID id) {
+        entityManager
+                .createQuery(
+                        "UPDATE Notificatie SET " + Notificatie_.REGIE + " = NULL WHERE " + Notificatie_.ID + " = :id")
+                .setParameter("id", id)
+                .executeUpdate();
+    }
+
     public static void zetKekVersie(EntityManager entityManager, UUID id, int kekVersie) {
         entityManager
                 .createQuery("UPDATE Notificatie SET " + Notificatie_.KEK_VERSIE + " = :kekVersie WHERE "

@@ -33,9 +33,8 @@ public class WebhookClientProducer {
                 .build(WebhookClient.class);
     }
 
+    // Een MicroProfile REST-client implementeert altijd Closeable.
     void sluit(@Disposes WebhookClient client) throws IOException {
-        if (client instanceof Closeable closeable) {
-            closeable.close();
-        }
+        ((Closeable) client).close();
     }
 }

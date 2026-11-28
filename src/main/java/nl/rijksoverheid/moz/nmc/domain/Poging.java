@@ -184,8 +184,9 @@ public class Poging {
             return false;
         }
 
-        // Een bezorging na een fout begint een nieuwe vaststellingstermijn.
-        if (uitkomst == PogingStatus.BEZORGD && (bezorgdOp == null || status != PogingStatus.BEZORGD)) {
+        // Een herhaalde bezorging is hierboven al afgevangen; een bezorging na een fout begint een nieuwe
+        // vaststellingstermijn.
+        if (uitkomst == PogingStatus.BEZORGD) {
             this.bezorgdOp = opgetreden;
         }
 

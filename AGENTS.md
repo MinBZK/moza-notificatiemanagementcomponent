@@ -100,7 +100,12 @@ podman compose up -d                    # PostgreSQL voor dev-mode (docker compo
   van opmaak met de hand te corrigeren.
 - **JaCoCo-drempels en excludes staan in `pom.xml`.** De excludes staan ook als
   `%test.quarkus.jacoco.excludes` in `application.properties`; `ConfiguratiePariteitTest`
-  bewaakt dat ze gelijk blijven.
+  bewaakt dat ze gelijk blijven. Trek de drempels op als de dekking stijgt, tot net onder de
+  werkelijke waarde.
+- **Elke gewijzigde regel in `src/main/java` moet gedekt zijn.** CI controleert dat per PR met
+  diff-cover tegen de basisbranch (`.github/diff-dekking/`). Code die geen test kan bereiken,
+  zoals een catch op `NoSuchAlgorithmException` voor HmacSHA256, krijgt
+  `// onbereikbaar: <reden>` op de regel zelf of de regel erboven. Ongebruikte code haal je weg.
 - **`quarkus.jacoco.*` alleen onder `%test`**: de extensie is test-scoped en een onbekende
   sleutel laat het prod-image niet starten.
 - **Dev-mode en de Profielservice** claimen allebei poort 8080

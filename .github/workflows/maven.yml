@@ -13,6 +13,7 @@ permissions: read-all
 on:
   push:
     branches: [ "main" ]
+  # Alle PR's, ook die in een stack bovenop een andere branch.
   pull_request:
 
 jobs:
@@ -24,6 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Volledige historie: de dekkingscontrole hieronder vergelijkt met de basisbranch.
+          fetch-depth: 0
       - name: Set up JDK 25
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
@@ -36,6 +40,20 @@ jobs:
       - name: Build with Maven
         # verify i.p.v. package: de JaCoCo-coverage-gate hangt aan fase verify.
         run: mvn -B verify --file pom.xml
+      - name: Dekking van gewijzigde regels
+        # Elke regel in src/main/java die deze PR toevoegt of wijzigt, moet door een test geraakt
+        # worden. diff-cover kijkt per regel, niet per branch; de branches bewaakt de JaCoCo-gate.
+        if: github.event_name == 'pull_request'
+        env:
+          BASIS: origin/${{ github.base_ref }}
+        run: |
+          python3 -m venv /tmp/diff-dekking
+          /tmp/diff-dekking/bin/pip install --quiet --require-hashes -r .github/diff-dekking/requirements.txt
+          /tmp/diff-dekking/bin/diff-cover target/site/jacoco/jacoco.xml \
+            --compare-branch="$BASIS" --src-roots src/main/java --include 'src/main/java/**' \
+            --format json:diff-dekking.json,markdown:diff-dekking.md --quiet
+          cat diff-dekking.md >> "$GITHUB_STEP_SUMMARY"
+          python3 .github/diff-dekking/controleer.py diff-dekking.json
       # Optional: Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
       - name: Update dependency graph
         uses: advanced-security/maven-dependency-submission-action@a64327a7329c9939cf675e458452febe1894a70c

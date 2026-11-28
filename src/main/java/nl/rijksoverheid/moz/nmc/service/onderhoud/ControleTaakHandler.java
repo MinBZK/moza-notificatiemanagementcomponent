@@ -187,6 +187,7 @@ public class ControleTaakHandler implements TaakHandler {
             case AANGENOMEN, IN_VERZENDING -> Optional.of(TaakSoort.VERZENDEN);
             case VERZONDEN -> laatste.flatMap(poging -> soortBijPoging(poging, notificatie.getBerichtType()));
             case BEZORGD -> Optional.of(TaakSoort.BEZORGING_VASTSTELLEN);
+            // onbereikbaar: zonderTaak en isZonderTaak laten alleen statussen zonder eindstatus door
             default -> throw new IllegalStateException("Eindstatus " + notificatie.getStatus() + " hoort hier niet");
         };
     }

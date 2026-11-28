@@ -96,6 +96,9 @@ class TerugkoppelTaakHandlerTest {
     @Inject
     ObjectMapper objectMapper;
 
+    @Inject
+    TerugkoppelTaakHandler terugkoppelTaakHandler;
+
     @BeforeEach
     void setUp() {
         QuarkusMock.installMockForType(clock, Clock.class);
@@ -114,6 +117,13 @@ class TerugkoppelTaakHandlerTest {
     void tearDown() {
         WebhookOntvanger.TIJDENS_AANROEP = () -> {};
         zetWebhook(null, null);
+    }
+
+    // Eén rij per dienstverlener die niets opnieuw aanmaakt: na het maximum aantal pogingen gaat hij niet
+    // op mislukt maar plant de worker hem opnieuw.
+    @Test
+    void periodiek_isWaar() {
+        assertTrue(terugkoppelTaakHandler.periodiek());
     }
 
     // Een eigen bundelgrootte in het register gaat voor de default, hier één event per aanroep.

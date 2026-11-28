@@ -22,11 +22,7 @@ final class NotifyNLFoutmelding {
 
     private NotifyNLFoutmelding() {}
 
-    static String beschrijf(Response response) {
-        return beschrijf(response, body(response));
-    }
-
-    /** Als {@link #beschrijf(Response)}, met een body die de aanroeper al gelezen heeft. */
+    /** Beschrijft de foutrespons met een body die de aanroeper al met {@link #body(Response)} gelezen heeft. */
     static String beschrijf(Response response, String body) {
         List<String> fouten = notifyFouten(body);
 

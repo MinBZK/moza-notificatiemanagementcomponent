@@ -37,14 +37,6 @@ public final class Problems {
                 .build();
     }
 
-    public static HttpProblem notFound(String title, String detail) {
-        return HttpProblem.builder()
-                .withStatus(Response.Status.NOT_FOUND)
-                .withTitle(title)
-                .withDetail(detail)
-                .build();
-    }
-
     public static HttpProblem gone(URI type, String title, String detail) {
         return HttpProblem.builder()
                 .withType(type)
@@ -61,14 +53,6 @@ public final class Problems {
                 .withTitle(title)
                 .withDetail(detail)
                 .withHeader(HttpHeaders.RETRY_AFTER, retryAfterSeconden)
-                .build();
-    }
-
-    public static HttpProblem badGateway(String title, String detail) {
-        return HttpProblem.builder()
-                .withStatus(Response.Status.BAD_GATEWAY)
-                .withTitle(title)
-                .withDetail(detail)
                 .build();
     }
 
